@@ -1,72 +1,175 @@
-import { LogoMark } from "./LogoMark.js";
+import type { CSSProperties } from "react";
 
-const FEATURES = [
+const PROOF = [
   {
     title: "Answer requests in one tap",
-    description: "Hirers pay CRAL up front, so a request's money is already waiting on your yes.",
+    body: "Hirers pay CRAL up front, so a request is money already waiting on your yes.",
   },
   {
     title: "Payouts straight to M-Pesa",
-    description: "Every Monday and Thursday, 24 hours after each vehicle comes back.",
+    body: "Every Monday and Thursday, 24 hours after each vehicle comes back.",
   },
   {
     title: "One check per vehicle",
-    description: "Your company papers are checked once. Each vehicle then needs only three documents.",
+    body: "Your company papers are checked once. Each vehicle then needs only three documents.",
   },
 ];
 
 /**
- * The dark marketing panel from the merchant app design — shared by every
- * auth screen. Built against the real CRAL Design System v2 brand doc:
- * Ink (#0B0F1A) surface, Archivo for the display headline, Instrument Sans
- * for body copy, IBM Plex Mono for the small-caps labels. The masthead's
- * red rule carries the brand's signature 14° skew — "one skewed red rule
- * per surface, never more than once in view."
+ * The dark panel, reproduced from the design canvas source
+ * ("Cruz Merchant Login.dc.html") with its exact inline styles — the
+ * clamp() sizing, the 14° skewed red rule, the Archivo 'wdth' 110 display
+ * axis, and the radial glow anchored to this panel's bottom-right corner.
  */
 export function BrandPanel(): JSX.Element {
   return (
-    <div className="hidden flex-col justify-between bg-ink p-12 text-white lg:flex">
-      <div>
-        <div className="flex items-center gap-3">
-          <LogoMark />
-          <span className="border-l border-white/10 pl-3 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
-            Merchant Portal
-          </span>
+    <div style={S.panel}>
+      <div style={S.masthead}>
+        <img src="/logo.png" alt="Cruz Ride Auto Limited" style={S.logo} />
+        <span style={S.mastheadRule} />
+        <span style={S.mastheadLabel}>MERCHANT PORTAL</span>
+      </div>
+
+      <div style={S.middle}>
+        <div style={S.eyebrow}>
+          <span style={S.eyebrowRule} />
+          <span style={S.eyebrowText}>CRAL · NAIROBI, KENYA</span>
         </div>
+        <h1 style={S.h1}>Your vehicles, your money, in one place.</h1>
+        <p style={S.lede}>
+          Sign in to answer booking requests, track what each vehicle earns, and watch your payouts land
+          on M-Pesa.
+        </p>
 
-        <div className="mt-24 max-w-md">
-          <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
-            <span className="h-[3px] w-6 -skew-x-[14deg] bg-cruz-red" />
-            CRAL · Nairobi, Kenya
-          </div>
-          <h1 className="mt-4 font-display text-[42px] font-bold leading-[1.05] tracking-[-0.01em]">
-            Your vehicles, your money, in one place.
-          </h1>
-          <p className="mt-4 text-white/70">
-            Sign in to answer booking requests, track what each vehicle earns, and watch your payouts
-            land on M-Pesa.
-          </p>
-
-          <ul className="mt-8 flex flex-col gap-4">
-            {FEATURES.map((feature) => (
-              <li key={feature.title} className="flex gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[11px] text-white/50">
-                  ✓
-                </span>
-                <div>
-                  <div className="font-semibold text-white">{feature.title}</div>
-                  <div className="text-sm text-white/60">{feature.description}</div>
-                </div>
-              </li>
-            ))}
-          </ul>
+        <div style={S.proofList}>
+          {PROOF.map((p) => (
+            <div key={p.title} style={S.proofRow}>
+              <span style={S.proofCheck}>✓</span>
+              <div>
+                <div style={S.proofTitle}>{p.title}</div>
+                <div style={S.proofBody}>{p.body}</div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
-      <div className="flex items-center justify-between font-mono text-xs uppercase tracking-widest text-white/40">
-        <span>© 2026 CRAL · CRAL.CO.KE</span>
-        <span>Stuck? Call 0733 376 061</span>
+      <div style={S.footer}>
+        <span style={S.footerLeft}>© 2026 CRAL · CRAL.CO.KE</span>
+        <span style={S.footerRight}>Stuck? Call 0733 376 061</span>
       </div>
+
+      <div style={S.glow} />
     </div>
   );
 }
+
+const S: Record<string, CSSProperties> = {
+  panel: {
+    background: "#0B0F1A",
+    padding: "clamp(20px,3.4vw,48px) clamp(20px,4vw,56px)",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "space-between",
+    gap: "clamp(22px,3.4vw,40px)",
+    position: "relative",
+    overflow: "hidden",
+  },
+  masthead: { display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 2 },
+  logo: {
+    height: "clamp(34px,6vw,42px)",
+    width: "auto",
+    display: "block",
+    background: "#FFFFFF",
+    borderRadius: "var(--r-sm)",
+    padding: "6px 10px",
+  },
+  mastheadRule: { width: 1, height: 22, background: "#242C3D" },
+  mastheadLabel: {
+    font: "500 11px/1 'IBM Plex Mono',monospace",
+    letterSpacing: ".09em",
+    color: "#8C97A8",
+  },
+
+  middle: { position: "relative", zIndex: 2, maxWidth: 520 },
+  eyebrow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 18 },
+  eyebrowRule: {
+    display: "block",
+    width: 24,
+    height: 5,
+    background: "#D81E32",
+    transform: "skewX(-14deg)",
+    flex: "none",
+  },
+  eyebrowText: {
+    font: "500 11px/1.4 'IBM Plex Mono',monospace",
+    letterSpacing: ".14em",
+    color: "#8C97A8",
+  },
+  h1: {
+    margin: "0 0 16px",
+    font: "700 clamp(30px,4.4vw,46px)/1.05 Archivo,sans-serif",
+    fontVariationSettings: "'wdth' 110",
+    letterSpacing: "-.028em",
+    color: "#FFFFFF",
+    textWrap: "balance",
+  } as CSSProperties,
+  lede: {
+    margin: "0 0 28px",
+    font: "400 clamp(14px,1.4vw,16px)/1.6 'Instrument Sans',sans-serif",
+    color: "#A7B0BE",
+    maxWidth: "46ch",
+    textWrap: "pretty",
+  } as CSSProperties,
+
+  proofList: { display: "grid", gap: 14 },
+  proofRow: { display: "flex", alignItems: "flex-start", gap: 12 },
+  proofCheck: {
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    background: "#141B2B",
+    border: "1px solid #242C3D",
+    color: "#57D69E",
+    font: "600 10px/20px 'IBM Plex Mono',monospace",
+    textAlign: "center",
+    flex: "none",
+  },
+  proofTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#F2F5F9" },
+  proofBody: {
+    font: "400 13px/1.5 'Instrument Sans',sans-serif",
+    color: "#8C97A8",
+    marginTop: 2,
+    maxWidth: "44ch",
+    textWrap: "pretty",
+  } as CSSProperties,
+
+  footer: {
+    position: "relative",
+    zIndex: 2,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    flexWrap: "wrap",
+    paddingTop: 22,
+    borderTop: "1px solid #1D2637",
+  },
+  footerLeft: {
+    font: "500 11px/1.6 'IBM Plex Mono',monospace",
+    letterSpacing: ".08em",
+    color: "#5F6B7C",
+  },
+  footerRight: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5F6B7C" },
+
+  glow: {
+    position: "absolute",
+    right: -120,
+    bottom: -140,
+    width: 420,
+    height: 420,
+    borderRadius: 999,
+    background: "radial-gradient(circle,rgba(15,35,168,.42),rgba(11,15,26,0) 68%)",
+    zIndex: 1,
+  },
+};

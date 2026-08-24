@@ -1,9 +1,6 @@
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useState, type CSSProperties } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { BrandPanel } from "../components/BrandPanel.js";
-import { TextInput } from "../components/TextInput.js";
-import { SegmentedControl } from "../components/SegmentedControl.js";
 import { login, requestLoginOtp, verifyLoginOtp } from "../lib/auth-api.js";
 import { setSession } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
@@ -20,240 +17,295 @@ function deviceId(): string {
   return id;
 }
 
+/**
+ * Reproduced from the design canvas source ("Cruz Merchant Login.dc.html").
+ * Styles are the design's own inline values verbatim — deliberately not
+ * re-expressed as Tailwind utilities, because approximating them by eye is
+ * exactly what drifted before. Behaviour is wired to the real identity API.
+ */
 export function SignIn(): JSX.Element {
   const [mode, setMode] = useState<Mode>("password");
+  const [error, setError] = useState<string | null>(null);
 
   return (
-    <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
+    <div style={S.page}>
       <BrandPanel />
-      <div className="relative flex items-center justify-center overflow-hidden bg-white px-6 py-12">
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(720px 480px at -10% 110%, rgba(15,35,168,0.10), transparent 60%)",
-          }}
-        />
-        <div className="relative w-full max-w-sm">
-          <h1 className="text-2xl font-bold text-neutral-900">Sign in</h1>
-          <p className="mt-1 text-sm text-neutral-600">
-            Karibu tena. Use the phone number or email on your merchant account.
-          </p>
 
-          <button
-            type="button"
-            disabled
-            title="Google sign-in isn't connected yet"
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2.5 text-sm font-semibold text-neutral-400 cursor-not-allowed"
-          >
-            <GoogleIcon />
-            Continue with Google
-          </button>
-
-          <div className="my-6 flex items-center gap-3">
-            <hr className="flex-1 border-neutral-200" />
-            <span className="text-xs font-medium text-neutral-400">OR</span>
-            <hr className="flex-1 border-neutral-200" />
+      <div style={S.formPanel}>
+        <div style={S.formInner}>
+          <div style={{ marginBottom: 22 }}>
+            <h2 style={S.h2}>Sign in</h2>
+            <p style={S.sub}>Karibu tena. Use the phone number or email on your merchant account.</p>
           </div>
 
-          <SegmentedControl
-            value={mode}
-            onChange={setMode}
-            options={[
-              { value: "password", label: "Password" },
-              { value: "sms", label: "SMS code" },
-            ]}
-          />
+          <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
+            <button
+              type="button"
+              disabled
+              title="Google sign-in isn't connected yet"
+              style={{ ...S.googleBtn, opacity: 0.55, cursor: "not-allowed" }}
+            >
+              <GoogleIcon />
+              Continue with Google
+            </button>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={S.hr} />
+              <span style={S.orLabel}>OR</span>
+              <span style={S.hr} />
+            </div>
+          </div>
 
-          <div className="mt-6">{mode === "password" ? <PasswordForm /> : <SmsForm />}</div>
+          <div style={S.segment}>
+            {(
+              [
+                { value: "password", label: "Password" },
+                { value: "sms", label: "SMS code" },
+              ] as const
+            ).map((m) => {
+              const active = m.value === mode;
+              return (
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => {
+                    setMode(m.value);
+                    setError(null);
+                  }}
+                  style={{
+                    ...S.segmentBtn,
+                    background: active ? "#FFFFFF" : "transparent",
+                    color: active ? "#0B0F1A" : "#5A6373",
+                    boxShadow: active ? "0 1px 2px rgba(11,15,26,.12)" : "none",
+                  }}
+                >
+                  {m.label}
+                </button>
+              );
+            })}
+          </div>
 
-          <p className="mt-6 border-t border-neutral-200 pt-6 text-sm text-neutral-600">
-            New to CRAL?{" "}
-            <Link to="/create-account" className="font-semibold text-cruz-blue hover:underline">
-              Register instead
-            </Link>
-          </p>
+          {mode === "password" ? (
+            <PasswordForm onError={setError} />
+          ) : (
+            <SmsForm onError={setError} />
+          )}
+
+          {error && (
+            <div style={S.errorBox}>
+              <span style={S.errorDot} />
+              <span style={S.errorText}>{error}</span>
+            </div>
+          )}
+
+          <div style={S.bottom}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={S.bottomText}>New to CRAL?</span>
+              <Link to="/create-account" style={S.link}>
+                Register instead
+              </Link>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-interface PasswordFormValues {
-  identifier: string;
-  password: string;
-}
-
-function PasswordForm(): JSX.Element {
+function PasswordForm({ onError }: { onError: (m: string | null) => void }): JSX.Element {
   const navigate = useNavigate();
-  const [showPassword, setShowPassword] = useState(false);
-  const [keepSignedIn, setKeepSignedIn] = useState(true);
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-  const {
-    register: field,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<PasswordFormValues>();
+  const [who, setWho] = useState("");
+  const [pw, setPw] = useState("");
+  const [reveal, setReveal] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [busy, setBusy] = useState(false);
 
-  async function onSubmit(values: PasswordFormValues) {
-    setServerError(null);
-    setSubmitting(true);
+  async function submit() {
+    onError(null);
+    setBusy(true);
     try {
-      const result = await login(values.identifier, values.password, deviceId());
-      setSession(result, keepSignedIn);
+      const result = await login(who, pw, deviceId());
+      setSession(result, remember);
       navigate("/");
     } catch (err) {
-      if (err instanceof ApiClientError && err.code === "account_locked") {
-        setServerError("Too many failed attempts. Try again in a few minutes, or reset your password.");
-      } else {
-        setServerError(
-          err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.",
-        );
-      }
+      onError(
+        err instanceof ApiClientError && err.code === "account_locked"
+          ? "Too many failed attempts. Try again in a few minutes, or reset your password."
+          : err instanceof ApiClientError
+            ? err.message
+            : "Something went wrong. Please try again.",
+      );
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   return (
-    <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
-      <TextInput
-        id="identifier"
-        label="Phone or email"
-        placeholder="0733 376 061"
-        autoComplete="username"
-        {...field("identifier", { required: "Enter your phone or email." })}
-        error={errors.identifier}
-      />
-      <TextInput
-        id="password"
-        label="Password"
-        type={showPassword ? "text" : "password"}
-        placeholder="Your password"
-        autoComplete="current-password"
-        labelAction={
-          <button
-            type="button"
-            onClick={() => setShowPassword((v) => !v)}
-            className="text-xs font-semibold text-cruz-blue hover:underline"
-          >
-            {showPassword ? "Hide" : "Show"}
-          </button>
-        }
-        {...field("password", { required: "Enter your password." })}
-        error={errors.password}
-      />
-
-      <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-sm text-neutral-700">
-          <input
-            type="checkbox"
-            checked={keepSignedIn}
-            onChange={(e) => setKeepSignedIn(e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-300 text-cruz-blue focus:ring-cruz-blue"
-          />
-          Keep me signed in
+    <form
+      style={{ display: "grid", gap: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void submit();
+      }}
+    >
+      <div>
+        <label htmlFor="who" style={S.label}>
+          PHONE OR EMAIL
         </label>
-        <Link to="/forgot-password" className="text-sm font-semibold text-cruz-blue hover:underline">
+        <input
+          id="who"
+          value={who}
+          onChange={(e) => setWho(e.target.value)}
+          placeholder="0733 376 061"
+          autoComplete="username"
+          style={S.input}
+        />
+      </div>
+
+      <div>
+        <div style={S.labelRow}>
+          <label htmlFor="pw" style={S.label}>
+            PASSWORD
+          </label>
+          <button type="button" onClick={() => setReveal((v) => !v)} style={S.revealBtn}>
+            {reveal ? "Hide" : "Show"}
+          </button>
+        </div>
+        <input
+          id="pw"
+          type={reveal ? "text" : "password"}
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          placeholder="Your password"
+          autoComplete="current-password"
+          style={S.input}
+        />
+      </div>
+
+      <div style={S.rememberRow}>
+        <button type="button" onClick={() => setRemember((v) => !v)} style={S.rememberBtn}>
+          <span
+            style={{
+              ...S.checkbox,
+              border: `1.5px solid ${remember ? "#0F23A8" : "#CDD2DA"}`,
+              background: remember ? "#0F23A8" : "#FFFFFF",
+            }}
+          >
+            {remember ? "✓" : ""}
+          </span>
+          <span style={S.rememberLabel}>Keep me signed in</span>
+        </button>
+        <Link to="/forgot-password" style={S.forgotBtn}>
           Forgot password?
         </Link>
       </div>
 
-      {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
-
-      <button
-        type="submit"
-        disabled={submitting}
-        className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
-      >
-        {submitting ? "Signing in…" : "Sign in"}
+      <button type="submit" disabled={busy} style={{ ...S.primaryBtn, opacity: busy ? 0.7 : 1 }}>
+        {busy ? "Signing in…" : "Sign in"}
       </button>
     </form>
   );
 }
 
-function SmsForm(): JSX.Element {
+function SmsForm({ onError }: { onError: (m: string | null) => void }): JSX.Element {
   const navigate = useNavigate();
-  const [step, setStep] = useState<"request" | "verify">("request");
-  const [identifier, setIdentifier] = useState("");
+  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [phone, setPhone] = useState("");
   const [code, setCode] = useState("");
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [busy, setBusy] = useState(false);
 
-  async function onRequest() {
-    setServerError(null);
-    setSubmitting(true);
+  async function send() {
+    onError(null);
+    setBusy(true);
     try {
-      await requestLoginOtp(identifier);
-      setStep("verify");
+      await requestLoginOtp(`+254${phone.replace(/\D/g, "")}`);
+      setStep("code");
     } catch (err) {
-      setServerError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
+      onError(err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.");
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
-  async function onVerify() {
-    setServerError(null);
-    setSubmitting(true);
+  async function verify() {
+    onError(null);
+    setBusy(true);
     try {
-      const result = await verifyLoginOtp(identifier, code, deviceId());
+      const result = await verifyLoginOtp(`+254${phone.replace(/\D/g, "")}`, code, deviceId());
       setSession(result, true);
       navigate("/");
     } catch (err) {
-      setServerError(err instanceof ApiClientError ? err.message : "That code didn't work. Try again.");
+      onError(err instanceof ApiClientError ? err.message : "That code didn't work. Try again.");
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
-  if (step === "verify") {
+  if (step === "code") {
     return (
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-neutral-600">
-          We sent a 6-digit code to <strong>{identifier}</strong>.
-        </p>
-        <TextInput
-          id="sms-code"
-          label="Code"
-          inputMode="numeric"
-          maxLength={6}
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-        />
-        {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
+      <form
+        style={{ display: "grid", gap: 16 }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          void verify();
+        }}
+      >
+        <div>
+          <label htmlFor="code" style={S.label}>
+            SIX-DIGIT CODE
+          </label>
+          <input
+            id="code"
+            value={code}
+            onChange={(e) => setCode(e.target.value)}
+            placeholder="000000"
+            inputMode="numeric"
+            maxLength={6}
+            style={{ ...S.input, font: "500 15px/1 'IBM Plex Mono',monospace", letterSpacing: ".18em" }}
+          />
+          <div style={S.helper}>Sent to +254 {phone}. It expires in ten minutes.</div>
+        </div>
         <button
-          type="button"
-          onClick={onVerify}
-          disabled={submitting || code.length !== 6}
-          className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
+          type="submit"
+          disabled={busy || code.length !== 6}
+          style={{ ...S.primaryBtn, opacity: busy || code.length !== 6 ? 0.7 : 1 }}
         >
-          {submitting ? "Verifying…" : "Sign in"}
+          {busy ? "Checking…" : "Sign in"}
         </button>
-      </div>
+      </form>
     );
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <TextInput
-        id="sms-identifier"
-        label="Phone or email"
-        placeholder="0733 376 061"
-        value={identifier}
-        onChange={(e) => setIdentifier(e.target.value)}
-      />
-      {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
-      <button
-        type="button"
-        onClick={onRequest}
-        disabled={submitting || !identifier}
-        className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
-      >
-        {submitting ? "Sending…" : "Send code"}
+    <form
+      style={{ display: "grid", gap: 16 }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        void send();
+      }}
+    >
+      <div>
+        <label htmlFor="phone" style={S.label}>
+          M-PESA PHONE NUMBER
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <span style={S.prefix}>+254</span>
+          <input
+            id="phone"
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
+            placeholder="733 376 061"
+            inputMode="tel"
+            style={{ ...S.input, flex: 1, minWidth: 0 }}
+          />
+        </div>
+        <div style={S.helper}>
+          Use the number your payouts go to. We text a six-digit code, free of charge.
+        </div>
+      </div>
+      <button type="submit" disabled={busy || !phone} style={{ ...S.primaryBtn, opacity: busy || !phone ? 0.7 : 1 }}>
+        {busy ? "Sending…" : "Send code"}
       </button>
-    </div>
+    </form>
   );
 }
 
@@ -261,21 +313,213 @@ function GoogleIcon(): JSX.Element {
   return (
     <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
       <path
-        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.9c1.7-1.57 2.7-3.87 2.7-6.62Z"
         fill="#4285F4"
+        d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.91c1.7-1.57 2.69-3.88 2.69-6.62Z"
       />
       <path
-        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.26c-.8.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.96v2.33A9 9 0 0 0 9 18Z"
         fill="#34A853"
+        d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.91-2.26c-.81.54-1.84.86-3.05.86-2.34 0-4.32-1.58-5.03-3.7H1.05v2.34A9 9 0 0 0 9 18Z"
       />
+      <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.94H1.05a9 9 0 0 0 0 8.12l2.92-2.34Z" />
       <path
-        d="M3.95 10.7A5.4 5.4 0 0 1 3.67 9c0-.59.1-1.16.28-1.7V4.97H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.03l2.99-2.33Z"
-        fill="#FBBC05"
-      />
-      <path
-        d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.97l2.99 2.33C4.66 5.17 6.65 3.58 9 3.58Z"
         fill="#EA4335"
+        d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.59C13.46.89 11.43 0 9 0A9 9 0 0 0 1.05 4.94l2.92 2.34C4.68 5.16 6.66 3.58 9 3.58Z"
       />
     </svg>
   );
 }
+
+const S: Record<string, CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,430px),1fr))",
+    fontFamily: "'Instrument Sans',sans-serif",
+  },
+  formPanel: {
+    background: "#FAFBFC",
+    padding: "clamp(24px,4vw,48px) clamp(20px,4vw,56px)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  formInner: { width: "100%", maxWidth: 420 },
+
+  h2: {
+    margin: "0 0 7px",
+    font: "600 clamp(24px,3vw,30px)/1.15 Archivo,sans-serif",
+    fontVariationSettings: "'wdth' 106",
+    letterSpacing: "-.022em",
+    color: "#0B0F1A",
+  },
+  sub: {
+    margin: 0,
+    font: "400 14px/1.55 'Instrument Sans',sans-serif",
+    color: "#5A6373",
+    textWrap: "pretty",
+  } as CSSProperties,
+
+  googleBtn: {
+    height: 50,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 11,
+    background: "#FFFFFF",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "600 15px/1 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+    cursor: "pointer",
+    transition: "background 120ms cubic-bezier(.2,.8,.25,1)",
+  },
+  hr: { flex: 1, height: 1, background: "#E4E7EC" },
+  orLabel: {
+    font: "500 10px/1 'IBM Plex Mono',monospace",
+    letterSpacing: ".1em",
+    color: "#9AA2B0",
+  },
+
+  segment: {
+    display: "flex",
+    gap: 4,
+    padding: 4,
+    background: "#F1F3F6",
+    borderRadius: 999,
+    marginBottom: 20,
+  },
+  segmentBtn: {
+    flex: 1,
+    height: 38,
+    border: "none",
+    borderRadius: 999,
+    font: "600 13px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    transition: "background 120ms cubic-bezier(.2,.8,.25,1)",
+  },
+
+  label: {
+    display: "block",
+    font: "500 10px/1 'IBM Plex Mono',monospace",
+    letterSpacing: ".1em",
+    color: "#9AA2B0",
+    marginBottom: 8,
+  },
+  labelRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  input: {
+    width: "100%",
+    height: 48,
+    padding: "0 14px",
+    background: "#FFFFFF",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "400 15px/1 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+  },
+  prefix: {
+    height: 48,
+    padding: "0 13px",
+    display: "inline-flex",
+    alignItems: "center",
+    background: "#F1F3F6",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "500 15px/1 'IBM Plex Mono',monospace",
+    color: "#333B4A",
+    flex: "none",
+  },
+  helper: {
+    font: "400 12px/1.5 'Instrument Sans',sans-serif",
+    color: "#838C9B",
+    marginTop: 8,
+  },
+  revealBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    font: "600 12px/1 'Instrument Sans',sans-serif",
+    color: "#0F23A8",
+    cursor: "pointer",
+  },
+
+  rememberRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    flexWrap: "wrap",
+  },
+  rememberBtn: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    background: "none",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+  },
+  checkbox: {
+    width: 21,
+    height: 21,
+    borderRadius: "var(--r-sm)",
+    color: "#FFFFFF",
+    font: "600 11px/18px 'IBM Plex Mono',monospace",
+    textAlign: "center",
+    flex: "none",
+  },
+  rememberLabel: { font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#333B4A" },
+  forgotBtn: {
+    background: "none",
+    border: "none",
+    padding: 0,
+    font: "600 13px/1 'Instrument Sans',sans-serif",
+    color: "#0F23A8",
+    cursor: "pointer",
+    textDecoration: "none",
+  },
+
+  primaryBtn: {
+    height: 50,
+    background: "#0F23A8",
+    color: "#FFFFFF",
+    border: "none",
+    borderRadius: "var(--r)",
+    font: "600 15px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    transition: "background 120ms cubic-bezier(.2,.8,.25,1)",
+  },
+
+  errorBox: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    marginTop: 16,
+    padding: "12px 14px",
+    background: "#FDE7EA",
+    border: "1px solid #F7BDC5",
+    borderRadius: "var(--r)",
+  },
+  errorDot: { width: 8, height: 8, borderRadius: 999, background: "#D81E32", flex: "none" },
+  errorText: { font: "600 13px/1.45 'Instrument Sans',sans-serif", color: "#A50E22" },
+
+  bottom: {
+    marginTop: 24,
+    paddingTop: 20,
+    borderTop: "1px solid #E4E7EC",
+    display: "grid",
+    gap: 14,
+  },
+  bottomText: { font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" },
+  link: {
+    font: "600 14px/1.5 'Instrument Sans',sans-serif",
+    color: "#0F23A8",
+    textDecoration: "none",
+    borderBottom: "1px solid rgba(15,35,168,.26)",
+  },
+};

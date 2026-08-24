@@ -2,6 +2,29 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Base rules lifted verbatim from the design canvas source
+ * ("Cruz Merchant Login.dc.html"). The auth screens are reproduced with
+ * the design's own inline styles rather than Tailwind utilities, so the
+ * rendering matches the canvas exactly rather than approximately.
+ */
+:root {
+  --r-sm: 4px;
+  --r: 8px;
+  --r-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 body {
-  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  margin: 0;
+  background: #0b0f1a;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input::placeholder {
+  color: #a7aebb;
 }
