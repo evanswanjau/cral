@@ -1,0 +1,995 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Identity API
+  version: "1.0.0"
+  description: >
+    Registration, verification, login/sessions, forgot & reset password,
+    credential/contact changes, and admin authentication. Frozen from the
+    platform API spec §3–8 for Phase 1 (delivery plan). Covers the customer
+    + merchant public-app audience and the separate admin (Ops) audience.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: registration
+    description: Account creation, phone/email verification, terms acceptance
+  - name: login
+    description: Password and passwordless (OTP) login, token refresh
+  - name: sessions
+    description: "\"Where you're signed in\" — active sessions and remote sign-out"
+  - name: password
+    description: Forgot/reset password, authenticated password change, policy
+  - name: account
+    description: Credential and contact changes, 2FA, DPA export/erasure
+  - name: admin-auth
+    description: Separate admin (Ops) login audience with mandatory 2FA
+
+paths:
+  # ---------------------------------------------------------------------
+  # §4 Registration and verification
+  # ---------------------------------------------------------------------
+  /auth/register:
+    post:
+      tags: [registration]
+      summary: Create an account
+      operationId: register
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [full_name, phone, email, password, role, accepted_terms_version]
+              properties:
+                full_name: { type: string, minLength: 1 }
+                phone: { $ref: "#/components/schemas/E164Phone" }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 10 }
+                role: { type: string, enum: [customer, merchant] }
+                accepted_terms_version: { type: string }
+      responses:
+        "201":
+          description: Account created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: "#/components/schemas/User" }
+                  next: { type: string, enum: [verify_phone], nullable: true }
+        "409":
+          description: Phone or email already registered — no further detail (spec §4)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /auth/otp/request:
+    post:
+      tags: [registration, login]
+      summary: Send a one-time code
+      operationId: requestOtp
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, purpose]
+              properties:
+                identifier: { type: string, description: "phone or email" }
+                purpose:
+                  type: string
+                  enum: [signup, login, phone_change, password_reset]
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  retry_after: { type: integer, description: seconds }
+                  masked_destination: { type: string }
+        "429":
+          $ref: "#/components/responses/RateLimited"
+
+  /auth/otp/verify:
+    post:
+      tags: [registration, login]
+      summary: Exchange a code for a verified flag (signup) or a token pair (login)
+      operationId: verifyOtp
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, purpose, code]
+              properties:
+                identifier: { type: string }
+                purpose:
+                  type: string
+                  enum: [signup, login, phone_change, password_reset]
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Verified — signup returns a flag, login returns a token pair
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      verified: { type: boolean }
+                  - $ref: "#/components/schemas/TokenPair"
+        "401":
+          description: otp_incorrect
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "410":
+          description: otp_expired
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/email/verify/request:
+    post:
+      tags: [registration]
+      summary: Send the email verification link (rate limited to 3/hour)
+      operationId: requestEmailVerification
+      security: [{ bearerAuth: [] }]
+      responses:
+        "202": { description: Link sent }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/email/verify:
+    post:
+      tags: [registration]
+      summary: Consume the email verification link token (24h life, single use)
+      operationId: verifyEmail
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token: { type: string }
+      responses:
+        "200": { description: Email verified }
+        "400":
+          description: Token expired or already used
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/registration-state:
+    get:
+      tags: [registration]
+      summary: What's still missing before this account can transact
+      operationId: getRegistrationState
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Registration state
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone_verified: { type: boolean }
+                  email_verified: { type: boolean }
+                  terms_accepted: { type: boolean }
+                  licence_required: { type: boolean }
+                  licence_present: { type: boolean }
+                  merchant_profile_required: { type: boolean }
+                  merchant_profile_present: { type: boolean }
+
+  /auth/terms/accept:
+    post:
+      tags: [registration]
+      summary: Record acceptance of a named terms/privacy version
+      operationId: acceptTerms
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [version]
+              properties:
+                version: { type: string }
+      responses:
+        "204": { description: Recorded }
+
+  /me:
+    get:
+      tags: [registration]
+      summary: The current user
+      operationId: getMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Me" }
+
+  # ---------------------------------------------------------------------
+  # §5 Login and sessions
+  # ---------------------------------------------------------------------
+  /auth/login:
+    post:
+      tags: [login]
+      summary: Password login
+      operationId: login
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier, password, device_id]
+              properties:
+                identifier: { type: string, description: "phone or email" }
+                password: { type: string }
+                device_id: { type: string }
+      responses:
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginResponse" }
+        "401":
+          description: invalid_credentials — never says which field was wrong
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "423":
+          description: account_locked — 15 min after 10 failures
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/login/otp:
+    post:
+      tags: [login]
+      summary: Passwordless login — request then verify via /auth/otp/*
+      operationId: loginOtpInfo
+      security: []
+      description: >
+        Uses the shared /auth/otp/request and /auth/otp/verify endpoints
+        with purpose="login". Listed here for discoverability; no separate
+        request/response shape of its own.
+      responses:
+        "200": { description: See /auth/otp/request and /auth/otp/verify }
+
+  /auth/token/refresh:
+    post:
+      tags: [login]
+      summary: Rotate the refresh token, get a new access token
+      operationId: refreshToken
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: New token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401":
+          description: >
+            Reuse of an already-rotated refresh token — the whole token
+            family is revoked, forcing a fresh login.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/logout:
+    post:
+      tags: [login, sessions]
+      summary: Revoke the current refresh token, or every session
+      operationId: logout
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                all_devices: { type: boolean, default: false }
+      responses:
+        "204": { description: Revoked }
+
+  /auth/sessions:
+    get:
+      tags: [sessions]
+      summary: Active sessions — "where you are signed in"
+      operationId: listSessions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /auth/sessions/{id}:
+    delete:
+      tags: [sessions]
+      summary: Sign out one device
+      operationId: revokeSession
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Signed out }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /auth/pin/set:
+    post:
+      tags: [login]
+      summary: Set the optional 4-digit merchant handover PIN (local unlock only, never an API credential)
+      operationId: setPin
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pin]
+              properties:
+                pin: { type: string, pattern: "^[0-9]{4}$" }
+      responses:
+        "204": { description: Set }
+
+  # ---------------------------------------------------------------------
+  # §6 Forgot and reset password
+  # ---------------------------------------------------------------------
+  /auth/password/forgot:
+    post:
+      tags: [password]
+      summary: Start a reset — always 202, never reveals whether the account exists
+      operationId: forgotPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [identifier]
+              properties:
+                identifier: { type: string }
+      responses:
+        "202":
+          description: Neutral response regardless of account existence
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [sent] }
+                  channel_hint: { type: string, enum: [email, sms] }
+                  masked: { type: string }
+                  retry_after: { type: integer }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/password/reset/check:
+    post:
+      tags: [password]
+      summary: Is this reset token/code still valid?
+      operationId: checkPasswordReset
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: { type: string }
+                phone: { $ref: "#/components/schemas/E164Phone" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Validity
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  valid: { type: boolean }
+                  expires_at: { type: string, format: date-time }
+                  masked_identifier: { type: string }
+                  requires_2fa: { type: boolean }
+
+  /auth/password/reset:
+    post:
+      tags: [password]
+      summary: Complete the reset — revokes every session, notifies both channels
+      operationId: resetPassword
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_password]
+              properties:
+                token: { type: string }
+                phone: { $ref: "#/components/schemas/E164Phone" }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+                new_password: { type: string, minLength: 10 }
+                two_factor_code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Reset
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [reset] }
+                  sessions_revoked: { type: integer }
+        "400":
+          description: reset_token_expired
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: password_breached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/password/change:
+    post:
+      tags: [password]
+      summary: Authenticated change — revokes all other sessions, keeps the current one
+      operationId: changePassword
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 10 }
+      responses:
+        "200":
+          description: Changed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions_revoked: { type: integer }
+        "401":
+          description: Wrong current password — counts against the lockout
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/password/policy:
+    get:
+      tags: [password]
+      summary: Password policy as data, so the strength meter and server never disagree
+      operationId: getPasswordPolicy
+      security: []
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  min_length: { type: integer, example: 10 }
+                  checks_breach_list: { type: boolean }
+                  rejects_personal_info: { type: boolean }
+
+  /admin/team/{id}/reset-invite:
+    post:
+      tags: [password, admin-auth]
+      summary: >
+        The admin exception — an admin never self-resets. Another admin
+        (admin_super) issues a single-use invite; both the issue and the
+        use are audited.
+      operationId: issueAdminResetInvite
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "201": { description: Invite issued }
+        "403": { $ref: "#/components/responses/InsufficientScope" }
+
+  # ---------------------------------------------------------------------
+  # §7 Credential, contact and account changes
+  # ---------------------------------------------------------------------
+  /auth/phone/change/request:
+    post:
+      tags: [account]
+      summary: Verify current + new phone, two codes required. Blocked during an open handover session.
+      operationId: requestPhoneChange
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_phone]
+              properties:
+                new_phone: { $ref: "#/components/schemas/E164Phone" }
+      responses:
+        "202": { description: Codes sent to both numbers }
+        "409":
+          description: handover_in_progress
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/phone/change/confirm:
+    post:
+      tags: [account]
+      summary: Complete the phone swap (payout M-Pesa number is a separate, separately verified change)
+      operationId: confirmPhoneChange
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [old_phone_code, new_phone_code]
+              properties:
+                old_phone_code: { type: string, pattern: "^[0-9]{6}$" }
+                new_phone_code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200": { description: Phone changed }
+
+  /auth/email/change/request:
+    post:
+      tags: [account]
+      summary: Same shape as phone change. Reset links go to the old address for 7 days after.
+      operationId: requestEmailChange
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [new_email]
+              properties:
+                new_email: { type: string, format: email }
+      responses:
+        "202": { description: Codes sent }
+
+  /auth/2fa/enroll:
+    post:
+      tags: [account]
+      summary: TOTP enrolment — returns a secret and an otpauth URI
+      operationId: enroll2fa
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Enrolment material
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  secret: { type: string }
+                  otpauth_uri: { type: string }
+
+  /auth/2fa/verify:
+    post:
+      tags: [account]
+      summary: Confirm enrolment or satisfy a 2FA challenge. Issues 10 single-use recovery codes once.
+      operationId: verify2fa
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+                    nullable: true
+                    description: Present only on first enrolment confirmation.
+
+  /auth/2fa:
+    delete:
+      tags: [account]
+      summary: Disable 2FA — requires password + a current code. Admins cannot disable their own.
+      operationId: disable2fa
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, code]
+              properties:
+                password: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "204": { description: Disabled }
+        "403":
+          description: Admins cannot disable their own 2FA
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /me/data-export:
+    post:
+      tags: [account]
+      summary: Kenya DPA 2019 access request — async, emails a link valid 48h
+      operationId: requestDataExport
+      security: [{ bearerAuth: [] }]
+      responses:
+        "202": { description: Export job queued }
+
+  /me/delete-request:
+    post:
+      tags: [account]
+      summary: >
+        Erasure request. Refused while a booking is active, a deposit is
+        held, or a dispute is open. Otherwise a 14-day cooling window, then
+        anonymisation.
+      operationId: requestErasure
+      security: [{ bearerAuth: [] }]
+      responses:
+        "202": { description: Cooling window started }
+        "409":
+          description: Refused — active booking, held deposit, or open dispute
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------------------------------------------------------------------
+  # §8 Admin authentication — separate token audience (aud: "ops")
+  # ---------------------------------------------------------------------
+  /admin/auth/login:
+    post:
+      tags: [admin-auth]
+      summary: Admin email+password login, separate token audience and cookie domain
+      operationId: adminLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        "200":
+          description: Requires a second factor before a usable session exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge_token: { type: string }
+                  next: { type: string, enum: [2fa] }
+        "401":
+          description: Invalid admin credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/auth/2fa:
+    post:
+      tags: [admin-auth]
+      summary: Mandatory second factor on every login (no "remember this device")
+      operationId: adminVerify2fa
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_token, code]
+              properties:
+                challenge_token: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Ops-audience token pair (10 min access token)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+
+  /admin/auth/refresh:
+    post:
+      tags: [admin-auth]
+      summary: >
+        8-hour absolute session cap; 20-minute idle timeout re-prompts for
+        the second factor only.
+      operationId: adminRefresh
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: New ops-audience token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401":
+          description: idle_timeout_2fa_required | session_expired
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/auth/me:
+    get:
+      tags: [admin-auth]
+      summary: Reviewer identity, role, permissions, assigned queues
+      operationId: getAdminMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Reviewer identity and permissions
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminMe" }
+
+  /admin/auth/logout:
+    post:
+      tags: [admin-auth]
+      summary: Revokes immediately and writes an audit row
+      operationId: adminLogout
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Revoked }
+
+  /admin/impersonate:
+    post:
+      tags: [admin-auth]
+      summary: >
+        Support only. Time-boxed to 30 minutes, read-only by default,
+        forced banner, both actor ids tagged on every request, user
+        notified afterwards.
+      operationId: impersonate
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id: { type: string }
+                read_only: { type: boolean, default: true }
+      responses:
+        "201":
+          description: Impersonation session token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  impersonation_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+        "403": { $ref: "#/components/responses/InsufficientScope" }
+
+  /admin/auth/audit:
+    get:
+      tags: [admin-auth]
+      summary: This admin's own recent actions
+      operationId: getAdminOwnAudit
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: This admin's recent actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditLogEntry" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    ValidationError:
+      description: Validation failed
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    InsufficientScope:
+      description: insufficient_scope — never 404, hiding the endpoint hides the bug
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  schemas:
+    E164Phone:
+      type: string
+      pattern: "^\\+[1-9][0-9]{6,14}$"
+      example: "+254722418903"
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type:
+              type: string
+              enum:
+                [validation_error, auth_error, not_found, conflict, rate_limited, server_error]
+            code: { type: string, example: insurance_expiry_in_past }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string, format: uri }
+            request_id: { type: string, example: req_01J9F2K7QW3M }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, example: usr_01J8QM... }
+        full_name: { type: string }
+        phone: { $ref: "#/components/schemas/E164Phone" }
+        email: { type: string, format: email }
+        roles:
+          type: array
+          items: { type: string, enum: [customer, merchant, merchant_staff] }
+        phone_verified: { type: boolean }
+        email_verified: { type: boolean }
+
+    Me:
+      allOf:
+        - $ref: "#/components/schemas/User"
+        - type: object
+          properties:
+            active_merchant_id: { type: string, nullable: true }
+            unread_notification_count: { type: integer }
+
+    AdminMe:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string, format: email }
+        role:
+          type: string
+          enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+        assigned_queues:
+          type: array
+          items: { type: string }
+
+    TokenPair:
+      type: object
+      properties:
+        access_token: { type: string, description: "JWT, 15 minutes (10 for admin)" }
+        refresh_token: { type: string, description: "30 days, rotates on every use" }
+        expires_in: { type: integer, example: 900 }
+
+    LoginResponse:
+      allOf:
+        - $ref: "#/components/schemas/TokenPair"
+        - type: object
+          properties:
+            user: { $ref: "#/components/schemas/User" }
+            next:
+              type: string
+              nullable: true
+              enum: [verify_phone, "2fa", reset_password]
+
+    Session:
+      type: object
+      properties:
+        id: { type: string }
+        device: { type: string }
+        approximate_location: { type: string }
+        last_seen_at: { type: string, format: date-time }
+        is_current: { type: boolean }
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        actor_id: { type: string, nullable: true }
+        actor_type: { type: string, enum: [user, admin, system] }
+        action: { type: string, example: vehicle.approved }
+        entity_type: { type: string }
+        entity_id: { type: string }
+        request_id: { type: string }
+        created_at: { type: string, format: date-time }
