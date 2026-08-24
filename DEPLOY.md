@@ -15,9 +15,13 @@ both.
 2. **`apps/api` as a service** — build command `npm run build -w apps/api`,
    start command `npm run start -w apps/api` (needs `npm run build` to have
    produced `dist/` first — see note below on workspace builds). Env vars:
-   everything in `.env.example`, with `SMS_ADAPTER`/`EMAIL_ADAPTER` still
-   `console` until a real provider is chosen (spec §28 marks this as a real
-   decision, not a default to ship with).
+   everything in `.env.example`. `EMAIL_ADAPTER=smtp` with the
+   `SMTP_HOST`/`PORT`/`USER`/`PASSWORD`/`FROM` set — `SMTP_PASSWORD` goes in
+   the platform's secret manager, never in a committed file. `SMS_ADAPTER`
+   is still `console` until a real provider is chosen (spec §28 marks this
+   as a real decision, not a default to ship with); note that with SMS on
+   console, opt-in 2FA challenges cannot be delivered, so 2FA must stay off
+   until an SMS provider is wired.
 3. **Three static sites** for `apps/customer`, `apps/merchant`,
    `apps/admin` — build command `npm run build -w apps/<name>`, publish
    directory `apps/<name>/dist`, with `VITE_API_URL` pointed at the
@@ -26,9 +30,11 @@ both.
    nothing cross-origin to allow yet in local dev (Vite dev servers proxy or
    just hit `localhost:4000` directly). Add `cors` scoped to the three
    deployed app origins before the first real deploy.
-5. **Secrets** — none exist yet (no auth in Phase 0). Phase 1 will need
-   JWT signing keys and refresh-token secrets; store them in the platform's
-   secret manager, never in `.env` committed to the repo.
+5. **Secrets** — `JWT_ACCESS_SECRET` and `SMTP_PASSWORD` are the live ones
+   today; store them in the platform's secret manager, never in a file the
+   repo tracks. `.env` holds them locally and is gitignored.
+   `npm run smtp:check -w apps/api` proves the mail credentials from
+   whatever environment you run it in.
 6. **CI gate** — `.github/workflows/ci.yml` already runs lint/typecheck/test
    against real Postgres+Redis service containers; wire a deploy step (or
    the platform's own git-push-to-deploy) only once staging is intentionally

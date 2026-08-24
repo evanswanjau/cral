@@ -24,6 +24,8 @@ export const ID_PREFIXES = {
   session: "ses",
   otpCode: "otp",
   passwordResetToken: "prt",
+  twoFactorChallenge: "tfc",
+  recoveryCode: "rcv",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

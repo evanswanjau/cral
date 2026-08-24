@@ -10,6 +10,8 @@ import {
   AcceptTermsSchema,
   ChangePasswordSchema,
   CheckPasswordResetSchema,
+  Disable2faSchema,
+  Enroll2faSchema,
   ForgotPasswordSchema,
   LoginSchema,
   LogoutSchema,
@@ -18,6 +20,8 @@ import {
   RefreshTokenSchema,
   RegisterSchema,
   ResetPasswordSchema,
+  TwoFactorChallengeSchema,
+  Verify2faSchema,
 } from "./schemas.js";
 
 export const authRouter = Router();
@@ -100,10 +104,20 @@ authRouter.post(
   "/auth/login",
   // Looser than the 10-failure account lockout in the service layer — that's
   // the primary defense; this is just a backstop against outright abuse.
-  rateLimit({ bucket: "login", limit: 20, windowSeconds: 900, keyFn: (req) => req.body?.identifier ?? req.ip ?? "unknown" }),
+  rateLimit({
+    bucket: "login",
+    limit: 20,
+    windowSeconds: 900,
+    keyFn: (req) => req.body?.identifier ?? req.ip ?? "unknown",
+  }),
   validateBody(LoginSchema),
   asyncHandler(async (req, res) => {
-    const result = await authService.login(req.body.identifier, req.body.password, req.body.device_id, ctxOf(req));
+    const result = await authService.login(
+      req.body.identifier,
+      req.body.password,
+      req.body.device_id,
+      ctxOf(req),
+    );
     res.status(200).json(result);
   }),
 );
@@ -145,11 +159,96 @@ authRouter.delete(
   }),
 );
 
+// --- §7 Opt-in SMS two-factor ------------------------------------------
+//
+// The only SMS an established account ever receives. Enrolment is two
+// steps (choose a handset, prove you hold it); after that every password
+// login raises a challenge that /auth/2fa/challenge answers.
+
+authRouter.get(
+  "/auth/2fa",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.getTwoFactorState(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.post(
+  "/auth/2fa/enroll",
+  authenticate(),
+  rateLimit({ bucket: "two_factor_enroll", limit: 5, windowSeconds: 3600 }),
+  validateBody(Enroll2faSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.enroll2fa(req.auth!.sub, req.body.phone);
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.post(
+  "/auth/2fa/verify",
+  authenticate(),
+  rateLimit({ bucket: "two_factor_verify", limit: 10, windowSeconds: 3600 }),
+  validateBody(Verify2faSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.verify2fa(req.auth!.sub, req.body.code, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
+// Unauthenticated on purpose — the caller has passed a password but has no
+// token yet. The challenge id is the only thing that identifies them.
+authRouter.post(
+  "/auth/2fa/challenge",
+  rateLimit({
+    bucket: "two_factor_challenge",
+    limit: 10,
+    windowSeconds: 900,
+    keyFn: (req) => req.body?.challenge_id ?? req.ip ?? "unknown",
+  }),
+  validateBody(TwoFactorChallengeSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.completeTwoFactorChallenge(
+      req.body.challenge_id,
+      req.body.code,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
+// Raises a fresh challenge for someone already signed in, so they can
+// satisfy the code half of DELETE /auth/2fa.
+authRouter.post(
+  "/auth/2fa/challenge/send",
+  authenticate(),
+  rateLimit({ bucket: "two_factor_reauth", limit: 5, windowSeconds: 3600 }),
+  asyncHandler(async (req, res) => {
+    const result = await authService.sendTwoFactorChallenge(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.delete(
+  "/auth/2fa",
+  authenticate(),
+  validateBody(Disable2faSchema),
+  asyncHandler(async (req, res) => {
+    await authService.disable2fa(req.auth!.sub, req.body.password, req.body.code, ctxOf(req));
+    res.status(204).send();
+  }),
+);
+
 // --- §6 Forgot and reset password --------------------------------------
 
 authRouter.post(
   "/auth/password/forgot",
-  rateLimit({ bucket: "password_forgot", limit: 3, windowSeconds: 3600, keyFn: (req) => req.body?.identifier ?? req.ip ?? "unknown" }),
+  rateLimit({
+    bucket: "password_forgot",
+    limit: 3,
+    windowSeconds: 3600,
+    keyFn: (req) => req.body?.identifier ?? req.ip ?? "unknown",
+  }),
   validateBody(ForgotPasswordSchema),
   asyncHandler(async (req, res) => {
     const result = await authService.forgotPassword(req.body.identifier);

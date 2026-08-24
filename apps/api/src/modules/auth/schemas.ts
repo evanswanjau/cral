@@ -40,32 +40,16 @@ export const ForgotPasswordSchema = z.object({
   identifier: z.string(),
 });
 
-export const CheckPasswordResetSchema = z
-  .object({
-    token: z.string().optional(),
-    phone: z.string().optional(),
-    code: z
-      .string()
-      .regex(/^[0-9]{6}$/)
-      .optional(),
-  })
-  .refine((v) => v.token ?? (v.phone && v.code), {
-    message: "Provide either a token, or both phone and code.",
-  });
+// Reset is by emailed link only — the token from that link is the sole
+// credential. SMS is reserved for opt-in 2FA challenges.
+export const CheckPasswordResetSchema = z.object({
+  token: z.string().min(1),
+});
 
-export const ResetPasswordSchema = z
-  .object({
-    token: z.string().optional(),
-    phone: z.string().optional(),
-    code: z
-      .string()
-      .regex(/^[0-9]{6}$/)
-      .optional(),
-    new_password: z.string().min(10),
-  })
-  .refine((v) => v.token ?? (v.phone && v.code), {
-    message: "Provide either a token, or both phone and code.",
-  });
+export const ResetPasswordSchema = z.object({
+  token: z.string().min(1),
+  new_password: z.string().min(10),
+});
 
 export const ChangePasswordSchema = z.object({
   current_password: z.string(),
@@ -74,4 +58,28 @@ export const ChangePasswordSchema = z.object({
 
 export const AcceptTermsSchema = z.object({
   version: z.string(),
+});
+
+// --- §7 Opt-in SMS two-factor -----------------------------------------
+
+export const Enroll2faSchema = z.object({
+  phone: z.string().min(1),
+});
+
+export const Verify2faSchema = z.object({
+  code: z.string().regex(/^[0-9]{6}$/),
+});
+
+/**
+ * The post-password step. `code` is either the texted six digits or one of
+ * the ten recovery codes, so it can't be pinned to a six-digit pattern.
+ */
+export const TwoFactorChallengeSchema = z.object({
+  challenge_id: z.string().min(1),
+  code: z.string().min(6).max(64),
+});
+
+export const Disable2faSchema = z.object({
+  password: z.string(),
+  code: z.string().min(6).max(64),
 });

@@ -200,6 +200,11 @@ export const S = {
   },
 
   resendLine: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B" },
+  termsLink: {
+    color: "#0F23A8",
+    textDecoration: "underline",
+    textUnderlineOffset: 2,
+  },
   terms: {
     margin: 0,
     font: "400 12px/1.55 'Instrument Sans',sans-serif",

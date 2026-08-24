@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
 import { Field, InfoBanner, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
@@ -11,22 +10,22 @@ import { forgotPassword } from "../lib/auth-api.js";
  * composed entirely from the shared auth primitives — same shell, fields,
  * banner and button — rather than invented styling.
  *
+ * Email only, matching sign-in and sign-up: the account's identity is its
+ * email address, so the way back in is always an emailed link.
+ *
  * The response is deliberately identical whether or not the account exists
  * (spec §6: always 202, never reveal enumeration), so the confirmation copy
  * is conditional-free and the request error is swallowed.
  */
 export function ForgotPassword(): JSX.Element {
-  const navigate = useNavigate();
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
-  const [channel, setChannel] = useState<"email" | "sms">("sms");
   const [busy, setBusy] = useState(false);
 
   async function submit() {
     setBusy(true);
     try {
-      const res = await forgotPassword(identifier).catch(() => null);
-      if (res?.channel_hint) setChannel(res.channel_hint);
+      await forgotPassword(email.trim()).catch(() => null);
       setSent(true);
     } finally {
       setBusy(false);
@@ -36,20 +35,15 @@ export function ForgotPassword(): JSX.Element {
   if (sent) {
     return (
       <AuthShell
-        heading="Check your messages"
+        heading="Check your email"
         subheading="If that account exists, we've sent it a way back in."
         footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
       >
         <div style={S.formStack}>
-          <InfoBanner text={`Instructions sent to ${identifier}`} />
+          <InfoBanner text={`Instructions sent to ${email.trim()}`} />
           <p style={{ ...S.subheading, margin: 0 }}>
-            {channel === "email"
-              ? "Open the link in that email to choose a new password. It expires in thirty minutes."
-              : "Enter the six-digit code we texted you to choose a new password. It expires in ten minutes."}
+            Open the link in that email to choose a new password. It expires in thirty minutes.
           </p>
-          <PrimaryButton type="button" onClick={() => navigate("/reset-password")}>
-            I have a code
-          </PrimaryButton>
           <div style={S.splitRow}>
             <span style={S.resendLine}>Nothing arrived?</span>
             <button
@@ -57,7 +51,7 @@ export function ForgotPassword(): JSX.Element {
               onClick={() => setSent(false)}
               style={{ ...S.smallLink, cursor: "pointer" }}
             >
-              Try another number
+              Try another email
             </button>
           </div>
         </div>
@@ -68,7 +62,7 @@ export function ForgotPassword(): JSX.Element {
   return (
     <AuthShell
       heading="Forgot your password?"
-      subheading="Give us the phone number or email on your merchant account and we'll send you a way back in."
+      subheading="Give us the email on your merchant account and we'll send you a way back in."
       footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
     >
       <form
@@ -78,26 +72,20 @@ export function ForgotPassword(): JSX.Element {
           void submit();
         }}
       >
-        <Field
-          id="identifier"
-          label="PHONE OR EMAIL"
-          helper="We'll text a code, or email a link — whichever your account is verified on."
-        >
+        <Field id="email" label="EMAIL ADDRESS" helper="We'll email you a link.">
           <TextInput
-            id="identifier"
-            value={identifier}
-            onChange={(e) => setIdentifier(e.target.value)}
-            placeholder="0733 376 061"
-            autoComplete="username"
+            id="email"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@company.co.ke"
+            autoComplete="email"
             autoFocus
           />
         </Field>
-        <PrimaryButton type="submit" disabled={busy || !identifier.trim()}>
+        <PrimaryButton type="submit" disabled={busy}>
           {busy ? "Sending…" : "Send me a way back in"}
         </PrimaryButton>
-        <p style={S.terms}>
-          Admin accounts can&apos;t reset this way — another admin has to issue an invite.
-        </p>
       </form>
     </AuthShell>
   );

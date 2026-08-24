@@ -64,10 +64,25 @@ all three portals.
 
 SMS, email and file storage are behind interfaces in
 `apps/api/src/adapters/{sms,email,storage}` so a real provider drops in
-later without touching call sites. Dev/test default is a console/local-disk
-adapter — no SMS or email ever leaves the building until a real adapter is
-wired in and selected via `SMS_ADAPTER` / `EMAIL_ADAPTER` /
-`STORAGE_ADAPTER` env vars.
+without touching call sites, selected via `SMS_ADAPTER` / `EMAIL_ADAPTER` /
+`STORAGE_ADAPTER`.
+
+**Email is real as of 2026-08-24**: `EMAIL_ADAPTER=smtp` uses
+`SmtpEmailAdapter` (nodemailer) against the `noreply@cral.co.ke` mailbox on
+`mail.cral.co.ke:587`. Port 587 is STARTTLS, so `SMTP_SECURE=false` and
+`requireTLS` does the upgrade — `secure: true` on 587 hangs until timeout.
+Credentials live in the gitignored `.env`; `.env.example` carries the keys
+with an empty password. `npm run smtp:check -w apps/api` authenticates and
+disconnects without sending; pass an address to send one real test message.
+The server verifies the connection at boot and warns (does not exit) if it
+fails.
+
+`apps/api/vitest.config.ts` pins `EMAIL_ADAPTER`/`SMS_ADAPTER` to `console`
+for the test run. Don't remove that — without it every test run tries to
+deliver verification codes to `@example.test` addresses.
+
+**SMS is still console.** No real provider is wired, so opt-in 2FA
+challenges can't actually be delivered yet; 2FA must stay off until one is.
 
 ## Design tokens
 
@@ -168,9 +183,56 @@ transact; `GET /auth/registration-state` reports what's outstanding and is
 what the "finish setting up" banner reads. `users.phone` and
 `users.full_name` are nullable as of migration `20260826090000`.
 
-Consequences to keep in mind: an email-first account can't use the
-passwordless SMS tab on sign-in until onboarding adds a phone (the screen
-says so), and password reset for such an account can only go by email.
+**Sign-in is email + password (or Google) only** (decided 2026-08-24) —
+the design's passwordless SMS-code tab is gone from the merchant UI. A phone
+may not be on file at all, so the tab was a dead end more often than not;
+second factors belong in account settings later, not as a competing way in.
+Forgot/reset password follow suit: forgot-password takes an email and sends
+a link, and `/reset-password` only works from that link's `?token=` (a bare
+visit shows the "ask for a new one" screen).
+
+**SMS is only ever a 2FA challenge** (decided 2026-08-24). No password
+reset by SMS, no passwordless SMS login, no SMS at sign-up. Every other
+message the product sends goes by email. The reasoning: SMS costs money per
+send, SIM-swap is a real attack in Kenya, and a texted code is a poor
+primary credential — but it is a reasonable *second* factor for someone who
+has opted into it.
+
+What that meant in practice:
+- `POST /auth/password/forgot` always emails a link. `channel_hint` is now
+  the constant `"email"`, and `/auth/password/reset{,/check}` take a
+  `token` and nothing else — the phone+code branch is gone from the
+  service, the schemas, and `identity.yaml`.
+- Opt-in SMS 2FA is implemented end to end in the API: `GET /auth/2fa`,
+  `POST /auth/2fa/enroll` → `POST /auth/2fa/verify` (two-step enrolment,
+  returns ten single-use recovery codes exactly once),
+  `POST /auth/2fa/challenge` (the post-password step at sign-in; accepts
+  the texted code or a recovery code), `POST /auth/2fa/challenge/send`, and
+  `DELETE /auth/2fa` (password + a current code; admins can't disable their
+  own). Tables in migration `20260826100000`.
+- **A 2FA-pending login carries no tokens.** `POST /auth/login` returns
+  `{ next: "2fa", challenge_id, masked_destination, expires_in }` and
+  nothing else; the session is created by `/auth/2fa/challenge`. Don't
+  "fix" this by issuing a short-lived token at the password step.
+- `two_factor_phone` is deliberately separate from `users.phone`. The
+  latter is the payout number; changing payout details must not silently
+  move the second factor.
+
+This is a **deliberate deviation from the frozen `identity.yaml`**, which
+specified TOTP (`secret` + `otpauth_uri`). The owner chose SMS on
+2026-08-24 — the phone is already on file for payouts and an authenticator
+app is a bigger ask of this audience. The contract was rewritten to match,
+so it is once again the source of truth.
+
+**The 2FA UI is not built.** No settings section exists in `apps/merchant`
+(the only authenticated route is `/` → Overview), so nobody can enrol, and
+the sign-in screen has no code step — it shows a plain error if the API
+ever returns the `2fa` branch. Both are pending, by the owner's call
+("we will get to settings later").
+
+`verifyLoginOtp`, `PhoneInput` and `toE164` in `apps/merchant` are
+referenced by nothing right now. They're kept for onboarding's payout-phone
+step and the 2FA screens; don't delete them as dead code.
 
 ## What NOT to do
 

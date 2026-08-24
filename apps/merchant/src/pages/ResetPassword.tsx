@@ -1,17 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
-import {
-  CodeInput,
-  Field,
-  InfoBanner,
-  PhoneInput,
-  PrimaryButton,
-  TextInput,
-} from "../components/auth/primitives.jsx";
+import { Field, InfoBanner, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
 import { checkPasswordReset, resetPassword } from "../lib/auth-api.js";
-import { toE164 } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 
 type View = "checking" | "form" | "expired" | "done";
@@ -20,9 +12,8 @@ type View = "checking" | "form" | "expired" | "done";
  * Reset password. Like Forgot, this screen has no canvas file and is built
  * from the shared auth primitives.
  *
- * Two paths, per spec §6: an emailed link (`?token=`) or a texted code
- * (phone + code). With a token we verify it up front via
- * /auth/password/reset/check, so an expired link says so *before* the
+ * One path, per spec §6: the emailed link (`?token=`). We verify the token
+ * up front via /auth/password/reset/check, so an expired link says so *before* the
  * person types a new password twice — the delivery plan calls that dead end
  * out explicitly as a gap in the original designs.
  */
@@ -31,10 +22,8 @@ export function ResetPassword(): JSX.Element {
   const [params] = useSearchParams();
   const token = params.get("token");
 
-  const [view, setView] = useState<View>(token ? "checking" : "form");
+  const [view, setView] = useState<View>(token ? "checking" : "expired");
   const [masked, setMasked] = useState<string | null>(null);
-  const [phone, setPhone] = useState("");
-  const [code, setCode] = useState("");
   const [pw, setPw] = useState("");
   const [reveal, setReveal] = useState(false);
   const [revoked, setRevoked] = useState(0);
@@ -62,11 +51,7 @@ export function ResetPassword(): JSX.Element {
     setError(null);
     setBusy(true);
     try {
-      const res = await resetPassword(
-        token
-          ? { token, new_password: pw }
-          : { phone: toE164(phone), code, new_password: pw },
-      );
+      const res = await resetPassword({ token: token!, new_password: pw });
       setRevoked(res.sessions_revoked);
       setView("done");
     } catch (err) {
@@ -96,7 +81,7 @@ export function ResetPassword(): JSX.Element {
     return (
       <AuthShell
         heading="This link has expired"
-        subheading="Reset links and codes are short-lived on purpose. Ask for a new one and you'll be straight back in."
+        subheading="Reset links are short-lived on purpose. Ask for a new one and you'll be straight back in."
         footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
       >
         <div style={S.formStack}>
@@ -126,8 +111,8 @@ export function ResetPassword(): JSX.Element {
             }
           />
           <p style={{ ...S.subheading, margin: 0 }}>
-            Anyone still signed in on another phone or laptop has been signed out, so a stolen session
-            can't outlive the reset.
+            Anyone still signed in on another phone or laptop has been signed out, so a stolen
+            session can't outlive the reset.
           </p>
           <PrimaryButton type="button" onClick={() => navigate("/sign-in", { replace: true })}>
             Sign in
@@ -140,11 +125,7 @@ export function ResetPassword(): JSX.Element {
   return (
     <AuthShell
       heading="Choose a new password"
-      subheading={
-        masked
-          ? `Setting a new password for ${masked}.`
-          : "Enter the code we sent you, then pick something new."
-      }
+      subheading={masked ? `Setting a new password for ${masked}.` : "Pick something new."}
       error={error}
       footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
     >
@@ -155,17 +136,6 @@ export function ResetPassword(): JSX.Element {
           void submit();
         }}
       >
-        {!token && (
-          <>
-            <Field id="reset-phone" label="M-PESA PHONE NUMBER">
-              <PhoneInput id="reset-phone" value={phone} onChange={setPhone} />
-            </Field>
-            <Field id="reset-code" label="SIX-DIGIT CODE">
-              <CodeInput id="reset-code" value={code} onChange={(e) => setCode(e.target.value)} />
-            </Field>
-          </>
-        )}
-
         <Field
           id="new-pw"
           label="NEW PASSWORD"
@@ -186,16 +156,11 @@ export function ResetPassword(): JSX.Element {
           />
         </Field>
 
-        <PrimaryButton
-          type="submit"
-          disabled={busy || pw.length < 10 || (!token && (code.length !== 6 || !phone.trim()))}
-        >
+        <PrimaryButton type="submit" disabled={busy}>
           {busy ? "Saving…" : "Save new password"}
         </PrimaryButton>
 
-        <p style={S.terms}>
-          Setting a new password signs you out on every other device.
-        </p>
+        <p style={S.terms}>Setting a new password signs you out on every other device.</p>
       </form>
     </AuthShell>
   );

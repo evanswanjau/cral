@@ -1,3 +1,5 @@
+import { randomInt } from "node:crypto";
+import type { Knex } from "knex";
 import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -9,8 +11,24 @@ import { isPasswordBreached } from "../../lib/breach-check.js";
 import { isPhone, normalizePhone } from "../../lib/identifier.js";
 import { maskIdentifier } from "../../lib/mask.js";
 import { smsAdapter, emailAdapter } from "../../lib/adapters.js";
+import {
+  emailButton,
+  emailCode,
+  emailHeading,
+  emailLayout,
+  emailMuted,
+  emailNotice,
+  emailParagraph,
+} from "../../lib/email-templates.js";
 import { writeAuditEntry } from "../../lib/audit.js";
-import type { OtpCodeRow, PasswordResetTokenRow, SessionRow, UserRow } from "./db-types.js";
+import type {
+  OtpCodeRow,
+  PasswordResetTokenRow,
+  RecoveryCodeRow,
+  SessionRow,
+  TwoFactorChallengeRow,
+  UserRow,
+} from "./db-types.js";
 
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
@@ -18,8 +36,21 @@ const RESET_TOKEN_TTL_MINUTES = 30;
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
 const LOCKOUT_THRESHOLD = 10;
 const LOCKOUT_MINUTES = 15;
+const TWO_FACTOR_TTL_MINUTES = 10;
+const TWO_FACTOR_MAX_ATTEMPTS = 5;
+const RECOVERY_CODE_COUNT = 10;
 
-type OtpPurpose = "signup" | "login" | "phone_change" | "password_reset";
+/**
+ * Where the reset link points. The merchant portal is a separate static
+ * site from the API, so its origin has to be configured, not guessed —
+ * localhost in dev, the deployed origin in staging/production. Trailing
+ * slashes are trimmed so the path concatenation below can't double up.
+ */
+function merchantAppUrl(): string {
+  return (process.env.MERCHANT_APP_URL ?? "http://localhost:5174").replace(/\/+$/, "");
+}
+
+type OtpPurpose = "signup" | "login" | "phone_change" | "password_reset" | "two_factor_enrol";
 
 export interface RequestContext {
   ip: string | null;
@@ -40,7 +71,9 @@ async function findUserByIdentifier(raw: string): Promise<UserRow | undefined> {
   const resolved = resolveIdentifier(raw);
   if (!resolved) return undefined;
   return db<UserRow>("users")
-    .where(resolved.kind === "phone" ? { phone: resolved.identifier } : { email: resolved.identifier })
+    .where(
+      resolved.kind === "phone" ? { phone: resolved.identifier } : { email: resolved.identifier },
+    )
     .first();
 }
 
@@ -90,7 +123,11 @@ function issueTokenPair(user: UserRow, session: SessionRow, refreshToken: string
   };
 }
 
-async function sendOtp(identifier: string, kind: "phone" | "email", purpose: OtpPurpose): Promise<void> {
+async function sendOtp(
+  identifier: string,
+  kind: "phone" | "email",
+  purpose: OtpPurpose,
+): Promise<void> {
   const code = generateOtpCode();
   const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000);
 
@@ -102,11 +139,24 @@ async function sendOtp(identifier: string, kind: "phone" | "email", purpose: Otp
     expires_at: expiresAt,
   });
 
-  const body = `Your Cruz Ride Auto code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`;
+  const body = `Your CRAL code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`;
   if (kind === "phone") {
     await smsAdapter.send({ to: identifier, body });
   } else {
-    await emailAdapter.send({ to: identifier, subject: "Your verification code", html: body, text: body });
+    await emailAdapter.send({
+      to: identifier,
+      subject: "Your CRAL code",
+      html: emailLayout({
+        preheader: `${code} is your CRAL code`,
+        bodyHtml: [
+          emailHeading("Your verification code"),
+          emailCode(code),
+          emailParagraph(`Enter this to continue. It expires in ${OTP_TTL_MINUTES} minutes.`),
+          emailMuted("If you didn't ask for this code, you can ignore this email."),
+        ].join(""),
+      }),
+      text: body,
+    });
   }
 }
 
@@ -197,7 +247,12 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
 export async function getRegistrationState(userId: string) {
   const user = await db<UserRow>("users").where({ id: userId }).first();
   if (!user) {
-    throw new ApiError({ status: 404, type: "not_found", code: "user_not_found", message: "Not found." });
+    throw new ApiError({
+      status: 404,
+      type: "not_found",
+      code: "user_not_found",
+      message: "Not found.",
+    });
   }
   const isMerchant = user.roles.includes("merchant");
   return {
@@ -280,7 +335,9 @@ export async function verifyOtp(input: VerifyOtpInput, ctx: RequestContext) {
   if (input.purpose === "signup") {
     const column = resolved.kind === "phone" ? "phone_verified" : "email_verified";
     await db<UserRow>("users")
-      .where(resolved.kind === "phone" ? { phone: resolved.identifier } : { email: resolved.identifier })
+      .where(
+        resolved.kind === "phone" ? { phone: resolved.identifier } : { email: resolved.identifier },
+      )
       .update({ [column]: true });
     return { verified: true };
   }
@@ -295,8 +352,16 @@ export async function verifyOtp(input: VerifyOtpInput, ctx: RequestContext) {
         message: "We couldn't find an account for that number or email.",
       });
     }
-    const { session, refreshToken } = await createSession(user.id, input.deviceId ?? "otp-login", ctx);
-    return { ...issueTokenPair(user, session, refreshToken), user: serializeUser(user), next: null };
+    const { session, refreshToken } = await createSession(
+      user.id,
+      input.deviceId ?? "otp-login",
+      ctx,
+    );
+    return {
+      ...issueTokenPair(user, session, refreshToken),
+      user: serializeUser(user),
+      next: null,
+    };
   }
 
   return { verified: true };
@@ -326,12 +391,19 @@ async function registerFailedAttempt(user: UserRow): Promise<void> {
     .update({ failed_login_count: failedCount, locked_until: lockedUntil });
 }
 
-export async function login(identifier: string, password: string, deviceId: string, ctx: RequestContext) {
+export async function login(
+  identifier: string,
+  password: string,
+  deviceId: string,
+  ctx: RequestContext,
+) {
   const user = await findUserByIdentifier(identifier);
 
   // Always run a hash comparison, even for an unknown identifier, so a
   // missing account and a wrong password take roughly the same time.
-  const passwordHash = user?.password_hash ?? "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+  const passwordHash =
+    user?.password_hash ??
+    "$argon2id$v=19$m=65536,t=3,p=4$AAAAAAAAAAAAAAAAAAAAAA$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
   const passwordOk = await verifyPassword(passwordHash, password).catch(() => false);
 
   if (!user) {
@@ -356,7 +428,21 @@ export async function login(identifier: string, password: string, deviceId: stri
   }
 
   if (user.failed_login_count > 0 || user.locked_until) {
-    await db<UserRow>("users").where({ id: user.id }).update({ failed_login_count: 0, locked_until: null });
+    await db<UserRow>("users")
+      .where({ id: user.id })
+      .update({ failed_login_count: 0, locked_until: null });
+  }
+
+  // The password was right, but an enrolled merchant still owes a code. No
+  // session and no tokens exist until POST /auth/2fa/challenge succeeds.
+  if (user.two_factor_enabled && user.two_factor_phone) {
+    const challenge = await issueTwoFactorChallenge(user, deviceId);
+    return {
+      next: "2fa" as const,
+      challenge_id: challenge.id,
+      masked_destination: maskIdentifier(user.two_factor_phone),
+      expires_in: TWO_FACTOR_TTL_MINUTES * 60,
+    };
   }
 
   const { session, refreshToken } = await createSession(user.id, deviceId, ctx);
@@ -366,7 +452,9 @@ export async function login(identifier: string, password: string, deviceId: stri
 export async function refreshToken(presentedToken: string, ctx: RequestContext) {
   const presentedHash = hashToken(presentedToken);
 
-  const byCurrentHash = await db<SessionRow>("sessions").where({ token_hash: presentedHash }).first();
+  const byCurrentHash = await db<SessionRow>("sessions")
+    .where({ token_hash: presentedHash })
+    .first();
 
   if (byCurrentHash) {
     if (byCurrentHash.revoked_at || byCurrentHash.expires_at < new Date()) {
@@ -406,7 +494,9 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
 
   // Presented hash matches a *previous* (already-rotated) token — someone
   // is replaying a used refresh token. Revoke the whole session (spec §5).
-  const reused = await db<SessionRow>("sessions").where({ previous_token_hash: presentedHash }).first();
+  const reused = await db<SessionRow>("sessions")
+    .where({ previous_token_hash: presentedHash })
+    .first();
   if (reused && !reused.revoked_at) {
     await db<SessionRow>("sessions")
       .where({ id: reused.id })
@@ -421,7 +511,11 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
   });
 }
 
-export async function logout(userId: string, sessionId: string, allDevices: boolean): Promise<void> {
+export async function logout(
+  userId: string,
+  sessionId: string,
+  allDevices: boolean,
+): Promise<void> {
   const query = db<SessionRow>("sessions").where({ user_id: userId, revoked_at: null });
   if (!allDevices) query.andWhere({ id: sessionId });
   await query.update({ revoked_at: new Date(), revoked_reason: "logout" });
@@ -458,6 +552,439 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
 }
 
 // ---------------------------------------------------------------------
+// §7 Opt-in SMS two-factor
+// ---------------------------------------------------------------------
+
+/**
+ * Texts a fresh six-digit code and records the challenge it belongs to.
+ * Any earlier unspent challenge for the same user is retired first, so a
+ * second sign-in attempt can't be completed with a stale code.
+ */
+async function issueTwoFactorChallenge(
+  user: UserRow,
+  deviceId: string,
+): Promise<TwoFactorChallengeRow> {
+  await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ user_id: user.id, consumed_at: null })
+    .update({ consumed_at: new Date() });
+
+  const code = generateOtpCode();
+  const [challenge] = await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .insert({
+      id: generateId("twoFactorChallenge"),
+      user_id: user.id,
+      device_id: deviceId,
+      code_hash: hashCode(code),
+      expires_at: new Date(Date.now() + TWO_FACTOR_TTL_MINUTES * 60 * 1000),
+    })
+    .returning("*");
+
+  if (!challenge) throw new Error("Failed to create two-factor challenge");
+
+  await smsAdapter.send({
+    to: user.two_factor_phone as string,
+    body: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+  });
+
+  return challenge;
+}
+
+function generateRecoveryCode(): string {
+  // Two short groups, unambiguous alphabet — these get written down.
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const pick = (n: number) =>
+    Array.from({ length: n }, () => alphabet[randomInt(0, alphabet.length)]).join("");
+  return `${pick(4)}-${pick(4)}`;
+}
+
+async function issueRecoveryCodes(userId: string, trx: Knex.Transaction): Promise<string[]> {
+  await trx("recovery_codes").where({ user_id: userId }).del();
+  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
+  await trx("recovery_codes").insert(
+    codes.map((code) => ({
+      id: generateId("recoveryCode"),
+      user_id: userId,
+      code_hash: hashCode(code),
+    })),
+  );
+  return codes;
+}
+
+/** Spends a recovery code if it matches an unconsumed one. */
+async function consumeRecoveryCode(userId: string, presented: string): Promise<boolean> {
+  const row = await db<RecoveryCodeRow>("recovery_codes")
+    .where({
+      user_id: userId,
+      code_hash: hashCode(presented.trim().toUpperCase()),
+      consumed_at: null,
+    })
+    .first();
+  if (!row) return false;
+  await db<RecoveryCodeRow>("recovery_codes")
+    .where({ id: row.id })
+    .update({ consumed_at: new Date() });
+  return true;
+}
+
+async function requireUser(userId: string): Promise<UserRow> {
+  const user = await db<UserRow>("users").where({ id: userId }).first();
+  if (!user) {
+    throw new ApiError({
+      status: 404,
+      type: "not_found",
+      code: "user_not_found",
+      message: "That account no longer exists.",
+    });
+  }
+  return user;
+}
+
+/**
+ * Step 1 of enrolment: take the handset the merchant wants challenges on,
+ * and text it a code to prove they hold it. Nothing is switched on until
+ * /auth/2fa/verify confirms.
+ */
+export async function enroll2fa(userId: string, rawPhone: string) {
+  const user = await requireUser(userId);
+
+  if (user.two_factor_enabled) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_already_enabled",
+      message: "Two-factor authentication is already on for this account.",
+    });
+  }
+
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "invalid_phone",
+      message: "That doesn't look like a Kenyan mobile number.",
+      field: "phone",
+    });
+  }
+
+  await db<UserRow>("users").where({ id: user.id }).update({ two_factor_phone: phone });
+  await sendOtp(phone, "phone", "two_factor_enrol");
+
+  return { masked_destination: maskIdentifier(phone), retry_after: 60 };
+}
+
+/**
+ * Step 2 of enrolment: the code from the text. Switches 2FA on and issues
+ * the ten recovery codes — the only time they are ever shown.
+ */
+export async function verify2fa(userId: string, code: string, ctx: RequestContext) {
+  const user = await requireUser(userId);
+
+  if (user.two_factor_enabled) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_already_enabled",
+      message: "Two-factor authentication is already on for this account.",
+    });
+  }
+
+  if (!user.two_factor_phone) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_not_started",
+      message: "Start by choosing the number to text.",
+    });
+  }
+
+  const row = await db<OtpCodeRow>("otp_codes")
+    .where({ identifier: user.two_factor_phone, purpose: "two_factor_enrol", consumed_at: null })
+    .orderBy("created_at", "desc")
+    .first();
+
+  if (!row || row.expires_at < new Date() || row.attempts >= OTP_MAX_ATTEMPTS) {
+    throw new ApiError({
+      status: 400,
+      type: "conflict",
+      code: "otp_expired",
+      message: "That code has expired. Ask for a new one.",
+    });
+  }
+
+  if (hashCode(code) !== row.code_hash) {
+    await db<OtpCodeRow>("otp_codes")
+      .where({ id: row.id })
+      .update({ attempts: row.attempts + 1 });
+    throw new ApiError({
+      status: 400,
+      type: "validation_error",
+      code: "otp_invalid",
+      message: "That code isn't right.",
+      field: "code",
+    });
+  }
+
+  const recoveryCodes = await db.transaction(async (trx) => {
+    await trx<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ consumed_at: new Date() });
+    await trx<UserRow>("users")
+      .where({ id: user.id })
+      .update({ two_factor_enabled: true, two_factor_enrolled_at: new Date() });
+    const codes = await issueRecoveryCodes(user.id, trx);
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "auth.two_factor.enabled",
+      entityType: "user",
+      entityId: user.id,
+      after: { two_factor_enabled: true },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return codes;
+  });
+
+  const notice =
+    "Two-factor authentication was switched on for your CRAL account. If this wasn't you, contact support immediately.";
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Two-factor authentication is on",
+    html: emailLayout({
+      preheader: "Two-factor authentication is now on for your account",
+      bodyHtml: [
+        emailHeading("Two-factor authentication is on"),
+        emailParagraph(
+          "From now on, signing in needs your password and a code texted to your phone.",
+        ),
+        emailMuted("If this wasn't you, contact support immediately."),
+      ].join(""),
+    }),
+    text: notice,
+  });
+
+  return { recovery_codes: recoveryCodes };
+}
+
+/**
+ * The post-password step at sign-in. Accepts the texted code or any unspent
+ * recovery code, and only then creates the session.
+ */
+export async function completeTwoFactorChallenge(
+  challengeId: string,
+  presented: string,
+  ctx: RequestContext,
+) {
+  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ id: challengeId, consumed_at: null })
+    .first();
+
+  if (
+    !challenge ||
+    challenge.expires_at < new Date() ||
+    challenge.attempts >= TWO_FACTOR_MAX_ATTEMPTS
+  ) {
+    throw new ApiError({
+      status: 400,
+      type: "conflict",
+      code: "two_factor_challenge_expired",
+      message: "That sign-in attempt has expired. Start again.",
+    });
+  }
+
+  const user = await requireUser(challenge.user_id);
+
+  const code = presented.trim();
+  const matchesTexted = /^[0-9]{6}$/.test(code) && hashCode(code) === challenge.code_hash;
+  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, code);
+
+  if (!matchesTexted && !usedRecoveryCode) {
+    await db<TwoFactorChallengeRow>("two_factor_challenges")
+      .where({ id: challenge.id })
+      .update({ attempts: challenge.attempts + 1 });
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "two_factor_invalid",
+      message: "That code isn't right.",
+      field: "code",
+    });
+  }
+
+  await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ id: challenge.id })
+    .update({ consumed_at: new Date() });
+
+  if (usedRecoveryCode) {
+    const remaining = await db<RecoveryCodeRow>("recovery_codes")
+      .where({ user_id: user.id, consumed_at: null })
+      .count({ n: "*" })
+      .first();
+    const remainingCount = Number(remaining?.n ?? 0);
+    const notice = `A recovery code was used to sign in to your CRAL account. ${remainingCount} remain.`;
+    await emailAdapter.send({
+      to: user.email,
+      subject: "A recovery code was used",
+      html: emailLayout({
+        preheader: notice,
+        bodyHtml: [
+          emailHeading("A recovery code was used"),
+          emailParagraph("One of your two-factor recovery codes was just used to sign in."),
+          emailNotice(
+            `${remainingCount} recovery ${remainingCount === 1 ? "code" : "codes"} remain.`,
+          ),
+          emailMuted("If this wasn't you, change your password and contact support immediately."),
+        ].join(""),
+      }),
+      text: notice,
+    });
+  }
+
+  const { session, refreshToken } = await createSession(user.id, challenge.device_id, ctx);
+  return {
+    ...issueTokenPair(user, session, refreshToken),
+    user: serializeUser(user),
+    next: null,
+    used_recovery_code: usedRecoveryCode,
+  };
+}
+
+/**
+ * Turning it off costs a password *and* a current code, per the contract.
+ * The code must come from a challenge the caller already holds — call
+ * /auth/2fa/challenge/send first — or be one of the recovery codes.
+ */
+export async function disable2fa(
+  userId: string,
+  password: string,
+  code: string,
+  ctx: RequestContext,
+) {
+  const user = await requireUser(userId);
+
+  if (!user.two_factor_enabled) return;
+
+  if (user.roles.includes("admin")) {
+    throw new ApiError({
+      status: 403,
+      type: "auth_error",
+      code: "admin_two_factor_required",
+      message: "Admins can't switch off their own two-factor authentication.",
+    });
+  }
+
+  const passwordOk = await verifyPassword(user.password_hash, password).catch(() => false);
+  if (!passwordOk) {
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "invalid_credentials",
+      message: "That password isn't right.",
+      field: "password",
+    });
+  }
+
+  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ user_id: user.id, consumed_at: null })
+    .orderBy("created_at", "desc")
+    .first();
+
+  const trimmed = code.trim();
+  const matchesTexted =
+    !!challenge &&
+    challenge.expires_at > new Date() &&
+    /^[0-9]{6}$/.test(trimmed) &&
+    hashCode(trimmed) === challenge.code_hash;
+  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, trimmed);
+
+  if (!matchesTexted && !usedRecoveryCode) {
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "two_factor_invalid",
+      message: "That code isn't right.",
+      field: "code",
+    });
+  }
+
+  if (challenge) {
+    await db<TwoFactorChallengeRow>("two_factor_challenges")
+      .where({ id: challenge.id })
+      .update({ consumed_at: new Date() });
+  }
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users")
+      .where({ id: user.id })
+      .update({ two_factor_enabled: false, two_factor_phone: null, two_factor_enrolled_at: null });
+    await trx("recovery_codes").where({ user_id: user.id }).del();
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "auth.two_factor.disabled",
+      entityType: "user",
+      entityId: user.id,
+      before: { two_factor_enabled: true },
+      after: { two_factor_enabled: false },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  const notice =
+    "Two-factor authentication was switched off for your CRAL account. If this wasn't you, contact support immediately.";
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Two-factor authentication is off",
+    html: emailLayout({
+      preheader: "Two-factor authentication is now off for your account",
+      bodyHtml: [
+        emailHeading("Two-factor authentication is off"),
+        emailParagraph("Signing in no longer asks for a texted code — a password is enough again."),
+        emailMuted("If this wasn't you, contact support immediately."),
+      ].join(""),
+    }),
+    text: notice,
+  });
+}
+
+/** Raises a fresh challenge for an already-signed-in merchant (used by disable). */
+export async function sendTwoFactorChallenge(userId: string) {
+  const user = await requireUser(userId);
+  if (!user.two_factor_enabled || !user.two_factor_phone) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_not_enabled",
+      message: "Two-factor authentication isn't on for this account.",
+    });
+  }
+  const challenge = await issueTwoFactorChallenge(user, "reauth");
+  return {
+    challenge_id: challenge.id,
+    masked_destination: maskIdentifier(user.two_factor_phone),
+    expires_in: TWO_FACTOR_TTL_MINUTES * 60,
+  };
+}
+
+/** What the settings screen reads to draw the 2FA card. */
+export async function getTwoFactorState(userId: string) {
+  const user = await requireUser(userId);
+  const remaining = user.two_factor_enabled
+    ? await db<RecoveryCodeRow>("recovery_codes")
+        .where({ user_id: userId, consumed_at: null })
+        .count({ n: "*" })
+        .first()
+    : null;
+  return {
+    enabled: user.two_factor_enabled,
+    method: user.two_factor_enabled ? ("sms" as const) : null,
+    masked_destination: user.two_factor_phone ? maskIdentifier(user.two_factor_phone) : null,
+    enrolled_at: user.two_factor_enrolled_at?.toISOString() ?? null,
+    recovery_codes_remaining: remaining ? Number(remaining.n) : null,
+  };
+}
+
+// ---------------------------------------------------------------------
 // §6 Forgot and reset password
 // ---------------------------------------------------------------------
 
@@ -465,95 +992,74 @@ export async function forgotPassword(identifier: string) {
   const resolved = resolveIdentifier(identifier);
   const user = resolved ? await findUserByIdentifier(resolved.identifier) : undefined;
 
-  // Chooses the channel from what the account has verified — falls back to
-  // whatever the raw identifier *looks like* when there's no real account,
-  // so the response shape never hints at whether one exists (spec §6).
-  // An email-first account has no phone yet, so email is the only route.
-  const smsPhone = user && !user.email_verified && user.phone && user.phone_verified ? user.phone : null;
-  const useEmail = user ? smsPhone === null : resolved?.kind === "email";
-  const destination = user ? (smsPhone ?? user.email) : (resolved?.identifier ?? identifier);
+  // Always email, never SMS. An account's identity is its email address, and
+  // the only SMS this product sends is a 2FA challenge the merchant opted
+  // into — a reset code is not that. When there's no account we still echo a
+  // masked form of whatever was typed, so the response shape never hints at
+  // whether one exists (spec §6).
+  const destination = user ? user.email : (resolved?.identifier ?? identifier);
 
   if (user) {
-    if (useEmail) {
-      const rawToken = generateOpaqueToken();
-      await db<PasswordResetTokenRow>("password_reset_tokens")
-        .where({ user_id: user.id, consumed_at: null })
-        .update({ consumed_at: new Date() }); // invalidate any earlier unused token
-      await db<PasswordResetTokenRow>("password_reset_tokens").insert({
-        id: generateId("passwordResetToken"),
-        user_id: user.id,
-        token_hash: hashToken(rawToken),
-        expires_at: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000),
-      });
-      const link = `https://cral.co.ke/reset?token=${rawToken}`;
-      await emailAdapter.send({
-        to: user.email,
-        subject: "Reset your Cruz Ride Auto password",
-        html: `Reset your password: ${link}`,
-        text: `Reset your password: ${link}`,
-      });
-    } else if (smsPhone) {
-      await sendOtp(smsPhone, "phone", "password_reset");
-    }
+    const rawToken = generateOpaqueToken();
+    await db<PasswordResetTokenRow>("password_reset_tokens")
+      .where({ user_id: user.id, consumed_at: null })
+      .update({ consumed_at: new Date() }); // invalidate any earlier unused token
+    await db<PasswordResetTokenRow>("password_reset_tokens").insert({
+      id: generateId("passwordResetToken"),
+      user_id: user.id,
+      token_hash: hashToken(rawToken),
+      expires_at: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000),
+    });
+    const link = `${merchantAppUrl()}/reset-password?token=${rawToken}`;
+    await emailAdapter.send({
+      to: user.email,
+      subject: "Reset your CRAL password",
+      html: emailLayout({
+        preheader: "Choose a new password for your CRAL account",
+        bodyHtml: [
+          emailHeading("Reset your password"),
+          emailParagraph("Someone asked to reset the password on your CRAL account."),
+          emailButton("Choose a new password", link),
+          emailMuted(
+            `This link expires in ${RESET_TOKEN_TTL_MINUTES} minutes. If this wasn't you, ignore this email — nothing has changed.`,
+          ),
+        ].join(""),
+      }),
+      text: `Someone asked to reset the password on your CRAL account.
+
+Choose a new password: ${link}
+
+The link expires in ${RESET_TOKEN_TTL_MINUTES} minutes. If this wasn't you, ignore this email - nothing has changed.`,
+    });
   }
 
   return {
     status: "sent" as const,
-    channel_hint: useEmail ? ("email" as const) : ("sms" as const),
+    channel_hint: "email" as const,
     masked: maskIdentifier(destination),
     retry_after: 60,
   };
 }
 
 interface ResetLookupInput {
-  token?: string;
-  phone?: string;
-  code?: string;
+  token: string;
 }
 
 async function lookupResetTarget(
   input: ResetLookupInput,
 ): Promise<{ userId: string; consume: () => Promise<void> } | null> {
-  if (input.token) {
-    const row = await db<PasswordResetTokenRow>("password_reset_tokens")
-      .where({ token_hash: hashToken(input.token), consumed_at: null })
-      .first();
-    if (!row || row.expires_at < new Date()) return null;
-    return {
-      userId: row.user_id,
-      consume: async () => {
-        await db<PasswordResetTokenRow>("password_reset_tokens")
-          .where({ id: row.id })
-          .update({ consumed_at: new Date() });
-      },
-    };
-  }
-
-  if (input.phone && input.code) {
-    const phone = normalizePhone(input.phone);
-    if (!phone) return null;
-    const row = await db<OtpCodeRow>("otp_codes")
-      .where({ identifier: phone, purpose: "password_reset", consumed_at: null })
-      .orderBy("created_at", "desc")
-      .first();
-    if (!row || row.expires_at < new Date() || row.attempts >= OTP_MAX_ATTEMPTS) return null;
-    if (hashCode(input.code) !== row.code_hash) {
-      await db<OtpCodeRow>("otp_codes")
+  const row = await db<PasswordResetTokenRow>("password_reset_tokens")
+    .where({ token_hash: hashToken(input.token), consumed_at: null })
+    .first();
+  if (!row || row.expires_at < new Date()) return null;
+  return {
+    userId: row.user_id,
+    consume: async () => {
+      await db<PasswordResetTokenRow>("password_reset_tokens")
         .where({ id: row.id })
-        .update({ attempts: row.attempts + 1 });
-      return null;
-    }
-    const user = await db<UserRow>("users").where({ phone }).first();
-    if (!user) return null;
-    return {
-      userId: user.id,
-      consume: async () => {
-        await db<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ consumed_at: new Date() });
-      },
-    };
-  }
-
-  return null;
+        .update({ consumed_at: new Date() });
+    },
+  };
 }
 
 export async function checkPasswordReset(input: ResetLookupInput) {
@@ -563,7 +1069,7 @@ export async function checkPasswordReset(input: ResetLookupInput) {
   const user = await db<UserRow>("users").where({ id: target.userId }).first();
   return {
     valid: true,
-    masked_identifier: user ? maskIdentifier(input.token ? user.email : (user.phone ?? user.email)) : null,
+    masked_identifier: user ? maskIdentifier(user.email) : null,
     requires_2fa: false,
   };
 }
@@ -578,7 +1084,7 @@ export async function resetPassword(
       status: 400,
       type: "conflict",
       code: "reset_token_expired",
-      message: "This reset link or code has expired. Request a new one.",
+      message: "This reset link has expired. Request a new one.",
     });
   }
 
@@ -616,12 +1122,27 @@ export async function resetPassword(
 
   const user = await db<UserRow>("users").where({ id: target.userId }).first();
   if (user) {
-    const notice = "Your Cruz Ride Auto password was just reset. If this wasn't you, contact support immediately.";
+    const notice =
+      "Your CRAL password was just reset. If this wasn't you, contact support immediately.";
     // Notify on every channel the account actually has — an email-first
     // account has no phone yet (spec §6 asks for both where both exist).
     await Promise.all([
       ...(user.phone ? [smsAdapter.send({ to: user.phone, body: notice })] : []),
-      emailAdapter.send({ to: user.email, subject: "Your password was reset", html: notice, text: notice }),
+      emailAdapter.send({
+        to: user.email,
+        subject: "Your password was reset",
+        html: emailLayout({
+          preheader: "Your CRAL password was just changed",
+          bodyHtml: [
+            emailHeading("Your password was reset"),
+            emailParagraph(
+              "Your CRAL password was just changed, and you've been signed out everywhere.",
+            ),
+            emailMuted("If this wasn't you, contact support immediately."),
+          ].join(""),
+        }),
+        text: notice,
+      }),
     ]);
   }
 
@@ -637,7 +1158,12 @@ export async function changePassword(
 ) {
   const user = await db<UserRow>("users").where({ id: userId }).first();
   if (!user) {
-    throw new ApiError({ status: 404, type: "not_found", code: "user_not_found", message: "Not found." });
+    throw new ApiError({
+      status: 404,
+      type: "not_found",
+      code: "user_not_found",
+      message: "Not found.",
+    });
   }
 
   await assertNotLocked(user);
@@ -703,16 +1229,27 @@ export function getPasswordPolicy() {
 // Terms + /me
 // ---------------------------------------------------------------------
 
-export async function acceptTerms(userId: string, version: string, ctx: RequestContext): Promise<void> {
-  await db<UserRow>("users")
-    .where({ id: userId })
-    .update({ terms_accepted_version: version, terms_accepted_at: new Date(), terms_accepted_ip: ctx.ip });
+export async function acceptTerms(
+  userId: string,
+  version: string,
+  ctx: RequestContext,
+): Promise<void> {
+  await db<UserRow>("users").where({ id: userId }).update({
+    terms_accepted_version: version,
+    terms_accepted_at: new Date(),
+    terms_accepted_ip: ctx.ip,
+  });
 }
 
 export async function getMe(userId: string) {
   const user = await db<UserRow>("users").where({ id: userId }).first();
   if (!user) {
-    throw new ApiError({ status: 404, type: "not_found", code: "user_not_found", message: "Not found." });
+    throw new ApiError({
+      status: 404,
+      type: "not_found",
+      code: "user_not_found",
+      message: "Not found.",
+    });
   }
   return {
     ...serializeUser(user),

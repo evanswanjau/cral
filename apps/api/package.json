@@ -11,7 +11,8 @@
     "test": "vitest run",
     "migrate": "tsx src/db/migrate.ts latest",
     "migrate:rollback": "tsx src/db/migrate.ts rollback",
-    "migrate:make": "knex --knexfile src/db/knexfile.ts migrate:make"
+    "migrate:make": "knex --knexfile src/db/knexfile.ts migrate:make",
+    "smtp:check": "tsx src/scripts/smtp-check.ts"
   },
   "dependencies": {
     "@cral/types": "*",
@@ -23,6 +24,7 @@
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",
+    "nodemailer": "^9.0.5",
     "pg": "^8.13.1",
     "pino": "^9.5.0",
     "pino-http": "^10.3.0",
@@ -34,10 +36,11 @@
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.7",
     "@types/node": "^22.9.0",
+    "@types/nodemailer": "^8.0.1",
     "@types/pg": "^8.11.10",
-    "supertest": "^7.0.0",
     "@types/supertest": "^6.0.2",
     "esbuild": "^0.24.0",
+    "supertest": "^7.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vitest": "^2.1.4"

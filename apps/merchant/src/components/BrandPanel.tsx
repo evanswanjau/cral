@@ -3,15 +3,15 @@ import type { CSSProperties } from "react";
 const PROOF = [
   {
     title: "Answer requests in one tap",
-    body: "Hirers pay CRAL up front, so a request is money already waiting on your yes.",
+    body: "Hirers pay CRAL up front, so your yes is money already on the way — not a promise to chase.",
   },
   {
-    title: "Payouts straight to M-Pesa",
-    body: "Every Monday and Thursday, 24 hours after each vehicle comes back.",
+    title: "Get paid your way",
+    body: "M-Pesa, bank transfer, or invoiced terms for corporate hirers — payouts move as soon as each booking wraps.",
   },
   {
-    title: "One check per vehicle",
-    body: "Your company papers are checked once. Each vehicle then needs only three documents.",
+    title: "List as many vehicles as you want",
+    body: "One account, one fleet — add your next car whenever you're ready, with no cap on how many.",
   },
 ];
 
@@ -25,7 +25,7 @@ export function BrandPanel(): JSX.Element {
   return (
     <div style={S.panel}>
       <div style={S.masthead}>
-        <img src="/logo.png" alt="Cruz Ride Auto Limited" style={S.logo} />
+        <img src="/logo-white.png" alt="Cruz Ride Auto Limited" style={S.logo} />
         <span style={S.mastheadRule} />
         <span style={S.mastheadLabel}>MERCHANT PORTAL</span>
       </div>
@@ -37,8 +37,8 @@ export function BrandPanel(): JSX.Element {
         </div>
         <h1 style={S.h1}>Your vehicles, your money, in one place.</h1>
         <p style={S.lede}>
-          Sign in to answer booking requests, track what each vehicle earns, and watch your payouts land
-          on M-Pesa.
+          Sign in to answer booking requests, track what each vehicle earns, and get paid the moment
+          each trip wraps.
         </p>
 
         <div style={S.proofList}>
@@ -77,12 +77,9 @@ const S: Record<string, CSSProperties> = {
   },
   masthead: { display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 2 },
   logo: {
-    height: "clamp(34px,6vw,42px)",
+    height: "clamp(40px,7vw,50px)",
     width: "auto",
     display: "block",
-    background: "#FFFFFF",
-    borderRadius: "var(--r-sm)",
-    padding: "6px 10px",
   },
   mastheadRule: { width: 1, height: 22, background: "#242C3D" },
   mastheadLabel: {

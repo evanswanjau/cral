@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BrandPanel } from "../BrandPanel.js";
 import { ErrorBanner, GoogleIcon } from "./primitives.jsx";
@@ -10,8 +10,6 @@ export interface AuthShellProps {
   children: ReactNode;
   /** Rendered by the design above the OR rule; only sign-in and register show it. */
   showGoogle?: boolean;
-  /** Method toggle (Password / SMS code) — sign-in only. */
-  methods?: ReactNode;
   error?: string | null;
   /** The bordered link row at the bottom ("New to CRAL? Register instead", etc.). */
   footer?: { text: string; linkLabel: string; to: string };
@@ -28,15 +26,29 @@ export function AuthShell({
   subheading,
   children,
   showGoogle = false,
-  methods,
   error,
   footer,
 }: AuthShellProps): JSX.Element {
+  const [googleNotice, setGoogleNotice] = useState<string | null>(null);
+
   return (
     <div style={S.page}>
+      {/*
+        The grid's own `auto-fit,minmax(min(100%,430px),1fr)` (styles.ts)
+        already stacks these two panels below ~860px — that part needs no
+        media query. What it doesn't do is reorder them: DOM order keeps the
+        brand panel first, so on a phone someone scrolls past the whole
+        pitch before reaching the actual sign-in form. This flips the form
+        to the top only below that same 860px stacking point, and is
+        deliberately a real media query rather than a JS width check —
+        `S.formPanel` still holds every pixel value verbatim from the
+        design, this only reorders the two existing DOM nodes.
+      */}
+      <style>{`@media (max-width: 860px) { .cral-auth-form-panel { order: -1; } }`}</style>
+
       <BrandPanel />
 
-      <div style={S.formPanel}>
+      <div className="cral-auth-form-panel" style={S.formPanel}>
         <div style={S.formInner}>
           <div style={{ marginBottom: 22 }}>
             <h2 style={S.heading}>{heading}</h2>
@@ -47,9 +59,12 @@ export function AuthShell({
             <div style={{ display: "grid", gap: 14, marginBottom: 20 }}>
               <button
                 type="button"
-                disabled
-                title="Google sign-in isn't connected yet"
-                style={{ ...S.googleBtn, opacity: 0.55, cursor: "not-allowed" }}
+                onClick={() =>
+                  setGoogleNotice(
+                    "Google sign-in isn’t connected yet — use your email and password for now.",
+                  )
+                }
+                style={S.googleBtn}
               >
                 <GoogleIcon />
                 Continue with Google
@@ -62,11 +77,9 @@ export function AuthShell({
             </div>
           )}
 
-          {methods}
-
           {children}
 
-          {error && <ErrorBanner message={error} />}
+          {(error ?? googleNotice) && <ErrorBanner message={(error ?? googleNotice)!} />}
 
           {footer && (
             <div style={S.bottom}>

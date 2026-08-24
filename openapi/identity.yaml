@@ -399,7 +399,7 @@ paths:
   /auth/password/forgot:
     post:
       tags: [password]
-      summary: Start a reset — always 202, never reveals whether the account exists
+      summary: Start a reset — always 202, never reveals whether the account exists. Emailed link only.
       operationId: forgotPassword
       security: []
       requestBody:
@@ -410,7 +410,10 @@ paths:
               type: object
               required: [identifier]
               properties:
-                identifier: { type: string }
+                identifier:
+                  type: string
+                  format: email
+                  description: The account's email. SMS is reserved for opt-in 2FA challenges.
       responses:
         "202":
           description: Neutral response regardless of account existence
@@ -420,7 +423,7 @@ paths:
                 type: object
                 properties:
                   status: { type: string, enum: [sent] }
-                  channel_hint: { type: string, enum: [email, sms] }
+                  channel_hint: { type: string, enum: [email] }
                   masked: { type: string }
                   retry_after: { type: integer }
         "429": { $ref: "#/components/responses/RateLimited" }
@@ -428,7 +431,7 @@ paths:
   /auth/password/reset/check:
     post:
       tags: [password]
-      summary: Is this reset token/code still valid?
+      summary: Is this reset token still valid?
       operationId: checkPasswordReset
       security: []
       requestBody:
@@ -437,10 +440,9 @@ paths:
           application/json:
             schema:
               type: object
+              required: [token]
               properties:
                 token: { type: string }
-                phone: { $ref: "#/components/schemas/E164Phone" }
-                code: { type: string, pattern: "^[0-9]{6}$" }
       responses:
         "200":
           description: Validity
@@ -466,11 +468,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [new_password]
+              required: [token, new_password]
               properties:
                 token: { type: string }
-                phone: { $ref: "#/components/schemas/E164Phone" }
-                code: { type: string, pattern: "^[0-9]{6}$" }
                 new_password: { type: string, minLength: 10 }
                 two_factor_code: { type: string, pattern: "^[0-9]{6}$" }
       responses:
@@ -624,29 +624,103 @@ paths:
       responses:
         "202": { description: Codes sent }
 
-  /auth/2fa/enroll:
-    post:
+  /auth/2fa:
+    get:
       tags: [account]
-      summary: TOTP enrolment — returns a secret and an otpauth URI
-      operationId: enroll2fa
+      summary: Current two-factor state — what the settings screen draws
+      operationId: getTwoFactorState
       security: [{ bearerAuth: [] }]
       responses:
         "200":
-          description: Enrolment material
+          description: State
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorState" }
+
+    delete:
+      tags: [account]
+      summary: Disable 2FA — requires password + a current code. Admins cannot disable their own.
+      operationId: disable2fa
+      security: [{ bearerAuth: [] }]
+      description: >
+        The code is either a six-digit challenge raised by
+        /auth/2fa/challenge/send, or one of the recovery codes. Disabling
+        destroys the remaining recovery codes and forgets the enrolled
+        number.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password, code]
+              properties:
+                password: { type: string }
+                code: { type: string }
+      responses:
+        "204": { description: Disabled }
+        "401":
+          description: invalid_credentials | two_factor_invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: Admins cannot disable their own 2FA
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/2fa/enroll:
+    post:
+      tags: [account]
+      summary: Start SMS enrolment — texts a code to the nominated handset
+      operationId: enroll2fa
+      security: [{ bearerAuth: [] }]
+      description: >
+        Step 1 of 2. The number is kept separate from the payout number on
+        `users.phone`: a merchant may want challenges on a different
+        handset, and changing payout details must not silently move the
+        second factor. Nothing is switched on until /auth/2fa/verify.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { $ref: "#/components/schemas/E164Phone" }
+      responses:
+        "200":
+          description: Code sent
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  secret: { type: string }
-                  otpauth_uri: { type: string }
+                  masked_destination: { type: string }
+                  retry_after: { type: integer }
+        "409":
+          description: two_factor_already_enabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: invalid_phone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /auth/2fa/verify:
     post:
       tags: [account]
-      summary: Confirm enrolment or satisfy a 2FA challenge. Issues 10 single-use recovery codes once.
+      summary: Confirm enrolment. Issues 10 single-use recovery codes, once.
       operationId: verify2fa
       security: [{ bearerAuth: [] }]
+      description: >
+        Step 2 of 2. The recovery codes are returned here and never again —
+        the server only keeps their hashes.
       requestBody:
         required: true
         content:
@@ -658,7 +732,7 @@ paths:
                 code: { type: string, pattern: "^[0-9]{6}$" }
       responses:
         "200":
-          description: Verified
+          description: Enrolled
           content:
             application/json:
               schema:
@@ -666,33 +740,85 @@ paths:
                 properties:
                   recovery_codes:
                     type: array
-                    items: { type: string }
-                    nullable: true
-                    description: Present only on first enrolment confirmation.
+                    items: { type: string, example: "K4M2-P9XR" }
+                    minItems: 10
+                    maxItems: 10
+        "400":
+          description: otp_expired | otp_invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: two_factor_already_enabled | two_factor_not_started
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
-  /auth/2fa:
-    delete:
-      tags: [account]
-      summary: Disable 2FA — requires password + a current code. Admins cannot disable their own.
-      operationId: disable2fa
-      security: [{ bearerAuth: [] }]
+  /auth/2fa/challenge:
+    post:
+      tags: [login]
+      summary: Satisfy the code half of a sign-in — issues the session
+      operationId: completeTwoFactorChallenge
+      security: []
+      description: >
+        Unauthenticated on purpose: the caller has passed a password but
+        holds no token yet, so `challenge_id` is the only thing identifying
+        them. `code` is the texted six digits or any unspent recovery code.
+        Five wrong answers kill the challenge.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [password, code]
+              required: [challenge_id, code]
               properties:
-                password: { type: string }
-                code: { type: string, pattern: "^[0-9]{6}$" }
+                challenge_id: { type: string }
+                code: { type: string }
       responses:
-        "204": { description: Disabled }
-        "403":
-          description: Admins cannot disable their own 2FA
+        "200":
+          description: Signed in
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/SignedIn"
+                  - type: object
+                    properties:
+                      used_recovery_code: { type: boolean }
+        "400":
+          description: two_factor_challenge_expired
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: two_factor_invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/2fa/challenge/send:
+    post:
+      tags: [account]
+      summary: Raise a fresh challenge for an already-signed-in merchant
+      operationId: sendTwoFactorChallenge
+      security: [{ bearerAuth: [] }]
+      description: >
+        Used to satisfy the code half of DELETE /auth/2fa. Retires any
+        earlier unspent challenge for the same account.
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TwoFactorRequired" }
+        "409":
+          description: two_factor_not_enabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
 
   /me/data-export:
     post:
@@ -977,6 +1103,16 @@ components:
         expires_in: { type: integer, example: 900 }
 
     LoginResponse:
+      description: >
+        Either a signed-in session, or — when the account has opt-in SMS
+        two-factor switched on — a challenge to satisfy first. The
+        two-factor branch deliberately carries no tokens: nothing is issued
+        until POST /auth/2fa/challenge succeeds.
+      oneOf:
+        - $ref: "#/components/schemas/SignedIn"
+        - $ref: "#/components/schemas/TwoFactorRequired"
+
+    SignedIn:
       allOf:
         - $ref: "#/components/schemas/TokenPair"
         - type: object
@@ -985,7 +1121,25 @@ components:
             next:
               type: string
               nullable: true
-              enum: [verify_phone, "2fa", reset_password]
+              enum: [verify_phone, reset_password]
+
+    TwoFactorRequired:
+      type: object
+      required: [next, challenge_id]
+      properties:
+        next: { type: string, enum: ["2fa"] }
+        challenge_id: { type: string, description: "tfc_<ulid>" }
+        masked_destination: { type: string, example: "+2547••••••061" }
+        expires_in: { type: integer, description: Seconds until the code dies }
+
+    TwoFactorState:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        method: { type: string, nullable: true, enum: [sms] }
+        masked_destination: { type: string, nullable: true }
+        enrolled_at: { type: string, format: date-time, nullable: true }
+        recovery_codes_remaining: { type: integer, nullable: true }
 
     Session:
       type: object

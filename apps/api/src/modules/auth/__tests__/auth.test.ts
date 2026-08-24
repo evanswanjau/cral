@@ -21,6 +21,10 @@ function extractCode(message: string): string {
   return match[1] as string;
 }
 
+function extractResetToken(message: string): string {
+  return /token=([A-Za-z0-9_-]+)/.exec(message)?.[1] ?? "";
+}
+
 afterAll(async () => {
   await db("users").where({ phone }).orWhere({ email: emailOnly }).delete();
   await db.destroy();
@@ -70,7 +74,9 @@ describe("identity — email-first sign-up", () => {
     const emailSpy = vi.spyOn(emailAdapter, "send");
     const smsSpy = vi.spyOn(smsAdapter, "send");
 
-    const forgotRes = await request(app).post("/auth/password/forgot").send({ identifier: emailOnly });
+    const forgotRes = await request(app)
+      .post("/auth/password/forgot")
+      .send({ identifier: emailOnly });
     expect(forgotRes.status).toBe(202);
     // With no phone on the account, email is the only possible channel.
     expect(forgotRes.body.channel_hint).toBe("email");
@@ -91,7 +97,11 @@ describe("identity — email-first sign-up", () => {
 
     const loginRes = await request(app)
       .post("/auth/login")
-      .send({ identifier: emailOnly, password: "an entirely different passphrase", device_id: "dev_ef2" });
+      .send({
+        identifier: emailOnly,
+        password: "an entirely different passphrase",
+        device_id: "dev_ef2",
+      });
     expect(loginRes.status).toBe(200);
 
     emailSpy.mockRestore();
@@ -187,7 +197,7 @@ describe("identity — golden path", () => {
     smsSpy.mockRestore();
   });
 
-  it("resets a forgotten password by SMS code and revokes every session", async () => {
+  it("resets a forgotten password by emailed link and revokes every session", async () => {
     const smsSpy = vi.spyOn(smsAdapter, "send");
     const emailSpy = vi.spyOn(emailAdapter, "send");
 
@@ -197,22 +207,28 @@ describe("identity — golden path", () => {
       .send({ identifier: phone, password, device_id: "dev_test_2" });
     expect(loginRes.status).toBe(200);
 
-    const forgotRes = await request(app).post("/auth/password/forgot").send({ identifier: phone });
-    expect(forgotRes.status).toBe(202);
-    expect(forgotRes.body.channel_hint).toBe("sms");
+    const smsCallsBefore = smsSpy.mock.calls.length;
 
-    const resetCode = extractCode(smsSpy.mock.calls.at(-1)?.[0]?.body ?? "");
+    const forgotRes = await request(app).post("/auth/password/forgot").send({ identifier: email });
+    expect(forgotRes.status).toBe(202);
+    expect(forgotRes.body.channel_hint).toBe("email");
+
+    // Reset never goes out by SMS — that channel is reserved for opt-in 2FA.
+    expect(smsSpy.mock.calls.length).toBe(smsCallsBefore);
+
+    const resetToken = extractResetToken(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
+    expect(resetToken).toBeTruthy();
 
     const checkRes = await request(app)
       .post("/auth/password/reset/check")
-      .send({ phone, code: resetCode });
+      .send({ token: resetToken });
     expect(checkRes.status).toBe(200);
     expect(checkRes.body.valid).toBe(true);
 
     const newPassword = "a totally different passphrase";
     const resetRes = await request(app)
       .post("/auth/password/reset")
-      .send({ phone, code: resetCode, new_password: newPassword });
+      .send({ token: resetToken, new_password: newPassword });
     expect(resetRes.status).toBe(200);
     expect(resetRes.body.sessions_revoked).toBeGreaterThanOrEqual(1);
 

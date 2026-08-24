@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
-import { CodeInput, Field, InfoBanner, PrimaryButton, ResendRow, TextInput } from "../components/auth/primitives.jsx";
+import {
+  CodeInput,
+  Field,
+  InfoBanner,
+  PrimaryButton,
+  ResendRow,
+  TextInput,
+} from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
 import { register, requestOtp, verifySignupOtp } from "../lib/auth-api.js";
 import { ApiClientError } from "../lib/api.js";
@@ -96,12 +103,21 @@ export function CreateAccount(): JSX.Element {
             }
           />
           <Field id="reg-code" label="SIX-DIGIT CODE">
-            <CodeInput id="reg-code" value={code} onChange={(e) => setCode(e.target.value)} autoFocus />
+            <CodeInput
+              id="reg-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+            />
           </Field>
-          <PrimaryButton type="submit" disabled={busy || code.length !== 6}>
+          <PrimaryButton type="submit" disabled={busy}>
             {busy ? "Checking…" : "Verify and start setup"}
           </PrimaryButton>
-          <ResendRow line="It expires in ten minutes." disabled={busy} onResend={() => void resend()} />
+          <ResendRow
+            line="It expires in ten minutes."
+            disabled={busy}
+            onResend={() => void resend()}
+          />
         </form>
       </AuthShell>
     );
@@ -136,7 +152,6 @@ export function CreateAccount(): JSX.Element {
         <Field
           id="reg-pw"
           label="PASSWORD"
-          helper="Ten characters or more. We check your email before anything else."
           action={
             <button type="button" onClick={() => setReveal((v) => !v)} style={S.inlineBtn}>
               {reveal ? "Hide" : "Show"}
@@ -153,12 +168,20 @@ export function CreateAccount(): JSX.Element {
           />
         </Field>
 
-        <PrimaryButton type="submit" disabled={busy || !email.trim() || pw.length < 10}>
+        <PrimaryButton type="submit" disabled={busy}>
           {busy ? "Creating account…" : "Create account"}
         </PrimaryButton>
 
         <p style={S.terms}>
-          By creating an account you agree to the CRAL merchant terms and privacy notice.
+          By creating an account you agree to the CRAL merchant{" "}
+          <a href="#" style={S.termsLink}>
+            terms
+          </a>{" "}
+          and{" "}
+          <a href="#" style={S.termsLink}>
+            privacy notice
+          </a>
+          .
         </p>
       </form>
     </AuthShell>
