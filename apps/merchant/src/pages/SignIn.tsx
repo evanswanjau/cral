@@ -26,8 +26,15 @@ export function SignIn(): JSX.Element {
   return (
     <div className="grid min-h-screen grid-cols-1 lg:grid-cols-2">
       <BrandPanel />
-      <div className="flex items-center justify-center bg-white px-6 py-12">
-        <div className="w-full max-w-sm">
+      <div className="relative flex items-center justify-center overflow-hidden bg-white px-6 py-12">
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(720px 480px at -10% 110%, rgba(15,35,168,0.10), transparent 60%)",
+          }}
+        />
+        <div className="relative w-full max-w-sm">
           <h1 className="text-2xl font-bold text-neutral-900">Sign in</h1>
           <p className="mt-1 text-sm text-neutral-600">
             Karibu tena. Use the phone number or email on your merchant account.
@@ -60,7 +67,7 @@ export function SignIn(): JSX.Element {
 
           <div className="mt-6">{mode === "password" ? <PasswordForm /> : <SmsForm />}</div>
 
-          <p className="mt-6 text-sm text-neutral-600">
+          <p className="mt-6 border-t border-neutral-200 pt-6 text-sm text-neutral-600">
             New to CRAL?{" "}
             <Link to="/create-account" className="font-semibold text-cruz-blue hover:underline">
               Register instead

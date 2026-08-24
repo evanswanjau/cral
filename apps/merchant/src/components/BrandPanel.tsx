@@ -50,7 +50,7 @@ export function BrandPanel(): JSX.Element {
           <ul className="mt-8 flex flex-col gap-4">
             {FEATURES.map((feature) => (
               <li key={feature.title} className="flex gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B8A5B]/20 text-[#3DDB9A]">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/5 text-[11px] text-white/50">
                   ✓
                 </span>
                 <div>
