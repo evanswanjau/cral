@@ -41,20 +41,32 @@ paths:
       summary: Create an account
       operationId: register
       security: []
+      description: >
+        Sign-up is email + password. full_name and phone are optional here
+        and collected during onboarding instead — the phone at payout setup,
+        where the reason for asking is self-evident, rather than gating the
+        signup form behind an SMS round-trip. Both are still required before
+        an account can transact; GET /auth/registration-state reports what is
+        outstanding. This is a deliberate, recorded deviation from spec §4's
+        "phone number is the identity in Kenya".
+
+        The verification channel follows whatever contact was supplied: with
+        a phone the code goes by SMS and `next` is "verify_phone", otherwise
+        it goes by email and `next` is "verify_email".
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [full_name, phone, email, password, role, accepted_terms_version]
+              required: [email, password, role, accepted_terms_version]
               properties:
-                full_name: { type: string, minLength: 1 }
-                phone: { $ref: "#/components/schemas/E164Phone" }
                 email: { type: string, format: email }
                 password: { type: string, minLength: 10 }
                 role: { type: string, enum: [customer, merchant] }
                 accepted_terms_version: { type: string }
+                full_name: { type: string, minLength: 1 }
+                phone: { $ref: "#/components/schemas/E164Phone" }
       responses:
         "201":
           description: Account created
@@ -64,7 +76,7 @@ paths:
                 type: object
                 properties:
                   user: { $ref: "#/components/schemas/User" }
-                  next: { type: string, enum: [verify_phone], nullable: true }
+                  next: { type: string, enum: [verify_email, verify_phone] }
         "409":
           description: Phone or email already registered — no further detail (spec §4)
           content:
@@ -192,11 +204,13 @@ paths:
               schema:
                 type: object
                 properties:
+                  full_name_present: { type: boolean }
+                  phone_present:
+                    type: boolean
+                    description: False until onboarding collects it — sign-up is email-first.
                   phone_verified: { type: boolean }
                   email_verified: { type: boolean }
                   terms_accepted: { type: boolean }
-                  licence_required: { type: boolean }
-                  licence_present: { type: boolean }
                   merchant_profile_required: { type: boolean }
                   merchant_profile_present: { type: boolean }
 

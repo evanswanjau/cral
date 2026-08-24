@@ -67,6 +67,15 @@ authRouter.post(
 );
 
 authRouter.get(
+  "/auth/registration-state",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.getRegistrationState(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.get(
   "/me",
   authenticate(),
   asyncHandler(async (req, res) => {

@@ -12,6 +12,7 @@ const app = createApp();
 const suffix = ulid().slice(-8).toLowerCase();
 const phone = `+2547${suffix.replace(/[^0-9]/g, "1").slice(0, 8)}`;
 const email = `test-${suffix}@example.test`;
+const emailOnly = `email-first-${suffix}@example.test`;
 const password = "correct horse battery staple";
 
 function extractCode(message: string): string {
@@ -21,8 +22,81 @@ function extractCode(message: string): string {
 }
 
 afterAll(async () => {
-  await db("users").where({ phone }).delete();
+  await db("users").where({ phone }).orWhere({ email: emailOnly }).delete();
   await db.destroy();
+});
+
+describe("identity — email-first sign-up", () => {
+  it("registers with email + password only, verifies by email code, then signs in", async () => {
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+
+    // No full_name, no phone — the merchant portal's actual sign-up shape.
+    const registerRes = await request(app)
+      .post("/auth/register")
+      .send({ email: emailOnly, password, role: "merchant", accepted_terms_version: "2026-08-24" });
+    expect(registerRes.status).toBe(201);
+    expect(registerRes.body.next).toBe("verify_email");
+
+    // The code goes by email, since that's the only contact on file.
+    const code = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
+    const verifyRes = await request(app)
+      .post("/auth/otp/verify")
+      .send({ identifier: emailOnly, purpose: "signup", code });
+    expect(verifyRes.status).toBe(200);
+    expect(verifyRes.body.verified).toBe(true);
+
+    const loginRes = await request(app)
+      .post("/auth/login")
+      .send({ identifier: emailOnly, password, device_id: "dev_email_first" });
+    expect(loginRes.status).toBe(200);
+
+    // registration-state is what drives the "finish setting up" nag, so it
+    // must report the deferred phone as outstanding.
+    const stateRes = await request(app)
+      .get("/auth/registration-state")
+      .set("Authorization", `Bearer ${loginRes.body.access_token}`);
+    expect(stateRes.status).toBe(200);
+    expect(stateRes.body).toMatchObject({
+      phone_present: false,
+      full_name_present: false,
+      email_verified: true,
+      merchant_profile_required: true,
+    });
+
+    emailSpy.mockRestore();
+  });
+
+  it("resets an email-only account's password by emailed link, with no phone to text", async () => {
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+    const smsSpy = vi.spyOn(smsAdapter, "send");
+
+    const forgotRes = await request(app).post("/auth/password/forgot").send({ identifier: emailOnly });
+    expect(forgotRes.status).toBe(202);
+    // With no phone on the account, email is the only possible channel.
+    expect(forgotRes.body.channel_hint).toBe("email");
+    expect(smsSpy).not.toHaveBeenCalled();
+
+    const link = emailSpy.mock.calls.at(-1)?.[0]?.text ?? "";
+    const token = link.match(/token=([\w-]+)/)?.[1];
+    expect(token).toBeTruthy();
+
+    const checkRes = await request(app).post("/auth/password/reset/check").send({ token });
+    expect(checkRes.status).toBe(200);
+    expect(checkRes.body.valid).toBe(true);
+
+    const resetRes = await request(app)
+      .post("/auth/password/reset")
+      .send({ token, new_password: "an entirely different passphrase" });
+    expect(resetRes.status).toBe(200);
+
+    const loginRes = await request(app)
+      .post("/auth/login")
+      .send({ identifier: emailOnly, password: "an entirely different passphrase", device_id: "dev_ef2" });
+    expect(loginRes.status).toBe(200);
+
+    emailSpy.mockRestore();
+    smsSpy.mockRestore();
+  });
 });
 
 describe("identity — golden path", () => {

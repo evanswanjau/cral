@@ -179,7 +179,9 @@ export function SignIn(): JSX.Element {
           <Field
             id="phone"
             label="M-PESA PHONE NUMBER"
-            helper="Use the number your payouts go to. We text a six-digit code, free of charge."
+            // Accounts start email-only, so the phone may not be on file yet
+            // until onboarding collects it — say so rather than failing blankly.
+            helper="Use the number your payouts go to. If you haven't added one yet, sign in with your password."
           >
             <PhoneInput id="phone" value={phone} onChange={setPhone} />
           </Field>

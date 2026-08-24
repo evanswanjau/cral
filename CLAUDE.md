@@ -151,6 +151,27 @@ Verify the result with `getComputedStyle`, not by looking at a screenshot.
 And note the Chrome window must be non-minimized or `innerWidth` reads 0
 and screenshots fail.
 
+## Recorded product decisions
+
+**Sign-up is email + password only** (decided 2026-08-26). Full name and
+phone are collected during onboarding — the phone at payout setup, where
+the reason for asking is self-evident — rather than putting an SMS
+round-trip in front of someone who hasn't seen the product yet. Rationale:
+the OTP is a hard gate before any value is shown, SMS costs money per send
+so you'd pay for tyre-kickers, and the payout number gets its own KES 1
+name-lookup verification in onboarding anyway (spec §10), so collecting it
+at sign-up saves nothing.
+
+This is a **deliberate deviation from spec §4** ("phone number is the
+identity in Kenya"). Both contacts are still required before an account can
+transact; `GET /auth/registration-state` reports what's outstanding and is
+what the "finish setting up" banner reads. `users.phone` and
+`users.full_name` are nullable as of migration `20260826090000`.
+
+Consequences to keep in mind: an email-first account can't use the
+passwordless SMS tab on sign-in until onboarding adds a phone (the screen
+says so), and password reset for such an account can only go by email.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

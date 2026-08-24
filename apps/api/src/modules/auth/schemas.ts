@@ -1,12 +1,13 @@
 import { z } from "zod";
 
 export const RegisterSchema = z.object({
-  full_name: z.string().min(1),
-  phone: z.string(),
   email: z.string().email(),
   password: z.string().min(10),
   role: z.enum(["customer", "merchant"]),
   accepted_terms_version: z.string(),
+  // Optional: onboarding collects these, so sign-up stays email + password.
+  full_name: z.string().min(1).optional(),
+  phone: z.string().optional(),
 });
 
 export const OtpRequestSchema = z.object({

@@ -36,17 +36,18 @@ export function verifyLoginOtp(identifier: string, code: string, deviceId: strin
 
 // --- register ---------------------------------------------------------
 
-export interface RegisterInput {
-  full_name: string;
-  phone: string;
-  email: string;
-  password: string;
-}
-
-export function register(input: RegisterInput) {
-  return apiPost<{ user: { id: string; phone: string; email: string }; next: string | null }>(
+/**
+ * Sign-up is email + password only. Full name and phone are collected in
+ * onboarding — the phone at payout setup, where the reason for asking is
+ * obvious — rather than gating the signup form behind an SMS.
+ */
+export function register(email: string, password: string) {
+  return apiPost<{
+    user: { id: string; email: string };
+    next: "verify_email" | "verify_phone" | null;
+  }>(
     "/auth/register",
-    { ...input, role: "merchant", accepted_terms_version: TERMS_VERSION },
+    { email, password, role: "merchant", accepted_terms_version: TERMS_VERSION },
     { auth: false },
   );
 }

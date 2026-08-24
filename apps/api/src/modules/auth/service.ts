@@ -115,28 +115,43 @@ async function sendOtp(identifier: string, kind: "phone" | "email", purpose: Otp
 // ---------------------------------------------------------------------
 
 export interface RegisterInput {
-  full_name: string;
-  phone: string;
   email: string;
   password: string;
   role: "customer" | "merchant";
   accepted_terms_version: string;
+  /**
+   * Optional at sign-up. The merchant portal collects both during
+   * onboarding — the phone at payout setup, where the reason for asking is
+   * self-evident — rather than putting an SMS wall in front of the signup
+   * form. See the 20260826090000 migration for the recorded §4 deviation.
+   */
+  full_name?: string | undefined;
+  phone?: string | undefined;
 }
 
 export async function register(input: RegisterInput, ctx: RequestContext) {
-  const phone = normalizePhone(input.phone);
-  if (!phone) {
-    throw new ApiError({
-      status: 422,
-      type: "validation_error",
-      code: "invalid_phone",
-      message: "That doesn't look like a valid phone number.",
-      field: "phone",
-    });
-  }
   const email = input.email.trim().toLowerCase();
 
-  const existing = await db<UserRow>("users").where({ phone }).orWhere({ email }).first();
+  let phone: string | null = null;
+  if (input.phone) {
+    phone = normalizePhone(input.phone);
+    if (!phone) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "invalid_phone",
+        message: "That doesn't look like a valid phone number.",
+        field: "phone",
+      });
+    }
+  }
+
+  const existing = await db<UserRow>("users")
+    .where({ email })
+    .modify((q) => {
+      if (phone) q.orWhere({ phone });
+    })
+    .first();
   if (existing) {
     throw new ApiError({
       status: 409,
@@ -152,7 +167,7 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
   const [user] = await db<UserRow>("users")
     .insert({
       id: generateId("user"),
-      full_name: input.full_name,
+      full_name: input.full_name ?? null,
       phone,
       email,
       password_hash: passwordHash,
@@ -164,9 +179,38 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
     .returning("*");
   if (!user) throw new Error("Failed to create user");
 
-  await sendOtp(phone, "phone", "signup");
+  // Verify whichever contact we actually hold. Email-first sign-up sends the
+  // code by email; a caller that did supply a phone keeps the SMS path.
+  if (phone) {
+    await sendOtp(phone, "phone", "signup");
+    return { user: serializeUser(user), next: "verify_phone" as const };
+  }
+  await sendOtp(email, "email", "signup");
+  return { user: serializeUser(user), next: "verify_email" as const };
+}
 
-  return { user: serializeUser(user), next: "verify_phone" as const };
+/**
+ * What is still outstanding before this account can transact (spec §4).
+ * Drives the portals' "finish setting up" banners — and, with email-first
+ * sign-up, it is what tells the merchant portal the phone is still missing.
+ */
+export async function getRegistrationState(userId: string) {
+  const user = await db<UserRow>("users").where({ id: userId }).first();
+  if (!user) {
+    throw new ApiError({ status: 404, type: "not_found", code: "user_not_found", message: "Not found." });
+  }
+  const isMerchant = user.roles.includes("merchant");
+  return {
+    full_name_present: user.full_name !== null,
+    phone_present: user.phone !== null,
+    phone_verified: user.phone_verified,
+    email_verified: user.email_verified,
+    terms_accepted: user.terms_accepted_version !== null,
+    // Filled in by later phases; merchants need a phone on file before a
+    // listing can go live, which is where the deferred number gets chased.
+    merchant_profile_required: isMerchant,
+    merchant_profile_present: false,
+  };
 }
 
 export async function requestOtp(identifier: string, purpose: OtpPurpose) {
@@ -424,8 +468,10 @@ export async function forgotPassword(identifier: string) {
   // Chooses the channel from what the account has verified — falls back to
   // whatever the raw identifier *looks like* when there's no real account,
   // so the response shape never hints at whether one exists (spec §6).
-  const useEmail = user ? user.email_verified || !user.phone_verified : resolved?.kind === "email";
-  const destination = user ? (useEmail ? user.email : user.phone) : (resolved?.identifier ?? identifier);
+  // An email-first account has no phone yet, so email is the only route.
+  const smsPhone = user && !user.email_verified && user.phone && user.phone_verified ? user.phone : null;
+  const useEmail = user ? smsPhone === null : resolved?.kind === "email";
+  const destination = user ? (smsPhone ?? user.email) : (resolved?.identifier ?? identifier);
 
   if (user) {
     if (useEmail) {
@@ -446,8 +492,8 @@ export async function forgotPassword(identifier: string) {
         html: `Reset your password: ${link}`,
         text: `Reset your password: ${link}`,
       });
-    } else {
-      await sendOtp(user.phone, "phone", "password_reset");
+    } else if (smsPhone) {
+      await sendOtp(smsPhone, "phone", "password_reset");
     }
   }
 
@@ -517,7 +563,7 @@ export async function checkPasswordReset(input: ResetLookupInput) {
   const user = await db<UserRow>("users").where({ id: target.userId }).first();
   return {
     valid: true,
-    masked_identifier: user ? maskIdentifier(input.token ? user.email : user.phone) : null,
+    masked_identifier: user ? maskIdentifier(input.token ? user.email : (user.phone ?? user.email)) : null,
     requires_2fa: false,
   };
 }
@@ -571,8 +617,10 @@ export async function resetPassword(
   const user = await db<UserRow>("users").where({ id: target.userId }).first();
   if (user) {
     const notice = "Your Cruz Ride Auto password was just reset. If this wasn't you, contact support immediately.";
+    // Notify on every channel the account actually has — an email-first
+    // account has no phone yet (spec §6 asks for both where both exist).
     await Promise.all([
-      smsAdapter.send({ to: user.phone, body: notice }),
+      ...(user.phone ? [smsAdapter.send({ to: user.phone, body: notice })] : []),
       emailAdapter.send({ to: user.email, subject: "Your password was reset", html: notice, text: notice }),
     ]);
   }

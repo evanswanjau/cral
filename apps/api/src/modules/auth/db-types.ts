@@ -1,7 +1,9 @@
 export interface UserRow {
   id: string;
-  full_name: string;
-  phone: string;
+  /** Null until onboarding collects it — sign-up is email + password only. */
+  full_name: string | null;
+  /** Null until onboarding collects it, at payout setup. */
+  phone: string | null;
   email: string;
   password_hash: string;
   roles: string[];

@@ -1,31 +1,24 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
-import {
-  CodeInput,
-  Field,
-  InfoBanner,
-  PhoneInput,
-  PrimaryButton,
-  ResendRow,
-  TextInput,
-} from "../components/auth/primitives.jsx";
+import { CodeInput, Field, InfoBanner, PrimaryButton, ResendRow, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
 import { register, requestOtp, verifySignupOtp } from "../lib/auth-api.js";
-import { toE164 } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
- * Create account — the design's `isRegister` / `isRegisterVerify` branches.
+ * Create account — the design's `isRegister` / `isRegisterVerify` branches,
+ * built to the canvas exactly: email and a password, nothing else.
  *
- * Two deliberate deviations from the canvas screen, both forced by the API
- * contract rather than by preference (flagged for a product decision):
- *  1. The canvas collects only email + password. `POST /auth/register`
- *     requires full_name and phone as well, because spec §4 makes the phone
- *     number the account's identity in Kenya — so those two fields are added
- *     here, in the same field vocabulary.
- *  2. The canvas verifies by emailing a code ("Change email"). The API sends
- *     the sign-up OTP to the phone, so the verify step here is phone-based.
+ * Name and phone deliberately are not asked for here. They're collected in
+ * onboarding, where the phone sits next to "this is where your payouts
+ * land" and the reason for asking is self-evident — instead of putting an
+ * SMS round-trip in front of someone who hasn't seen the product yet.
+ * `GET /auth/registration-state` reports what's still outstanding.
+ *
+ * The one departure from the canvas copy is the password minimum: the
+ * design says eight, spec §6 sets ten and checks it against a breach list,
+ * so eight would be rejected server-side and the copy would be lying.
  */
 export function CreateAccount(): JSX.Element {
   const navigate = useNavigate();
@@ -33,8 +26,6 @@ export function CreateAccount(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [fullName, setFullName] = useState("");
-  const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -47,7 +38,7 @@ export function CreateAccount(): JSX.Element {
       await fn();
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "account_exists") {
-        setError("An account with that phone or email already exists. Try signing in instead.");
+        setError("An account with that email already exists. Try signing in instead.");
       } else {
         setError(err instanceof ApiClientError ? err.message : fallback);
       }
@@ -58,26 +49,26 @@ export function CreateAccount(): JSX.Element {
 
   const createAccount = () =>
     run(async () => {
-      await register({ full_name: fullName, phone: toE164(phone), email, password: pw });
+      await register(email.trim(), pw);
       setStep("verify");
     }, "We couldn't create that account. Please try again.");
 
   const verify = () =>
     run(async () => {
-      await verifySignupOtp(toE164(phone), code);
+      await verifySignupOtp(email.trim(), code);
       navigate("/sign-in", { replace: true });
     }, "That code didn't work. Try again.");
 
   const resend = () =>
     run(async () => {
-      await requestOtp(toE164(phone), "signup");
+      await requestOtp(email.trim(), "signup");
     }, "We couldn't resend that code. Please try again.");
 
   if (step === "verify") {
     return (
       <AuthShell
-        heading="Confirm your number"
-        subheading="We texted a six-digit code. Enter it to finish setting up your merchant account."
+        heading="Confirm your email"
+        subheading="Enter the six-digit code we sent. Then we'll start on your company papers."
         error={error}
         footer={{ text: "Already have an account?", linkLabel: "Sign in", to: "/sign-in" }}
       >
@@ -89,7 +80,7 @@ export function CreateAccount(): JSX.Element {
           }}
         >
           <InfoBanner
-            text={`Code sent to +254 ${phone}`}
+            text={`Code sent to ${email.trim()}`}
             action={
               <button
                 type="button"
@@ -119,7 +110,7 @@ export function CreateAccount(): JSX.Element {
   return (
     <AuthShell
       heading="Create your account"
-      subheading="List your vehicles, answer booking requests, and get paid straight to M-Pesa."
+      subheading="Email and a password to start. Company papers and vehicles come next."
       showGoogle
       error={error}
       footer={{ text: "Already have an account?", linkLabel: "Sign in", to: "/sign-in" }}
@@ -131,24 +122,6 @@ export function CreateAccount(): JSX.Element {
           void createAccount();
         }}
       >
-        <Field id="name" label="FULL NAME">
-          <TextInput
-            id="name"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="Wanjiku Mwangi"
-            autoComplete="name"
-          />
-        </Field>
-
-        <Field
-          id="reg-phone"
-          label="M-PESA PHONE NUMBER"
-          helper="This is how you sign in, and where your payouts go."
-        >
-          <PhoneInput id="reg-phone" value={phone} onChange={setPhone} />
-        </Field>
-
         <Field id="email" label="EMAIL ADDRESS">
           <TextInput
             id="email"
@@ -163,7 +136,7 @@ export function CreateAccount(): JSX.Element {
         <Field
           id="reg-pw"
           label="PASSWORD"
-          helper="Ten characters or more. We check your number before anything else."
+          helper="Ten characters or more. We check your email before anything else."
           action={
             <button type="button" onClick={() => setReveal((v) => !v)} style={S.inlineBtn}>
               {reveal ? "Hide" : "Show"}
@@ -180,10 +153,7 @@ export function CreateAccount(): JSX.Element {
           />
         </Field>
 
-        <PrimaryButton
-          type="submit"
-          disabled={busy || !fullName.trim() || !phone.trim() || !email.trim() || pw.length < 10}
-        >
+        <PrimaryButton type="submit" disabled={busy || !email.trim() || pw.length < 10}>
           {busy ? "Creating account…" : "Create account"}
         </PrimaryButton>
 
