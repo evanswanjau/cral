@@ -17,8 +17,13 @@ export const ID_PREFIXES = {
   review: "rev",
   file: "fil",
   campaign: "cmp",
-  // Internal to Phase 0, not named in spec §2, but same convention.
+  // Internal entities not named in spec §2's identifier list, but built on
+  // the same convention. "passwordResetToken" reuses "prt" from the spec's
+  // own §6 example payload ("token": "prt_8Kd…").
   auditLog: "aud",
+  session: "ses",
+  otpCode: "otp",
+  passwordResetToken: "prt",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

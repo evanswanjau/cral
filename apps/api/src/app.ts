@@ -3,6 +3,7 @@ import { pinoHttp } from "pino-http";
 import { requestId } from "./middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.js";
+import { authRouter } from "./modules/auth/routes.js";
 
 export function createApp(): Express {
   const app = express();
@@ -22,6 +23,7 @@ export function createApp(): Express {
   app.use(express.json({ limit: "5mb" }));
 
   app.use(healthRouter);
+  app.use(authRouter);
 
   app.use(notFoundHandler());
   app.use(errorHandler());

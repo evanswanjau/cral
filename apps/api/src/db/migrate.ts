@@ -4,6 +4,7 @@
  * use under Node's native ESM loader. `npm run migrate` / `migrate:rollback`
  * both go through this file so there's one working code path.
  */
+import "../lib/load-env.js";
 import { db } from "./client.js";
 
 const direction = process.argv[2] ?? "latest";
