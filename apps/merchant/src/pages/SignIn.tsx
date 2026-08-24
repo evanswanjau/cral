@@ -28,8 +28,8 @@ export function SignIn(): JSX.Element {
       <BrandPanel />
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm">
-          <h1 className="text-2xl font-bold text-slate-900">Sign in</h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <h1 className="text-2xl font-bold text-neutral-900">Sign in</h1>
+          <p className="mt-1 text-sm text-neutral-600">
             Karibu tena. Use the phone number or email on your merchant account.
           </p>
 
@@ -37,16 +37,16 @@ export function SignIn(): JSX.Element {
             type="button"
             disabled
             title="Google sign-in isn't connected yet"
-            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-400 cursor-not-allowed"
+            className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg border border-neutral-300 bg-white py-2.5 text-sm font-semibold text-neutral-400 cursor-not-allowed"
           >
             <GoogleIcon />
             Continue with Google
           </button>
 
           <div className="my-6 flex items-center gap-3">
-            <hr className="flex-1 border-slate-200" />
-            <span className="text-xs font-medium text-slate-400">OR</span>
-            <hr className="flex-1 border-slate-200" />
+            <hr className="flex-1 border-neutral-200" />
+            <span className="text-xs font-medium text-neutral-400">OR</span>
+            <hr className="flex-1 border-neutral-200" />
           </div>
 
           <SegmentedControl
@@ -60,9 +60,9 @@ export function SignIn(): JSX.Element {
 
           <div className="mt-6">{mode === "password" ? <PasswordForm /> : <SmsForm />}</div>
 
-          <p className="mt-6 text-sm text-slate-600">
+          <p className="mt-6 text-sm text-neutral-600">
             New to CRAL?{" "}
-            <Link to="/create-account" className="font-semibold text-indigo-800 hover:underline">
+            <Link to="/create-account" className="font-semibold text-cruz-blue hover:underline">
               Register instead
             </Link>
           </p>
@@ -129,7 +129,7 @@ function PasswordForm(): JSX.Element {
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="text-xs font-semibold text-indigo-800 hover:underline"
+            className="text-xs font-semibold text-cruz-blue hover:underline"
           >
             {showPassword ? "Hide" : "Show"}
           </button>
@@ -139,26 +139,26 @@ function PasswordForm(): JSX.Element {
       />
 
       <div className="flex items-center justify-between">
-        <label className="flex items-center gap-2 text-sm text-slate-700">
+        <label className="flex items-center gap-2 text-sm text-neutral-700">
           <input
             type="checkbox"
             checked={keepSignedIn}
             onChange={(e) => setKeepSignedIn(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-indigo-800 focus:ring-indigo-800"
+            className="h-4 w-4 rounded border-neutral-300 text-cruz-blue focus:ring-cruz-blue"
           />
           Keep me signed in
         </label>
-        <Link to="/forgot-password" className="text-sm font-semibold text-indigo-800 hover:underline">
+        <Link to="/forgot-password" className="text-sm font-semibold text-cruz-blue hover:underline">
           Forgot password?
         </Link>
       </div>
 
-      {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+      {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
 
       <button
         type="submit"
         disabled={submitting}
-        className="rounded-lg bg-indigo-800 py-3 text-sm font-semibold text-white hover:bg-indigo-900 disabled:opacity-60"
+        className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
       >
         {submitting ? "Signing in…" : "Sign in"}
       </button>
@@ -204,7 +204,7 @@ function SmsForm(): JSX.Element {
   if (step === "verify") {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-slate-600">
+        <p className="text-sm text-neutral-600">
           We sent a 6-digit code to <strong>{identifier}</strong>.
         </p>
         <TextInput
@@ -215,12 +215,12 @@ function SmsForm(): JSX.Element {
           value={code}
           onChange={(e) => setCode(e.target.value)}
         />
-        {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+        {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
         <button
           type="button"
           onClick={onVerify}
           disabled={submitting || code.length !== 6}
-          className="rounded-lg bg-indigo-800 py-3 text-sm font-semibold text-white hover:bg-indigo-900 disabled:opacity-60"
+          className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
         >
           {submitting ? "Verifying…" : "Sign in"}
         </button>
@@ -237,12 +237,12 @@ function SmsForm(): JSX.Element {
         value={identifier}
         onChange={(e) => setIdentifier(e.target.value)}
       />
-      {serverError && <p className="text-sm text-red-600">{serverError}</p>}
+      {serverError && <p className="text-sm text-cruz-red">{serverError}</p>}
       <button
         type="button"
         onClick={onRequest}
         disabled={submitting || !identifier}
-        className="rounded-lg bg-indigo-800 py-3 text-sm font-semibold text-white hover:bg-indigo-900 disabled:opacity-60"
+        className="rounded-lg bg-cruz-blue py-3 text-sm font-semibold text-white hover:bg-cruz-blue-700 disabled:opacity-60"
       >
         {submitting ? "Sending…" : "Send code"}
       </button>

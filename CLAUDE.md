@@ -8,8 +8,12 @@ convention reference so it doesn't need re-explaining every session.
 
 ## Current phase
 
-**Phase 0 — Foundation.** Nothing customer-facing yet. Do not start Phase 1
-(accounts & login) work unless explicitly asked.
+**Phase 1 — Identity, merchant portal only.** The owner corrected course
+after Phase 1 initially got built against `apps/customer`: **merchant is
+the sole priority until told otherwise.** `apps/customer` and `apps/admin`
+are Phase-0 shells only — don't add screens or wire them to the API unless
+explicitly asked, even if a later phase's spec section would normally cover
+all three portals.
 
 ## Stack
 
@@ -67,10 +71,30 @@ wired in and selected via `SMS_ADAPTER` / `EMAIL_ADAPTER` /
 
 ## Design tokens
 
-`packages/ui/src/tokens.ts` currently holds **placeholder values** — swap
-them for the real exported design values (colors, the five-state badge
-tones, the plated/monospace reference styling, the "boosted" skew) when
-available. The shape shouldn't need to change, only the values.
+`packages/ui/src/tokens.ts` holds the **real** brand values — colors, type
+scale, control heights, motion — extracted from
+[`docs/brand/CRAL-Brand-Strategy-and-Design-System-v2.pdf`](./docs/brand/CRAL-Brand-Strategy-and-Design-System-v2.pdf)
+(the design canvas's own token-reference pages, exported to PDF). That PDF
+is the source of truth for anything token-shaped; the actual screen designs
+live in the Claude Design canvas the owner shares links to (currently the
+Merchant App file) — read screens from there, tokens from the PDF.
+
+Three fonts, each with one job, all on Google Fonts: **Archivo** (variable
+`wdth` axis) for display-size headlines only, **Instrument Sans** for all
+UI/body text, **IBM Plex Mono** for identifiers/timestamps only. Load via
+the Google Fonts `<link>` in each app's `index.html` — see
+`apps/merchant/index.html` for the exact href.
+
+Five status states — pending / review / verified / rejected / boosted —
+never colour alone, always paired with a glyph + word. "boosted" is the
+only skewed (-14°) element in the product ("round = trust, angled = paid");
+never skew a verification/trust element. The masthead's red rule carries
+the same 14° skew, once per surface, never more than once in view.
+
+If a screenshot of a screen and these tokens ever seem to disagree, trust
+the tokens file / brand PDF for *values* (colors, fonts, spacing) and the
+Claude Design canvas for *layout* — don't eyeball colors from a screenshot
+when the real hex is available here.
 
 ## What NOT to do
 
@@ -82,6 +106,11 @@ available. The shape shouldn't need to change, only the values.
   sequencing and the "sequencing traps" section) unless explicitly asked.
 - Don't wire a real SMS/email/storage provider without being asked — the
   console/local adapters are intentional for now.
+- Don't build or wire screens in `apps/customer` / `apps/admin` right now —
+  merchant only, until the owner says otherwise.
+- Don't guess colors/fonts from a screenshot of the design canvas when
+  `packages/ui/src/tokens.ts` or the brand PDF has the real value — that
+  mismatch has already caused a rebuild once.
 
 ## Local dev
 

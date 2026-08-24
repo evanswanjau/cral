@@ -1,28 +1,56 @@
 import type { ButtonHTMLAttributes, CSSProperties } from "react";
-import { color, font, radius, space } from "../tokens.js";
+import { color, controlHeight, font, radius } from "../tokens.js";
+
+/**
+ * §05 Buttons: one primary per view. "boost" is the only skewed control in
+ * the product (paid placement, never trust) — see StatusBadge for the same
+ * skew/counter-skew technique applied to text.
+ */
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "boost";
+export type ButtonSize = "lg" | "md" | "sm";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 }
 
-export function Button({ variant = "primary", style, ...rest }: ButtonProps): JSX.Element {
+const VARIANT_STYLE: Record<ButtonVariant, CSSProperties> = {
+  primary: { backgroundColor: color.cruzBlue, color: "#fff", border: "1px solid transparent" },
+  secondary: { backgroundColor: "#fff", color: color.neutral[900], border: `1px solid ${color.neutral[300]}` },
+  ghost: { backgroundColor: "transparent", color: color.cruzBlue, border: "1px solid transparent" },
+  danger: { backgroundColor: "#fff", color: color.cruzRed, border: `1px solid ${color.cruzRed}` },
+  boost: { backgroundColor: color.boost, color: "#fff", border: "1px solid transparent" },
+};
+
+export function Button({
+  variant = "primary",
+  size = "md",
+  style,
+  children,
+  ...rest
+}: ButtonProps): JSX.Element {
   const base: CSSProperties = {
     fontFamily: font.sans,
     fontSize: "14px",
     fontWeight: 600,
-    padding: `${space[2]} ${space[4]}`,
+    height: controlHeight[size],
+    padding: "0 16px",
     borderRadius: radius.md,
-    border: "1px solid transparent",
     cursor: "pointer",
-    ...(variant === "primary"
-      ? { backgroundColor: color.brand[500], color: "#fff" }
-      : {
-          backgroundColor: "#fff",
-          color: color.neutral[700],
-          borderColor: color.neutral[300],
-        }),
+    ...VARIANT_STYLE[variant],
+    ...(variant === "boost" ? { transform: `skewX(${color.status.boosted.skewDeg}deg)` } : {}),
     ...style,
   };
 
-  return <button style={base} {...rest} />;
+  return (
+    <button style={base} {...rest}>
+      {variant === "boost" ? (
+        <span style={{ display: "inline-block", transform: `skewX(${-color.status.boosted.skewDeg}deg)` }}>
+          {children}
+        </span>
+      ) : (
+        children
+      )}
+    </button>
+  );
 }

@@ -29,7 +29,7 @@ export function Overview(): JSX.Element {
         {Object.entries(data.checks).map(([name, state]) => (
           <StatusBadge
             key={name}
-            tone={state === "ok" ? "success" : "danger"}
+            tone={state === "ok" ? "verified" : "rejected"}
             label={`${name}: ${state}`}
           />
         ))}

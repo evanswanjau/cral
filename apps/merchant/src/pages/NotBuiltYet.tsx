@@ -8,9 +8,9 @@ export function NotBuiltYet({ title }: { title: string }): JSX.Element {
       <BrandPanel />
       <div className="flex items-center justify-center bg-white px-6 py-12">
         <div className="w-full max-w-sm text-center">
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-          <p className="mt-2 text-sm text-slate-600">This screen isn't built yet.</p>
-          <Link to="/sign-in" className="mt-6 inline-block text-sm font-semibold text-indigo-800 hover:underline">
+          <h1 className="text-2xl font-bold text-neutral-900">{title}</h1>
+          <p className="mt-2 text-sm text-neutral-600">This screen isn't built yet.</p>
+          <Link to="/sign-in" className="mt-6 inline-block text-sm font-semibold text-cruz-blue hover:underline">
             Back to sign in
           </Link>
         </div>

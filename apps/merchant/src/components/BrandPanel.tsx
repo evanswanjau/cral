@@ -17,34 +17,36 @@ const FEATURES = [
 
 /**
  * The dark marketing panel from the merchant app design — shared by every
- * auth screen (sign in now; create account / forgot password reuse it
- * once built). Colors are visually matched from the design file pending
- * exact exported values (see packages/ui/src/tokens.ts).
+ * auth screen. Built against the real CRAL Design System v2 brand doc:
+ * Ink (#0B0F1A) surface, Archivo for the display headline, Instrument Sans
+ * for body copy, IBM Plex Mono for the small-caps labels. The masthead's
+ * red rule carries the brand's signature 14° skew — "one skewed red rule
+ * per surface, never more than once in view."
  */
 export function BrandPanel(): JSX.Element {
   return (
-    <div className="hidden flex-col justify-between bg-[#0a0f1f] p-12 text-white lg:flex">
+    <div className="hidden flex-col justify-between bg-ink p-12 text-white lg:flex">
       <div>
         <div className="flex items-center gap-3">
           <LogoMark />
           <div className="leading-tight">
-            <div className="text-sm font-semibold">CRUZ RIDE AUTO</div>
-            <div className="text-[10px] text-slate-500">LIMITED</div>
+            <div className="font-display text-sm font-semibold">CRUZ RIDE AUTO</div>
+            <div className="font-mono text-[10px] tracking-wide text-cruz-blue-200">LIMITED</div>
           </div>
-          <span className="ml-2 border-l border-slate-700 pl-3 font-mono text-xs uppercase tracking-widest text-slate-400">
+          <span className="ml-2 border-l border-white/10 pl-3 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
             Merchant Portal
           </span>
         </div>
 
         <div className="mt-24 max-w-md">
-          <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-slate-400">
-            <span className="h-0.5 w-6 bg-red-600" />
+          <div className="flex items-center gap-2 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
+            <span className="h-[3px] w-6 -skew-x-[14deg] bg-cruz-red" />
             CRAL · Nairobi, Kenya
           </div>
-          <h1 className="mt-4 text-4xl font-bold leading-tight">
+          <h1 className="mt-4 font-display text-[42px] font-bold leading-[1.05] tracking-[-0.01em]">
             Your vehicles, your money, in one place.
           </h1>
-          <p className="mt-4 text-slate-300">
+          <p className="mt-4 text-white/70">
             Sign in to answer booking requests, track what each vehicle earns, and watch your payouts
             land on M-Pesa.
           </p>
@@ -52,12 +54,12 @@ export function BrandPanel(): JSX.Element {
           <ul className="mt-8 flex flex-col gap-4">
             {FEATURES.map((feature) => (
               <li key={feature.title} className="flex gap-3">
-                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#0B8A5B]/20 text-[#3DDB9A]">
                   ✓
                 </span>
                 <div>
                   <div className="font-semibold text-white">{feature.title}</div>
-                  <div className="text-sm text-slate-400">{feature.description}</div>
+                  <div className="text-sm text-white/60">{feature.description}</div>
                 </div>
               </li>
             ))}
@@ -65,7 +67,7 @@ export function BrandPanel(): JSX.Element {
         </div>
       </div>
 
-      <div className="flex items-center justify-between font-mono text-xs uppercase tracking-widest text-slate-500">
+      <div className="flex items-center justify-between font-mono text-xs uppercase tracking-widest text-white/40">
         <span>© 2026 CRAL · CRAL.CO.KE</span>
         <span>Stuck? Call 0733 376 061</span>
       </div>

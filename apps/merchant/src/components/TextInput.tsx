@@ -20,7 +20,7 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
       <div className="flex items-baseline justify-between">
         <label
           htmlFor={id}
-          className="font-mono text-[11px] font-medium uppercase tracking-widest text-slate-500"
+          className="font-mono text-[11px] font-medium uppercase tracking-widest text-neutral-500"
         >
           {label}
         </label>
@@ -29,12 +29,14 @@ export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(function T
       <input
         ref={ref}
         id={id}
-        className={`rounded-lg border px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-800/20 ${
-          error ? "border-red-400" : "border-slate-300 focus:border-indigo-800"
+        className={`h-10 rounded-[10px] border px-3.5 text-sm text-ink placeholder:text-neutral-400 focus:outline-none focus:ring-[3px] ${
+          error
+            ? "border-cruz-red focus:ring-cruz-red/20"
+            : "border-neutral-300 focus:border-cruz-blue focus:ring-cruz-blue/20"
         } ${className ?? ""}`}
         {...rest}
       />
-      {error && <span className="text-xs text-red-600">{error.message}</span>}
+      {error && <span className="text-xs text-cruz-red">{error.message}</span>}
     </div>
   );
 });

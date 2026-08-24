@@ -2,21 +2,22 @@ import type { CSSProperties } from "react";
 import { color, font, radius, space } from "../tokens.js";
 
 /**
- * The five-state status badge system referenced throughout the spec's state
- * machines (§27): draft/pending states, in-review states, success states
- * (live/verified/approved), warning states (expiring), and danger states
- * (rejected/suspended/expired). Callers map their own domain state to one
- * of these five tones and supply the label text.
+ * The five status states from the brand doc §02 — identical meaning
+ * across all three portals, never shipped as colour alone. "boosted" is
+ * the one state rendered skewed (paid placement, never trust): the pill
+ * itself is skewed via CSS transform, and the label text inside is
+ * counter-skewed back to upright so it stays legible.
  */
-export type StatusTone = "pending" | "review" | "success" | "warning" | "danger";
+export type StatusTone = "pending" | "review" | "verified" | "rejected" | "boosted";
 
 export interface StatusBadgeProps {
   tone: StatusTone;
   label: string;
 }
 
+const skew = color.status.boosted.skewDeg;
+
 export function StatusBadge({ tone, label }: StatusBadgeProps): JSX.Element {
-  const c = color.status[tone];
   const style: CSSProperties = {
     display: "inline-flex",
     alignItems: "center",
@@ -27,14 +28,22 @@ export function StatusBadge({ tone, label }: StatusBadgeProps): JSX.Element {
     fontSize: "13px",
     fontWeight: 600,
     lineHeight: 1,
-    backgroundColor: c.bg,
-    color: c.fg,
-    border: `1px solid ${c.border}`,
+    ...(tone === "boosted"
+      ? { backgroundColor: color.boost, color: "#fff", border: "none", transform: `skewX(${skew}deg)` }
+      : {
+          backgroundColor: color.status[tone].tint,
+          color: color.status[tone].text,
+          border: `1px solid ${color.status[tone].border}`,
+        }),
   };
 
   return (
     <span style={style} data-tone={tone}>
-      {label}
+      {tone === "boosted" ? (
+        <span style={{ display: "inline-block", transform: `skewX(${-skew}deg)` }}>{label}</span>
+      ) : (
+        label
+      )}
     </span>
   );
 }

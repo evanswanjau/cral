@@ -41,7 +41,7 @@ export function Sessions(): JSX.Element {
               <span className="text-xs text-slate-500">
                 Last active {new Date(session.last_seen_at).toLocaleString()}
               </span>
-              {session.is_current && <StatusBadge tone="success" label="This device" />}
+              {session.is_current && <StatusBadge tone="verified" label="This device" />}
             </div>
             {!session.is_current && (
               <Button

@@ -14,8 +14,8 @@ export function LogoMark(): JSX.Element {
         />
         <defs>
           <linearGradient id="cral-logo-gradient" x1="3" y1="9" x2="25" y2="20" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#2563eb" />
-            <stop offset="1" stopColor="#dc2626" />
+            <stop stopColor="#0F23A8" />
+            <stop offset="1" stopColor="#D81E32" />
           </linearGradient>
         </defs>
       </svg>

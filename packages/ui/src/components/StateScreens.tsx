@@ -51,7 +51,7 @@ export function ErrorState({
 }): JSX.Element {
   return (
     <div style={wrapper}>
-      <strong style={{ color: color.status.danger.fg }}>{title}</strong>
+      <strong style={{ color: color.status.rejected.text }}>{title}</strong>
       {description && <p style={{ margin: 0, color: color.neutral[500] }}>{description}</p>}
       {action}
     </div>
