@@ -1,0 +1,36 @@
+{
+  "name": "cral",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "Cruz Ride Auto — car rental marketplace for Kenya. Monorepo root.",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev -w apps/api",
+    "dev:customer": "npm run dev -w apps/customer",
+    "dev:merchant": "npm run dev -w apps/merchant",
+    "dev:admin": "npm run dev -w apps/admin",
+    "lint": "eslint . --max-warnings=0",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present",
+    "migrate": "npm run migrate -w apps/api",
+    "migrate:rollback": "npm run migrate:rollback -w apps/api"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "eslint-config-prettier": "^9.1.0",
+    "globals": "^15.12.0",
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}
