@@ -29,11 +29,7 @@ export function BrandPanel(): JSX.Element {
       <div>
         <div className="flex items-center gap-3">
           <LogoMark />
-          <div className="leading-tight">
-            <div className="font-display text-sm font-semibold">CRUZ RIDE AUTO</div>
-            <div className="font-mono text-[10px] tracking-wide text-cruz-blue-200">LIMITED</div>
-          </div>
-          <span className="ml-2 border-l border-white/10 pl-3 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
+          <span className="border-l border-white/10 pl-3 font-mono text-xs uppercase tracking-widest text-cruz-blue-200">
             Merchant Portal
           </span>
         </div>

@@ -85,7 +85,7 @@ export const font = {
 } as const;
 
 export const googleFontsHref =
-  "https://fonts.googleapis.com/css2?family=Archivo:wght,wdth@400,100..900,75..125&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap";
+  "https://fonts.googleapis.com/css2?family=Archivo:wght,wdth@100..900,75..125&family=Instrument+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap";
 
 /** Type scale — size/line-height, weight, and (where set) wdth axis + tracking. */
 export const type = {
