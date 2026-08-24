@@ -79,11 +79,24 @@ is the source of truth for anything token-shaped; the actual screen designs
 live in the Claude Design canvas the owner shares links to (currently the
 Merchant App file) — read screens from there, tokens from the PDF.
 
-Three fonts, each with one job, all on Google Fonts: **Archivo** (variable
-`wdth` axis) for display-size headlines only, **Instrument Sans** for all
-UI/body text, **IBM Plex Mono** for identifiers/timestamps only. Load via
-the Google Fonts `<link>` in each app's `index.html` — see
-`apps/merchant/index.html` for the exact href.
+Three fonts, each with one job: **Archivo** for display-size headlines
+only, **Instrument Sans** for all UI/body text, **IBM Plex Mono** for
+identifiers/timestamps only.
+
+They are **self-hosted, not loaded from the Google Fonts CDN** — see
+`apps/merchant/src/fonts.css`, which aliases the `@fontsource*` packages to
+the exact family names the canvas source uses so its declarations work
+verbatim. This is deliberate: the CDN returned a 503 during testing, and a
+font that fails to load silently falls back to a system sans, which is
+precisely what made an earlier build "look like a different font". Don't
+reintroduce the CDN `<link>`.
+
+Archivo must be the **wdth+wght variable cut** (`@fontsource-variable/archivo`,
+`archivo-*-wdth-normal.woff2`). The display type sets
+`font-variation-settings:'wdth' 110` (sub-heads 106) — with a wght-only
+build that declaration silently does nothing and the type renders too
+narrow. To check the axis is live, measure a string at `'wdth' 100` vs
+`'wdth' 110` and confirm the widths differ.
 
 Five status states — pending / review / verified / rejected / boosted —
 never colour alone, always paired with a glyph + word. "boosted" is the
