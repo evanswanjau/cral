@@ -241,13 +241,11 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
   // down, SMS provider down, ...) is fixed.
   if (phone) {
     await sendOtp(phone, "phone", "signup").catch((err: unknown) => {
-      // eslint-disable-next-line no-console
       console.error(`[auth] signup SMS to ${maskIdentifier(phone as string)} failed:`, err);
     });
     return { user: serializeUser(user), next: "verify_phone" as const };
   }
   await sendOtp(email, "email", "signup").catch((err: unknown) => {
-    // eslint-disable-next-line no-console
     console.error(`[auth] signup email to ${maskIdentifier(email)} failed:`, err);
   });
   return { user: serializeUser(user), next: "verify_email" as const };

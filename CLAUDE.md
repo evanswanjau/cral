@@ -67,15 +67,31 @@ SMS, email and file storage are behind interfaces in
 without touching call sites, selected via `SMS_ADAPTER` / `EMAIL_ADAPTER` /
 `STORAGE_ADAPTER`.
 
-**Email is real as of 2026-08-24**: `EMAIL_ADAPTER=smtp` uses
-`SmtpEmailAdapter` (nodemailer) against the `noreply@cral.co.ke` mailbox on
-`mail.cral.co.ke:587`. Port 587 is STARTTLS, so `SMTP_SECURE=false` and
-`requireTLS` does the upgrade — `secure: true` on 587 hangs until timeout.
-Credentials live in the gitignored `.env`; `.env.example` carries the keys
-with an empty password. `npm run smtp:check -w apps/api` authenticates and
-disconnects without sending; pass an address to send one real test message.
-The server verifies the connection at boot and warns (does not exit) if it
-fails.
+**Email is real, two adapters exist.** `SmtpEmailAdapter` (nodemailer,
+`EMAIL_ADAPTER=smtp`) talks to the `noreply@cral.co.ke` mailbox on
+`mail.cral.co.ke:587` — STARTTLS, so `SMTP_SECURE=false` and `requireTLS`
+does the upgrade; `secure: true` on 587 hangs until timeout.
+`npm run smtp:check -w apps/api` authenticates and disconnects without
+sending; pass an address to send one real test message. The server
+verifies the connection at boot and warns (does not exit) if it fails.
+
+**Prefer `ResendEmailAdapter` (`EMAIL_ADAPTER=resend`) over SMTP where
+possible.** Discovered 2026-08-25 deploying to Railway: raw SMTP to
+`mail.cral.co.ke` is unreachable from Railway's egress — `ETIMEDOUT` at
+the TCP-connect stage on both port 587 and 465, while two independent
+external SMTP-test tools (different clouds, different regions) both got a
+full, healthy SMTP conversation from the same host. That points at
+Railway's specific outbound IP being blocked by the mail server's
+IP-reputation firewall, not a config problem — and since Railway's egress
+IP on non-static plans can change on redeploy, an allowlist fix wouldn't
+even stay fixed. Resend sends over HTTPS to its own API instead of a raw
+SMTP socket, so a mail server's firewall never enters the picture. Needs
+`RESEND_API_KEY` + `EMAIL_FROM`, and `cral.co.ke` verified as a sending
+domain in Resend's dashboard (a handful of DNS TXT/MX records) before
+sends succeed.
+
+Credentials for both live in the gitignored `.env`; `.env.example` carries
+the keys with empty secrets.
 
 `apps/api/vitest.config.ts` pins `EMAIL_ADAPTER`/`SMS_ADAPTER` to `console`
 for the test run. Don't remove that — without it every test run tries to
