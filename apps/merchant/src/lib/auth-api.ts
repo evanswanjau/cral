@@ -1,4 +1,4 @@
-import { apiPost } from "./api.js";
+import { apiGet, apiPost } from "./api.js";
 
 export interface TokenPair {
   access_token: string;
@@ -90,6 +90,21 @@ export function verifySignupOtp(identifier: string, code: string) {
 
 /** Bump when the merchant terms change; recorded against the account at sign-up (spec §4). */
 export const TERMS_VERSION = "2026-08-24";
+
+export interface RegistrationState {
+  full_name_present: boolean;
+  phone_present: boolean;
+  phone_verified: boolean;
+  email_verified: boolean;
+  terms_accepted: boolean;
+  merchant_profile_required: boolean;
+  merchant_profile_present: boolean;
+}
+
+/** What the onboarding checklist reads to know what's still outstanding. */
+export function getRegistrationState() {
+  return apiGet<RegistrationState>("/auth/registration-state");
+}
 
 // --- forgot / reset password ------------------------------------------
 

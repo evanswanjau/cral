@@ -10,7 +10,9 @@ import {
   TextInput,
 } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
-import { register, requestOtp, verifySignupOtp } from "../lib/auth-api.js";
+import { isTwoFactorRequired, login, register, requestOtp, verifySignupOtp } from "../lib/auth-api.js";
+import { setSession } from "../lib/auth.js";
+import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
@@ -63,7 +65,20 @@ export function CreateAccount(): JSX.Element {
   const verify = () =>
     run(async () => {
       await verifySignupOtp(email.trim(), code);
-      navigate("/sign-in", { replace: true });
+      // /auth/otp/verify's signup branch only flips email_verified — it
+      // doesn't issue a session (see identity.yaml), so sign in with the
+      // password still held in state rather than sending someone who just
+      // finished signing up back to a sign-in form to type it again.
+      const result = await login(email.trim(), pw, deviceId());
+      if (isTwoFactorRequired(result)) {
+        // Nobody can enrol yet (no settings UI), so a brand-new account
+        // never hits this — but if that ever changes, fail toward sign-in
+        // rather than pretending the session exists.
+        navigate("/sign-in", { replace: true });
+        return;
+      }
+      setSession(result, true);
+      navigate("/onboarding", { replace: true });
     }, "That code didn't work. Try again.");
 
   const resend = () =>
