@@ -32,6 +32,14 @@ export class SmtpEmailAdapter implements EmailAdapter {
         user: requireEnv("SMTP_USER"),
         pass: requireEnv("SMTP_PASSWORD"),
       },
+      // Nodemailer's own default is ~2 minutes per stage, which turns an
+      // unreachable mail server (wrong firewall rule, host down) into a
+      // 2-minute hang on every send — long enough to look like the whole
+      // request died, not just the email. Fail in single-digit seconds
+      // instead; a real SMTP server answers well within that.
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 10_000,
     });
   }
 

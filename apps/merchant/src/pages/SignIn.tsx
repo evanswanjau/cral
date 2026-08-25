@@ -43,6 +43,11 @@ export function SignIn(): JSX.Element {
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "account_locked") {
         setError("Too many failed attempts. Try again in a few minutes, or reset your password.");
+      } else if (err instanceof ApiClientError && err.code === "invalid_credentials") {
+        // The API's message says "phone or email" because it's shared with
+        // the customer portal, which still supports both — merchant is
+        // email-only, so override with copy that matches this form.
+        setError("That email and password don't match.");
       } else {
         setError(
           err instanceof ApiClientError ? err.message : "Something went wrong. Please try again.",

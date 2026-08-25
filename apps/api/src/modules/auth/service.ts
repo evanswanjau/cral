@@ -231,11 +231,25 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
 
   // Verify whichever contact we actually hold. Email-first sign-up sends the
   // code by email; a caller that did supply a phone keeps the SMS path.
+  //
+  // The account row above is already committed by this point, so a failed
+  // send here must not fail the request — that would leave a real,
+  // unverified account stranded with no way for the caller to know it
+  // exists, since a retry just hits account_exists (409) against a row it
+  // can't see. Log and continue instead; POST /auth/otp/request already
+  // exists as the resend path once the underlying delivery problem (SMTP
+  // down, SMS provider down, ...) is fixed.
   if (phone) {
-    await sendOtp(phone, "phone", "signup");
+    await sendOtp(phone, "phone", "signup").catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error(`[auth] signup SMS to ${maskIdentifier(phone as string)} failed:`, err);
+    });
     return { user: serializeUser(user), next: "verify_phone" as const };
   }
-  await sendOtp(email, "email", "signup");
+  await sendOtp(email, "email", "signup").catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error(`[auth] signup email to ${maskIdentifier(email)} failed:`, err);
+  });
   return { user: serializeUser(user), next: "verify_email" as const };
 }
 
