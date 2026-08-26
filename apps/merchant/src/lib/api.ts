@@ -25,6 +25,8 @@ interface RequestOptions {
   auth?: boolean;
   /** Read a successful response as a Blob instead of JSON. Errors are still parsed as the JSON envelope. */
   blob?: boolean;
+  /** Extra headers merged in on top of Content-Type/Authorization — e.g. Idempotency-Key. */
+  headers?: Record<string, string>;
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -59,7 +61,7 @@ async function tryRefresh(): Promise<boolean> {
 
 async function request<T>(path: string, options: RequestOptions, isRetry = false): Promise<T> {
   const { method = "GET", body, formData, auth = true, blob = false } = options;
-  const headers: Record<string, string> = {};
+  const headers: Record<string, string> = { ...options.headers };
   // formData: no Content-Type here — the browser sets its own multipart
   // boundary, which it can only do if this fetch doesn't specify one.
   if (formData === undefined && body !== undefined) headers["Content-Type"] = "application/json";
@@ -112,8 +114,8 @@ export const apiPost = <T>(path: string, body?: unknown, options: Omit<RequestOp
 export const apiPatch = <T>(path: string, body?: unknown, options: Omit<RequestOptions, "method" | "body"> = {}) =>
   request<T>(path, { ...options, method: "PATCH", body });
 
-export const apiDelete = <T>(path: string, options: Omit<RequestOptions, "method" | "body"> = {}) =>
-  request<T>(path, { ...options, method: "DELETE" });
+export const apiDelete = <T>(path: string, body?: unknown, options: Omit<RequestOptions, "method" | "body"> = {}) =>
+  request<T>(path, { ...options, method: "DELETE", body });
 
 export const apiUpload = <T>(path: string, formData: FormData, options: Omit<RequestOptions, "method" | "body" | "formData"> = {}) =>
   request<T>(path, { ...options, method: "POST", formData });

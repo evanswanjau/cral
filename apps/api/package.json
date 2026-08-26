@@ -13,7 +13,9 @@
     "migrate:rollback": "tsx src/db/migrate.ts rollback",
     "migrate:make": "knex --knexfile src/db/knexfile.ts migrate:make",
     "smtp:check": "tsx src/scripts/smtp-check.ts",
-    "reminders:sweep": "tsx src/scripts/run-reminder-sweep.ts"
+    "reminders:sweep": "tsx src/scripts/run-reminder-sweep.ts",
+    "seed:vehicles": "tsx src/scripts/seed-vehicles.ts",
+    "approve:merchant": "tsx src/scripts/approve-merchant.ts"
   },
   "dependencies": {
     "@cral/types": "*",
