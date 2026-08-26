@@ -6,6 +6,7 @@ import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
+import { vehiclesRouter } from "./modules/vehicles/routes.js";
 
 /**
  * Allowed CORS origins. Defaults to the three local Vite dev ports so the
@@ -47,6 +48,7 @@ export function createApp(): Express {
   app.use(healthRouter);
   app.use(authRouter);
   app.use(merchantRouter);
+  app.use(vehiclesRouter);
 
   app.use(notFoundHandler());
   app.use(errorHandler());

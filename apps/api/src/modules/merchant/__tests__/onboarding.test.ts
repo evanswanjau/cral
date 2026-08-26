@@ -387,5 +387,18 @@ describe("merchant onboarding — submit", () => {
       .orderBy("created_at", "desc")
       .first();
     expect(auditRow).toBeTruthy();
+
+    // Every vehicle built through the wizard is submitted right along with
+    // it — it should land as "pending review" on the Vehicles screen, with
+    // a real listing ref, not sit as an untouched draft (see vehicles
+    // module's status vocabulary).
+    const vehicleRow = await db("vehicles").where({ id: vehicleId }).first();
+    expect(vehicleRow.status).toBe("pending");
+    expect(vehicleRow.submitted_at).toBeTruthy();
+    expect(vehicleRow.listing_ref).toMatch(/^CRAL-V-\d+$/);
+    const submittedEvent = await db("vehicle_events")
+      .where({ vehicle_id: vehicleId, kind: "submitted" })
+      .first();
+    expect(submittedEvent).toBeTruthy();
   });
 });

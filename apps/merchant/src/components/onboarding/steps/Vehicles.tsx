@@ -381,7 +381,7 @@ const fmt = (n: number): string => n.toLocaleString("en-KE");
  * Fee is rounded to whole shillings and earnings derived by subtraction, so
  * the three figures always reconcile exactly and no float reaches the UI.
  */
-function Earnings({ dailyRate }: { dailyRate: string }): JSX.Element {
+export function Earnings({ dailyRate }: { dailyRate: string }): JSX.Element {
   const rate = Number(dailyRate) || 0;
   const fee = Math.round((rate * COMMISSION_PCT) / 100);
   const earns = rate - fee;
