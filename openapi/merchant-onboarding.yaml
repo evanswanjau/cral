@@ -1,0 +1,400 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Merchant Onboarding API
+  version: "1.0.0"
+  description: >
+    Server-side persistence for the merchant onboarding wizard: owner
+    details, payout, vehicles, documents, and submission. Frozen from the
+    platform API spec §9 for Phase 1 (delivery plan). Merchant-portal
+    audience only.
+
+    Every mutating call bumps the merchant's `last_activity_at`, which is
+    the clock the stalled-onboarding reminder emails (spec §9, decided
+    2026-08-25) key off. There is exactly one merchant draft per user —
+    every path here acts on the authenticated caller's own draft, so none
+    of them take a merchant id.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: onboarding
+    description: The merchant draft — owner/company/payout fields, step, submission
+  - name: vehicles
+    description: Vehicles added to the draft before submission
+  - name: documents
+    description: Owner and vehicle document/photo uploads
+
+paths:
+  # ---------------------------------------------------------------------
+  # §9 Merchant onboarding
+  # ---------------------------------------------------------------------
+  /merchant/onboarding:
+    get:
+      tags: [onboarding]
+      summary: Current onboarding progress
+      operationId: getOnboarding
+      description: >
+        Never 404s — a caller with no merchant row yet gets a freshly
+        initialized empty draft, so the wizard always has something to
+        render on first load.
+      responses:
+        "200":
+          description: Current draft state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingState" }
+    patch:
+      tags: [onboarding]
+      summary: Update owner/company/payout/terms fields
+      operationId: patchOnboarding
+      description: >
+        Partial update of every top-level draft field. Creation is implicit
+        — the first PATCH from a new merchant creates their row. Every
+        successful call bumps `last_activity_at`, not just ones that change
+        `step` — that field is what the reminder-email system hangs off, so
+        any real progress (even re-typing a field) resets the clock.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PatchOnboardingRequest" }
+      responses:
+        "200":
+          description: Updated draft state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingState" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /merchant/onboarding/vehicles:
+    post:
+      tags: [vehicles]
+      summary: Add a vehicle to the draft
+      operationId: createVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleInput" }
+      responses:
+        "201":
+          description: Vehicle added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /merchant/onboarding/vehicles/{vehicleId}:
+    parameters:
+      - name: vehicleId
+        in: path
+        required: true
+        schema: { type: string }
+    patch:
+      tags: [vehicles]
+      summary: Edit a vehicle
+      operationId: patchVehicle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/VehicleInput" }
+      responses:
+        "200":
+          description: Updated vehicle
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Vehicle" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "422":
+          $ref: "#/components/responses/ValidationError"
+    delete:
+      tags: [vehicles]
+      summary: Remove a vehicle from the draft
+      operationId: deleteVehicle
+      description: Cascades its documents and photos.
+      responses:
+        "204":
+          description: Removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /merchant/onboarding/documents:
+    post:
+      tags: [documents]
+      summary: Upload an owner or vehicle document/photo
+      operationId: uploadDocument
+      description: >
+        Multipart upload. `kind` selects the slot; `vehicle_id` is required
+        for vehicle-scoped kinds (`logbook`, `comprehensive_insurance`,
+        `tracker_certificate`, `vehicle_photo`) and forbidden for owner
+        kinds (`national_id`, `kra_pin`). Every kind except `vehicle_photo`
+        is single-slot — a second upload replaces the first. `vehicle_photo`
+        allows up to 3 per vehicle; a 4th is rejected with 422.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind: { $ref: "#/components/schemas/DocumentKind" }
+                vehicle_id: { type: string }
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DocumentUploadResponse" }
+        "422":
+          $ref: "#/components/responses/ValidationError"
+
+  /merchant/onboarding/documents/{documentId}:
+    parameters:
+      - name: documentId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [documents]
+      summary: Download one document or photo
+      operationId: getDocument
+      description: >
+        Streams the stored bytes back to the owning merchant. Authenticated
+        like every other route — the storage bucket is never public and no
+        token is ever placed in the URL, so the client fetches this with its
+        bearer token and turns the response into an object URL for display.
+        This is what lets an uploaded photo still render after a page reload,
+        since object URLs do not survive one.
+
+        A document belonging to another merchant is a 404, not a 403.
+      responses:
+        "200":
+          description: The file's bytes
+          headers:
+            Cache-Control:
+              schema: { type: string }
+              description: Always `private` — per-user content behind a bearer token
+          content:
+            application/octet-stream:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [documents]
+      summary: Remove one document or photo
+      operationId: deleteDocument
+      responses:
+        "204":
+          description: Removed
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /merchant/onboarding/submit:
+    post:
+      tags: [onboarding]
+      summary: Submit the draft for review
+      operationId: submitOnboarding
+      description: >
+        Validates completeness server-side (owner details, payout, at least
+        one vehicle with all three vehicle documents and a non-expired
+        insurance-expiry date if comprehensive insurance is attached, both
+        owner documents, and merchant terms accepted) — the same rules the
+        wizard already enforces client-side, re-checked here as the honest
+        backstop. On success, flips `onboarding_submitted` and writes an
+        audit row in the same transaction.
+      responses:
+        "200":
+          description: Submitted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OnboardingState" }
+        "422":
+          description: Incomplete — `message` names the first missing thing
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    DocumentKind:
+      type: string
+      enum:
+        [
+          national_id,
+          kra_pin,
+          logbook,
+          comprehensive_insurance,
+          tracker_certificate,
+          vehicle_photo,
+        ]
+
+    DocumentSlot:
+      type: object
+      nullable: true
+      properties:
+        status: { type: string, enum: [attached] }
+        document_id: { type: string }
+        original_name: { type: string }
+        size_bytes: { type: integer }
+        content_type: { type: string }
+        uploaded_at: { type: string, format: date-time }
+
+    DocumentUploadResponse:
+      type: object
+      properties:
+        document_id: { type: string }
+        original_name: { type: string }
+        size_bytes: { type: integer }
+        content_type: { type: string }
+
+    VehicleInput:
+      type: object
+      properties:
+        type: { type: string, enum: [Car, SUV, Van, Pickup, Lorry] }
+        make: { type: string }
+        model: { type: string }
+        year: { type: string }
+        registration: { type: string }
+        transmission: { type: string, enum: [Automatic, Manual] }
+        fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
+        colour: { type: string }
+        pickup_address: { type: string }
+        daily_rate: { type: string, description: "KES, whole shillings, as a numeric string" }
+        insurance_expiry: { type: string, format: date, nullable: true }
+
+    Vehicle:
+      allOf:
+        - $ref: "#/components/schemas/VehicleInput"
+        - type: object
+          properties:
+            id: { type: string }
+            docs:
+              type: object
+              properties:
+                logbook: { $ref: "#/components/schemas/DocumentSlot" }
+                comprehensive_insurance: { $ref: "#/components/schemas/DocumentSlot" }
+                tracker_certificate: { $ref: "#/components/schemas/DocumentSlot" }
+            photos:
+              type: array
+              items: { $ref: "#/components/schemas/DocumentSlot" }
+
+    PatchOnboardingRequest:
+      type: object
+      properties:
+        step: { type: integer }
+        max_step:
+          type: integer
+          description: >
+            Furthest step ever reached; drives which stepper tabs stay
+            clickable. Applied monotonically — the server keeps the larger of
+            the stored and submitted values, so navigating back to an earlier
+            step never makes a later one unreachable.
+        screen: { type: string, enum: [fleet, vehicle-form] }
+        owner_type: { type: string, enum: [individual, company] }
+        company_name: { type: string }
+        company_cert_no: { type: string }
+        company_kra: { type: string }
+        first_name: { type: string }
+        middle_name: { type: string }
+        surname: { type: string }
+        national_id: { type: string }
+        kra_pin: { type: string }
+        phone: { type: string }
+        county: { type: string }
+        payout_same: { type: boolean }
+        payout_method: { type: string, enum: [mpesa, bank] }
+        payout_detail: { type: string }
+        bank_name: { type: string }
+        bank_branch: { type: string }
+        bank_account_name: { type: string }
+        bank_account_number: { type: string }
+        terms_accepted: { type: boolean }
+
+    OnboardingState:
+      type: object
+      properties:
+        step: { type: integer }
+        max_step: { type: integer, description: Furthest step ever reached }
+        screen:
+          type: string
+          enum: [fleet, vehicle-form]
+          description: >
+            Retained for history; clients should resume on the fleet list
+            rather than mid-vehicle-form, since the in-progress form's
+            identity is client-only state that no round-trip can restore.
+        owner_type: { type: string, enum: [individual, company] }
+        company_name: { type: string, nullable: true }
+        company_cert_no: { type: string, nullable: true }
+        company_kra: { type: string, nullable: true }
+        first_name: { type: string, nullable: true }
+        middle_name: { type: string, nullable: true }
+        surname: { type: string, nullable: true }
+        national_id: { type: string, nullable: true }
+        kra_pin: { type: string, nullable: true }
+        phone: { type: string, nullable: true }
+        county: { type: string, nullable: true }
+        payout_same: { type: boolean }
+        payout_method: { type: string, enum: [mpesa, bank] }
+        payout_detail: { type: string, nullable: true }
+        bank_name: { type: string, nullable: true }
+        bank_branch: { type: string, nullable: true }
+        bank_account_name: { type: string, nullable: true }
+        bank_account_number: { type: string, nullable: true }
+        terms_accepted: { type: boolean }
+        owner_docs:
+          type: object
+          properties:
+            national_id: { $ref: "#/components/schemas/DocumentSlot" }
+            kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
+        vehicles:
+          type: array
+          items: { $ref: "#/components/schemas/Vehicle" }
+        submitted: { type: boolean }
+        last_activity_at: { type: string, format: date-time }
+
+  responses:
+    ValidationError:
+      description: The request failed validation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    NotFound:
+      description: No such resource for this merchant
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

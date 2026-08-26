@@ -1,6 +1,7 @@
 import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { AppLayout } from "./layouts/AppLayout.js";
 import { RequireAuth } from "./components/RequireAuth.js";
+import { RequireOnboarding } from "./components/RequireOnboarding.js";
 import { Overview } from "./pages/Overview.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
@@ -20,9 +21,16 @@ const router = createBrowserRouter([
       // focused first step, not part of the main dashboard.
       { path: "/onboarding", element: <Onboarding /> },
       {
-        path: "/",
-        element: <AppLayout />,
-        children: [{ index: true, element: <Overview /> }],
+        // Dashboard is gated on a finished onboarding — no vehicle, no
+        // dashboard; you get returned to the step you stopped at.
+        element: <RequireOnboarding />,
+        children: [
+          {
+            path: "/",
+            element: <AppLayout />,
+            children: [{ index: true, element: <Overview /> }],
+          },
+        ],
       },
     ],
   },

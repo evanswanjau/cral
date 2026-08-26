@@ -13,3 +13,5 @@ Thumbs.db
 .turbo/
 infra/pgdata/
 infra/local-storage/
+.local-storage/
+apps/api/.local-storage/

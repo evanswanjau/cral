@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import { queryClient } from "./query-client.js";
 
 /**
  * Client-side session storage. Access tokens are short-lived (15 min per
@@ -37,6 +38,26 @@ export function useIsAuthenticated(): boolean {
   return useAccessToken() !== null;
 }
 
+/**
+ * The `sub` claim (user id) read straight off the access token, used only to
+ * namespace this user's local data — an onboarding draft must not leak to
+ * whoever signs in next on the same browser. This is deliberately not a
+ * security check: the payload is read without verifying the signature, and
+ * the server validates the token on every request.
+ */
+export function getCurrentUserId(): string | null {
+  const token = getAccessTokenSnapshot();
+  if (!token) return null;
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const json = atob(payload.replace(/-/g, "+").replace(/_/g, "/"));
+    return (JSON.parse(json) as { sub?: string }).sub ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function getAccessToken(): string | null {
   return getAccessTokenSnapshot();
 }
@@ -56,6 +77,14 @@ export function setSession(
   tokens: { access_token: string; refresh_token: string } | null,
   remember = true,
 ): void {
+  // Cached query data belongs to whoever was signed in a moment ago. Clear
+  // it on *every* session change — sign-out, sign-in, and the silent drop
+  // in lib/api.ts when a refresh fails — so the next account never hydrates
+  // against the previous one's cached onboarding draft. The localStorage
+  // draft is namespaced per user id for exactly this reason (see
+  // getCurrentUserId); without this the query cache defeats that.
+  queryClient.clear();
+
   window.localStorage.removeItem(ACCESS_TOKEN_KEY);
   window.localStorage.removeItem(REFRESH_TOKEN_KEY);
   window.sessionStorage.removeItem(ACCESS_TOKEN_KEY);
