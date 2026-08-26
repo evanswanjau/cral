@@ -3,6 +3,7 @@ import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
+import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
   emailButton,
@@ -237,14 +238,19 @@ function vehicleUpdateFromInput(input: VehicleInput) {
 
 export async function addVehicle(userId: string, input: CreateVehicleInput, _ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
-  const [vehicle] = await db<VehicleRow>("vehicles")
-    .insert({
-      id: generateId("vehicle"),
-      merchant_id: merchant.id,
-      ...vehicleUpdateFromInput(input),
-    })
-    .returning("*");
-  if (!vehicle) throw new Error("Failed to create vehicle");
+  const vehicle = await db.transaction(async (trx) => {
+    const listingRef = await nextListingRef(trx);
+    const [created] = await trx<VehicleRow>("vehicles")
+      .insert({
+        id: generateId("vehicle"),
+        merchant_id: merchant.id,
+        listing_ref: listingRef,
+        ...vehicleUpdateFromInput(input),
+      })
+      .returning("*");
+    if (!created) throw new Error("Failed to create vehicle");
+    return created;
+  });
   await touchActivity(merchant.id);
   return serializeVehicle(vehicle, []);
 }
@@ -520,7 +526,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
 }
 
 export async function submitOnboarding(userId: string, ctx: RequestContext) {
-  const { merchant, vehicles, documents } = await assertCompleteForSubmission(userId);
+  const { merchant, vehicles } = await assertCompleteForSubmission(userId);
 
   await db.transaction(async (trx) => {
     await trx<MerchantRow>("merchants")
@@ -536,6 +542,29 @@ export async function submitOnboarding(userId: string, ctx: RequestContext) {
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+
+    // Every vehicle built through the wizard is submitted right along with
+    // it — a vehicle added in onboarding must land as "pending review" on
+    // the Vehicles screen, not sit as an editable draft the merchant never
+    // explicitly submitted. Skips anything already past draft (defensive —
+    // "add another vehicle" after a first submission re-runs this on a mix
+    // of old and new vehicles).
+    for (const v of vehicles) {
+      if (v.status !== "draft") continue;
+      const listingRef = v.listing_ref ?? (await nextListingRef(trx));
+      await trx<VehicleRow>("vehicles")
+        .where({ id: v.id })
+        .update({ status: "pending", submitted_at: new Date(), listing_ref: listingRef });
+      await appendVehicleEvent(trx, {
+        vehicleId: v.id,
+        merchantId: merchant.id,
+        kind: "submitted",
+        tone: "amber",
+        label: "Submitted for review",
+        body: "In the queue. Reviews take up to two working days.",
+        actorType: "merchant",
+      });
+    }
   });
 
   return getOnboardingState(userId);

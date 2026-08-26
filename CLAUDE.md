@@ -135,6 +135,17 @@ only skewed (-14°) element in the product ("round = trust, angled = paid");
 never skew a verification/trust element. The masthead's red rule carries
 the same 14° skew, once per surface, never more than once in view.
 
+**The merchant portal's Vehicles screen widens this vocabulary** — its own
+design file (`Cruz Merchant Portal.dc.html`) is the authority there, not
+this section. Listing `status` is seven states (`draft / pending / review /
+action / rejected / live / paused`), not five — "verified" is a separate
+`verification_badge` axis (`none / pending / active`) rather than a listing
+status. See `apps/merchant/src/components/portal/status.ts`. That screen's
+reviewer-note card also carries its own 14° skewed rule alongside the
+masthead's — the design does this deliberately (the note card counts as its
+own surface), so it's a documented exception to "never more than once in
+view", not an oversight.
+
 ### Getting the real screen source — do this, don't eyeball screenshots
 
 Twice now, building a screen by looking at a screenshot of the canvas

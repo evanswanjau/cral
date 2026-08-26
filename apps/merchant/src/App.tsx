@@ -1,8 +1,10 @@
-import { createBrowserRouter, RouterProvider } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { AppLayout } from "./layouts/AppLayout.js";
 import { RequireAuth } from "./components/RequireAuth.js";
 import { RequireOnboarding } from "./components/RequireOnboarding.js";
-import { Overview } from "./pages/Overview.js";
+import { VehicleList } from "./pages/VehicleList.js";
+import { VehicleDetail } from "./pages/VehicleDetail.js";
+import { AddVehicle } from "./pages/AddVehicle.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -21,14 +23,19 @@ const router = createBrowserRouter([
       // focused first step, not part of the main dashboard.
       { path: "/onboarding", element: <Onboarding /> },
       {
-        // Dashboard is gated on a finished onboarding — no vehicle, no
-        // dashboard; you get returned to the step you stopped at.
+        // The portal is gated on a finished onboarding — no vehicle, no
+        // portal; you get returned to the step you stopped at.
         element: <RequireOnboarding />,
         children: [
           {
             path: "/",
             element: <AppLayout />,
-            children: [{ index: true, element: <Overview /> }],
+            children: [
+              { index: true, element: <Navigate to="/vehicles" replace /> },
+              { path: "vehicles", element: <VehicleList /> },
+              { path: "vehicles/new", element: <AddVehicle /> },
+              { path: "vehicles/:vehicleId", element: <VehicleDetail /> },
+            ],
           },
         ],
       },

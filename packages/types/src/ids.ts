@@ -29,6 +29,9 @@ export const ID_PREFIXES = {
   // Onboarding-reminder log rows (spec §9) — an internal entity, no prefix
   // named in the spec's own identifier list.
   merchantOnboardingReminder: "obr",
+  // Vehicle-listing review-history rows (portal Vehicles screen) — an
+  // internal entity, no prefix named in the spec's own identifier list.
+  vehicleEvent: "vev",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

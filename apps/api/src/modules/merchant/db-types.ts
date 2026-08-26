@@ -26,10 +26,15 @@ export interface MerchantRow {
   onboarding_max_step: number;
   onboarding_screen: string;
   onboarding_submitted: boolean;
+  /** Set only once an admin approves the account — nothing does that yet in Phase 1 (no admin portal). */
+  approved_at: Date | null;
   last_activity_at: Date;
   created_at: Date;
   updated_at: Date;
 }
+
+export type VehicleStatus = "draft" | "pending" | "review" | "action" | "rejected" | "live" | "paused";
+export type VerificationBadgeState = "none" | "pending" | "active";
 
 export interface VehicleRow {
   id: string;
@@ -46,6 +51,17 @@ export interface VehicleRow {
   daily_rate_amount: number;
   daily_rate_currency: string;
   insurance_expiry: string | null;
+  status: VehicleStatus;
+  listing_ref: string | null;
+  seats: number;
+  minimum_hire_days: number;
+  chauffeured: boolean;
+  submitted_at: Date | null;
+  verification_badge: VerificationBadgeState;
+  verification_badge_expires_at: Date | null;
+  reviewer_note: string | null;
+  reviewer_note_meta: string | null;
+  reviewer_note_resolved: boolean;
   created_at: Date;
   updated_at: Date;
 }
@@ -58,6 +74,8 @@ export type DocumentKind =
   | "tracker_certificate"
   | "vehicle_photo";
 
+export type DocumentReviewState = "ok" | "pending" | "expiring" | "rejected";
+
 export interface DocumentRow {
   id: string;
   merchant_id: string;
@@ -67,6 +85,26 @@ export interface DocumentRow {
   original_name: string;
   size_bytes: number;
   content_type: string;
+  review_state: DocumentReviewState;
+  expires_at: string | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type EventTone = "grey" | "blue" | "green" | "amber" | "red";
+export type EventActorType = "merchant" | "reviewer" | "system";
+
+export interface VehicleEventRow {
+  id: string;
+  vehicle_id: string;
+  merchant_id: string;
+  kind: string;
+  tone: EventTone;
+  label: string;
+  body: string | null;
+  actor_type: EventActorType;
+  actor_name: string | null;
+  occurred_at: Date;
   created_at: Date;
   updated_at: Date;
 }
