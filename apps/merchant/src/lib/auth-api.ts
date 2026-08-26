@@ -106,6 +106,15 @@ export function getRegistrationState() {
   return apiGet<RegistrationState>("/auth/registration-state");
 }
 
+/**
+ * The frozen `/me` contract (identity.yaml) — used by onboarding to prefill
+ * the email address collected at sign-up, so the "Your details" step
+ * doesn't ask for it a second time.
+ */
+export function getMe() {
+  return apiGet<{ id: string; email: string; phone: string | null; full_name: string | null }>("/me");
+}
+
 // --- forgot / reset password ------------------------------------------
 
 /** Always emails a reset link — see the note on the server's forgotPassword. */
@@ -115,6 +124,11 @@ export function forgotPassword(email: string) {
     { identifier: email },
     { auth: false },
   );
+}
+
+/** Revokes the current session (or every session, if `allDevices`). */
+export function logout(allDevices = false) {
+  return apiPost<void>("/auth/logout", { all_devices: allDevices });
 }
 
 export function checkPasswordReset(input: { token: string }) {

@@ -26,6 +26,9 @@ export const ID_PREFIXES = {
   passwordResetToken: "prt",
   twoFactorChallenge: "tfc",
   recoveryCode: "rcv",
+  // Onboarding-reminder log rows (spec §9) — an internal entity, no prefix
+  // named in the spec's own identifier list.
+  merchantOnboardingReminder: "obr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;
