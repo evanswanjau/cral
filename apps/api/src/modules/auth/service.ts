@@ -146,22 +146,39 @@ async function sendOtp(
   });
 
   const body = `Your CRAL code is ${code}. It expires in ${OTP_TTL_MINUTES} minutes.`;
-  if (kind === "phone") {
-    await smsAdapter.send({ to: identifier, body });
-  } else {
-    await emailAdapter.send({
-      to: identifier,
-      subject: "Your CRAL code",
-      html: emailLayout({
-        preheader: `${code} is your CRAL code`,
-        bodyHtml: [
-          emailHeading("Your verification code"),
-          emailCode(code),
-          emailParagraph(`Enter this to continue. It expires in ${OTP_TTL_MINUTES} minutes.`),
-          emailMuted("If you didn't ask for this code, you can ignore this email."),
-        ].join(""),
-      }),
-      text: body,
+  try {
+    if (kind === "phone") {
+      await smsAdapter.send({ to: identifier, body });
+    } else {
+      await emailAdapter.send({
+        to: identifier,
+        subject: "Your CRAL code",
+        html: emailLayout({
+          preheader: `${code} is your CRAL code`,
+          bodyHtml: [
+            emailHeading("Your verification code"),
+            emailCode(code),
+            emailParagraph(`Enter this to continue. It expires in ${OTP_TTL_MINUTES} minutes.`),
+            emailMuted("If you didn't ask for this code, you can ignore this email."),
+          ].join(""),
+        }),
+        text: body,
+      });
+    }
+  } catch (err) {
+    // A provider-side failure (no SMS credits, provider down, a number the
+    // provider itself rejects) is not our bug — surface it as a clean,
+    // retryable error rather than a bare 500. Callers that can tolerate a
+    // silent miss (signup) already wrap this in their own .catch.
+    console.error(`[auth] ${kind} OTP delivery to ${maskIdentifier(identifier)} failed:`, err);
+    throw new ApiError({
+      status: 503,
+      type: "server_error",
+      code: kind === "phone" ? "sms_send_failed" : "email_send_failed",
+      message:
+        kind === "phone"
+          ? "We couldn't send the code by SMS just now. Please try again in a moment."
+          : "We couldn't send the email just now. Please try again in a moment.",
     });
   }
 }
