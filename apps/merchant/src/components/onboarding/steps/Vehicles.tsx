@@ -97,7 +97,7 @@ export function Vehicles({
             <div style={{ flex: "1 1 0%", minWidth: 160 }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
-                {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.pickupAddress || "-"}
+                {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -324,6 +324,15 @@ function VehicleForm({
                     error={showErrors && !v.dailyRate.trim()}
                   />
                 </div>
+              </FormField>
+              <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
+                <Select
+                  value={v.chauffeured ? "chauffeured" : "self_drive"}
+                  onChange={(e) => patch({ chauffeured: e.target.value === "chauffeured" })}
+                >
+                  <option value="chauffeured">With driver (chauffeured)</option>
+                  <option value="self_drive">Self-drive</option>
+                </Select>
               </FormField>
             </div>
           </div>

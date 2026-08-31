@@ -287,6 +287,7 @@ components:
         county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
         daily_rate: { type: string, description: "KES, whole shillings, as a numeric string" }
+        chauffeured: { type: boolean, description: "true = hire comes with the owner's driver; false = self-drive" }
         insurance_expiry: { type: string, format: date, nullable: true }
 
     Vehicle:
@@ -321,6 +322,8 @@ components:
         company_name: { type: string }
         company_cert_no: { type: string }
         company_kra: { type: string }
+        company_email: { type: string, format: email }
+        company_address: { type: string }
         first_name: { type: string }
         middle_name: { type: string }
         surname: { type: string }
@@ -352,6 +355,8 @@ components:
         company_name: { type: string, nullable: true }
         company_cert_no: { type: string, nullable: true }
         company_kra: { type: string, nullable: true }
+        company_email: { type: string, format: email, nullable: true }
+        company_address: { type: string, nullable: true }
         first_name: { type: string, nullable: true }
         middle_name: { type: string, nullable: true }
         surname: { type: string, nullable: true }

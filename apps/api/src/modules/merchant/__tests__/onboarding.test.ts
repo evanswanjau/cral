@@ -190,6 +190,51 @@ describe("merchant onboarding — vehicle CRUD", () => {
       .send({ colour: "Red" });
     expect(res.status).toBe(404);
   });
+
+  it("rejects a backdated insurance expiry on patch", async () => {
+    const { accessToken } = await newMerchant();
+    const createRes = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "sedan",
+        make: "Toyota",
+        model: "Axio",
+        year: "2019",
+        registration: "KOB 210F",
+        transmission: "Automatic",
+        fuel: "Petrol",
+        pickup_address: "Westlands, Nairobi",
+        daily_rate: "4500",
+      });
+
+    const res = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${createRes.body.id}`)
+      .set(auth(accessToken))
+      .send({ insurance_expiry: "2020-01-01" });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("expiry_in_past");
+    expect(res.body.error.field).toBe("insurance_expiry");
+  });
+
+  it("surfaces a friendly conflict when a payout phone is already registered to another account", async () => {
+    const first = await newMerchant();
+    const second = await newMerchant();
+
+    const ok = await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(first.accessToken))
+      .send({ phone: "+254712345699" });
+    expect(ok.status).toBe(200);
+
+    const clash = await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(second.accessToken))
+      .send({ phone: "+254712345699" });
+    expect(clash.status).toBe(409);
+    expect(clash.body.error.code).toBe("phone_taken");
+    expect(clash.body.error.field).toBe("phone");
+  });
 });
 
 describe("merchant onboarding — document upload", () => {
@@ -401,5 +446,80 @@ describe("merchant onboarding — submit", () => {
       .where({ vehicle_id: vehicleId, kind: "submitted" })
       .first();
     expect(submittedEvent).toBeTruthy();
+  });
+
+  it("blocks a company submission until company email and physical location are on file", async () => {
+    const { accessToken } = await newMerchant();
+
+    await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(accessToken))
+      .send({
+        owner_type: "company",
+        company_name: "Barabara Fleet Ltd",
+        company_cert_no: "CPR/2020/123456",
+        company_kra: "P051234567X",
+        first_name: "Amani",
+        surname: "Otieno",
+        national_id: "12345678",
+        kra_pin: "A012345678Z",
+        payout_method: "bank",
+        bank_name: "Equity Bank",
+        bank_branch: "Westlands",
+        bank_account_name: "Barabara Fleet Ltd",
+        bank_account_number: "0123456789",
+        phone: "+254712345688",
+        terms_accepted: true,
+      });
+
+    const vehicleRes = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "van",
+        make: "Toyota",
+        model: "Hiace",
+        year: "2019",
+        registration: "KOB 220G",
+        transmission: "Manual",
+        fuel: "Diesel",
+        county: "Nairobi",
+        pickup_address: "Industrial Area, Nairobi",
+        daily_rate: "9000",
+      });
+    const vehicleId = vehicleRes.body.id;
+    for (const kind of ["national_id", "kra_pin"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .field("vehicle_id", vehicleId)
+        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ insurance_expiry: futureDate });
+
+    const missing = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(missing.status).toBe(422);
+    expect(missing.body.error.message).toMatch(/company email/i);
+
+    await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(accessToken))
+      .send({ company_email: "accounts@barabara.co.ke", company_address: "Enterprise Road, Nairobi" });
+
+    const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(ok.status).toBe(200);
+    expect(ok.body.submitted).toBe(true);
   });
 });

@@ -4,7 +4,8 @@ import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
-import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { isUniqueViolation, rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { assertNotPast } from "../../lib/dates.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
   emailButton,
@@ -134,6 +135,8 @@ function serializeState(
     company_name: merchant.company_name,
     company_cert_no: merchant.company_cert_no,
     company_kra: merchant.company_kra,
+    company_email: merchant.company_email,
+    company_address: merchant.company_address,
     first_name: merchant.first_name,
     middle_name: merchant.middle_name,
     surname: merchant.surname,
@@ -170,6 +173,7 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
+    chauffeured: vehicle.chauffeured,
     insurance_expiry: vehicle.insurance_expiry,
     docs: {
       logbook: docSlot(vehicleDocs.find((d) => d.kind === "logbook")),
@@ -184,7 +188,20 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
 // deviation); the onboarding wizard's "phone" field writes there, not to
 // merchants, so patching it needs a users update alongside the merchant one.
 async function setUserPhone(userId: string, phone: string): Promise<void> {
-  await db("users").where({ id: userId }).update({ phone });
+  try {
+    await db("users").where({ id: userId }).update({ phone });
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new ApiError({
+        status: 409,
+        type: "conflict",
+        code: "phone_taken",
+        message: "That phone number is already registered to another account.",
+        field: "phone",
+      });
+    }
+    throw err;
+  }
 }
 
 export async function patchOnboarding(
@@ -265,6 +282,7 @@ export async function patchVehicle(
   _ctx: RequestContext,
 ) {
   const vehicle = await requireOwnVehicle(userId, vehicleId);
+  if (input.insurance_expiry) assertNotPast(input.insurance_expiry, "insurance_expiry");
   const [updated] = await db<VehicleRow>("vehicles")
     .where({ id: vehicle.id })
     .update(vehicleUpdateFromInput(input))
@@ -485,6 +503,8 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     if (!merchant.company_name?.trim()) fail("Company name is required.");
     if (!merchant.company_cert_no?.trim()) fail("Certificate of incorporation number is required.");
     if (!merchant.company_kra?.trim()) fail("Company KRA PIN is required.");
+    if (!merchant.company_email?.trim()) fail("Company email is required.");
+    if (!merchant.company_address?.trim()) fail("Company physical location is required.");
   }
 
   const payoutFilled =

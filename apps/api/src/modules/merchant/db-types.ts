@@ -5,6 +5,8 @@ export interface MerchantRow {
   company_name: string | null;
   company_cert_no: string | null;
   company_kra: string | null;
+  company_email: string | null;
+  company_address: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;

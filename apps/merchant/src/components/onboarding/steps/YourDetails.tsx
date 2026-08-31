@@ -73,7 +73,12 @@ export function YourDetails({
     draft.kraPin.trim() &&
     draft.phone.trim() &&
     payoutFilled &&
-    (!isCompany || (draft.companyName.trim() && draft.certNo.trim() && draft.companyKra.trim()));
+    (!isCompany ||
+      (draft.companyName.trim() &&
+        draft.certNo.trim() &&
+        draft.companyKra.trim() &&
+        draft.companyEmail.trim() &&
+        draft.companyAddress.trim()));
 
   function pickOwnerType(type: OnboardingDraft["ownerType"]) {
     // Switching to a company forces the bank path; switching back restores
@@ -154,6 +159,23 @@ export function YourDetails({
                   onChange={(e) => onChange({ companyKra: e.target.value.toUpperCase() })}
                   placeholder="P051234567X"
                   error={showErrors && !draft.companyKra.trim()}
+                />
+              </FormField>
+              <FormField label="Company email" required error={req(draft.companyEmail)} helper="Where CRAL sends receipts and payout statements for the company.">
+                <TextInput
+                  value={draft.companyEmail}
+                  onChange={(e) => onChange({ companyEmail: e.target.value })}
+                  placeholder="accounts@barabarafleet.co.ke"
+                  inputMode="email"
+                  error={showErrors && !draft.companyEmail.trim()}
+                />
+              </FormField>
+              <FormField label="Company physical location" required error={req(draft.companyAddress)} helper="Street or building, plus town - where the company operates from.">
+                <TextInput
+                  value={draft.companyAddress}
+                  onChange={(e) => onChange({ companyAddress: e.target.value })}
+                  placeholder="Enterprise Road, Industrial Area, Nairobi"
+                  error={showErrors && !draft.companyAddress.trim()}
                 />
               </FormField>
             </div>

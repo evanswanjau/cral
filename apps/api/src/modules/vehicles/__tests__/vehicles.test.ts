@@ -456,6 +456,21 @@ describe("vehicles — document upload", () => {
     expect(res.body.status).toBe("live");
   });
 
+  it("rejects a document whose expiry date is already in the past", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KNN 400M");
+
+    const res = await request(app)
+      .post(`/merchant/vehicles/${created.body.id}/documents`)
+      .set(auth(accessToken))
+      .field("kind", "comprehensive_insurance")
+      .field("expires_at", "2020-06-01")
+      .attach("file", Buffer.from("stale cert"), { filename: "cert.pdf", contentType: "application/pdf" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("expiry_in_past");
+  });
+
   it("carries photos uploaded via the onboarding documents endpoint through to the vehicle detail", async () => {
     const { accessToken } = await newMerchant();
     const created = await createVehicle(accessToken, "KLL 200K");

@@ -9,6 +9,8 @@ export const PatchOnboardingSchema = z.object({
   company_name: z.string().optional(),
   company_cert_no: z.string().optional(),
   company_kra: z.string().optional(),
+  company_email: z.string().email().or(z.literal("")).optional(),
+  company_address: z.string().optional(),
   first_name: z.string().optional(),
   middle_name: z.string().optional(),
   surname: z.string().optional(),
@@ -41,6 +43,7 @@ export const VehicleInputSchema = z.object({
   pickup_address: z.string().optional(),
   daily_rate: z.string().optional(),
   insurance_expiry: z.string().nullable().optional(),
+  chauffeured: z.boolean().optional(),
 });
 export type VehicleInput = z.infer<typeof VehicleInputSchema>;
 

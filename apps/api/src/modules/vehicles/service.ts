@@ -5,6 +5,7 @@ import { writeAuditEntry } from "../../lib/audit.js";
 import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
 import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { assertNotPast } from "../../lib/dates.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
@@ -709,6 +710,7 @@ export async function uploadVehicleDocument(
   ctx: RequestContext,
 ) {
   const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
+  if (input.expiresAt) assertNotPast(input.expiresAt, "expires_at");
 
   const key = buildStorageKey(merchant.id, vehicle.id, input.kind, input.file.originalname);
   await getStorageAdapter().putObject({ key, body: input.file.buffer, contentType: input.file.mimetype });

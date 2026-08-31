@@ -334,6 +334,25 @@ model"):**
   `lib/vehicle-events.ts#nextListingRef`. Older `CRAL-V-*` refs and the
   `vehicle_listing_ref_seq` sequence are left in place, just unused.
 
+**Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
+- **The merchant is never shown the hirer's deposit** on their own
+  surfaces — the "DEPOSIT HELD" chip and the deposit row/foot-note on the
+  Vehicles detail screen are gone. It still appears in Bookings, where the
+  claim flow is built around it.
+- **Company merchants give `company_email` + `company_address`** (physical
+  location), both required at submission when `owner_type = 'company'`.
+  Migration `20260831093000`.
+- **Document expiry dates can't be backdated.** The client's date input
+  `min` only stops the picker; `Documents.tsx` now also blocks the step on
+  a typed-in past date, and the server re-checks via
+  `apps/api/src/lib/dates.ts#assertNotPast` (422 `expiry_in_past`) on
+  vehicle patch and document upload.
+- **A duplicate payout phone returns `phone_taken` (409)** instead of a
+  raw 500 — `users.phone` is unique; `setUserPhone` maps the violation.
+- **The onboarding vehicle form has a driver toggle** ("With driver
+  (chauffeured)" / "Self-drive"), mirroring the Price & availability modal.
+  `vehicles.chauffeured` already existed; the wizard just sets it now.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

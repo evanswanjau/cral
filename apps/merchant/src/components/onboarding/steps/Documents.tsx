@@ -27,6 +27,15 @@ function todayIso(): string {
   return new Date(d.getTime() - tz * 60000).toISOString().slice(0, 10);
 }
 
+/**
+ * A backdated expiry. `min` on the date input stops the picker but not a
+ * typed-in value, so this is what actually catches "expires 2019-…" before
+ * the step advances (matches the server's own `assertNotPast` check).
+ */
+function isExpiredIso(value: string | undefined): boolean {
+  return Boolean(value) && (value as string).slice(0, 10) < todayIso();
+}
+
 function DocRow({
   title,
   body,
@@ -37,6 +46,7 @@ function DocRow({
   expiry,
   onExpiryChange,
   expiryError,
+  expiryExpired,
 }: {
   title: string;
   body: string;
@@ -48,6 +58,7 @@ function DocRow({
   expiry?: string;
   onExpiryChange?: (v: string) => void;
   expiryError?: boolean;
+  expiryExpired?: boolean;
 }): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
@@ -149,11 +160,17 @@ function DocRow({
                 // not just a validation message after the fact.
                 min={todayIso()}
                 onChange={(e) => onExpiryChange(e.target.value)}
-                error={expiryError}
+                error={expiryError || expiryExpired}
                 style={O.expiryInput}
               />
             </div>
-            <div style={O.expiryHelper}>We flag the listing before it runs out.</div>
+            {expiryExpired ? (
+              <div style={{ ...O.expiryHelper, color: "#D81E32", fontWeight: 600 }}>
+                This date has already passed - enter the current cover&rsquo;s expiry.
+              </div>
+            ) : (
+              <div style={O.expiryHelper}>We flag the listing before it runs out.</div>
+            )}
           </div>
         )}
       </div>
@@ -192,9 +209,14 @@ export function Documents({
       Number(Boolean(v.docs.logbook)) +
       Number(Boolean(v.docs.comprehensiveInsurance)) +
       Number(Boolean(v.docs.trackerCertificate));
-    return count === 3 && (!v.docs.comprehensiveInsurance || Boolean(v.insuranceExpiry));
+    if (count !== 3) return false;
+    if (!v.docs.comprehensiveInsurance) return true;
+    return Boolean(v.insuranceExpiry) && !isExpiredIso(v.insuranceExpiry);
   }
 
+  const anyExpiredInsurance = draft.vehicles.some(
+    (v) => Boolean(v.docs.comprehensiveInsurance) && isExpiredIso(v.insuranceExpiry),
+  );
   const allComplete = ownerComplete && draft.vehicles.every((v) => vehicleComplete(v.id));
 
   function handleContinue() {
@@ -304,6 +326,7 @@ export function Documents({
               expiry={v.insuranceExpiry}
               onExpiryChange={setExpiry}
               expiryError={Boolean(v.docs.comprehensiveInsurance) && !v.insuranceExpiry}
+              expiryExpired={Boolean(v.docs.comprehensiveInsurance) && isExpiredIso(v.insuranceExpiry)}
             />
             <DocRow
               title="Car tracker certificate"
@@ -322,7 +345,11 @@ export function Documents({
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {showErrors && !allComplete && (
             <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>
-              {!ownerComplete ? "Attach your remaining personal documents." : "Attach every vehicle's remaining documents."}
+              {anyExpiredInsurance
+                ? "One insurance expiry date has already passed - enter the current cover's."
+                : !ownerComplete
+                  ? "Attach your remaining personal documents."
+                  : "Attach every vehicle's remaining documents."}
             </span>
           )}
           <PrimaryButton onClick={handleContinue}>Continue to review</PrimaryButton>

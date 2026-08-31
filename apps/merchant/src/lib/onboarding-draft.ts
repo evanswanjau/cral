@@ -62,6 +62,8 @@ export interface DraftVehicle {
   county: string;
   pickupAddress: string;
   dailyRate: string;
+  /** true = hire comes with the owner's driver; false = self-drive. */
+  chauffeured: boolean;
   photos: DraftPhoto[];
   docs: VehicleDocs;
   insuranceExpiry: string;
@@ -81,6 +83,8 @@ export interface OnboardingDraft {
   companyName: string;
   certNo: string;
   companyKra: string;
+  companyEmail: string;
+  companyAddress: string;
   firstName: string;
   middleName: string;
   surname: string;
@@ -121,6 +125,8 @@ export function emptyDraft(): OnboardingDraft {
     companyName: "",
     certNo: "",
     companyKra: "",
+    companyEmail: "",
+    companyAddress: "",
     firstName: "",
     middleName: "",
     surname: "",
@@ -158,6 +164,7 @@ export function emptyVehicle(id: string): DraftVehicle {
     county: "",
     pickupAddress: "",
     dailyRate: "",
+    chauffeured: true,
     photos: [],
     docs: { logbook: null, comprehensiveInsurance: null, trackerCertificate: null },
     insuranceExpiry: "",
@@ -218,6 +225,7 @@ interface WireVehicle {
   county: string | null;
   pickup_address: string | null;
   daily_rate: string;
+  chauffeured: boolean;
   insurance_expiry: string | null;
   docs: {
     logbook: WireDocSlot | null;
@@ -235,6 +243,8 @@ interface WireOnboardingState {
   company_name: string | null;
   company_cert_no: string | null;
   company_kra: string | null;
+  company_email: string | null;
+  company_address: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;
@@ -278,6 +288,7 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     colour: v.colour ?? "",
     county: v.county ?? "",
     pickupAddress: v.pickup_address ?? "",
+    chauffeured: v.chauffeured ?? true,
     dailyRate: v.daily_rate,
     photos: v.photos
       .filter((p): p is WireDocSlot => p !== null)
@@ -312,6 +323,8 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     companyName: state.company_name ?? "",
     certNo: state.company_cert_no ?? "",
     companyKra: state.company_kra ?? "",
+    companyEmail: state.company_email ?? "",
+    companyAddress: state.company_address ?? "",
     firstName: state.first_name ?? "",
     middleName: state.middle_name ?? "",
     surname: state.surname ?? "",
@@ -368,6 +381,8 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "companyName",
   "certNo",
   "companyKra",
+  "companyEmail",
+  "companyAddress",
   "firstName",
   "middleName",
   "surname",
@@ -390,6 +405,8 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
   companyName: "company_name",
   certNo: "company_cert_no",
   companyKra: "company_kra",
+  companyEmail: "company_email",
+  companyAddress: "company_address",
   firstName: "first_name",
   middleName: "middle_name",
   nationalId: "national_id",

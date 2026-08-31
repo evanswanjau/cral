@@ -891,7 +891,6 @@ export function VehicleDetail(): JSX.Element {
                 ["Daily rate", v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "Not set"],
                 ["Minimum hire", `${v.minimum_hire_days} ${v.minimum_hire_days === 1 ? "day" : "days"}`],
                 ["Driver", v.chauffeured ? "Included" : "Self-drive"],
-                ["Hirer's deposit · held by CRAL", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 1.5))}` : "—"],
                 ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : "—"],
               ].map(([k, val]) => (
                 <div key={k} style={P.priceRow}>
@@ -900,7 +899,7 @@ export function VehicleDetail(): JSX.Element {
                 </div>
               ))}
             </div>
-            <div style={P.cardFoot}>Commission is taken from completed bookings only. Deposits never pass through your payout.</div>
+            <div style={P.cardFoot}>Commission is taken from completed bookings only.</div>
           </div>
 
           <div style={P.upsell}>

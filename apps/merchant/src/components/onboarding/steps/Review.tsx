@@ -60,7 +60,14 @@ export function Review({
             <EditButton onClick={() => onEditStep(2)} />
           </div>
           <div style={O.reviewCardBody}>
-            <ReviewRow label="Name" value={fullName || "-"} />
+            {draft.ownerType === "company" && (
+              <>
+                <ReviewRow label="Company" value={draft.companyName || "-"} />
+                <ReviewRow label="Company email" value={draft.companyEmail || "-"} />
+                <ReviewRow label="Company location" value={draft.companyAddress || "-"} />
+              </>
+            )}
+            <ReviewRow label={draft.ownerType === "company" ? "Contact person" : "Name"} value={fullName || "-"} />
             <ReviewRow label="National ID" value={draft.nationalId || "-"} />
             <ReviewRow label="KRA PIN" value={draft.kraPin || "-"} />
             <ReviewRow label="Phone" value={draft.phone ? `+254 ${draft.phone}` : "-"} />
@@ -128,7 +135,7 @@ export function Review({
               <PlateBadge>{v.registration || "-"}</PlateBadge>
               <div style={{ flex: 1 }}>
                 <div style={O.fleetName}>{v.make} {v.model}</div>
-                <div style={O.fleetSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.photos.length} photos · {v.county || "-"} · {v.pickupAddress || "-"}</div>
+                <div style={O.fleetSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.photos.length} photos · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}</div>
                 {v.photos.length > 0 && (
                   <div style={O.reviewPhotoRow}>
                     {v.photos.map((photo) => (
