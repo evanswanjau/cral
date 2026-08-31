@@ -9,6 +9,8 @@ import { useToast } from "../components/portal/Toast.js";
 import { usePhotoPreview } from "../lib/use-photo-preview.js";
 import { ApiClientError } from "../lib/api.js";
 import { toE164 } from "../lib/device.js";
+import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
+import { COUNTIES } from "../lib/kenya.js";
 import {
   useDeleteVehicle,
   useDeleteVehicleDocument,
@@ -237,6 +239,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   const update = useUpdatePriceAvailability(v.id);
   const [rate, setRate] = useState(v.daily_rate ? String(Math.round(v.daily_rate.amount / 100)) : "");
   const [minDays, setMinDays] = useState(String(v.minimum_hire_days));
+  const [county, setCounty] = useState(v.county ?? "");
   const [loc, setLoc] = useState(v.pickup_address ?? "");
   const [driver, setDriver] = useState(v.chauffeured);
 
@@ -254,7 +257,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
       ctaDisabled={update.isPending}
       onConfirm={() => {
         update.mutate(
-          { daily_rate: String(rateNum), minimum_hire_days: days, pickup_address: loc, chauffeured: driver },
+          { daily_rate: String(rateNum), minimum_hire_days: days, county, pickup_address: loc, chauffeured: driver },
           {
             onSuccess: () => {
               onClose();
@@ -275,9 +278,20 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             <input style={P.fieldInput} value={minDays} onChange={(e) => setMinDays(e.target.value.replace(/\D/g, ""))} />
           </div>
         </div>
-        <div>
-          <label style={P.fieldLabel}>Pick-up town</label>
-          <input style={P.fieldInputText} value={loc} onChange={(e) => setLoc(e.target.value)} />
+        <div style={P.fieldGrid}>
+          <div>
+            <label style={P.fieldLabel}>County</label>
+            <select style={P.fieldInputText} value={county} onChange={(e) => setCounty(e.target.value)}>
+              <option value="">Select a county</option>
+              {COUNTIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={P.fieldLabel}>Pick-up address</label>
+            <input style={P.fieldInputText} value={loc} onChange={(e) => setLoc(e.target.value)} />
+          </div>
         </div>
         <div style={P.toggleRow}>
           <div>
@@ -575,7 +589,7 @@ export function VehicleDetail(): JSX.Element {
               )}
             </div>
             <h1 style={P.mastH1}>{v.make} {v.model}</h1>
-            <div style={P.mastSub}>{v.type} · {v.year} · {v.transmission} · {v.seats} seats · {v.pickup_address ?? "—"}</div>
+            <div style={P.mastSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.seats} seats · {v.county ?? v.pickup_address ?? "—"}</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={P.mastRefLabel}>LISTING REF</div>
@@ -785,12 +799,13 @@ export function VehicleDetail(): JSX.Element {
               {[
                 ["MAKE", v.make],
                 ["MODEL", v.model],
-                ["TYPE", v.type],
+                ["TYPE", vehicleTypeLabel(v.type)],
                 ["YEAR", v.year],
                 ["SEATS", String(v.seats)],
                 ["TRANSMISSION", v.transmission],
                 ["FUEL", v.fuel],
                 ["COLOUR", v.colour ?? "—"],
+                ["COUNTY", v.county ?? "—"],
                 ["BASED IN", v.pickup_address ?? "—"],
               ].map(([k, val]) => (
                 <div key={k}>

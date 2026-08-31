@@ -12,6 +12,7 @@
 
 import { getCurrentUserId } from "./auth.js";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
+import type { VehicleType } from "./vehicle-categories.js";
 
 export type OwnerType = "individual" | "company";
 /**
@@ -21,7 +22,7 @@ export type OwnerType = "individual" | "company";
  * (Owner's call, 2026-08-25 - supersedes the earlier M-Pesa-only rule.)
  */
 export type PayoutMethod = "mpesa" | "bank";
-export type VehicleType = "Car" | "SUV" | "Van" | "Pickup" | "Lorry";
+export type { VehicleType };
 export type Transmission = "Automatic" | "Manual";
 export type Fuel = "Petrol" | "Diesel" | "Hybrid" | "Electric";
 
@@ -58,6 +59,7 @@ export interface DraftVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string;
+  county: string;
   pickupAddress: string;
   dailyRate: string;
   photos: DraftPhoto[];
@@ -87,7 +89,6 @@ export interface OnboardingDraft {
   phone: string;
   /** Read-only here - collected once at sign-up (CLAUDE.md's recorded decision), prefilled from GET /me. */
   email: string;
-  county: string;
   payoutSame: boolean;
   payoutMethod: PayoutMethod;
   /** M-Pesa payout number, national format without the +254. */
@@ -127,7 +128,6 @@ export function emptyDraft(): OnboardingDraft {
     kraPin: "",
     phone: "",
     email: "",
-    county: "",
     payoutSame: true,
     payoutMethod: "mpesa",
     payoutDetail: "",
@@ -147,7 +147,7 @@ export function emptyDraft(): OnboardingDraft {
 export function emptyVehicle(id: string): DraftVehicle {
   return {
     id,
-    type: "Car",
+    type: "sedan",
     make: "",
     model: "",
     year: "",
@@ -155,6 +155,7 @@ export function emptyVehicle(id: string): DraftVehicle {
     transmission: "Automatic",
     fuel: "Petrol",
     colour: "",
+    county: "",
     pickupAddress: "",
     dailyRate: "",
     photos: [],
@@ -214,6 +215,7 @@ interface WireVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string | null;
+  county: string | null;
   pickup_address: string | null;
   daily_rate: string;
   insurance_expiry: string | null;
@@ -239,7 +241,6 @@ interface WireOnboardingState {
   national_id: string | null;
   kra_pin: string | null;
   phone: string | null;
-  county: string | null;
   payout_same: boolean;
   payout_method: PayoutMethod;
   payout_detail: string | null;
@@ -275,6 +276,7 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     transmission: v.transmission,
     fuel: v.fuel,
     colour: v.colour ?? "",
+    county: v.county ?? "",
     pickupAddress: v.pickup_address ?? "",
     dailyRate: v.daily_rate,
     photos: v.photos
@@ -317,7 +319,6 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     kraPin: state.kra_pin ?? "",
     phone: state.phone ?? "",
     email: "", // filled separately from GET /me, as before
-    county: state.county ?? "",
     payoutSame: state.payout_same,
     payoutMethod: state.payout_method,
     payoutDetail: state.payout_detail ?? "",
@@ -373,7 +374,6 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "nationalId",
   "kraPin",
   "phone",
-  "county",
   "payoutSame",
   "payoutMethod",
   "payoutDetail",

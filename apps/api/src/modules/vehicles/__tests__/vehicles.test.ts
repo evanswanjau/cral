@@ -25,12 +25,13 @@ function auth(token: string) {
 }
 
 const BASE_VEHICLE = {
-  type: "Car" as const,
+  type: "sedan" as const,
   make: "Toyota",
   model: "Axio",
   year: "2019",
   transmission: "Automatic" as const,
   fuel: "Petrol" as const,
+  county: "Nairobi",
   pickup_address: "Westlands, Nairobi",
   daily_rate: "4500",
 };
@@ -67,7 +68,9 @@ describe("vehicles — create and list", () => {
     const createRes = await createVehicle(accessToken, "KDL 442N");
     expect(createRes.status).toBe(201);
     expect(createRes.body.id).toMatch(/^veh_/);
-    expect(createRes.body.listing_ref).toMatch(/^CRAL-V-\d+$/);
+    // H + YYMMDD + a 3-digit per-day sequence (owner's call, 2026-08-31).
+    expect(createRes.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(createRes.body.county).toBe("Nairobi");
     expect(createRes.body.status).toBe("draft");
     expect(createRes.body.daily_rate).toEqual({ amount: 450000, currency: "KES" });
 
@@ -110,6 +113,37 @@ describe("vehicles — create and list", () => {
       .get(`/merchant/vehicles/${created.body.id}`)
       .set(auth(stranger.accessToken));
     expect(res.status).toBe(404);
+  });
+
+  it("rejects a registration already listed on the platform — even by a different merchant, and regardless of spacing/case", async () => {
+    const first = await newMerchant();
+    const second = await newMerchant();
+
+    const ok = await createVehicle(first.accessToken, "KXA 771Q");
+    expect(ok.status).toBe(201);
+
+    const sameMerchant = await createVehicle(first.accessToken, "kxa-771q");
+    expect(sameMerchant.status).toBe(409);
+    expect(sameMerchant.body.error.code).toBe("registration_taken");
+    expect(sameMerchant.body.error.field).toBe("registration");
+
+    const otherMerchant = await createVehicle(second.accessToken, "KXA771Q");
+    expect(otherMerchant.status).toBe(409);
+    expect(otherMerchant.body.error.code).toBe("registration_taken");
+  });
+
+  it("hands out per-day listing refs that increment within the day", async () => {
+    const { accessToken } = await newMerchant();
+    const a = await createVehicle(accessToken, "KAB 010A");
+    const b = await createVehicle(accessToken, "KAB 011B");
+
+    expect(a.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(b.body.listing_ref).toMatch(/^H\d{9}$/);
+    const seqA = Number(a.body.listing_ref.slice(-3));
+    const seqB = Number(b.body.listing_ref.slice(-3));
+    expect(seqB).toBe(seqA + 1);
+    // Same Nairobi day → same date portion.
+    expect(a.body.listing_ref.slice(0, 7)).toBe(b.body.listing_ref.slice(0, 7));
   });
 });
 

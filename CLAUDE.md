@@ -309,6 +309,31 @@ is `openapi/merchant-bookings.yaml`, code is
   routes.ts) — there's no customer portal to generate real requests yet,
   so this is how the Bookings screen gets anything to demo against.
 
+**Vehicle model changes (owner's call, 2026-08-31 — PR "vehicle data
+model"):**
+- **Vehicle type is five fixed categories, stored as slugs** — `sedan`
+  ("Sedan / small cars"), `suv` ("SUV / 4x4 / Pickup"), `van` ("Van /
+  Minibus"), `truck` ("Truck & trailers"), `machinery` ("Construction &
+  machinery"). Replaces the old free-text `Car | SUV | Van | Pickup |
+  Lorry`. One source of truth: `apps/api/src/modules/vehicles/categories.ts`,
+  mirrored client-side in `apps/merchant/src/lib/vehicle-categories.ts` —
+  keep them in step. Migration `20260831090100` remaps existing rows
+  (Car→sedan, SUV/Pickup→suv, Van→van, Lorry→truck).
+- **A registration plate is globally unique**, not per-merchant — a
+  functional unique index on the normalised plate (`upper`, non-alnum
+  stripped), so "KDL 442N" / "kdl442n" / "KDL-442N" all collide across
+  every merchant. A clash throws `registration_taken` (409) via
+  `apps/api/src/lib/pg-errors.ts#rethrowRegistrationConflict`.
+- **County lives on the vehicle, not the merchant.** `merchants.county`
+  was dropped; each vehicle carries its own `county` (the location a hirer
+  cares about — "County, then pickup address"). Required per-vehicle at
+  onboarding submission, like `insurance_expiry`.
+- **Listing ref format is `H` + `YYMMDD` + a 3-digit sequence that
+  restarts each Nairobi day** (`H260831001`, `H260831002`, next day
+  `H260901001`). Backed by `listing_ref_daily_counters`, generated in
+  `lib/vehicle-events.ts#nextListingRef`. Older `CRAL-V-*` refs and the
+  `vehicle_listing_ref_seq` sequence are left in place, just unused.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

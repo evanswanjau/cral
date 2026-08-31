@@ -6,7 +6,7 @@ import { User } from "@phosphor-icons/react/dist/ssr/User";
 import { Wallet } from "@phosphor-icons/react/dist/ssr/Wallet";
 import { O } from "../styles.js";
 import { BackButton, FormField, OptionCard, PrimaryButton, Select, TextInput } from "../primitives.js";
-import { BANKS, COUNTIES } from "../../../lib/kenya.js";
+import { BANKS } from "../../../lib/kenya.js";
 import type { OnboardingDraft } from "../../../lib/onboarding-draft.js";
 
 /** Solid (filled) Phosphor marks, white on the blue section badges. */
@@ -72,7 +72,6 @@ export function YourDetails({
     draft.nationalId.trim() &&
     draft.kraPin.trim() &&
     draft.phone.trim() &&
-    draft.county &&
     payoutFilled &&
     (!isCompany || (draft.companyName.trim() && draft.certNo.trim() && draft.companyKra.trim()));
 
@@ -211,14 +210,6 @@ export function YourDetails({
           <div style={O.formGrid3}>
             <FormField label="Email" required helper="This is the email on your CRAL account - receipts and payout statements go here.">
               <TextInput value={draft.email} disabled style={O.inputDisabled} />
-            </FormField>
-            <FormField label="County" required error={showErrors && !draft.county ? "Required." : undefined} helper="Used for compliance records.">
-              <Select value={draft.county} onChange={(e) => onChange({ county: e.target.value })}>
-                <option value="">Select a county</option>
-                {COUNTIES.map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </Select>
             </FormField>
           </div>
         </div>

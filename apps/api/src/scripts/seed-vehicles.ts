@@ -1,6 +1,7 @@
 import "../lib/load-env.js";
 import { db } from "../db/client.js";
 import { generateId } from "../lib/ids.js";
+import { nextListingRef } from "../lib/vehicle-events.js";
 import { getOrCreateMerchant } from "../modules/merchant/service.js";
 
 /**
@@ -52,7 +53,7 @@ interface SeedVehicle {
 
 const SEED: SeedVehicle[] = [
   {
-    registration: "KDL 442N", type: "SUV", make: "Toyota", model: "Land Cruiser Prado", year: "2019", seats: 7,
+    registration: "KDL 442N", type: "suv", make: "Toyota", model: "Land Cruiser Prado", year: "2019", seats: 7,
     transmission: "Automatic", fuel: "Diesel", colour: "Pearl white", pickup_address: "Nairobi · Westlands",
     daily_rate: 12500, minimum_hire_days: 2, chauffeured: true, status: "review", submitted_at: "2026-08-09T18:02:00Z",
     verification_badge: "none",
@@ -67,7 +68,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KCX 118T", type: "Van", make: "Toyota", model: "Hiace 9-seater", year: "2017", seats: 9,
+    registration: "KCX 118T", type: "van", make: "Toyota", model: "Hiace 9-seater", year: "2017", seats: 9,
     transmission: "Manual", fuel: "Diesel", colour: "Silver", pickup_address: "Nairobi · Embakasi",
     daily_rate: 9000, minimum_hire_days: 1, chauffeured: true, status: "action", submitted_at: "2026-08-04T11:12:00Z",
     verification_badge: "none",
@@ -87,7 +88,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KDA 907Q", type: "Car", make: "Nissan", model: "Note", year: "2018", seats: 5,
+    registration: "KDA 907Q", type: "sedan", make: "Nissan", model: "Note", year: "2018", seats: 5,
     transmission: "Automatic", fuel: "Petrol", colour: "Gunmetal", pickup_address: "Nairobi · Kilimani",
     daily_rate: 4200, minimum_hire_days: 1, chauffeured: false, status: "live", submitted_at: "2026-07-12T08:40:00Z",
     verification_badge: "active", verification_badge_expires_at: "2027-07-24",
@@ -103,7 +104,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KBZ 663M", type: "Lorry", make: "Isuzu", model: "FRR 10-tonne", year: "2015", seats: 3,
+    registration: "KBZ 663M", type: "truck", make: "Isuzu", model: "FRR 10-tonne", year: "2015", seats: 3,
     transmission: "Manual", fuel: "Diesel", colour: "White", pickup_address: "Mombasa · Changamwe",
     daily_rate: 18000, minimum_hire_days: 3, chauffeured: true, status: "pending", submitted_at: "2026-08-13T20:15:00Z",
     verification_badge: "none",
@@ -117,7 +118,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KDG 233V", type: "Car", make: "Toyota", model: "Fielder", year: "2016", seats: 5,
+    registration: "KDG 233V", type: "sedan", make: "Toyota", model: "Fielder", year: "2016", seats: 5,
     transmission: "Automatic", fuel: "Petrol", colour: "Silver", pickup_address: "Nakuru · Milimani",
     daily_rate: 3800, minimum_hire_days: 1, chauffeured: false, status: "live", submitted_at: "2026-07-18T17:26:00Z",
     verification_badge: "none",
@@ -136,7 +137,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KCB 771A", type: "Pickup", make: "Mitsubishi", model: "L200 double cab", year: "2014", seats: 5,
+    registration: "KCB 771A", type: "suv", make: "Mitsubishi", model: "L200 double cab", year: "2014", seats: 5,
     transmission: "Manual", fuel: "Diesel", colour: "Black", pickup_address: "Eldoret · Town",
     daily_rate: 0, minimum_hire_days: 1, chauffeured: true, status: "draft", submitted_at: null,
     verification_badge: "none",
@@ -146,7 +147,7 @@ const SEED: SeedVehicle[] = [
     ],
   },
   {
-    registration: "KDL 559X", type: "SUV", make: "Mazda", model: "CX-5", year: "2020", seats: 5,
+    registration: "KDL 559X", type: "suv", make: "Mazda", model: "CX-5", year: "2020", seats: 5,
     transmission: "Automatic", fuel: "Petrol", colour: "Soul red", pickup_address: "Nairobi · Karen",
     daily_rate: 9500, minimum_hire_days: 2, chauffeured: false, status: "rejected", submitted_at: "2026-07-29T09:18:00Z",
     verification_badge: "none",
@@ -200,12 +201,13 @@ async function main(): Promise<void> {
         fuel: seed.fuel,
         colour: seed.colour,
         seats: seed.seats,
+        county: seed.pickup_address.split("·")[0]?.trim() ?? null,
         pickup_address: seed.pickup_address,
         daily_rate_amount: seed.daily_rate * 100,
         minimum_hire_days: seed.minimum_hire_days,
         chauffeured: seed.chauffeured,
         status: seed.status,
-        listing_ref: `CRAL-V-${await nextRef()}`,
+        listing_ref: await nextListingRef(db),
         submitted_at: seed.submitted_at,
         verification_badge: seed.verification_badge,
         verification_badge_expires_at: seed.verification_badge_expires_at ?? null,
@@ -249,11 +251,6 @@ async function main(): Promise<void> {
   }
 
   await db.destroy();
-}
-
-async function nextRef(): Promise<string> {
-  const result = await db.raw<{ rows: { n: string }[] }>("select nextval('vehicle_listing_ref_seq') as n");
-  return result.rows[0]!.n;
 }
 
 main().catch((error: unknown) => {

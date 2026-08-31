@@ -11,9 +11,24 @@ import type { EventTone, VehicleEventRow } from "../modules/merchant/db-types.js
  * its own copy.
  */
 
+/**
+ * A human-readable listing reference: `H` + `YYMMDD` + a 3-digit sequence
+ * that restarts each Nairobi calendar day (owner's call, 2026-08-31), e.g.
+ * `H260831001` for the first vehicle listed on 2026-08-31. Backed by
+ * `listing_ref_daily_counters` — one row per day, bumped atomically here
+ * so concurrent inserts can't collide. Runs inside the caller's
+ * transaction, so a rolled-back vehicle insert rolls the counter back too.
+ */
 export async function nextListingRef(trx: Knex.Transaction | Knex): Promise<string> {
-  const result = await trx.raw<{ rows: { n: string }[] }>("select nextval('vehicle_listing_ref_seq') as n");
-  return `CRAL-V-${result.rows[0]!.n}`;
+  const result = await trx.raw<{ rows: { day: string; n: number }[] }>(
+    `INSERT INTO listing_ref_daily_counters (day, n, created_at, updated_at)
+     VALUES ((now() AT TIME ZONE 'Africa/Nairobi')::date, 1, now(), now())
+     ON CONFLICT (day)
+     DO UPDATE SET n = listing_ref_daily_counters.n + 1, updated_at = now()
+     RETURNING to_char(day, 'YYMMDD') AS day, n`,
+  );
+  const { day, n } = result.rows[0]!;
+  return `H${day}${String(n).padStart(3, "0")}`;
 }
 
 export async function appendVehicleEvent(

@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
+import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
   emailButton,
@@ -139,7 +140,6 @@ function serializeState(
     national_id: merchant.national_id,
     kra_pin: merchant.kra_pin,
     phone, // lives on users, not merchants — see identity's §4 payout-phone deviation
-    county: merchant.county,
     payout_same: merchant.payout_same,
     payout_method: merchant.payout_method,
     payout_detail: merchant.payout_detail,
@@ -167,6 +167,7 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     transmission: vehicle.transmission,
     fuel: vehicle.fuel,
     colour: vehicle.colour,
+    county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
     insurance_expiry: vehicle.insurance_expiry,
@@ -238,19 +239,21 @@ function vehicleUpdateFromInput(input: VehicleInput) {
 
 export async function addVehicle(userId: string, input: CreateVehicleInput, _ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
-  const vehicle = await db.transaction(async (trx) => {
-    const listingRef = await nextListingRef(trx);
-    const [created] = await trx<VehicleRow>("vehicles")
-      .insert({
-        id: generateId("vehicle"),
-        merchant_id: merchant.id,
-        listing_ref: listingRef,
-        ...vehicleUpdateFromInput(input),
-      })
-      .returning("*");
-    if (!created) throw new Error("Failed to create vehicle");
-    return created;
-  });
+  const vehicle = await db
+    .transaction(async (trx) => {
+      const listingRef = await nextListingRef(trx);
+      const [created] = await trx<VehicleRow>("vehicles")
+        .insert({
+          id: generateId("vehicle"),
+          merchant_id: merchant.id,
+          listing_ref: listingRef,
+          ...vehicleUpdateFromInput(input),
+        })
+        .returning("*");
+      if (!created) throw new Error("Failed to create vehicle");
+      return created;
+    })
+    .catch(rethrowRegistrationConflict);
   await touchActivity(merchant.id);
   return serializeVehicle(vehicle, []);
 }
@@ -265,7 +268,8 @@ export async function patchVehicle(
   const [updated] = await db<VehicleRow>("vehicles")
     .where({ id: vehicle.id })
     .update(vehicleUpdateFromInput(input))
-    .returning("*");
+    .returning("*")
+    .catch(rethrowRegistrationConflict);
   if (!updated) throw new Error("Failed to update vehicle");
   await touchActivity(vehicle.merchant_id);
   const documents = await db<DocumentRow>("documents").where({ vehicle_id: vehicle.id });
@@ -476,7 +480,6 @@ async function assertCompleteForSubmission(userId: string): Promise<{
   if (!merchant.national_id?.trim()) fail("National ID number is required.");
   if (!merchant.kra_pin?.trim()) fail("KRA PIN is required.");
   if (!user?.phone?.trim()) fail("Phone number is required.");
-  if (!merchant.county?.trim()) fail("County is required.");
 
   if (merchant.owner_type === "company") {
     if (!merchant.company_name?.trim()) fail("Company name is required.");
@@ -498,6 +501,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
   if (vehicles.length === 0) fail("Add at least one vehicle.");
 
   for (const v of vehicles) {
+    if (!v.county?.trim()) fail(`${v.registration || "A vehicle"} is missing its county.`);
     for (const kind of VEHICLE_DOC_KINDS) {
       if (!documents.some((d) => d.vehicle_id === v.id && d.kind === kind)) {
         fail(`${v.registration || "A vehicle"} is missing a required document.`);

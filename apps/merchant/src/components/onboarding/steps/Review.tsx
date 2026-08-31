@@ -3,6 +3,7 @@ import { O } from "../styles.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { BackButton, Kes, PlateBadge, PrimaryButton } from "../primitives.js";
 import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
+import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
 
 export function Review({
@@ -64,7 +65,6 @@ export function Review({
             <ReviewRow label="KRA PIN" value={draft.kraPin || "-"} />
             <ReviewRow label="Phone" value={draft.phone ? `+254 ${draft.phone}` : "-"} />
             <ReviewRow label="Email" value={draft.email || "-"} />
-            <ReviewRow label="County" value={draft.county || "-"} />
             {draft.ownerType === "company" || draft.payoutMethod === "bank" ? (
               <ReviewRow
                 payout
@@ -128,7 +128,7 @@ export function Review({
               <PlateBadge>{v.registration || "-"}</PlateBadge>
               <div style={{ flex: 1 }}>
                 <div style={O.fleetName}>{v.make} {v.model}</div>
-                <div style={O.fleetSub}>{v.type} · {v.year} · {v.photos.length} photos · {v.pickupAddress || "-"}</div>
+                <div style={O.fleetSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.photos.length} photos · {v.county || "-"} · {v.pickupAddress || "-"}</div>
                 {v.photos.length > 0 && (
                   <div style={O.reviewPhotoRow}>
                     {v.photos.map((photo) => (

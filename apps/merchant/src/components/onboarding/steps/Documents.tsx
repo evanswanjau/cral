@@ -3,6 +3,7 @@ import { User } from "@phosphor-icons/react/dist/ssr/User";
 import { O } from "../styles.js";
 import { BackButton, PlateBadge, PrimaryButton, TextInput } from "../primitives.js";
 import { formatFileSize } from "../../../lib/format.js";
+import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import {
   deleteDocument,
   updateVehicleOnServer,
@@ -270,7 +271,7 @@ export function Documents({
                 <PlateBadge>{v.registration || "-"}</PlateBadge>
                 <div>
                   <div style={O.cardTitle}>{v.make} {v.model}</div>
-                  <div style={O.optionBody}>{v.type} · {v.year} · {v.colour || "-"} · {v.pickupAddress || "-"}</div>
+                  <div style={O.optionBody}>{vehicleTypeLabel(v.type)} · {v.year} · {v.colour || "-"} · {v.county || "-"} · {v.pickupAddress || "-"}</div>
                 </div>
               </div>
               <span

@@ -276,7 +276,7 @@ components:
     VehicleInput:
       type: object
       properties:
-        type: { type: string, enum: [Car, SUV, Van, Pickup, Lorry] }
+        type: { type: string, enum: [sedan, suv, van, truck, machinery] }
         make: { type: string }
         model: { type: string }
         year: { type: string }
@@ -284,6 +284,7 @@ components:
         transmission: { type: string, enum: [Automatic, Manual] }
         fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
         colour: { type: string }
+        county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
         daily_rate: { type: string, description: "KES, whole shillings, as a numeric string" }
         insurance_expiry: { type: string, format: date, nullable: true }
@@ -326,7 +327,6 @@ components:
         national_id: { type: string }
         kra_pin: { type: string }
         phone: { type: string }
-        county: { type: string }
         payout_same: { type: boolean }
         payout_method: { type: string, enum: [mpesa, bank] }
         payout_detail: { type: string }
@@ -358,7 +358,6 @@ components:
         national_id: { type: string, nullable: true }
         kra_pin: { type: string, nullable: true }
         phone: { type: string, nullable: true }
-        county: { type: string, nullable: true }
         payout_same: { type: boolean }
         payout_method: { type: string, enum: [mpesa, bank] }
         payout_detail: { type: string, nullable: true }

@@ -10,7 +10,6 @@ export interface MerchantRow {
   surname: string | null;
   national_id: string | null;
   kra_pin: string | null;
-  county: string | null;
   payout_same: boolean;
   payout_method: string;
   payout_detail: string | null;
@@ -47,6 +46,7 @@ export interface VehicleRow {
   transmission: string;
   fuel: string;
   colour: string | null;
+  county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;

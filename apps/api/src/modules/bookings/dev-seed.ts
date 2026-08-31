@@ -1,6 +1,7 @@
 import { ulid } from "ulid";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
+import { nextListingRef } from "../../lib/vehicle-events.js";
 import { hashPassword } from "../../lib/password.js";
 import { computeBookingPricing, computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant } from "../merchant/service.js";
@@ -50,17 +51,18 @@ async function getOrCreateSeedVehicle(merchantId: string): Promise<VehicleRow> {
     .insert({
       id: generateId("vehicle"),
       merchant_id: merchantId,
-      type: "Car",
+      type: "sedan",
       make: "Nissan",
       model: "Note",
       year: "2020",
       registration: `KDA ${ulid().slice(-3).replace(/[A-Z]/g, "9")}Q`,
       transmission: "Automatic",
       fuel: "Petrol",
+      county: "Nairobi",
       pickup_address: "Kilimani, Nairobi",
       daily_rate_amount: 420000,
       status: "live",
-      listing_ref: `CRAL-V-${ulid().slice(-4)}`,
+      listing_ref: await nextListingRef(db),
     })
     .returning("*");
   if (!vehicle) throw new Error("Failed to seed vehicle");

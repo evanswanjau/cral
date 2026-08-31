@@ -51,7 +51,7 @@ describe("merchant onboarding — GET/PATCH", () => {
     const patchRes = await request(app)
       .patch("/merchant/onboarding")
       .set(auth(accessToken))
-      .send({ first_name: "Amani", surname: "Otieno", county: "Nairobi", step: 2 });
+      .send({ first_name: "Amani", surname: "Otieno", step: 2 });
 
     expect(patchRes.status).toBe(200);
     expect(patchRes.body.first_name).toBe("Amani");
@@ -101,11 +101,11 @@ describe("merchant onboarding — vehicle CRUD", () => {
       .post("/merchant/onboarding/vehicles")
       .set(auth(accessToken))
       .send({
-        type: "Car",
+        type: "sedan",
         make: "Toyota",
         model: "Axio",
         year: "2019",
-        registration: "KDL 442N",
+        registration: "KOB 201A",
         transmission: "Automatic",
         fuel: "Petrol",
         pickup_address: "Westlands, Nairobi",
@@ -141,11 +141,11 @@ describe("merchant onboarding — vehicle CRUD", () => {
       .post("/merchant/onboarding/vehicles")
       .set(auth(accessToken))
       .send({
-        type: "Car",
+        type: "sedan",
         make: "Toyota",
         model: "Axio",
         year: "2019",
-        registration: "KDL 900X",
+        registration: "KOB 202B",
         transmission: "Automatic",
         fuel: "Petrol",
         pickup_address: "Westlands, Nairobi",
@@ -173,11 +173,11 @@ describe("merchant onboarding — vehicle CRUD", () => {
       .post("/merchant/onboarding/vehicles")
       .set(auth(owner.accessToken))
       .send({
-        type: "Car",
+        type: "sedan",
         make: "Toyota",
         model: "Vitz",
         year: "2018",
-        registration: "KDA 100A",
+        registration: "KOB 203C",
         transmission: "Automatic",
         fuel: "Petrol",
         pickup_address: "CBD, Nairobi",
@@ -264,11 +264,11 @@ describe("merchant onboarding — document upload", () => {
       .post("/merchant/onboarding/vehicles")
       .set(auth(accessToken))
       .send({
-        type: "Car",
+        type: "sedan",
         make: "Toyota",
         model: "Axio",
         year: "2019",
-        registration: "KDL 442P",
+        registration: "KOB 204D",
         transmission: "Automatic",
         fuel: "Petrol",
         pickup_address: "Westlands, Nairobi",
@@ -334,7 +334,7 @@ describe("merchant onboarding — submit", () => {
         surname: "Otieno",
         national_id: "12345678",
         kra_pin: "A012345678Z",
-        county: "Nairobi",
+        county: "Nairobi", // ignored now — county lives on the vehicle
         payout_same: true,
         phone: "+254712345678",
         terms_accepted: true,
@@ -344,13 +344,14 @@ describe("merchant onboarding — submit", () => {
       .post("/merchant/onboarding/vehicles")
       .set(auth(accessToken))
       .send({
-        type: "Car",
+        type: "sedan",
         make: "Toyota",
         model: "Axio",
         year: "2019",
-        registration: "KDL 442N",
+        registration: "KOB 205E",
         transmission: "Automatic",
         fuel: "Petrol",
+        county: "Nairobi",
         pickup_address: "Westlands, Nairobi",
         daily_rate: "4500",
       });
@@ -395,7 +396,7 @@ describe("merchant onboarding — submit", () => {
     const vehicleRow = await db("vehicles").where({ id: vehicleId }).first();
     expect(vehicleRow.status).toBe("pending");
     expect(vehicleRow.submitted_at).toBeTruthy();
-    expect(vehicleRow.listing_ref).toMatch(/^CRAL-V-\d+$/);
+    expect(vehicleRow.listing_ref).toMatch(/^H\d{9}$/);
     const submittedEvent = await db("vehicle_events")
       .where({ vehicle_id: vehicleId, kind: "submitted" })
       .first();

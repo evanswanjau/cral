@@ -78,13 +78,14 @@ async function newVehicle(accessToken: string, registration: string) {
     .post("/merchant/vehicles")
     .set(auth(accessToken))
     .send({
-      type: "Car",
+      type: "sedan",
       make: "Toyota",
       model: "Axio",
       year: "2019",
       registration,
       transmission: "Automatic",
       fuel: "Petrol",
+      county: "Nairobi",
       pickup_address: "Westlands, Nairobi",
       daily_rate: "4200",
     });
