@@ -225,6 +225,20 @@ export function YourDetails({
             <FormField label="KRA PIN" required error={req(draft.kraPin)} helper="From your KRA PIN certificate.">
               <TextInput value={draft.kraPin} onChange={(e) => onChange({ kraPin: e.target.value.toUpperCase() })} placeholder="A012345678Z" error={showErrors && !draft.kraPin.trim()} />
             </FormField>
+            <FormField
+              label="Email"
+              helper="On your CRAL account — receipts and payout statements go here. Contact support to change it."
+            >
+              <TextInput
+                value={draft.email || "Loading…"}
+                readOnly
+                aria-label="Account email"
+                style={{ ...O.inputDisabled, color: "#1A1F2B", cursor: "default" }}
+              />
+            </FormField>
+          </div>
+
+          <div style={{ maxWidth: 360, marginBottom: 12 }}>
             <FormField label="Phone number" required error={req(draft.phone)} helper="How we reach you about your listing. We text a code to confirm it.">
               <PhoneInput
                 value={draft.phone}
@@ -243,12 +257,6 @@ export function YourDetails({
               showError={showErrors && !draft.phoneVerified}
               onVerified={() => onChange({ phoneVerified: true })}
             />
-          </div>
-
-          <div style={O.formGrid3}>
-            <FormField label="Email" required helper="This is the email on your CRAL account - receipts and payout statements go here.">
-              <TextInput value={draft.email} disabled style={O.inputDisabled} />
-            </FormField>
           </div>
         </div>
       </div>
@@ -489,23 +497,28 @@ function PhoneVerification({
           <span style={{ font: "500 13px/1.4 'Instrument Sans',sans-serif", color: "#475467" }}>
             Enter the 6-digit code we texted to {masked}.
           </span>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "stretch", gap: 8, flexWrap: "wrap" }}>
             <TextInput
               value={code}
               onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
               placeholder="123456"
               inputMode="numeric"
-              style={{ maxWidth: 140 }}
+              style={{ width: 132, flex: "none" }}
             />
             <button
               type="button"
-              style={O.primaryBtnSmall}
+              style={{ ...O.primaryBtnSmall, height: 44, flex: "none" }}
               disabled={code.length !== 6 || busy}
               onClick={() => void confirm()}
             >
               {busy ? "Checking…" : "Confirm"}
             </button>
-            <button type="button" style={O.secondaryBtnSmall} disabled={busy} onClick={() => void send()}>
+            <button
+              type="button"
+              style={{ ...O.secondaryBtnSmall, height: 44, flex: "none" }}
+              disabled={busy}
+              onClick={() => void send()}
+            >
               Resend
             </button>
           </div>

@@ -222,7 +222,9 @@ function TwoFactorOff({ onChanged }: { onChanged: () => void }): JSX.Element {
               <span style={O.phonePrefix}>+254</span>
               <TextInput
                 value={digits}
-                onChange={(e) => setDigits(e.target.value.replace(/\D/g, "").slice(0, 9))}
+                onChange={(e) =>
+                  setDigits(e.target.value.replace(/\D/g, "").replace(/^(?:254|0)/, "").slice(0, 9))
+                }
                 placeholder="712 345 678"
                 inputMode="tel"
                 style={{ flex: 1 }}

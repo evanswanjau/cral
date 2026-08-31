@@ -50,6 +50,7 @@ export function Onboarding(): JSX.Element {
   const [saved, setSaved] = useState(false);
   const resuming = useRef(false);
   const emailFetched = useRef(false);
+  const [accountEmail, setAccountEmail] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialDraft && !draft) {
@@ -58,18 +59,26 @@ export function Onboarding(): JSX.Element {
     }
   }, [initialDraft, draft]);
 
+  // Fetch the account email once…
   useEffect(() => {
     if (emailFetched.current) return;
     emailFetched.current = true;
     getMe()
-      .then((me) => {
-        if (me.email) setDraft((d) => (d && !d.email ? { ...d, email: me.email } : d));
-      })
+      .then((me) => setAccountEmail(me.email ?? null))
       .catch(() => {
-        // Onboarding still works without it - the email field just stays
-        // blank rather than blocking the whole wizard on a /me failure.
+        // Onboarding still works without it — the email field just stays
+        // "Loading…" rather than blocking the whole wizard on a /me failure.
       });
   }, []);
+
+  // …and stamp it onto the draft whenever both are ready. Kept separate
+  // because /me usually resolves before `draft` exists, and re-applied if a
+  // draft reload from the server (which carries no email) wipes it.
+  useEffect(() => {
+    if (accountEmail && draft && draft.email !== accountEmail) {
+      setDraft((d) => (d ? { ...d, email: accountEmail } : d));
+    }
+  }, [accountEmail, draft]);
 
   /**
    * Local-only: merges into the in-memory draft (and, via the effect below,
