@@ -2,11 +2,15 @@ import { NavLink } from "react-router-dom";
 import { P } from "./styles.js";
 
 /**
- * "Vehicles", "Bookings" and "Settings" are shown — the design's canvas
- * also has Dashboard, Payouts and Notifications, but those screens haven't
- * been asked for yet (see CLAUDE.md's "Phase 1 — Identity, merchant portal
- * only" scoping). Bookings and the Settings → Security screen were both
- * added explicitly by the owner ahead of the delivery plan's phase order.
+ * Only "Vehicles" and "Bookings" are shown — the design's canvas also has
+ * Dashboard, Payouts, Notifications and Settings, but those screens
+ * haven't been asked for yet (see CLAUDE.md's "Phase 1 — Identity,
+ * merchant portal only" scoping). Bookings was added explicitly by the
+ * owner ahead of the delivery plan's phase order.
+ *
+ * Settings → Security (`/settings/security`) exists as a route but is
+ * deliberately kept out of the nav for now (owner's call) — it's
+ * reachable by URL, not surfaced.
  */
 export function SideNav({ vehicleCount, bookingCount }: { vehicleCount: number; bookingCount: number }): JSX.Element {
   return (
@@ -26,14 +30,6 @@ export function SideNav({ vehicleCount, bookingCount }: { vehicleCount: number; 
             <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
             <span style={P.navLabel}>Bookings</span>
             <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{bookingCount}</span>
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/settings/security" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Settings</span>
           </>
         )}
       </NavLink>

@@ -261,9 +261,10 @@ so it is once again the source of truth.
 
 **The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible).
 `apps/merchant` now has its first settings screen — **Settings → Security**
-(`/settings/security`, `pages/SecuritySettings.tsx`, linked from `SideNav`)
-— with the enrol flow (phone → texted code → the ten recovery codes,
-shown once) and the disable flow (password + a current/recovery code).
+(`/settings/security`, `pages/SecuritySettings.tsx`) — with the enrol flow
+(phone → texted code → the ten recovery codes, shown once) and the disable
+flow (password + a current/recovery code). It's a route only: deliberately
+**not** in `SideNav` yet (owner's call), reachable by URL.
 `SignIn.tsx` handles the `next: "2fa"` branch with a real code step
 (`completeTwoFactorChallenge`), not the old placeholder error. The
 server-side 2FA endpoints were already there; this is only the UI.
