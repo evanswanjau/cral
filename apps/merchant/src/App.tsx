@@ -5,6 +5,8 @@ import { RequireOnboarding } from "./components/RequireOnboarding.js";
 import { VehicleList } from "./pages/VehicleList.js";
 import { VehicleDetail } from "./pages/VehicleDetail.js";
 import { AddVehicle } from "./pages/AddVehicle.js";
+import { BookingList } from "./pages/BookingList.js";
+import { BookingDetail } from "./pages/BookingDetail.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -35,6 +37,8 @@ const router = createBrowserRouter([
               { path: "vehicles", element: <VehicleList /> },
               { path: "vehicles/new", element: <AddVehicle /> },
               { path: "vehicles/:vehicleId", element: <VehicleDetail /> },
+              { path: "bookings", element: <BookingList /> },
+              { path: "bookings/:bookingId", element: <BookingDetail /> },
             ],
           },
         ],

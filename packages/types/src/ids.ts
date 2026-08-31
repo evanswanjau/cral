@@ -32,6 +32,14 @@ export const ID_PREFIXES = {
   // Vehicle-listing review-history rows (portal Vehicles screen) — an
   // internal entity, no prefix named in the spec's own identifier list.
   vehicleEvent: "vev",
+  // Booking review-history rows (portal Bookings screen), same pattern as
+  // vehicleEvent above — an internal entity, no prefix named in the spec.
+  bookingEvent: "bev",
+  // A merchant's post-hire report against a booking (spec §28's
+  // "insurance claim handoff" gap): either a claim against the held
+  // deposit, or a no-money conduct report. Escalates to a Dispute (dsp_)
+  // only once it exceeds what the deposit can cover.
+  bookingReport: "bkr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

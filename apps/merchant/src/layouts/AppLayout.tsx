@@ -8,6 +8,7 @@ import { SideNav } from "../components/portal/SideNav.js";
 import { ToastProvider } from "../components/portal/Toast.js";
 import { P } from "../components/portal/styles.js";
 import { useVehicleList } from "../lib/vehicles-api.js";
+import { useBookingList } from "../lib/bookings-api.js";
 
 export function AppLayout(): ReactNode {
   // Shares the ["onboarding"] cache key with RequireOnboarding/Onboarding —
@@ -16,6 +17,7 @@ export function AppLayout(): ReactNode {
   const { data: draft } = useQuery({ queryKey: ["onboarding"], queryFn: loadDraftFromServer });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: vehicles } = useVehicleList("all");
+  const { data: bookings } = useBookingList("all");
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
   const company = draft?.ownerType === "company" ? draft.companyName || null : null;
@@ -26,7 +28,7 @@ export function AppLayout(): ReactNode {
         <AppHeader name={name} company={company} email={me?.email ?? ""} />
         <div style={P.body}>
           <div style={P.bodyInner}>
-            <SideNav count={vehicles?.counts.all ?? 0} />
+            <SideNav vehicleCount={vehicles?.counts.all ?? 0} bookingCount={bookings?.counts.all ?? 0} />
             <div style={P.main}>
               <Outlet />
             </div>

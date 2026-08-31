@@ -1,0 +1,823 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Merchant Bookings API
+  version: "1.0.0"
+  description: >
+    Merchant-side bookings: the request/accept/decline lifecycle, the
+    pickup/return handover, deposit-backed reports, and post-hire ratings.
+    Frozen from the platform API spec §14–16, §19–20 for the bookings
+    slice the owner asked for ahead of the delivery plan's Phase 4–6
+    sequencing (see CLAUDE.md's "Recorded product decisions"). Merchant
+    portal audience only — every path acts on a booking the authenticated
+    merchant owns.
+
+    Scope note: the platform spec's handover is a customer app *and*
+    merchant app protocol (QR scan proves proximity, an SMS/email OTP
+    proves identity, both sides confirm a joint condition report). No
+    customer portal exists yet, so this phase runs a reduced version of
+    the same state machine: the QR-proximity step is skipped, the OTP is
+    still real and still emailed to the hirer (Resend), and confirmation
+    is single-sided. `Handover.state` and `required` are shaped so the
+    QR step and the second confirmation slot in later without a schema
+    change — see the `handover` tag description.
+
+    Two figures here are deliberately downstream of the merchant-portal
+    design screens, not the spec, because the spec leaves them
+    unspecified or in conflict with the design: the deposit is 15% of
+    booking gross (spec's own quote endpoint says 1.5× the daily rate —
+    flagged, not reconciled), and the 25% late-cancellation fee has no
+    source in the spec at all (spec §28 lists the cancellation/refund
+    ladder as an acknowledged, never-specified gap).
+
+    The deposit hold is two clocks, not a conflict — the design's own
+    return-modal copy has both: 24h is the normal release
+    (`Booking.deposit_release_at`, set when the return handover
+    completes), and filing a claim extends it to 48h from the return
+    while CRAL reviews it. `createBookingReport` performs the extension.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: bookings
+    description: The request → confirm/decline → active → completed lifecycle
+  - name: handover
+    description: >
+      Pickup/return proof-of-presence session. Real state machine, reduced
+      proof set for this phase (see the top-level description).
+  - name: reports
+    description: >
+      Post-hire reports against a booking's held deposit — a money claim
+      capped at the deposit, or a no-money conduct report that still
+      reaches the hirer's history. Escalates to a Dispute beyond the cap
+      (spec §28's unresourced "insurance claim handoff" gap).
+  - name: hirer
+    description: The in-app hirer-history drawer (no downloadable file)
+  - name: rating
+    description: Merchant-to-hirer rating, open for a fixed window after return
+
+paths:
+  # ---------------------------------------------------------------------
+  # §14 Bookings
+  # ---------------------------------------------------------------------
+  /merchant/bookings:
+    get:
+      tags: [bookings]
+      summary: List bookings, tab-filtered with counts
+      operationId: listBookings
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [all, requests, upcoming, on_hire, completed, cancelled]
+            default: all
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Page of bookings for the authenticated merchant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/BookingSummary" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    description: Count per filter tab, for the tab badges
+                    properties:
+                      all: { type: integer }
+                      requests: { type: integer }
+                      upcoming: { type: integer }
+                      on_hire: { type: integer }
+                      completed: { type: integer }
+                      cancelled: { type: integer }
+
+  /merchant/bookings/{bookingId}:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [bookings]
+      summary: Full booking detail
+      operationId: getBooking
+      responses:
+        "200":
+          description: Booking detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /merchant/bookings/{bookingId}/confirm:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [bookings]
+      summary: Accept a request
+      operationId: confirmBooking
+      description: >
+        Must happen inside the response window (default 12h, spec §14) or
+        the request has already moved to `expired`. Locks the vehicle for
+        these dates; money is already with CRAL from the request.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Booking is now `confirmed`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: Already answered, or the response window has closed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /merchant/bookings/{bookingId}/decline:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [bookings]
+      summary: Decline a request
+      operationId: declineBooking
+      description: >
+        Nothing was charged to the merchant; the hirer is refunded in
+        full. A decline rate above a threshold costs the merchant search
+        placement (spec §14) — not enforced in this phase.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason_code]
+              properties:
+                reason_code:
+                  type: string
+                  enum: [not_free, rate_out_of_date, hirer_needs_checking, other]
+                note: { type: string, nullable: true }
+      responses:
+        "200":
+          description: Booking is now `declined`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+
+  /merchant/bookings/{bookingId}/cancel:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [bookings]
+      summary: Cancel a confirmed or active booking
+      operationId: cancelBooking
+      description: >
+        Applies the late-cancellation fee (25% of gross, merchant-invented
+        — see the top-level description) if cancelled at or after the
+        pickup time; free before it. Response reports the exact fee/refund
+        before it is executed, per spec §14's "no surprise number" rule.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        "200":
+          description: Booking is now `cancelled`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+
+  # ---------------------------------------------------------------------
+  # §15 Handover — reduced proof set this phase (see top-level description)
+  # ---------------------------------------------------------------------
+  /merchant/bookings/{bookingId}/handovers:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Open a handover session
+      operationId: createHandover
+      description: >
+        Refused unless the booking is `confirmed` (pickup) or `active`
+        (return). This phase skips straight to `otp_sent` — the QR-
+        proximity step needs a customer app that does not exist yet — and
+        emails the one-time code to the hirer directly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [kind]
+              properties:
+                kind: { type: string, enum: [pickup, return] }
+      responses:
+        "201":
+          description: Session opened
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+        "409":
+          description: Booking is not in a state that allows this handover kind
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /merchant/handovers/{handoverId}/photos:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Upload a condition photo for this session
+      operationId: uploadHandoverPhoto
+      description: >
+        Stored the same way a vehicle photo is (spec §9's shared documents
+        table), tagged to this booking. Returns the document id to pass in
+        `ConditionReportInput.photo_document_ids`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "201":
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  document_id: { type: string }
+                  original_name: { type: string }
+
+  /merchant/handovers/{handoverId}:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [handover]
+      summary: Current handover session state
+      operationId: getHandover
+      responses:
+        "200":
+          description: Session state
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+
+  /merchant/handovers/{handoverId}/otp/verify:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Verify the code the hirer read out
+      operationId: verifyHandoverOtp
+      description: >
+        5 attempts (spec §15's handover rules), then the session must be
+        reopened. Moves the session to `otp_verified`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, description: "The digits the hirer read out" }
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+        "422":
+          description: "`otp_incorrect` or `otp_expired`"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: "`session_expired`, or attempts are exhausted"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /merchant/handovers/{handoverId}/condition:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Log the condition report
+      operationId: logHandoverCondition
+      description: >
+        Optional this phase (spec has it required from the merchant at
+        pickup and both sides at return) — but a damage report against
+        this booking's pickup can only be filed if pickup condition
+        photos are on file. Moves the session to `condition_logged`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ConditionReportInput" }
+      responses:
+        "200":
+          description: Logged
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+
+  /merchant/handovers/{handoverId}/confirm:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Merchant confirms the session
+      operationId: confirmHandover
+      description: >
+        Single-sided this phase — the spec has both parties confirm.
+        Moves the session to `confirmed`.
+      responses:
+        "200":
+          description: Confirmed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+        "409":
+          description: Required steps not yet done for this session's `required` list
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /merchant/handovers/{handoverId}/complete:
+    parameters:
+      - name: handoverId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [handover]
+      summary: Finalise the handover
+      operationId: completeHandover
+      description: >
+        Pickup moves the booking to `active` and starts the hire clock.
+        Return moves it to `completed`, starts the 24-hour deposit-hold
+        window, and opens the rating window. `active` is only ever
+        entered through a completed pickup handover — there is no other
+        path (spec §27).
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Handover completed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Handover" }
+
+  # ---------------------------------------------------------------------
+  # §19 Reports (deposit-backed claim, or a no-money conduct report)
+  # ---------------------------------------------------------------------
+  /merchant/bookings/{bookingId}/reports:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [reports]
+      summary: Reports filed against this booking
+      operationId: listBookingReports
+      responses:
+        "200":
+          description: Reports, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/BookingReport" }
+    post:
+      tags: [reports]
+      summary: File a claim or a conduct report
+      operationId: createBookingReport
+      description: >
+        Filable while `on_hire` and for 14 days after `completed`. A
+        `claim` can only move money while the deposit is still held
+        (within 24h of return, or 48h once a claim has already extended
+        the hold — see the top-level description); a `conduct` report
+        never moves money and is always filable within the 14-day window.
+        A `claim` amount is capped at the deposit held — anything above
+        the cap sets `escalated_dispute_id` on the response instead of
+        raising the claimed amount. Filing a `claim` also extends
+        `Booking.deposit_release_at` to 48h from the return.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BookingReportInput" }
+      responses:
+        "201":
+          description: Report filed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingReport" }
+        "422":
+          description: >
+            `photos_required` — a `damage` claim was filed but no pickup
+            condition photos are on file for this booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: Outside the reportable or claimable window
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------------------------------------------------------------------
+  # Hirer-history drawer — CRAL-observable conduct facts only, never a
+  # download and never another booking's free text (see CLAUDE.md).
+  # ---------------------------------------------------------------------
+  /merchant/bookings/{bookingId}/hirer-history:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [hirer]
+      summary: The hirer's conduct summary, scoped to this booking's hirer
+      operationId: getHirerHistory
+      responses:
+        "200":
+          description: Summary
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HirerHistory" }
+
+  # ---------------------------------------------------------------------
+  # §20 Reviews — merchant rates the hirer
+  # ---------------------------------------------------------------------
+  /merchant/bookings/{bookingId}/rating:
+    parameters:
+      - name: bookingId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [rating]
+      summary: Rate the hirer
+      operationId: rateHirer
+      description: Open for 14 days after `completed`; one rating per booking.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stars]
+              properties:
+                stars: { type: integer, minimum: 1, maximum: 5 }
+                comment: { type: string, nullable: true }
+      responses:
+        "201":
+          description: Rating recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: Already rated, or the 14-day window has closed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------------------------------------------------------------------
+  # Dev-only fixture seeding — never mounted when NODE_ENV=production
+  # (see routes.ts's guard). There is no customer portal yet to create
+  # real requests, so this is how the Bookings screen gets anything to
+  # show in development. Documented here so the contract doesn't drift
+  # from what actually exists, even though it's not a "real" endpoint.
+  # ---------------------------------------------------------------------
+  /merchant/bookings/dev-seed:
+    post:
+      tags: [bookings]
+      summary: "Dev/test only: seed a fixture set of bookings for this merchant"
+      operationId: seedDevBookings
+      responses:
+        "201":
+          description: Seeded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  seeded: { type: integer }
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: Required on every call that moves money or completes a handover (spec §2)
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, example: KES }
+
+    BookingStatus:
+      type: string
+      description: >
+        A third status vocabulary, distinct from the brand's five
+        verification states and the Vehicles screen's seven listing
+        states — see apps/merchant/src/components/portal/status.ts.
+      enum:
+        [
+          requested,
+          confirmed,
+          active,
+          completed,
+          declined,
+          expired,
+          cancelled,
+        ]
+
+    BookingSummary:
+      type: object
+      properties:
+        id: { type: string }
+        ref: { type: string, description: "Public plated reference, e.g. CB-2841" }
+        status: { $ref: "#/components/schemas/BookingStatus" }
+        hirer_name: { type: string }
+        hirer_is_corporate: { type: boolean }
+        vehicle_registration: { type: string }
+        vehicle_make: { type: string }
+        vehicle_model: { type: string }
+        vehicle_type: { type: string }
+        vehicle_year: { type: string }
+        vehicle_chauffeured: { type: boolean }
+        vehicle_pickup_address: { type: string, nullable: true }
+        pickup_at: { type: string, format: date-time }
+        dropoff_at: { type: string, format: date-time }
+        merchant_net: { $ref: "#/components/schemas/Money" }
+        requested_at: { type: string, format: date-time }
+        response_due_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 12h response window for a `requested` booking
+
+    ConditionReportInput:
+      type: object
+      properties:
+        odometer_km: { type: integer, nullable: true }
+        fuel_level: { type: string, enum: [empty, quarter, half, three_quarter, full], nullable: true }
+        photo_document_ids:
+          type: array
+          items: { type: string }
+        notes: { type: string, nullable: true }
+
+    HandoverState:
+      type: string
+      enum:
+        [
+          created,
+          qr_scanned,
+          otp_sent,
+          otp_verified,
+          condition_logged,
+          confirmed,
+          completed,
+          expired,
+          failed,
+          offline_pending,
+          reconciled,
+        ]
+
+    Handover:
+      type: object
+      properties:
+        id: { type: string }
+        booking_id: { type: string }
+        kind: { type: string, enum: [pickup, return] }
+        state: { $ref: "#/components/schemas/HandoverState" }
+        required:
+          type: array
+          description: >
+            Steps this session enforces, in order. `qr_scan` and the
+            hirer-side confirmation are omitted this phase — see the
+            top-level description.
+          items: { type: string, enum: [otp, condition, confirm] }
+        masked_destination:
+          type: string
+          description: "e.g. f***@example.com — where the code was sent"
+        expires_at: { type: string, format: date-time }
+        condition: { $ref: "#/components/schemas/ConditionReportInput" }
+
+    BookingReportKind:
+      type: string
+      enum: [claim, conduct]
+
+    BookingReportCategory:
+      type: string
+      enum:
+        [
+          damage,
+          fuel_short,
+          late_return,
+          missing_equipment,
+          cleaning,
+          conduct,
+          other,
+        ]
+
+    BookingReportInput:
+      type: object
+      required: [kind, category, description]
+      properties:
+        kind: { $ref: "#/components/schemas/BookingReportKind" }
+        category: { $ref: "#/components/schemas/BookingReportCategory" }
+        description: { type: string }
+        amount:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          type: object
+          description: "Required for kind=claim; ignored for conduct"
+          nullable: true
+        evidence_document_ids:
+          type: array
+          items: { type: string }
+
+    BookingReport:
+      allOf:
+        - $ref: "#/components/schemas/BookingReportInput"
+        - type: object
+          properties:
+            id: { type: string }
+            booking_id: { type: string }
+            status:
+              type: string
+              enum: [filed, under_review, resolved]
+            escalated_dispute_id:
+              type: string
+              nullable: true
+              description: Set when a claim amount exceeded the deposit held
+            filed_at: { type: string, format: date-time }
+
+    HirerHistory:
+      type: object
+      description: >
+        CRAL-observable conduct facts only — never another booking's
+        free-text comment, vehicle, dates or location. No `id_verified`
+        field — nothing in this phase actually verifies a hirer's ID, so
+        there is nothing honest to report; add the field when that
+        pipeline exists, not before.
+      properties:
+        name: { type: string }
+        member_since: { type: string, format: date }
+        trip_count: { type: integer }
+        average_rating: { type: number, nullable: true }
+        completed_count: { type: integer }
+        late_return_count: { type: integer }
+        cancellation_count: { type: integer }
+        licence_valid_to: { type: string, format: date, nullable: true }
+
+    BookingEvent:
+      type: object
+      properties:
+        kind:
+          type: string
+          description: >
+            A stable machine key (e.g. "rated", "confirmed") for clients
+            that need to detect a specific event — never parse `label`
+            for this, it's copy and can change independently.
+        label: { type: string }
+        body: { type: string, nullable: true }
+        tone: { type: string, enum: [grey, blue, green, amber, red] }
+        actor_type: { type: string, enum: [merchant, hirer, system] }
+        occurred_at: { type: string, format: date-time }
+
+    BookingDetail:
+      allOf:
+        - $ref: "#/components/schemas/BookingSummary"
+        - type: object
+          properties:
+            gross: { $ref: "#/components/schemas/Money" }
+            commission: { $ref: "#/components/schemas/Money" }
+            merchant_net: { $ref: "#/components/schemas/Money" }
+            deposit: { $ref: "#/components/schemas/Money" }
+            cancellation_fee:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              type: object
+              nullable: true
+            refund:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              type: object
+              nullable: true
+            pickup_location: { type: string }
+            dropoff_location: { type: string }
+            note_from_hirer: { type: string, nullable: true }
+            payout_method: { type: string, enum: [mpesa] }
+            payout_detail: { type: string }
+            payout_account_name: { type: string }
+            has_pickup_condition_photos: { type: boolean }
+            deposit_release_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: 24h after `return` handover completes, unless a claim is open
+            rating_open_until: { type: string, format: date-time, nullable: true }
+            events:
+              type: array
+              items: { $ref: "#/components/schemas/BookingEvent" }
+
+  responses:
+    NotFound:
+      description: No such booking for this merchant
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
