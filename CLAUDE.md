@@ -97,8 +97,16 @@ the keys with empty secrets.
 for the test run. Don't remove that — without it every test run tries to
 deliver verification codes to `@example.test` addresses.
 
-**SMS is still console.** No real provider is wired, so opt-in 2FA
-challenges can't actually be delivered yet; 2FA must stay off until one is.
+**SMS is live via TextSMS** (`SMS_ADAPTER=textsms`, decided 2026-08-31).
+`TextSmsAdapter` (`apps/api/src/adapters/sms/textsms-adapter.ts`) is one
+HTTPS POST to `sms.textsms.co.ke/api/services/sendsms/` — no SDK, same
+shape as `ResendEmailAdapter`. Needs `TEXTSMS_API_KEY` /
+`TEXTSMS_PARTNER_ID` / `TEXTSMS_SHORTCODE` in the gitignored `.env`; a
+missing one throws from the adapter constructor at boot. `console` stays
+the default for local dev and is pinned for the test run.
+`npm run sms:check -w apps/api -- +2547XXXXXXXX` sends one real test SMS.
+Two things it unblocked: opt-in SMS 2FA, and onboarding phone
+verification (below).
 
 ## Design tokens
 
@@ -251,15 +259,34 @@ specified TOTP (`secret` + `otpauth_uri`). The owner chose SMS on
 app is a bigger ask of this audience. The contract was rewritten to match,
 so it is once again the source of truth.
 
-**The 2FA UI is not built.** No settings section exists in `apps/merchant`
-(the only authenticated route is `/` → Overview), so nobody can enrol, and
-the sign-in screen has no code step — it shows a plain error if the API
-ever returns the `2fa` branch. Both are pending, by the owner's call
-("we will get to settings later").
+**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible).
+`apps/merchant` now has its first settings screen — **Settings → Security**
+(`/settings/security`, `pages/SecuritySettings.tsx`) — with the enrol flow
+(phone → texted code → the ten recovery codes, shown once) and the disable
+flow (password + a current/recovery code). It's a route only: deliberately
+**not** in `SideNav` yet (owner's call), reachable by URL.
+`SignIn.tsx` handles the `next: "2fa"` branch with a real code step
+(`completeTwoFactorChallenge`), not the old placeholder error. The
+server-side 2FA endpoints were already there; this is only the UI.
 
-`verifyLoginOtp`, `PhoneInput` and `toE164` in `apps/merchant` are
-referenced by nothing right now. They're kept for onboarding's payout-phone
-step and the 2FA screens; don't delete them as dead code.
+`verifyLoginOtp` and `PhoneInput` in `apps/merchant` are still referenced
+by nothing (the passwordless-SMS-login tab stayed cut). `toE164` is now
+used by the 2FA settings screen. Don't delete the first two as dead code —
+they're kept against a future account-settings need.
+
+**Onboarding phone verification** (owner's call, 2026-08-31). The payout
+phone must pass an SMS proof-of-ownership check before onboarding can be
+submitted — a deliberate extension of the 2026-08-24 "SMS is only ever a
+2FA challenge" decision to also cover one-time phone verification at
+payout setup (the number is already being collected there; spec §10's KES
+1 name-lookup is still a separate, unbuilt thing). Endpoints
+`POST /auth/phone/verification/{start,confirm}` (authenticated, reuse the
+`otp_codes` table with purpose `phone_verify`); `assertCompleteForSubmission`
+gates on `users.phone_verified`; `GET /merchant/onboarding` and
+`GET /auth/registration-state` both report it. `setUserPhone` now
+normalises to E.164 and clears `phone_verified` whenever the number
+changes. The wizard's "Your details" step carries the verify UI and won't
+advance until it's done.
 
 **Bookings was built into the merchant portal ahead of the delivery plan's
 own phase ordering** (decided 2026-08-31, owner's explicit call — the
@@ -308,6 +335,50 @@ is `openapi/merchant-bookings.yaml`, code is
   contract, but dev/test-only** (`NODE_ENV !== "production"` guard in
   routes.ts) — there's no customer portal to generate real requests yet,
   so this is how the Bookings screen gets anything to demo against.
+
+**Vehicle model changes (owner's call, 2026-08-31 — PR "vehicle data
+model"):**
+- **Vehicle type is five fixed categories, stored as slugs** — `sedan`
+  ("Sedan / small cars"), `suv` ("SUV / 4x4 / Pickup"), `van` ("Van /
+  Minibus"), `truck` ("Truck & trailers"), `machinery` ("Construction &
+  machinery"). Replaces the old free-text `Car | SUV | Van | Pickup |
+  Lorry`. One source of truth: `apps/api/src/modules/vehicles/categories.ts`,
+  mirrored client-side in `apps/merchant/src/lib/vehicle-categories.ts` —
+  keep them in step. Migration `20260831090100` remaps existing rows
+  (Car→sedan, SUV/Pickup→suv, Van→van, Lorry→truck).
+- **A registration plate is globally unique**, not per-merchant — a
+  functional unique index on the normalised plate (`upper`, non-alnum
+  stripped), so "KDL 442N" / "kdl442n" / "KDL-442N" all collide across
+  every merchant. A clash throws `registration_taken` (409) via
+  `apps/api/src/lib/pg-errors.ts#rethrowRegistrationConflict`.
+- **County lives on the vehicle, not the merchant.** `merchants.county`
+  was dropped; each vehicle carries its own `county` (the location a hirer
+  cares about — "County, then pickup address"). Required per-vehicle at
+  onboarding submission, like `insurance_expiry`.
+- **Listing ref format is `H` + `YYMMDD` + a 3-digit sequence that
+  restarts each Nairobi day** (`H260831001`, `H260831002`, next day
+  `H260901001`). Backed by `listing_ref_daily_counters`, generated in
+  `lib/vehicle-events.ts#nextListingRef`. Older `CRAL-V-*` refs and the
+  `vehicle_listing_ref_seq` sequence are left in place, just unused.
+
+**Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
+- **The merchant is never shown the hirer's deposit** on their own
+  surfaces — the "DEPOSIT HELD" chip and the deposit row/foot-note on the
+  Vehicles detail screen are gone. It still appears in Bookings, where the
+  claim flow is built around it.
+- **Company merchants give `company_email` + `company_address`** (physical
+  location), both required at submission when `owner_type = 'company'`.
+  Migration `20260831093000`.
+- **Document expiry dates can't be backdated.** The client's date input
+  `min` only stops the picker; `Documents.tsx` now also blocks the step on
+  a typed-in past date, and the server re-checks via
+  `apps/api/src/lib/dates.ts#assertNotPast` (422 `expiry_in_past`) on
+  vehicle patch and document upload.
+- **A duplicate payout phone returns `phone_taken` (409)** instead of a
+  raw 500 — `users.phone` is unique; `setUserPhone` maps the violation.
+- **The onboarding vehicle form has a driver toggle** ("With driver
+  (chauffeured)" / "Self-drive"), mirroring the Price & availability modal.
+  `vehicles.chauffeured` already existed; the wizard just sets it now.
 
 ## What NOT to do
 

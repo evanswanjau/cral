@@ -20,6 +20,7 @@ export interface VehicleSummary {
   type: string;
   year: string;
   seats: number;
+  county: string | null;
   pickup_address: string | null;
   status: VehicleStatus;
   verification_badge: VerificationBadge;
@@ -100,6 +101,7 @@ export interface CreateVehicleInput {
   fuel: string;
   colour?: string | undefined;
   seats?: number | undefined;
+  county: string;
   pickup_address: string;
   daily_rate: string;
   minimum_hire_days?: number | undefined;
@@ -113,6 +115,7 @@ export function createVehicle(input: CreateVehicleInput) {
 export interface PriceAvailabilityInput {
   daily_rate?: string;
   minimum_hire_days?: number;
+  county?: string;
   pickup_address?: string;
   chauffeured?: boolean;
 }

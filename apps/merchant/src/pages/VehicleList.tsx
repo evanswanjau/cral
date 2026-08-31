@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
 import { FILTER_ORDER, STATUS, filterLabel, money } from "../components/portal/status.js";
 import { useVehicleList, type VehicleFilter, type VehicleSummary } from "../lib/vehicles-api.js";
+import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
 
 function FilterPill({
   filter,
@@ -110,7 +111,7 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
           <span style={P.rowTitle}>{v.make} {v.model}</span>
           {v.verification_badge === "active" && <span style={P.verifiedTag}>✓ VERIFIED</span>}
         </div>
-        <div style={P.rowMeta}>{v.type} · {v.year} · {v.seats} seats · {v.pickup_address ?? "—"}</div>
+        <div style={P.rowMeta}>{vehicleTypeLabel(v.type)} · {v.year} · {v.seats} seats · {v.county ?? v.pickup_address ?? "—"}</div>
       </div>
       <span style={{ ...P.statusTag, background: meta.tint, border: `1px solid ${meta.border}`, color: meta.text }}>
         <span style={{ ...P.statusDot, background: meta.core }} />

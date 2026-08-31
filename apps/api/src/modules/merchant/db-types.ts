@@ -5,12 +5,13 @@ export interface MerchantRow {
   company_name: string | null;
   company_cert_no: string | null;
   company_kra: string | null;
+  company_email: string | null;
+  company_address: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;
   national_id: string | null;
   kra_pin: string | null;
-  county: string | null;
   payout_same: boolean;
   payout_method: string;
   payout_detail: string | null;
@@ -47,6 +48,7 @@ export interface VehicleRow {
   transmission: string;
   fuel: string;
   colour: string | null;
+  county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;

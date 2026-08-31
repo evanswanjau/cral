@@ -1,4 +1,4 @@
-import { apiGet, apiPost } from "./api.js";
+import { apiDelete, apiGet, apiPost } from "./api.js";
 
 export interface TokenPair {
   access_token: string;
@@ -37,13 +37,48 @@ export function login(identifier: string, password: string, deviceId: string) {
   );
 }
 
-/** Second half of a 2FA sign-in. No UI reaches this yet — settings can't enrol anyone. */
+/** Second half of a 2FA sign-in: the texted code (or a recovery code). */
 export function completeTwoFactorChallenge(challengeId: string, code: string) {
   return apiPost<SignedIn & { used_recovery_code: boolean }>(
     "/auth/2fa/challenge",
     { challenge_id: challengeId, code },
     { auth: false },
   );
+}
+
+// --- 2FA (account settings) -----------------------------------------
+
+export interface TwoFactorState {
+  enabled: boolean;
+  method: "sms" | null;
+  masked_destination: string | null;
+  enrolled_at: string | null;
+  recovery_codes_remaining: number | null;
+}
+
+export function getTwoFactorState() {
+  return apiGet<TwoFactorState>("/auth/2fa");
+}
+
+/** Enrolment step 1: choose the handset; the API texts it a code. */
+export function enroll2fa(phone: string) {
+  return apiPost<{ masked_destination: string; retry_after: number }>("/auth/2fa/enroll", { phone });
+}
+
+/** Enrolment step 2: the code from the text. Returns the ten recovery codes, once. */
+export function verify2fa(code: string) {
+  return apiPost<{ recovery_codes: string[] }>("/auth/2fa/verify", { code });
+}
+
+/** Raise a fresh challenge for an already-signed-in merchant (needed to disable). */
+export function sendTwoFactorChallenge() {
+  return apiPost<{ challenge_id: string; masked_destination: string; expires_in: number }>(
+    "/auth/2fa/challenge/send",
+  );
+}
+
+export function disable2fa(password: string, code: string) {
+  return apiDelete<void>("/auth/2fa", { password, code });
 }
 
 export function requestOtp(identifier: string, purpose: OtpPurpose) {

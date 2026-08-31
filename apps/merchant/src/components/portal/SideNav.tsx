@@ -2,11 +2,15 @@ import { NavLink } from "react-router-dom";
 import { P } from "./styles.js";
 
 /**
- * "Vehicles" and "Bookings" are shown — the design's canvas also has
+ * Only "Vehicles" and "Bookings" are shown — the design's canvas also has
  * Dashboard, Payouts, Notifications and Settings, but those screens
  * haven't been asked for yet (see CLAUDE.md's "Phase 1 — Identity,
  * merchant portal only" scoping). Bookings was added explicitly by the
- * owner ahead of the delivery plan's own phase ordering.
+ * owner ahead of the delivery plan's phase order.
+ *
+ * Settings → Security (`/settings/security`) exists as a route but is
+ * deliberately kept out of the nav for now (owner's call) — it's
+ * reachable by URL, not surfaced.
  */
 export function SideNav({ vehicleCount, bookingCount }: { vehicleCount: number; bookingCount: number }): JSX.Element {
   return (

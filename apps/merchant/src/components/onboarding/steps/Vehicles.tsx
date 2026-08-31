@@ -3,6 +3,8 @@ import { O } from "../styles.js";
 import { Combobox } from "../Combobox.js";
 import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
+import { VEHICLE_CATEGORIES, vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
+import { COUNTIES } from "../../../lib/kenya.js";
 import {
   BackButton,
   FormField,
@@ -23,14 +25,8 @@ import {
   type VehicleType,
 } from "../../../lib/onboarding-draft.js";
 
-/** Value is the stored type; the label is how the design writes it out. */
-const VEHICLE_TYPES: { value: VehicleType; label: string }[] = [
-  { value: "Car", label: "Car" },
-  { value: "SUV", label: "SUV / 4x4" },
-  { value: "Van", label: "Van / minibus" },
-  { value: "Pickup", label: "Pickup" },
-  { value: "Lorry", label: "Lorry / commercial truck" },
-];
+/** Value is the stored category slug; the label is how it reads on screen. */
+const VEHICLE_TYPES = VEHICLE_CATEGORIES;
 const TRANSMISSIONS: Transmission[] = ["Automatic", "Manual"];
 const FUELS: Fuel[] = ["Petrol", "Diesel", "Hybrid", "Electric"];
 /**
@@ -101,7 +97,7 @@ export function Vehicles({
             <div style={{ flex: "1 1 0%", minWidth: 160 }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
-                {v.type} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.pickupAddress || "-"}
+                {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -183,7 +179,7 @@ function VehicleForm({
       return next;
     });
 
-  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.pickupAddress.trim() && v.dailyRate.trim();
+  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim();
   const photosOk = v.photos.length === MAX_PHOTOS;
 
   // Lazily create the vehicle on the server the first moment it's saveable
@@ -305,6 +301,14 @@ function VehicleForm({
               <FormField label="Colour" helper="As written in the logbook.">
                 <TextInput value={v.colour} onChange={(e) => patch({ colour: e.target.value })} placeholder="Pearl white" />
               </FormField>
+              <FormField label="County" required error={showErrors && !v.county.trim() ? "Required." : undefined} helper="Where this vehicle is based.">
+                <Select value={v.county} onChange={(e) => patch({ county: e.target.value })}>
+                  <option value="">Select a county</option>
+                  {COUNTIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </Select>
+              </FormField>
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
@@ -320,6 +324,15 @@ function VehicleForm({
                     error={showErrors && !v.dailyRate.trim()}
                   />
                 </div>
+              </FormField>
+              <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
+                <Select
+                  value={v.chauffeured ? "chauffeured" : "self_drive"}
+                  onChange={(e) => patch({ chauffeured: e.target.value === "chauffeured" })}
+                >
+                  <option value="chauffeured">With driver (chauffeured)</option>
+                  <option value="self_drive">Self-drive</option>
+                </Select>
               </FormField>
             </div>
           </div>

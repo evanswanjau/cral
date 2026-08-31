@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VEHICLE_CATEGORIES } from "../vehicles/categories.js";
 
 export const PatchOnboardingSchema = z.object({
   step: z.number().int().min(1).max(5).optional(),
@@ -8,13 +9,14 @@ export const PatchOnboardingSchema = z.object({
   company_name: z.string().optional(),
   company_cert_no: z.string().optional(),
   company_kra: z.string().optional(),
+  company_email: z.string().email().or(z.literal("")).optional(),
+  company_address: z.string().optional(),
   first_name: z.string().optional(),
   middle_name: z.string().optional(),
   surname: z.string().optional(),
   national_id: z.string().optional(),
   kra_pin: z.string().optional(),
   phone: z.string().optional(),
-  county: z.string().optional(),
   payout_same: z.boolean().optional(),
   payout_method: z.enum(["mpesa", "bank"]).optional(),
   payout_detail: z.string().optional(),
@@ -27,7 +29,7 @@ export const PatchOnboardingSchema = z.object({
 export type PatchOnboardingInput = z.infer<typeof PatchOnboardingSchema>;
 
 export const VehicleInputSchema = z.object({
-  type: z.enum(["Car", "SUV", "Van", "Pickup", "Lorry"]).optional(),
+  type: z.enum(VEHICLE_CATEGORIES).optional(),
   make: z.string().optional(),
   model: z.string().optional(),
   year: z.string().optional(),
@@ -35,14 +37,18 @@ export const VehicleInputSchema = z.object({
   transmission: z.enum(["Automatic", "Manual"]).optional(),
   fuel: z.enum(["Petrol", "Diesel", "Hybrid", "Electric"]).optional(),
   colour: z.string().optional(),
+  // County is progressively filled like insurance_expiry — optional on the
+  // wizard's lazy create, enforced per-vehicle at submission time.
+  county: z.string().optional(),
   pickup_address: z.string().optional(),
   daily_rate: z.string().optional(),
   insurance_expiry: z.string().nullable().optional(),
+  chauffeured: z.boolean().optional(),
 });
 export type VehicleInput = z.infer<typeof VehicleInputSchema>;
 
 export const CreateVehicleSchema = VehicleInputSchema.extend({
-  type: z.enum(["Car", "SUV", "Van", "Pickup", "Lorry"]),
+  type: z.enum(VEHICLE_CATEGORIES),
   make: z.string().min(1),
   model: z.string().min(1),
   year: z.string().min(1),

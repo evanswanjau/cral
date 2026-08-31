@@ -4,6 +4,8 @@ import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
+import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { assertNotPast } from "../../lib/dates.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
@@ -124,6 +126,7 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
     type: vehicle.type,
     year: vehicle.year,
     seats: vehicle.seats,
+    county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     status: vehicle.status,
     verification_badge: vehicle.verification_badge,
@@ -280,6 +283,7 @@ export async function createVehicle(userId: string, input: CreateVehicleInput, c
         fuel: input.fuel,
         colour: input.colour ?? null,
         seats: input.seats ?? 5,
+        county: input.county,
         pickup_address: input.pickup_address,
         daily_rate_amount: dailyRateCents(input.daily_rate) ?? 0,
         minimum_hire_days: input.minimum_hire_days ?? 1,
@@ -310,7 +314,7 @@ export async function createVehicle(userId: string, input: CreateVehicleInput, c
       ip: ctx.ip,
     });
     return created;
-  });
+  }).catch(rethrowRegistrationConflict);
 
   return serializeDetail(merchant, vehicle);
 }
@@ -337,6 +341,7 @@ export async function duplicateVehicle(userId: string, vehicleId: string, ctx: R
         fuel: vehicle.fuel,
         colour: vehicle.colour,
         seats: vehicle.seats,
+        county: vehicle.county,
         pickup_address: vehicle.pickup_address,
         daily_rate_amount: vehicle.daily_rate_amount,
         minimum_hire_days: vehicle.minimum_hire_days,
@@ -390,6 +395,7 @@ export async function updatePriceAvailability(
   const update: Record<string, unknown> = {};
   if (input.daily_rate !== undefined) update.daily_rate_amount = dailyRateCents(input.daily_rate);
   if (input.minimum_hire_days !== undefined) update.minimum_hire_days = input.minimum_hire_days;
+  if (input.county !== undefined) update.county = input.county;
   if (input.pickup_address !== undefined) update.pickup_address = input.pickup_address;
   if (input.chauffeured !== undefined) update.chauffeured = input.chauffeured;
 
@@ -704,6 +710,7 @@ export async function uploadVehicleDocument(
   ctx: RequestContext,
 ) {
   const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
+  if (input.expiresAt) assertNotPast(input.expiresAt, "expires_at");
 
   const key = buildStorageKey(merchant.id, vehicle.id, input.kind, input.file.originalname);
   await getStorageAdapter().putObject({ key, body: input.file.buffer, contentType: input.file.mimetype });

@@ -3,23 +3,18 @@ import { useNavigate } from "react-router-dom";
 import { Combobox } from "../components/onboarding/Combobox.js";
 import { Earnings } from "../components/onboarding/steps/Vehicles.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../lib/vehicle-catalogue.js";
+import { VEHICLE_CATEGORIES, type VehicleType } from "../lib/vehicle-categories.js";
+import { COUNTIES } from "../lib/kenya.js";
 import { BackButton, FormField, PrimaryButton, Select, TextInput } from "../components/onboarding/primitives.js";
 import { O } from "../components/onboarding/styles.js";
 import { P } from "../components/portal/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { createVehicle } from "../lib/vehicles-api.js";
 
-type VehicleType = "Car" | "SUV" | "Van" | "Pickup" | "Lorry";
 type Transmission = "Automatic" | "Manual";
 type Fuel = "Petrol" | "Diesel" | "Hybrid" | "Electric";
 
-const VEHICLE_TYPES: { value: VehicleType; label: string }[] = [
-  { value: "Car", label: "Car" },
-  { value: "SUV", label: "SUV / 4x4" },
-  { value: "Van", label: "Van / minibus" },
-  { value: "Pickup", label: "Pickup" },
-  { value: "Lorry", label: "Lorry / commercial truck" },
-];
+const VEHICLE_TYPES = VEHICLE_CATEGORIES;
 const TRANSMISSIONS: Transmission[] = ["Automatic", "Manual"];
 const FUELS: Fuel[] = ["Petrol", "Diesel", "Hybrid", "Electric"];
 
@@ -43,7 +38,7 @@ export function AddVehicle(): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [type, setType] = useState<VehicleType>("Car");
+  const [type, setType] = useState<VehicleType>("sedan");
   const [make, setMake] = useState("");
   const [model, setModel] = useState("");
   const [year, setYear] = useState("");
@@ -51,10 +46,11 @@ export function AddVehicle(): JSX.Element {
   const [transmission, setTransmission] = useState<Transmission>("Automatic");
   const [fuel, setFuel] = useState<Fuel>("Petrol");
   const [colour, setColour] = useState("");
+  const [county, setCounty] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
   const [dailyRate, setDailyRate] = useState("");
 
-  const requiredFilled = make.trim() && model.trim() && year.trim() && registration.trim() && pickupAddress.trim() && dailyRate.trim();
+  const requiredFilled = make.trim() && model.trim() && year.trim() && registration.trim() && county.trim() && pickupAddress.trim() && dailyRate.trim();
 
   async function handleSave() {
     if (!requiredFilled) {
@@ -73,6 +69,7 @@ export function AddVehicle(): JSX.Element {
         transmission,
         fuel,
         colour: colour.trim() || undefined,
+        county: county.trim(),
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),
       });
@@ -138,6 +135,14 @@ export function AddVehicle(): JSX.Element {
           </FormField>
           <FormField label="Colour" helper="As written in the logbook.">
             <TextInput value={colour} onChange={(e) => setColour(e.target.value)} placeholder="Pearl white" />
+          </FormField>
+          <FormField label="County" required error={showErrors && !county.trim() ? "Required." : undefined} helper="Where this vehicle is based.">
+            <Select value={county} onChange={(e) => setCounty(e.target.value)}>
+              <option value="">Select a county</option>
+              {COUNTIES.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+            </Select>
           </FormField>
           <FormField label="Pickup address" required error={showErrors && !pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
             <TextInput value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)} placeholder="Westlands, Nairobi" error={showErrors && !pickupAddress.trim()} />

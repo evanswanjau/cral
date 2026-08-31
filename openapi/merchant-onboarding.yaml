@@ -276,7 +276,7 @@ components:
     VehicleInput:
       type: object
       properties:
-        type: { type: string, enum: [Car, SUV, Van, Pickup, Lorry] }
+        type: { type: string, enum: [sedan, suv, van, truck, machinery] }
         make: { type: string }
         model: { type: string }
         year: { type: string }
@@ -284,8 +284,10 @@ components:
         transmission: { type: string, enum: [Automatic, Manual] }
         fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
         colour: { type: string }
+        county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
         daily_rate: { type: string, description: "KES, whole shillings, as a numeric string" }
+        chauffeured: { type: boolean, description: "true = hire comes with the owner's driver; false = self-drive" }
         insurance_expiry: { type: string, format: date, nullable: true }
 
     Vehicle:
@@ -320,13 +322,14 @@ components:
         company_name: { type: string }
         company_cert_no: { type: string }
         company_kra: { type: string }
+        company_email: { type: string, format: email }
+        company_address: { type: string }
         first_name: { type: string }
         middle_name: { type: string }
         surname: { type: string }
         national_id: { type: string }
         kra_pin: { type: string }
         phone: { type: string }
-        county: { type: string }
         payout_same: { type: boolean }
         payout_method: { type: string, enum: [mpesa, bank] }
         payout_detail: { type: string }
@@ -352,13 +355,15 @@ components:
         company_name: { type: string, nullable: true }
         company_cert_no: { type: string, nullable: true }
         company_kra: { type: string, nullable: true }
+        company_email: { type: string, format: email, nullable: true }
+        company_address: { type: string, nullable: true }
         first_name: { type: string, nullable: true }
         middle_name: { type: string, nullable: true }
         surname: { type: string, nullable: true }
         national_id: { type: string, nullable: true }
         kra_pin: { type: string, nullable: true }
         phone: { type: string, nullable: true }
-        county: { type: string, nullable: true }
+        phone_verified: { type: boolean, description: "Payout phone has passed SMS verification — required before submit" }
         payout_same: { type: boolean }
         payout_method: { type: string, enum: [mpesa, bank] }
         payout_detail: { type: string, nullable: true }

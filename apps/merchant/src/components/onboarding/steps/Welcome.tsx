@@ -77,7 +77,6 @@ export function Welcome({ onStart, resuming }: { onStart: () => void; resuming?:
           </p>
           <div style={O.darkChipRow}>
             <span style={O.darkChip}>M-PESA PAYOUT</span>
-            <span style={O.darkChip}>DEPOSIT HELD</span>
             <span style={O.darkChip}>FLEETS WELCOME</span>
           </div>
         </div>

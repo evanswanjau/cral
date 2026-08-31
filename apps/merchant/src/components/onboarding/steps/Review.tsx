@@ -3,6 +3,7 @@ import { O } from "../styles.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { BackButton, Kes, PlateBadge, PrimaryButton } from "../primitives.js";
 import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
+import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
 
 export function Review({
@@ -23,8 +24,14 @@ export function Review({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const fullName = [draft.firstName, draft.middleName, draft.surname].filter(Boolean).join(" ");
 
+  const blockedReason = !draft.phoneVerified
+    ? "Verify your phone number on the Your details step first."
+    : !draft.termsAccepted
+      ? "Accept the merchant terms and conditions first."
+      : null;
+
   function handleSubmit() {
-    if (!draft.termsAccepted) {
+    if (blockedReason) {
       setAttemptedSubmit(true);
       return;
     }
@@ -59,12 +66,25 @@ export function Review({
             <EditButton onClick={() => onEditStep(2)} />
           </div>
           <div style={O.reviewCardBody}>
-            <ReviewRow label="Name" value={fullName || "-"} />
+            {draft.ownerType === "company" && (
+              <>
+                <ReviewRow label="Company" value={draft.companyName || "-"} />
+                <ReviewRow label="Company email" value={draft.companyEmail || "-"} />
+                <ReviewRow label="Company location" value={draft.companyAddress || "-"} />
+              </>
+            )}
+            <ReviewRow label={draft.ownerType === "company" ? "Contact person" : "Name"} value={fullName || "-"} />
             <ReviewRow label="National ID" value={draft.nationalId || "-"} />
             <ReviewRow label="KRA PIN" value={draft.kraPin || "-"} />
-            <ReviewRow label="Phone" value={draft.phone ? `+254 ${draft.phone}` : "-"} />
+            <ReviewRow
+              label="Phone"
+              value={
+                draft.phone
+                  ? `+254 ${draft.phone}${draft.phoneVerified ? " · verified" : " · not verified"}`
+                  : "-"
+              }
+            />
             <ReviewRow label="Email" value={draft.email || "-"} />
-            <ReviewRow label="County" value={draft.county || "-"} />
             {draft.ownerType === "company" || draft.payoutMethod === "bank" ? (
               <ReviewRow
                 payout
@@ -128,7 +148,7 @@ export function Review({
               <PlateBadge>{v.registration || "-"}</PlateBadge>
               <div style={{ flex: 1 }}>
                 <div style={O.fleetName}>{v.make} {v.model}</div>
-                <div style={O.fleetSub}>{v.type} · {v.year} · {v.photos.length} photos · {v.pickupAddress || "-"}</div>
+                <div style={O.fleetSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.photos.length} photos · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}</div>
                 {v.photos.length > 0 && (
                   <div style={O.reviewPhotoRow}>
                     {v.photos.map((photo) => (
@@ -199,8 +219,8 @@ export function Review({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <BackButton onClick={onBack}>← Back to documents</BackButton>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {attemptedSubmit && !draft.termsAccepted && (
-            <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>Accept the merchant terms and conditions first.</span>
+          {attemptedSubmit && blockedReason && (
+            <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>{blockedReason}</span>
           )}
           <PrimaryButton onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Submitting…" : "Submit for review"}

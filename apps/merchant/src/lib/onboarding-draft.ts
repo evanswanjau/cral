@@ -12,6 +12,7 @@
 
 import { getCurrentUserId } from "./auth.js";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
+import type { VehicleType } from "./vehicle-categories.js";
 
 export type OwnerType = "individual" | "company";
 /**
@@ -21,7 +22,7 @@ export type OwnerType = "individual" | "company";
  * (Owner's call, 2026-08-25 - supersedes the earlier M-Pesa-only rule.)
  */
 export type PayoutMethod = "mpesa" | "bank";
-export type VehicleType = "Car" | "SUV" | "Van" | "Pickup" | "Lorry";
+export type { VehicleType };
 export type Transmission = "Automatic" | "Manual";
 export type Fuel = "Petrol" | "Diesel" | "Hybrid" | "Electric";
 
@@ -58,8 +59,11 @@ export interface DraftVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string;
+  county: string;
   pickupAddress: string;
   dailyRate: string;
+  /** true = hire comes with the owner's driver; false = self-drive. */
+  chauffeured: boolean;
   photos: DraftPhoto[];
   docs: VehicleDocs;
   insuranceExpiry: string;
@@ -79,15 +83,18 @@ export interface OnboardingDraft {
   companyName: string;
   certNo: string;
   companyKra: string;
+  companyEmail: string;
+  companyAddress: string;
   firstName: string;
   middleName: string;
   surname: string;
   nationalId: string;
   kraPin: string;
   phone: string;
+  /** Server-owned: true once the payout phone has passed SMS verification. Not patchable. */
+  phoneVerified: boolean;
   /** Read-only here - collected once at sign-up (CLAUDE.md's recorded decision), prefilled from GET /me. */
   email: string;
-  county: string;
   payoutSame: boolean;
   payoutMethod: PayoutMethod;
   /** M-Pesa payout number, national format without the +254. */
@@ -120,14 +127,16 @@ export function emptyDraft(): OnboardingDraft {
     companyName: "",
     certNo: "",
     companyKra: "",
+    companyEmail: "",
+    companyAddress: "",
     firstName: "",
     middleName: "",
     surname: "",
     nationalId: "",
     kraPin: "",
     phone: "",
+    phoneVerified: false,
     email: "",
-    county: "",
     payoutSame: true,
     payoutMethod: "mpesa",
     payoutDetail: "",
@@ -147,7 +156,7 @@ export function emptyDraft(): OnboardingDraft {
 export function emptyVehicle(id: string): DraftVehicle {
   return {
     id,
-    type: "Car",
+    type: "sedan",
     make: "",
     model: "",
     year: "",
@@ -155,8 +164,10 @@ export function emptyVehicle(id: string): DraftVehicle {
     transmission: "Automatic",
     fuel: "Petrol",
     colour: "",
+    county: "",
     pickupAddress: "",
     dailyRate: "",
+    chauffeured: true,
     photos: [],
     docs: { logbook: null, comprehensiveInsurance: null, trackerCertificate: null },
     insuranceExpiry: "",
@@ -214,8 +225,10 @@ interface WireVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string | null;
+  county: string | null;
   pickup_address: string | null;
   daily_rate: string;
+  chauffeured: boolean;
   insurance_expiry: string | null;
   docs: {
     logbook: WireDocSlot | null;
@@ -233,13 +246,15 @@ interface WireOnboardingState {
   company_name: string | null;
   company_cert_no: string | null;
   company_kra: string | null;
+  company_email: string | null;
+  company_address: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;
   national_id: string | null;
   kra_pin: string | null;
   phone: string | null;
-  county: string | null;
+  phone_verified: boolean;
   payout_same: boolean;
   payout_method: PayoutMethod;
   payout_detail: string | null;
@@ -275,7 +290,9 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     transmission: v.transmission,
     fuel: v.fuel,
     colour: v.colour ?? "",
+    county: v.county ?? "",
     pickupAddress: v.pickup_address ?? "",
+    chauffeured: v.chauffeured ?? true,
     dailyRate: v.daily_rate,
     photos: v.photos
       .filter((p): p is WireDocSlot => p !== null)
@@ -310,14 +327,16 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     companyName: state.company_name ?? "",
     certNo: state.company_cert_no ?? "",
     companyKra: state.company_kra ?? "",
+    companyEmail: state.company_email ?? "",
+    companyAddress: state.company_address ?? "",
     firstName: state.first_name ?? "",
     middleName: state.middle_name ?? "",
     surname: state.surname ?? "",
     nationalId: state.national_id ?? "",
     kraPin: state.kra_pin ?? "",
     phone: state.phone ?? "",
+    phoneVerified: state.phone_verified ?? false,
     email: "", // filled separately from GET /me, as before
-    county: state.county ?? "",
     payoutSame: state.payout_same,
     payoutMethod: state.payout_method,
     payoutDetail: state.payout_detail ?? "",
@@ -367,13 +386,14 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "companyName",
   "certNo",
   "companyKra",
+  "companyEmail",
+  "companyAddress",
   "firstName",
   "middleName",
   "surname",
   "nationalId",
   "kraPin",
   "phone",
-  "county",
   "payoutSame",
   "payoutMethod",
   "payoutDetail",
@@ -390,6 +410,8 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
   companyName: "company_name",
   certNo: "company_cert_no",
   companyKra: "company_kra",
+  companyEmail: "company_email",
+  companyAddress: "company_address",
   firstName: "first_name",
   middleName: "middle_name",
   nationalId: "national_id",
@@ -414,6 +436,23 @@ export async function syncDraftToServer(patch: Partial<OnboardingDraft>): Promis
   }
   if (Object.keys(wireBody).length === 0) return;
   await apiPatch("/merchant/onboarding", wireBody);
+}
+
+// --- phone verification ----------------------------------------------
+
+/**
+ * Pushes the current phone to the server, then texts a code to it. Kept
+ * here so callers don't have to know it's two calls — the debounced draft
+ * sync might not have landed the number yet when the merchant hits "Send
+ * code".
+ */
+export async function startPhoneVerification(phone: string): Promise<{ masked_destination: string }> {
+  await apiPatch("/merchant/onboarding", { phone });
+  return apiPost<{ masked_destination: string }>("/auth/phone/verification/start");
+}
+
+export async function confirmPhoneVerification(code: string): Promise<void> {
+  await apiPost("/auth/phone/verification/confirm", { code });
 }
 
 // --- vehicles --------------------------------------------------------

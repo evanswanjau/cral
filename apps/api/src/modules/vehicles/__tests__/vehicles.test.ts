@@ -25,12 +25,13 @@ function auth(token: string) {
 }
 
 const BASE_VEHICLE = {
-  type: "Car" as const,
+  type: "sedan" as const,
   make: "Toyota",
   model: "Axio",
   year: "2019",
   transmission: "Automatic" as const,
   fuel: "Petrol" as const,
+  county: "Nairobi",
   pickup_address: "Westlands, Nairobi",
   daily_rate: "4500",
 };
@@ -67,7 +68,9 @@ describe("vehicles — create and list", () => {
     const createRes = await createVehicle(accessToken, "KDL 442N");
     expect(createRes.status).toBe(201);
     expect(createRes.body.id).toMatch(/^veh_/);
-    expect(createRes.body.listing_ref).toMatch(/^CRAL-V-\d+$/);
+    // H + YYMMDD + a 3-digit per-day sequence (owner's call, 2026-08-31).
+    expect(createRes.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(createRes.body.county).toBe("Nairobi");
     expect(createRes.body.status).toBe("draft");
     expect(createRes.body.daily_rate).toEqual({ amount: 450000, currency: "KES" });
 
@@ -110,6 +113,38 @@ describe("vehicles — create and list", () => {
       .get(`/merchant/vehicles/${created.body.id}`)
       .set(auth(stranger.accessToken));
     expect(res.status).toBe(404);
+  });
+
+  it("rejects a registration already listed on the platform — even by a different merchant, and regardless of spacing/case", async () => {
+    const first = await newMerchant();
+    const second = await newMerchant();
+
+    const ok = await createVehicle(first.accessToken, "KXA 771Q");
+    expect(ok.status).toBe(201);
+
+    const sameMerchant = await createVehicle(first.accessToken, "kxa-771q");
+    expect(sameMerchant.status).toBe(409);
+    expect(sameMerchant.body.error.code).toBe("registration_taken");
+    expect(sameMerchant.body.error.field).toBe("registration");
+
+    const otherMerchant = await createVehicle(second.accessToken, "KXA771Q");
+    expect(otherMerchant.status).toBe(409);
+    expect(otherMerchant.body.error.code).toBe("registration_taken");
+  });
+
+  it("hands out per-day listing refs that advance within the day", async () => {
+    const { accessToken } = await newMerchant();
+    const a = await createVehicle(accessToken, "KAB 010A");
+    const b = await createVehicle(accessToken, "KAB 011B");
+
+    expect(a.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(b.body.listing_ref).toMatch(/^H\d{9}$/);
+    // Same Nairobi day → same date portion; sequence only moves forward.
+    // (Not strictly +1: the whole suite shares one daily counter.)
+    expect(a.body.listing_ref.slice(0, 7)).toBe(b.body.listing_ref.slice(0, 7));
+    expect(Number(b.body.listing_ref.slice(-3))).toBeGreaterThan(
+      Number(a.body.listing_ref.slice(-3)),
+    );
   });
 });
 
@@ -420,6 +455,21 @@ describe("vehicles — document upload", () => {
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("live");
+  });
+
+  it("rejects a document whose expiry date is already in the past", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KNN 400M");
+
+    const res = await request(app)
+      .post(`/merchant/vehicles/${created.body.id}/documents`)
+      .set(auth(accessToken))
+      .field("kind", "comprehensive_insurance")
+      .field("expires_at", "2020-06-01")
+      .attach("file", Buffer.from("stale cert"), { filename: "cert.pdf", contentType: "application/pdf" });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("expiry_in_past");
   });
 
   it("carries photos uploaded via the onboarding documents endpoint through to the vehicle detail", async () => {

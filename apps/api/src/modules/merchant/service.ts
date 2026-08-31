@@ -4,6 +4,9 @@ import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
+import { isUniqueViolation, rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { assertNotPast } from "../../lib/dates.js";
+import { normalizePhone } from "../../lib/identifier.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
   emailButton,
@@ -111,7 +114,13 @@ export async function getOnboardingState(userId: string) {
     .orderBy("created_at", "asc");
   const documents = await db<DocumentRow>("documents").where({ merchant_id: merchant.id });
 
-  return serializeState(merchant, vehicles, documents, user?.phone ?? null);
+  return serializeState(
+    merchant,
+    vehicles,
+    documents,
+    user?.phone ?? null,
+    Boolean(user?.phone_verified),
+  );
 }
 
 function serializeState(
@@ -119,6 +128,7 @@ function serializeState(
   vehicles: VehicleRow[],
   documents: DocumentRow[],
   phone: string | null,
+  phoneVerified: boolean,
 ) {
   const ownerDocs = {
     national_id: docSlot(documents.find((d) => d.vehicle_id === null && d.kind === "national_id")),
@@ -133,13 +143,17 @@ function serializeState(
     company_name: merchant.company_name,
     company_cert_no: merchant.company_cert_no,
     company_kra: merchant.company_kra,
+    company_email: merchant.company_email,
+    company_address: merchant.company_address,
     first_name: merchant.first_name,
     middle_name: merchant.middle_name,
     surname: merchant.surname,
     national_id: merchant.national_id,
     kra_pin: merchant.kra_pin,
-    phone, // lives on users, not merchants — see identity's §4 payout-phone deviation
-    county: merchant.county,
+    // Stored E.164, but the wizard's PhoneInput works in bare national
+    // digits (it prepends +254 itself) — hand it back in that shape.
+    phone: phone ? phone.replace(/^\+254/, "") : null,
+    phone_verified: phoneVerified,
     payout_same: merchant.payout_same,
     payout_method: merchant.payout_method,
     payout_detail: merchant.payout_detail,
@@ -167,8 +181,10 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     transmission: vehicle.transmission,
     fuel: vehicle.fuel,
     colour: vehicle.colour,
+    county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
+    chauffeured: vehicle.chauffeured,
     insurance_expiry: vehicle.insurance_expiry,
     docs: {
       logbook: docSlot(vehicleDocs.find((d) => d.kind === "logbook")),
@@ -182,8 +198,39 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
 // users.phone is the actual payout-phone home (see identity's spec §4
 // deviation); the onboarding wizard's "phone" field writes there, not to
 // merchants, so patching it needs a users update alongside the merchant one.
-async function setUserPhone(userId: string, phone: string): Promise<void> {
-  await db("users").where({ id: userId }).update({ phone });
+async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
+  const phone = normalizePhone(rawPhone);
+  if (!phone) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "invalid_phone",
+      message: "That doesn't look like a valid Kenyan phone number.",
+      field: "phone",
+    });
+  }
+
+  const current = await db("users").where({ id: userId }).first();
+  // Changing the number drops any prior verification — the new one hasn't
+  // been proven, and a verified flag must never follow a number it wasn't
+  // earned on.
+  const update: Record<string, unknown> =
+    current?.phone === phone ? { phone } : { phone, phone_verified: false };
+
+  try {
+    await db("users").where({ id: userId }).update(update);
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      throw new ApiError({
+        status: 409,
+        type: "conflict",
+        code: "phone_taken",
+        message: "That phone number is already registered to another account.",
+        field: "phone",
+      });
+    }
+    throw err;
+  }
 }
 
 export async function patchOnboarding(
@@ -238,19 +285,21 @@ function vehicleUpdateFromInput(input: VehicleInput) {
 
 export async function addVehicle(userId: string, input: CreateVehicleInput, _ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
-  const vehicle = await db.transaction(async (trx) => {
-    const listingRef = await nextListingRef(trx);
-    const [created] = await trx<VehicleRow>("vehicles")
-      .insert({
-        id: generateId("vehicle"),
-        merchant_id: merchant.id,
-        listing_ref: listingRef,
-        ...vehicleUpdateFromInput(input),
-      })
-      .returning("*");
-    if (!created) throw new Error("Failed to create vehicle");
-    return created;
-  });
+  const vehicle = await db
+    .transaction(async (trx) => {
+      const listingRef = await nextListingRef(trx);
+      const [created] = await trx<VehicleRow>("vehicles")
+        .insert({
+          id: generateId("vehicle"),
+          merchant_id: merchant.id,
+          listing_ref: listingRef,
+          ...vehicleUpdateFromInput(input),
+        })
+        .returning("*");
+      if (!created) throw new Error("Failed to create vehicle");
+      return created;
+    })
+    .catch(rethrowRegistrationConflict);
   await touchActivity(merchant.id);
   return serializeVehicle(vehicle, []);
 }
@@ -262,10 +311,12 @@ export async function patchVehicle(
   _ctx: RequestContext,
 ) {
   const vehicle = await requireOwnVehicle(userId, vehicleId);
+  if (input.insurance_expiry) assertNotPast(input.insurance_expiry, "insurance_expiry");
   const [updated] = await db<VehicleRow>("vehicles")
     .where({ id: vehicle.id })
     .update(vehicleUpdateFromInput(input))
-    .returning("*");
+    .returning("*")
+    .catch(rethrowRegistrationConflict);
   if (!updated) throw new Error("Failed to update vehicle");
   await touchActivity(vehicle.merchant_id);
   const documents = await db<DocumentRow>("documents").where({ vehicle_id: vehicle.id });
@@ -476,12 +527,14 @@ async function assertCompleteForSubmission(userId: string): Promise<{
   if (!merchant.national_id?.trim()) fail("National ID number is required.");
   if (!merchant.kra_pin?.trim()) fail("KRA PIN is required.");
   if (!user?.phone?.trim()) fail("Phone number is required.");
-  if (!merchant.county?.trim()) fail("County is required.");
+  if (!user?.phone_verified) fail("Verify your phone number before submitting.");
 
   if (merchant.owner_type === "company") {
     if (!merchant.company_name?.trim()) fail("Company name is required.");
     if (!merchant.company_cert_no?.trim()) fail("Certificate of incorporation number is required.");
     if (!merchant.company_kra?.trim()) fail("Company KRA PIN is required.");
+    if (!merchant.company_email?.trim()) fail("Company email is required.");
+    if (!merchant.company_address?.trim()) fail("Company physical location is required.");
   }
 
   const payoutFilled =
@@ -498,6 +551,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
   if (vehicles.length === 0) fail("Add at least one vehicle.");
 
   for (const v of vehicles) {
+    if (!v.county?.trim()) fail(`${v.registration || "A vehicle"} is missing its county.`);
     for (const kind of VEHICLE_DOC_KINDS) {
       if (!documents.some((d) => d.vehicle_id === v.id && d.kind === kind)) {
         fail(`${v.registration || "A vehicle"} is missing a required document.`);

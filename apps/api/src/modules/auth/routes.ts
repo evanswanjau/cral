@@ -17,6 +17,7 @@ import {
   LogoutSchema,
   OtpRequestSchema,
   OtpVerifySchema,
+  PhoneVerificationConfirmSchema,
   RefreshTokenSchema,
   RegisterSchema,
   ResetPasswordSchema,
@@ -156,6 +157,49 @@ authRouter.delete(
   asyncHandler(async (req, res) => {
     await authService.revokeSession(req.auth!.sub, req.params.id as string);
     res.status(204).send();
+  }),
+);
+
+// --- Onboarding phone verification -----------------------------------
+//
+// Proves the merchant holds the payout number before onboarding can be
+// submitted. Authenticated — it's the number already on the account.
+
+authRouter.post(
+  "/auth/phone/verification/start",
+  authenticate(),
+  // Keyed by user, not IP — every merchant on a shared NAT (or localhost)
+  // otherwise fights over one bucket. Each send still costs an SMS, so the
+  // cap stays low; the 15-minute window just lets a stuck flow recover.
+  rateLimit({
+    bucket: "phone_verify_start",
+    limit: 5,
+    windowSeconds: 900,
+    keyFn: (req) => req.auth?.sub ?? req.ip ?? "unknown",
+  }),
+  asyncHandler(async (req, res) => {
+    const result = await authService.startPhoneVerification(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.post(
+  "/auth/phone/verification/confirm",
+  authenticate(),
+  rateLimit({
+    bucket: "phone_verify_confirm",
+    limit: 15,
+    windowSeconds: 900,
+    keyFn: (req) => req.auth?.sub ?? req.ip ?? "unknown",
+  }),
+  validateBody(PhoneVerificationConfirmSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.confirmPhoneVerification(
+      req.auth!.sub,
+      req.body.code,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
   }),
 );
 

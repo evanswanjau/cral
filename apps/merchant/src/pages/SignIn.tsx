@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
 import { Checkbox, Field, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
-import { isTwoFactorRequired, login } from "../lib/auth-api.js";
+import { completeTwoFactorChallenge, isTwoFactorRequired, login } from "../lib/auth-api.js";
 import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
@@ -11,10 +11,10 @@ import { ApiClientError } from "../lib/api.js";
 /**
  * Sign in — the design's `isPassword` branch only.
  *
- * The canvas also draws an SMS-code method (`isPhoneEntry` / `isCodeEntry`),
- * but accounts are email + password from sign-up onwards, so a phone may not
- * be on file at all and the tab was a dead end more often than not. Second
- * factors belong in account settings later, not as a competing way in.
+ * Password is the only way in from this form. An account with opt-in SMS
+ * 2FA (enrolled from Settings → Security) gets a second step here: the
+ * password login returns no tokens, just a challenge, and the texted code
+ * finishes it.
  */
 export function SignIn(): JSX.Element {
   const navigate = useNavigate();
@@ -26,16 +26,17 @@ export function SignIn(): JSX.Element {
   const [remember, setRemember] = useState(true);
   const [busy, setBusy] = useState(false);
 
+  // Set once a password login comes back needing a code.
+  const [challenge, setChallenge] = useState<{ id: string; masked: string } | null>(null);
+  const [code, setCode] = useState("");
+
   async function signInWithPassword() {
     setError(null);
     setBusy(true);
     try {
       const result = await login(email.trim(), pw, deviceId());
-      // Nobody can be enrolled yet — settings has no 2FA screen — but the
-      // API can return this branch, and it carries no tokens. Say so rather
-      // than storing an undefined session.
       if (isTwoFactorRequired(result)) {
-        setError("This account needs a sign-in code, and that step isn't built yet.");
+        setChallenge({ id: result.challenge_id, masked: result.masked_destination });
         return;
       }
       setSession(result, remember);
@@ -56,6 +57,69 @@ export function SignIn(): JSX.Element {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function submitCode() {
+    setError(null);
+    setBusy(true);
+    try {
+      const result = await completeTwoFactorChallenge(challenge!.id, code.trim());
+      setSession(result, remember);
+      navigate("/");
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === "two_factor_challenge_expired") {
+        setError("That sign-in attempt expired. Enter your password again.");
+        setChallenge(null);
+        setCode("");
+      } else {
+        setError(err instanceof ApiClientError ? err.message : "That code didn't work. Try again.");
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (challenge) {
+    return (
+      <AuthShell
+        heading="Enter your code"
+        subheading={`We texted a 6-digit code to ${challenge.masked}. It expires in 10 minutes. Lost your phone? A recovery code works here too.`}
+        error={error}
+      >
+        <form
+          style={S.formStack}
+          onSubmit={(e) => {
+            e.preventDefault();
+            void submitCode();
+          }}
+        >
+          <Field id="code" label="SIGN-IN CODE">
+            <TextInput
+              id="code"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/[^0-9A-Za-z-]/g, "").slice(0, 20))}
+              placeholder="123456 or a recovery code"
+            />
+          </Field>
+          <PrimaryButton type="submit" disabled={busy || code.trim().length < 6}>
+            {busy ? "Checking…" : "Finish signing in"}
+          </PrimaryButton>
+          <button
+            type="button"
+            style={S.inlineBtn}
+            onClick={() => {
+              setChallenge(null);
+              setCode("");
+              setError(null);
+            }}
+          >
+            ← Start over
+          </button>
+        </form>
+      </AuthShell>
+    );
   }
 
   return (
