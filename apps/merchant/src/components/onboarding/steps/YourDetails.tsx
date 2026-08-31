@@ -7,7 +7,11 @@ import { Wallet } from "@phosphor-icons/react/dist/ssr/Wallet";
 import { O } from "../styles.js";
 import { BackButton, FormField, OptionCard, PrimaryButton, Select, TextInput } from "../primitives.js";
 import { BANKS } from "../../../lib/kenya.js";
-import type { OnboardingDraft } from "../../../lib/onboarding-draft.js";
+import {
+  confirmPhoneVerification,
+  startPhoneVerification,
+  type OnboardingDraft,
+} from "../../../lib/onboarding-draft.js";
 
 /** Solid (filled) Phosphor marks, white on the blue section badges. */
 const ICON = { size: 20, weight: "fill", color: "#FFFFFF" } as const;
@@ -72,6 +76,7 @@ export function YourDetails({
     draft.nationalId.trim() &&
     draft.kraPin.trim() &&
     draft.phone.trim() &&
+    draft.phoneVerified &&
     payoutFilled &&
     (!isCompany ||
       (draft.companyName.trim() &&
@@ -220,13 +225,24 @@ export function YourDetails({
             <FormField label="KRA PIN" required error={req(draft.kraPin)} helper="From your KRA PIN certificate.">
               <TextInput value={draft.kraPin} onChange={(e) => onChange({ kraPin: e.target.value.toUpperCase() })} placeholder="A012345678Z" error={showErrors && !draft.kraPin.trim()} />
             </FormField>
-            <FormField label="Phone number" required error={req(draft.phone)} helper="How we reach you about your listing.">
+            <FormField label="Phone number" required error={req(draft.phone)} helper="How we reach you about your listing. We text a code to confirm it.">
               <PhoneInput
                 value={draft.phone}
-                onChange={(v) => onChange({ phone: v })}
+                onChange={(v) =>
+                  onChange(draft.phoneVerified ? { phone: v, phoneVerified: false } : { phone: v })
+                }
                 error={showErrors && !draft.phone.trim()}
               />
             </FormField>
+          </div>
+
+          <div style={{ marginBottom: 18 }}>
+            <PhoneVerification
+              phone={draft.phone}
+              verified={draft.phoneVerified}
+              showError={showErrors && !draft.phoneVerified}
+              onVerified={() => onChange({ phoneVerified: true })}
+            />
           </div>
 
           <div style={O.formGrid3}>
@@ -368,6 +384,134 @@ export function YourDetails({
         <BackButton onClick={onBack}>← Back</BackButton>
         <PrimaryButton onClick={handleContinue}>Continue to vehicles</PrimaryButton>
       </div>
+    </div>
+  );
+}
+
+/**
+ * The SMS proof-of-ownership check on the payout phone (owner's call,
+ * 2026-08-31). Required before onboarding can be submitted — see
+ * `assertCompleteForSubmission`. `startPhoneVerification` also pushes the
+ * current number to the server first, so a merchant can hit "Send code"
+ * before the debounced draft sync has landed it.
+ */
+function PhoneVerification({
+  phone,
+  verified,
+  showError,
+  onVerified,
+}: {
+  phone: string;
+  verified: boolean;
+  showError: boolean;
+  onVerified: () => void;
+}): JSX.Element {
+  const [sent, setSent] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [masked, setMasked] = useState("");
+
+  if (verified) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          font: "600 13px/1.4 'Instrument Sans',sans-serif",
+          color: "#076945",
+        }}
+      >
+        <span style={{ ...O.checkChipBox, background: "#0B8A5B" }}>✓</span>
+        Phone number verified
+      </div>
+    );
+  }
+
+  const canSend = phone.replace(/\D/g, "").length >= 9 && !busy;
+
+  async function send(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await startPhoneVerification(phone);
+      setMasked(res.masked_destination);
+      setSent(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't send the code. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function confirm(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await confirmPhoneVerification(code.trim());
+      onVerified();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "That code didn't work. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: "12px 14px",
+        border: `1px solid ${showError ? "#F7BDC5" : "#E4E7EC"}`,
+        borderRadius: 10,
+        background: showError ? "#FEF3F4" : "#F8FAFC",
+      }}
+    >
+      {!sent ? (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+          }}
+        >
+          <span style={{ font: "500 13px/1.4 'Instrument Sans',sans-serif", color: "#475467" }}>
+            We confirm this number by text before you can submit.
+          </span>
+          <button type="button" style={O.secondaryBtnSmall} disabled={!canSend} onClick={() => void send()}>
+            {busy ? "Sending…" : "Send code"}
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ font: "500 13px/1.4 'Instrument Sans',sans-serif", color: "#475467" }}>
+            Enter the 6-digit code we texted to {masked}.
+          </span>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <TextInput
+              value={code}
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
+              inputMode="numeric"
+              style={{ maxWidth: 140 }}
+            />
+            <button
+              type="button"
+              style={O.primaryBtnSmall}
+              disabled={code.length !== 6 || busy}
+              onClick={() => void confirm()}
+            >
+              {busy ? "Checking…" : "Confirm"}
+            </button>
+            <button type="button" style={O.secondaryBtnSmall} disabled={busy} onClick={() => void send()}>
+              Resend
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <div style={{ ...O.fieldError, marginTop: 6 }}>{error}</div>}
     </div>
   );
 }

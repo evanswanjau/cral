@@ -60,6 +60,12 @@ export const AcceptTermsSchema = z.object({
   version: z.string(),
 });
 
+// --- Onboarding phone verification -----------------------------------
+
+export const PhoneVerificationConfirmSchema = z.object({
+  code: z.string().regex(/^[0-9]{6}$/),
+});
+
 // --- §7 Opt-in SMS two-factor -----------------------------------------
 
 export const Enroll2faSchema = z.object({

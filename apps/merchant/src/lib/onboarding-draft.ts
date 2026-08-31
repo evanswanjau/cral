@@ -91,6 +91,8 @@ export interface OnboardingDraft {
   nationalId: string;
   kraPin: string;
   phone: string;
+  /** Server-owned: true once the payout phone has passed SMS verification. Not patchable. */
+  phoneVerified: boolean;
   /** Read-only here - collected once at sign-up (CLAUDE.md's recorded decision), prefilled from GET /me. */
   email: string;
   payoutSame: boolean;
@@ -133,6 +135,7 @@ export function emptyDraft(): OnboardingDraft {
     nationalId: "",
     kraPin: "",
     phone: "",
+    phoneVerified: false,
     email: "",
     payoutSame: true,
     payoutMethod: "mpesa",
@@ -251,6 +254,7 @@ interface WireOnboardingState {
   national_id: string | null;
   kra_pin: string | null;
   phone: string | null;
+  phone_verified: boolean;
   payout_same: boolean;
   payout_method: PayoutMethod;
   payout_detail: string | null;
@@ -331,6 +335,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     nationalId: state.national_id ?? "",
     kraPin: state.kra_pin ?? "",
     phone: state.phone ?? "",
+    phoneVerified: state.phone_verified ?? false,
     email: "", // filled separately from GET /me, as before
     payoutSame: state.payout_same,
     payoutMethod: state.payout_method,
@@ -431,6 +436,23 @@ export async function syncDraftToServer(patch: Partial<OnboardingDraft>): Promis
   }
   if (Object.keys(wireBody).length === 0) return;
   await apiPatch("/merchant/onboarding", wireBody);
+}
+
+// --- phone verification ----------------------------------------------
+
+/**
+ * Pushes the current phone to the server, then texts a code to it. Kept
+ * here so callers don't have to know it's two calls — the debounced draft
+ * sync might not have landed the number yet when the merchant hits "Send
+ * code".
+ */
+export async function startPhoneVerification(phone: string): Promise<{ masked_destination: string }> {
+  await apiPatch("/merchant/onboarding", { phone });
+  return apiPost<{ masked_destination: string }>("/auth/phone/verification/start");
+}
+
+export async function confirmPhoneVerification(code: string): Promise<void> {
+  await apiPost("/auth/phone/verification/confirm", { code });
 }
 
 // --- vehicles --------------------------------------------------------

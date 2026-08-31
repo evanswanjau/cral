@@ -24,8 +24,14 @@ export function Review({
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const fullName = [draft.firstName, draft.middleName, draft.surname].filter(Boolean).join(" ");
 
+  const blockedReason = !draft.phoneVerified
+    ? "Verify your phone number on the Your details step first."
+    : !draft.termsAccepted
+      ? "Accept the merchant terms and conditions first."
+      : null;
+
   function handleSubmit() {
-    if (!draft.termsAccepted) {
+    if (blockedReason) {
       setAttemptedSubmit(true);
       return;
     }
@@ -70,7 +76,14 @@ export function Review({
             <ReviewRow label={draft.ownerType === "company" ? "Contact person" : "Name"} value={fullName || "-"} />
             <ReviewRow label="National ID" value={draft.nationalId || "-"} />
             <ReviewRow label="KRA PIN" value={draft.kraPin || "-"} />
-            <ReviewRow label="Phone" value={draft.phone ? `+254 ${draft.phone}` : "-"} />
+            <ReviewRow
+              label="Phone"
+              value={
+                draft.phone
+                  ? `+254 ${draft.phone}${draft.phoneVerified ? " · verified" : " · not verified"}`
+                  : "-"
+              }
+            />
             <ReviewRow label="Email" value={draft.email || "-"} />
             {draft.ownerType === "company" || draft.payoutMethod === "bank" ? (
               <ReviewRow
@@ -206,8 +219,8 @@ export function Review({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <BackButton onClick={onBack}>← Back to documents</BackButton>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          {attemptedSubmit && !draft.termsAccepted && (
-            <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>Accept the merchant terms and conditions first.</span>
+          {attemptedSubmit && blockedReason && (
+            <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>{blockedReason}</span>
           )}
           <PrimaryButton onClick={handleSubmit} disabled={submitting}>
             {submitting ? "Submitting…" : "Submit for review"}

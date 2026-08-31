@@ -50,7 +50,13 @@ function merchantAppUrl(): string {
   return (process.env.MERCHANT_APP_URL ?? "http://localhost:5174").replace(/\/+$/, "");
 }
 
-type OtpPurpose = "signup" | "login" | "phone_change" | "password_reset" | "two_factor_enrol";
+type OtpPurpose =
+  | "signup"
+  | "login"
+  | "phone_change"
+  | "phone_verify"
+  | "password_reset"
+  | "two_factor_enrol";
 
 export interface RequestContext {
   ip: string | null;
@@ -377,6 +383,90 @@ export async function verifyOtp(input: VerifyOtpInput, ctx: RequestContext) {
   }
 
   return { verified: true };
+}
+
+// ---------------------------------------------------------------------
+// Onboarding phone verification (owner's call, 2026-08-31)
+//
+// A one-time proof-of-ownership check on the payout number, required
+// before a merchant can submit onboarding. Separate from opt-in 2FA:
+// this verifies `users.phone` (the payout number, set in the wizard),
+// 2FA uses its own `users.two_factor_phone`. Reuses the `otp_codes`
+// table with its own purpose.
+// ---------------------------------------------------------------------
+
+export async function startPhoneVerification(userId: string) {
+  const user = await requireUser(userId);
+  if (!user.phone) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "phone_missing",
+      message: "Add your phone number first.",
+      field: "phone",
+    });
+  }
+  if (user.phone_verified) {
+    return { masked_destination: maskIdentifier(user.phone), already_verified: true as const };
+  }
+  await sendOtp(user.phone, "phone", "phone_verify");
+  return { masked_destination: maskIdentifier(user.phone), retry_after: 60 };
+}
+
+export async function confirmPhoneVerification(userId: string, code: string, ctx: RequestContext) {
+  const user = await requireUser(userId);
+  if (!user.phone) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "phone_missing",
+      message: "Add your phone number first.",
+      field: "phone",
+    });
+  }
+  if (user.phone_verified) return { phone_verified: true as const };
+
+  const row = await db<OtpCodeRow>("otp_codes")
+    .where({ identifier: user.phone, purpose: "phone_verify", consumed_at: null })
+    .orderBy("created_at", "desc")
+    .first();
+
+  if (!row || row.expires_at < new Date() || row.attempts >= OTP_MAX_ATTEMPTS) {
+    throw new ApiError({
+      status: 410,
+      type: "conflict",
+      code: "otp_expired",
+      message: "That code has expired. Ask for a new one.",
+    });
+  }
+
+  if (hashCode(code.trim()) !== row.code_hash) {
+    await db<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ attempts: row.attempts + 1 });
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "otp_incorrect",
+      message: "That code is incorrect.",
+      field: "code",
+    });
+  }
+
+  await db.transaction(async (trx) => {
+    await trx<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ consumed_at: new Date() });
+    await trx<UserRow>("users").where({ id: user.id }).update({ phone_verified: true });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "auth.phone.verified",
+      entityType: "user",
+      entityId: user.id,
+      after: { phone_verified: true },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  return { phone_verified: true as const };
 }
 
 // ---------------------------------------------------------------------

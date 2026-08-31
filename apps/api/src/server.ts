@@ -1,7 +1,8 @@
 import "./lib/load-env.js";
 import { createApp } from "./app.js";
-import { emailAdapter } from "./lib/adapters.js";
+import { emailAdapter, smsAdapter } from "./lib/adapters.js";
 import { SmtpEmailAdapter } from "./adapters/email/index.js";
+import { TextSmsAdapter } from "./adapters/sms/index.js";
 import { scheduleRepeatable, startMerchantReminderWorker } from "./jobs/merchant-reminders.js";
 import { scheduleBookingExpirySweep, startBookingExpiryWorker } from "./jobs/booking-expiry.js";
 
@@ -38,4 +39,14 @@ if (emailAdapter instanceof SmtpEmailAdapter) {
       console.warn(`[api] smtp NOT ready — ${(error as Error).message}`);
     },
   );
+}
+
+// TextSMS has no auth-only endpoint to probe; a missing credential already
+// throws from the adapter constructor at boot. Just say which path is live
+// so a `console` adapter in a real deployment is obvious in the logs.
+if (smsAdapter instanceof TextSmsAdapter) {
+  // eslint-disable-next-line no-console
+  console.log(`[api] sms ready — textsms (sender ${process.env.TEXTSMS_SHORTCODE})`);
+} else if (process.env.NODE_ENV === "production") {
+  console.warn("[api] sms adapter is 'console' in production — no SMS will be delivered");
 }

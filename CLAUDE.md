@@ -97,8 +97,16 @@ the keys with empty secrets.
 for the test run. Don't remove that — without it every test run tries to
 deliver verification codes to `@example.test` addresses.
 
-**SMS is still console.** No real provider is wired, so opt-in 2FA
-challenges can't actually be delivered yet; 2FA must stay off until one is.
+**SMS is live via TextSMS** (`SMS_ADAPTER=textsms`, decided 2026-08-31).
+`TextSmsAdapter` (`apps/api/src/adapters/sms/textsms-adapter.ts`) is one
+HTTPS POST to `sms.textsms.co.ke/api/services/sendsms/` — no SDK, same
+shape as `ResendEmailAdapter`. Needs `TEXTSMS_API_KEY` /
+`TEXTSMS_PARTNER_ID` / `TEXTSMS_SHORTCODE` in the gitignored `.env`; a
+missing one throws from the adapter constructor at boot. `console` stays
+the default for local dev and is pinned for the test run.
+`npm run sms:check -w apps/api -- +2547XXXXXXXX` sends one real test SMS.
+Two things it unblocked: opt-in SMS 2FA, and onboarding phone
+verification (below).
 
 ## Design tokens
 
@@ -251,15 +259,33 @@ specified TOTP (`secret` + `otpauth_uri`). The owner chose SMS on
 app is a bigger ask of this audience. The contract was rewritten to match,
 so it is once again the source of truth.
 
-**The 2FA UI is not built.** No settings section exists in `apps/merchant`
-(the only authenticated route is `/` → Overview), so nobody can enrol, and
-the sign-in screen has no code step — it shows a plain error if the API
-ever returns the `2fa` branch. Both are pending, by the owner's call
-("we will get to settings later").
+**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible).
+`apps/merchant` now has its first settings screen — **Settings → Security**
+(`/settings/security`, `pages/SecuritySettings.tsx`, linked from `SideNav`)
+— with the enrol flow (phone → texted code → the ten recovery codes,
+shown once) and the disable flow (password + a current/recovery code).
+`SignIn.tsx` handles the `next: "2fa"` branch with a real code step
+(`completeTwoFactorChallenge`), not the old placeholder error. The
+server-side 2FA endpoints were already there; this is only the UI.
 
-`verifyLoginOtp`, `PhoneInput` and `toE164` in `apps/merchant` are
-referenced by nothing right now. They're kept for onboarding's payout-phone
-step and the 2FA screens; don't delete them as dead code.
+`verifyLoginOtp` and `PhoneInput` in `apps/merchant` are still referenced
+by nothing (the passwordless-SMS-login tab stayed cut). `toE164` is now
+used by the 2FA settings screen. Don't delete the first two as dead code —
+they're kept against a future account-settings need.
+
+**Onboarding phone verification** (owner's call, 2026-08-31). The payout
+phone must pass an SMS proof-of-ownership check before onboarding can be
+submitted — a deliberate extension of the 2026-08-24 "SMS is only ever a
+2FA challenge" decision to also cover one-time phone verification at
+payout setup (the number is already being collected there; spec §10's KES
+1 name-lookup is still a separate, unbuilt thing). Endpoints
+`POST /auth/phone/verification/{start,confirm}` (authenticated, reuse the
+`otp_codes` table with purpose `phone_verify`); `assertCompleteForSubmission`
+gates on `users.phone_verified`; `GET /merchant/onboarding` and
+`GET /auth/registration-state` both report it. `setUserPhone` now
+normalises to E.164 and clears `phone_verified` whenever the number
+changes. The wizard's "Your details" step carries the verify UI and won't
+advance until it's done.
 
 **Bookings was built into the merchant portal ahead of the delivery plan's
 own phase ordering** (decided 2026-08-31, owner's explicit call — the

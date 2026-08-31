@@ -214,6 +214,57 @@ paths:
                   merchant_profile_required: { type: boolean }
                   merchant_profile_present: { type: boolean }
 
+  /auth/phone/verification/start:
+    post:
+      tags: [registration]
+      summary: Text a one-time code to the payout phone on file
+      operationId: startPhoneVerification
+      description: >
+        Sends a six-digit code by SMS to `users.phone` so the merchant can
+        prove they hold the payout number. Required before onboarding can
+        be submitted (owner's call, 2026-08-31). 409 `phone_missing` if no
+        number is on file; returns `already_verified: true` and sends
+        nothing if it is already verified.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Code sent (or already verified)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  masked_destination: { type: string }
+                  retry_after: { type: integer }
+                  already_verified: { type: boolean }
+
+  /auth/phone/verification/confirm:
+    post:
+      tags: [registration]
+      summary: Confirm the texted code and mark the payout phone verified
+      operationId: confirmPhoneVerification
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Verified
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone_verified: { type: boolean }
+        "401": { description: Wrong code (`otp_incorrect`) }
+        "410": { description: Code expired (`otp_expired`) }
+
   /auth/terms/accept:
     post:
       tags: [registration]

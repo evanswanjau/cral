@@ -363,6 +363,7 @@ components:
         national_id: { type: string, nullable: true }
         kra_pin: { type: string, nullable: true }
         phone: { type: string, nullable: true }
+        phone_verified: { type: boolean, description: "Payout phone has passed SMS verification — required before submit" }
         payout_same: { type: boolean }
         payout_method: { type: string, enum: [mpesa, bank] }
         payout_detail: { type: string, nullable: true }

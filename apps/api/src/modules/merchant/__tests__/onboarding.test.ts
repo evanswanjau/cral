@@ -22,6 +22,15 @@ async function newMerchant() {
   return user;
 }
 
+/**
+ * Onboarding submission now requires a verified payout phone. The console
+ * SMS adapter doesn't surface the code to the test, so flip the flag
+ * directly — same shortcut `createVerifiedTestUser` takes for email.
+ */
+async function markPhoneVerified(userId: string) {
+  await db("users").where({ id: userId }).update({ phone_verified: true });
+}
+
 function auth(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
@@ -365,7 +374,7 @@ describe("merchant onboarding — document upload", () => {
 
 describe("merchant onboarding — submit", () => {
   it("422s when incomplete and 200s once every requirement is satisfied", async () => {
-    const { accessToken } = await newMerchant();
+    const { accessToken, userId } = await newMerchant();
 
     const incomplete = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
     expect(incomplete.status).toBe(422);
@@ -384,6 +393,7 @@ describe("merchant onboarding — submit", () => {
         phone: "+254712345678",
         terms_accepted: true,
       });
+    await markPhoneVerified(userId);
 
     const vehicleRes = await request(app)
       .post("/merchant/onboarding/vehicles")
@@ -449,7 +459,7 @@ describe("merchant onboarding — submit", () => {
   });
 
   it("blocks a company submission until company email and physical location are on file", async () => {
-    const { accessToken } = await newMerchant();
+    const { accessToken, userId } = await newMerchant();
 
     await request(app)
       .patch("/merchant/onboarding")
@@ -471,6 +481,7 @@ describe("merchant onboarding — submit", () => {
         phone: "+254712345688",
         terms_accepted: true,
       });
+    await markPhoneVerified(userId);
 
     const vehicleRes = await request(app)
       .post("/merchant/onboarding/vehicles")

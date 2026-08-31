@@ -132,18 +132,19 @@ describe("vehicles — create and list", () => {
     expect(otherMerchant.body.error.code).toBe("registration_taken");
   });
 
-  it("hands out per-day listing refs that increment within the day", async () => {
+  it("hands out per-day listing refs that advance within the day", async () => {
     const { accessToken } = await newMerchant();
     const a = await createVehicle(accessToken, "KAB 010A");
     const b = await createVehicle(accessToken, "KAB 011B");
 
     expect(a.body.listing_ref).toMatch(/^H\d{9}$/);
     expect(b.body.listing_ref).toMatch(/^H\d{9}$/);
-    const seqA = Number(a.body.listing_ref.slice(-3));
-    const seqB = Number(b.body.listing_ref.slice(-3));
-    expect(seqB).toBe(seqA + 1);
-    // Same Nairobi day → same date portion.
+    // Same Nairobi day → same date portion; sequence only moves forward.
+    // (Not strictly +1: the whole suite shares one daily counter.)
     expect(a.body.listing_ref.slice(0, 7)).toBe(b.body.listing_ref.slice(0, 7));
+    expect(Number(b.body.listing_ref.slice(-3))).toBeGreaterThan(
+      Number(a.body.listing_ref.slice(-3)),
+    );
   });
 });
 
