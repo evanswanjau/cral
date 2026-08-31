@@ -12,6 +12,7 @@
  * authority for this screen.
  */
 import type { VehicleFilter } from "../../lib/vehicles-api.js";
+import type { BookingFilter, BookingStatus } from "../../lib/bookings-api.js";
 
 export type VehicleStatus = "draft" | "pending" | "review" | "action" | "rejected" | "live" | "paused";
 export type DocReviewState = "ok" | "pending" | "expiring" | "rejected" | "missing";
@@ -85,4 +86,38 @@ export function filterLabel(f: VehicleFilter): string {
 export function money(cents: number | null | undefined): string {
   if (!cents) return "—";
   return Math.round(cents / 100).toLocaleString("en-KE");
+}
+
+/**
+ * A third status vocabulary — bookings are neither the brand's five
+ * verification states nor the Vehicles screen's seven listing states.
+ * Reuses the *same* quartet hex values as STATUS above (this is the same
+ * design system, not a new palette): pending's amber for a fresh request,
+ * review's blue for a confirmed-but-not-yet-collected booking, live's
+ * green for one out on hire, and a neutral/rejected pairing for the three
+ * ways a booking ends without completing.
+ */
+export const BOOKING_STATUS: Record<BookingStatus, { label: string; core: string; tint: string; border: string; text: string }> = {
+  requested: { label: "New request", core: "#C77400", tint: "#FFF3DB", border: "#F5D9A3", text: "#8A5200" },
+  confirmed: { label: "Upcoming", core: "#0B7BC1", tint: "#E1F1FA", border: "#A9D6EE", text: "#075D93" },
+  active: { label: "On hire", core: "#0B8A5B", tint: "#DDF3E9", border: "#A8DEC7", text: "#076945" },
+  completed: { label: "Completed", core: "#838C9B", tint: "#F1F3F6", border: "#CDD2DA", text: "#5A6373" },
+  declined: { label: "Declined", core: "#D81E32", tint: "#FDE7EA", border: "#F7BDC5", text: "#A50E22" },
+  expired: { label: "Expired", core: "#838C9B", tint: "#F1F3F6", border: "#CDD2DA", text: "#5A6373" },
+  cancelled: { label: "Cancelled", core: "#D81E32", tint: "#FDE7EA", border: "#F7BDC5", text: "#A50E22" },
+};
+
+const BOOKING_BUCKET_LABEL: Record<BookingFilter, string> = {
+  all: "All",
+  requests: "Requests",
+  upcoming: "Upcoming",
+  on_hire: "On hire",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+export const BOOKING_FILTER_ORDER: BookingFilter[] = ["all", "requests", "upcoming", "on_hire", "completed", "cancelled"];
+
+export function bookingFilterLabel(f: BookingFilter): string {
+  return BOOKING_BUCKET_LABEL[f];
 }

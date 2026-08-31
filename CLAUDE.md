@@ -261,6 +261,54 @@ ever returns the `2fa` branch. Both are pending, by the owner's call
 referenced by nothing right now. They're kept for onboarding's payout-phone
 step and the 2FA screens; don't delete them as dead code.
 
+**Bookings was built into the merchant portal ahead of the delivery plan's
+own phase ordering** (decided 2026-08-31, owner's explicit call — the
+plan's Phases 4–6 cover discovery/booking, money, and handover in that
+order, but there's no customer portal or Daraja integration yet). Contract
+is `openapi/merchant-bookings.yaml`, code is
+`apps/api/src/modules/bookings/` and `apps/merchant/src/pages/Booking*`.
+
+- **The pickup/return code is a separate secret from the booking ref.**
+  `CB-2841` is the public plated reference both sides read aloud (visible
+  to the merchant on their own screen); the handover code is a distinct
+  one-time code the hirer reads to the merchant to prove presence. Using
+  digits from the public ref (an earlier idea) would prove nothing, since
+  the merchant already has it.
+- **The deposit hold is two clocks, not a bug.** 24h is the normal
+  release after return; filing a claim extends it to 48h from the actual
+  return moment (`bookings.returned_at`) while CRAL reviews it. Both
+  figures come from the design's own return-modal copy — an earlier
+  session misread them as conflicting and only ever implemented the 24h
+  clock; that's fixed as of 2026-08-31's review pass.
+- **Reports split into `claim` (money) and `conduct` (no money).** A claim
+  is capped at the deposit held; anything above the cap escalates to a
+  dispute (`dsp_`, no real disputes table yet — Phase 6+) rather than
+  being silently discarded. The merchant-facing amount field must never
+  clamp client-side to the deposit — that makes the escalation
+  unreachable, which happened once and was fixed 2026-08-31.
+- **A damage claim needs pickup condition photos on file.** Photos are
+  optional at handover, but skipping them is disclosed as a consequence
+  at skip time, not discovered later at claim time.
+- **The handover is a reduced version of the platform spec's protocol.**
+  The spec has the customer's app show a QR code (proximity) plus an
+  emailed/texted OTP (identity), both sides confirming a joint condition
+  report. No customer app exists yet, so the QR step is skipped and
+  confirmation is single-sided — `Handover.required` and `.state` are
+  shaped so the real protocol slots in later without a schema change.
+- **No hirer ID-verification pipeline exists.** `HirerHistory` has no
+  `id_verified` field on purpose — an earlier pass hardcoded it to `true`
+  as a fabricated trust badge, which is precisely the kind of thing this
+  product's whole premise says never to do. Add the field only once
+  something real backs it.
+- **Idempotency-Key is required on every booking POST that moves money**
+  (confirm, decline, cancel, complete-handover, file-report) per spec §2
+  — including `decline` and `reports`, which were missed in the first
+  pass and would have let a double-submit refund or claim twice.
+- **`/merchant/bookings/dev-seed` is real and documented in the
+  contract, but dev/test-only** (`NODE_ENV !== "production"` guard in
+  routes.ts) — there's no customer portal to generate real requests yet,
+  so this is how the Bookings screen gets anything to demo against.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

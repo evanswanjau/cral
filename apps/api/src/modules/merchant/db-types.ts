@@ -72,7 +72,8 @@ export type DocumentKind =
   | "logbook"
   | "comprehensive_insurance"
   | "tracker_certificate"
-  | "vehicle_photo";
+  | "vehicle_photo"
+  | "handover_photo";
 
 export type DocumentReviewState = "ok" | "pending" | "expiring" | "rejected";
 

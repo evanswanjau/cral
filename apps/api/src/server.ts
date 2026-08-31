@@ -3,6 +3,7 @@ import { createApp } from "./app.js";
 import { emailAdapter } from "./lib/adapters.js";
 import { SmtpEmailAdapter } from "./adapters/email/index.js";
 import { scheduleRepeatable, startMerchantReminderWorker } from "./jobs/merchant-reminders.js";
+import { scheduleBookingExpirySweep, startBookingExpiryWorker } from "./jobs/booking-expiry.js";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -20,6 +21,8 @@ app.listen(port, () => {
 if (process.env.NODE_ENV !== "test") {
   void scheduleRepeatable();
   startMerchantReminderWorker();
+  void scheduleBookingExpirySweep();
+  startBookingExpiryWorker();
 }
 
 // Prove the mail path at boot rather than the first time someone registers
