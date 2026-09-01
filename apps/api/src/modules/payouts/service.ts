@@ -17,9 +17,6 @@ import type { CreatePayoutQueryInput, ListPayoutsQuery } from "./schemas.js";
  */
 const SUPPORT_EMAIL = process.env.PAYOUT_SUPPORT_EMAIL ?? "support@cral.co.ke";
 
-/** How many weeks the Payouts screen's net-earnings chart covers. */
-const CHART_WEEKS = 8;
-
 function notFound(): never {
   throw new ApiError({
     status: 404,
@@ -50,35 +47,12 @@ function nairobiDayStart(day: string): Date {
   return new Date(Date.parse(`${day}T00:00:00.000Z`) - NAIROBI_OFFSET_MS);
 }
 
-/**
- * The Monday of the Nairobi week an instant falls in, as "YYYY-MM-DD".
- * Weeks start Monday because the payout rhythm does ("Weekly · Mondays").
- */
-function nairobiWeekStart(instant: Date): string {
-  const shifted = new Date(instant.getTime() + NAIROBI_OFFSET_MS);
-  const dow = (shifted.getUTCDay() + 6) % 7; // 0 = Monday
-  shifted.setUTCDate(shifted.getUTCDate() - dow);
-  return shifted.toISOString().slice(0, 10);
-}
-
 /** The next Monday on or after `from`, in Nairobi, as "YYYY-MM-DD". */
 function nextMonday(from: Date): string {
   const shifted = new Date(from.getTime() + NAIROBI_OFFSET_MS);
   const dow = (shifted.getUTCDay() + 6) % 7;
   shifted.setUTCDate(shifted.getUTCDate() + (dow === 0 ? 0 : 7 - dow));
   return shifted.toISOString().slice(0, 10);
-}
-
-/**
- * ISO-ish week label ("W32") for a week-start day. The design's chart uses
- * these as axis labels; they only ever have to be stable and ordered, not
- * survive a year boundary as a unique key.
- */
-function weekLabel(weekStartDay: string): string {
-  const date = new Date(`${weekStartDay}T00:00:00.000Z`);
-  const jan1 = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
-  const week = Math.floor((date.getTime() - jan1.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
-  return `W${week}`;
 }
 
 // ---------------------------------------------------------------------
@@ -185,7 +159,7 @@ function composeFootnote(run: PayoutRunRow, lineCount: number): string {
     case "processing":
       return `On its way to M-Pesa ${run.destination_detail}. Safaricom usually confirms within a few minutes.`;
     case "failed":
-      return `This run did not go through. CRAL support is looking into it — raise a query below if you need an update.`;
+      return `This run did not go through. CRAL support is looking into it. Raise a query below if you need an update.`;
     case "scheduled":
     default:
       return `This run goes out on ${weekdayOf(run.run_date)} morning. Anything returned and cleared before the night before joins it automatically.`;
@@ -365,37 +339,6 @@ async function buildSummary(merchantId: string, destination: { method: string; d
     .filter((r) => r.paid_at !== null && r.paid_at >= monthStart)
     .reduce((sum, r) => sum + r.net_amount, 0);
 
-  // Eight Nairobi weeks of net earnings, oldest first. Weeks with no run are
-  // real zeroes, not gaps — a missing column would read as "no data" when it
-  // actually means "nothing was paid out".
-  const buckets = new Map<string, number>();
-  const thisWeek = nairobiWeekStart(now);
-  for (let i = CHART_WEEKS - 1; i >= 0; i--) {
-    const d = new Date(`${thisWeek}T00:00:00.000Z`);
-    d.setUTCDate(d.getUTCDate() - i * 7);
-    buckets.set(d.toISOString().slice(0, 10), 0);
-  }
-  for (const run of paidRuns) {
-    if (!run.paid_at) continue;
-    const week = nairobiWeekStart(run.paid_at);
-    if (buckets.has(week)) buckets.set(week, buckets.get(week)! + run.net_amount);
-  }
-  const bars = [...buckets.entries()].map(([week, amount]) => ({ label: weekLabel(week), net: kes(amount) }));
-  const barsTotal = bars.reduce((sum, b) => sum + b.net.amount, 0);
-
-  // Last *completed* week against the mean of the weeks before it. The final
-  // bar is the week currently in progress, and measuring a part-week against
-  // full ones reads as a collapse every Monday morning — on a fresh account
-  // it reported a confident "down 100%" purely because this week's run had
-  // not been cut yet. Null unless there is a non-zero baseline, since a
-  // percentage off zero is not a fact.
-  const completedWeeks = bars.slice(0, -1);
-  const lastComplete = completedWeeks[completedWeeks.length - 1]?.net.amount ?? 0;
-  const baselineWeeks = completedWeeks.slice(0, -1);
-  const baseline =
-    baselineWeeks.length > 0 ? baselineWeeks.reduce((s, b) => s + b.net.amount, 0) / baselineWeeks.length : 0;
-  const barsChangePct = baseline > 0 ? Math.round(((lastComplete - baseline) / baseline) * 100) : null;
-
   const allRuns = await db<PayoutRunRow>("payout_runs").where({ merchant_id: merchantId }).select("net_amount");
 
   const nextHires =
@@ -428,9 +371,6 @@ async function buildSummary(merchantId: string, destination: { method: string; d
         note: `${paidRuns.filter((r) => r.paid_at !== null && r.paid_at >= monthStart).length} runs · after commission`,
       },
     ],
-    bars,
-    bars_total: kes(barsTotal),
-    bars_change_pct: barsChangePct,
     run_count: allRuns.length,
     net_total: kes(allRuns.reduce((sum, r) => sum + r.net_amount, 0)),
     destination: { method: destination.method, detail: destination.detail, account_name: destination.accountName },
@@ -670,7 +610,7 @@ export async function createPayoutQuery(
         preheader: `A merchant has queried ${run.ref}.`,
         bodyHtml: [
           emailHeading("Payout query"),
-          emailParagraph(`${run.ref} — KES ${formatAmount(run.net_amount)} net, run date ${run.run_date}, status ${run.status}.`),
+          emailParagraph(`${run.ref}: KES ${formatAmount(run.net_amount)} net, run date ${run.run_date}, status ${run.status}.`),
           emailParagraph(input.message),
           emailMuted(`Merchant ${merchant.id} · user ${userId} · query ${id}`),
         ].join(""),

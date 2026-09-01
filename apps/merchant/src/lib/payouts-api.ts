@@ -14,7 +14,7 @@ export interface PayoutRunSummary {
   id: string;
   ref: string;
   status: PayoutStatus;
-  /** Nairobi calendar day, "YYYY-MM-DD" — a banking day, not an instant. */
+  /** Nairobi calendar day, "YYYY-MM-DD": a banking day, not an instant. */
   run_date: string;
   gross: Money;
   commission: Money;
@@ -26,7 +26,7 @@ export interface PayoutRunSummary {
 
 export interface PayoutRunLine {
   id: string;
-  /** Null once a booking has been archived — the line survives it. */
+  /** Null once a booking has been archived; the line survives it. */
   booking_id: string | null;
   booking_ref: string;
   hirer_name: string;
@@ -53,16 +53,8 @@ export interface PayoutTile {
   note: string;
 }
 
-export interface PayoutBar {
-  label: string;
-  net: Money;
-}
-
 export interface PayoutSummary {
   tiles: PayoutTile[];
-  bars: PayoutBar[];
-  bars_total: Money;
-  bars_change_pct: number | null;
   run_count: number;
   net_total: Money;
   destination: PayoutDestination;

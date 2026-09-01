@@ -238,7 +238,6 @@ describe("merchant payouts", () => {
     const tile = res.body.summary.tiles.find((t: { key: string }) => t.key === "next_payout");
     // The tile and the row beneath it must agree — see buildSummary's note.
     expect(tile.amount.amount).toBe(run!.net_amount);
-    expect(res.body.summary.bars).toHaveLength(8);
   });
 
   it("serves the receipt as a real PDF", async () => {

@@ -26,7 +26,8 @@ info:
     when the line was cut, not a live read of the booking. A later change to
     `COMMISSION_RATE` must never rewrite what a merchant was already paid, so
     a run's totals are the sum of its own line snapshots and are never
-    recomputed from rates. The 10% figure in the UI copy is display only.
+    recomputed from rates. The commission rate is never quoted as a figure
+    in merchant-facing copy, only as the amount it worked out to.
 
     A booking pays out exactly once — `PayoutRunLine.booking_id` is globally
     unique. The "next payout run" reported by `listPayouts` is a live
@@ -368,31 +369,12 @@ components:
         amount: { $ref: "#/components/schemas/Money" }
         note: { type: string, description: The sub-line, e.g. "2 hires · Monday 17 August" }
 
-    PayoutBar:
-      type: object
-      description: One column of the eight-week net-earnings chart
-      properties:
-        label: { type: string, example: W32 }
-        net: { $ref: "#/components/schemas/Money" }
-
     PayoutSummary:
       type: object
       properties:
         tiles:
           type: array
           items: { $ref: "#/components/schemas/PayoutTile" }
-        bars:
-          type: array
-          description: Eight weeks of net earnings, oldest first
-          items: { $ref: "#/components/schemas/PayoutBar" }
-        bars_total: { $ref: "#/components/schemas/Money" }
-        bars_change_pct:
-          type: integer
-          nullable: true
-          description: >
-            Percent change of the latest week against the mean of the seven
-            before it. Null when there is not enough history to say anything
-            honest.
         run_count: { type: integer, description: Runs in the list, for the foot line }
         net_total: { $ref: "#/components/schemas/Money" }
         destination: { $ref: "#/components/schemas/PayoutDestination" }

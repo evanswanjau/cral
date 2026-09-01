@@ -7,7 +7,6 @@ import {
   downloadStatement,
   usePayoutList,
   useSeedDevPayouts,
-  type PayoutBar,
   type PayoutRunSummary,
   type PayoutTile,
 } from "../lib/payouts-api.js";
@@ -30,7 +29,7 @@ const TILE_LABEL: Record<PayoutTile["key"], string> = {
 };
 
 /**
- * The third tile is the only one on a tinted ground — it is the figure that
+ * The third tile is the only one on a tinted ground: it is the figure that
  * has actually landed, and the design lifts it out of the other two.
  */
 function tileSkin(key: PayoutTile["key"]) {
@@ -49,6 +48,7 @@ function tileSkin(key: PayoutTile["key"]) {
 
 function Tile({ tile }: { tile: PayoutTile }): JSX.Element {
   const skin = tileSkin(tile.key);
+  const amount = money(tile.amount.amount);
   return (
     <div style={{ ...P.poTile, background: skin.bg, border: `1px solid ${skin.border}` }}>
       <div style={P.poTileHead}>
@@ -56,52 +56,9 @@ function Tile({ tile }: { tile: PayoutTile }): JSX.Element {
         <span style={{ ...P.poTileKicker, color: skin.kFg }}>{TILE_LABEL[tile.key]}</span>
       </div>
       <div style={{ ...P.poTileValue, color: "#0B0F1A" }}>
-        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {money(tile.amount.amount) === "—" ? "0" : money(tile.amount.amount)}
+        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {amount === "—" ? "0" : amount}
       </div>
       <div style={{ ...P.poTileSub, color: skin.subFg }}>{tile.note}</div>
-    </div>
-  );
-}
-
-function Chart({ bars, total, changePct }: { bars: PayoutBar[]; total: number; changePct: number | null }): JSX.Element {
-  const max = Math.max(...bars.map((b) => b.net.amount), 1);
-  return (
-    <div style={P.poChartCard}>
-      <div style={P.poChartHead}>
-        <div>
-          <div style={P.poChartTitle}>Net earnings</div>
-          <div style={P.poChartSub}>Last 8 weeks, after commission</div>
-        </div>
-        {/* Null when there isn't enough history for the figure to mean
-            anything — better a blank than a confident-looking 0%. */}
-        {changePct !== null && (
-          <span style={{ ...P.poChartDelta, color: changePct >= 0 ? "#0B8A5B" : "#A50E22" }}>
-            {changePct >= 0 ? "▲" : "▼"} {Math.abs(changePct)}%
-          </span>
-        )}
-      </div>
-      <div style={P.poBars}>
-        {bars.map((bar, i) => {
-          const last = i === bars.length - 1;
-          return (
-            <div key={bar.label} style={P.poBarCol}>
-              <div
-                style={{
-                  ...P.poBar,
-                  height: `${Math.max(4, Math.round((bar.net.amount / max) * 104))}px`,
-                  background: last ? "#EDEFFC" : "#DCE1FA",
-                  border: `1px solid ${last ? "#B6C0F4" : "#DCE1FA"}`,
-                }}
-              />
-              <span style={{ ...P.poBarLabel, color: last ? "#0F23A8" : "#A7AEBB" }}>{bar.label}</span>
-            </div>
-          );
-        })}
-      </div>
-      <div style={P.poChartFoot}>
-        <span style={P.poChartFootKey}>8-week total</span>
-        <span style={P.poChartFootVal}>KES {money(total) === "—" ? "0" : money(total)}</span>
-      </div>
     </div>
   );
 }
@@ -141,13 +98,13 @@ function SkeletonRow(): JSX.Element {
   const bar = (width: number, height = 12): CSSProperties => ({ ...P.skeletonBar, width, height });
   return (
     <div style={{ ...P.poHistoryRow, cursor: "default" }}>
-      <div className="cral-shimmer" style={{ ...bar(74, 26), borderRadius: 4 }} />
+      <div className="cral-shimmer" style={{ ...bar(80, 26), borderRadius: 4 }} />
       <div>
         <div className="cral-shimmer" style={bar(110)} />
         <div className="cral-shimmer" style={{ ...bar(80, 10), marginTop: 6 }} />
       </div>
-      <div className="cral-shimmer" style={{ ...bar(60), marginLeft: "auto" }} />
-      <div className="cral-shimmer" style={{ ...bar(84, 22), borderRadius: 999 }} />
+      <div className="cral-shimmer" style={{ ...bar(64), marginLeft: "auto" }} />
+      <div className="cral-shimmer" style={{ ...bar(92, 22), borderRadius: 999 }} />
       <span />
     </div>
   );
@@ -200,59 +157,22 @@ export function PayoutList(): JSX.Element {
           <h1 style={P.h1}>Payouts</h1>
           <p style={P.lede}>Hirers pay CRAL upfront. Your payout clears 24 hours after the vehicle comes back.</p>
         </div>
-        <button type="button" onClick={onStatement} disabled={downloading} style={{ ...P.addButton, background: "#FFFFFF", color: "#1A1F2B", border: "1px solid #CDD2DA" }}>
+        <button
+          type="button"
+          onClick={onStatement}
+          disabled={downloading}
+          style={{ ...P.addButton, background: "#FFFFFF", color: "#1A1F2B", border: "1px solid #CDD2DA" }}
+        >
           {downloading ? "Preparing…" : "Monthly statement"}
         </button>
       </div>
 
       {summary && (
-        <>
-          <div style={P.poTileGrid}>
-            {summary.tiles.map((tile) => (
-              <Tile key={tile.key} tile={tile} />
-            ))}
-          </div>
-
-          <div style={P.poSplit}>
-            <div style={P.poNextCard}>
-              <div style={P.poNextHead}>
-                <span style={P.poNextRule} />
-                <span style={P.poNextKicker}>NEXT PAYOUT RUN</span>
-              </div>
-              <div style={P.poNextBody}>
-                <div>
-                  <div style={P.poNextAmount}>
-                    <span style={P.poNextUnit}>KES</span>{" "}
-                    {money(summary.tiles.find((t) => t.key === "next_payout")?.amount.amount ?? 0) === "—"
-                      ? "0"
-                      : money(summary.tiles.find((t) => t.key === "next_payout")?.amount.amount ?? 0)}
-                  </div>
-                  <div style={P.poNextNote}>
-                    {summary.next_run_date
-                      ? `Goes out ${formatRunDate(summary.next_run_date)}. Anything returned and cleared before then joins it automatically.`
-                      : "Nothing is waiting to go out. Finished hires join the next run once their deposit is released."}
-                  </div>
-                </div>
-                <div style={P.poDestChip}>
-                  <span style={P.poDestMark}>M</span>
-                  <div>
-                    <div style={P.poDestLine}>{summary.destination.detail}</div>
-                    <div style={P.poDestKicker}>M-PESA · {summary.destination.account_name.toUpperCase()}</div>
-                  </div>
-                </div>
-              </div>
-              <div style={P.poNextFoot}>
-                {/* The design also offers a bank destination and an SMS-gated
-                    "Edit details". No bank fields exist in the schema yet, so
-                    this states what is true rather than offering a dead
-                    control — see the contract's destination note. */}
-                <span style={P.poNextFootNote}>M-PESA · SAME DAY · SET AT ONBOARDING</span>
-              </div>
-            </div>
-
-            <Chart bars={summary.bars} total={summary.bars_total.amount} changePct={summary.bars_change_pct} />
-          </div>
-        </>
+        <div style={P.poTileGrid}>
+          {summary.tiles.map((tile) => (
+            <Tile key={tile.key} tile={tile} />
+          ))}
+        </div>
       )}
 
       <div style={P.table}>
@@ -286,7 +206,7 @@ export function PayoutList(): JSX.Element {
               {summary?.run_count} {summary?.run_count === 1 ? "PAYOUT RUN" : "PAYOUT RUNS"} · KES{" "}
               {money(summary?.net_total.amount ?? 0)} NET
             </span>
-            <span style={P.tableFooterRight}>Commission is 10% of completed bookings only.</span>
+            <span style={P.tableFooterRight}>CRAL commission applies to completed bookings only.</span>
           </div>
         )}
       </div>

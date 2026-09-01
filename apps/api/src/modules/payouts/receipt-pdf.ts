@@ -1,5 +1,4 @@
 import PDFDocument from "pdfkit";
-import { COMMISSION_RATE } from "../../lib/booking-pricing.js";
 import type { PayoutRunLineRow, PayoutRunRow } from "./db-types.js";
 import { formatAmount, formatDay } from "./service.js";
 
@@ -143,7 +142,7 @@ export async function renderReceiptPdf(
 
   const totals: [string, string, string][] = [
     ["Gross bookings", `KES ${formatAmount(run.gross_amount)}`, PALETTE.ink],
-    [`CRAL commission · ${Math.round(COMMISSION_RATE * 100)}%`, `- KES ${formatAmount(run.commission_amount)}`, PALETTE.red],
+    ["CRAL commission", `- KES ${formatAmount(run.commission_amount)}`, PALETTE.red],
   ];
   for (const [label, value, colour] of totals) {
     doc.font("Helvetica").fontSize(10).fillColor(PALETTE.muted).text(label, PAGE_MARGIN, y);

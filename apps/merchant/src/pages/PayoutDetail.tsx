@@ -27,8 +27,8 @@ function formatRunDate(day: string): string {
 
 function LineRow({ line, onOpen }: { line: PayoutRunLine; onOpen: (line: PayoutRunLine) => void }): JSX.Element {
   const [hover, setHover] = useState(false);
-  // A line whose booking has been archived still renders — it is the
-  // merchant's payment record — but there is nowhere to navigate to.
+  // A line whose booking has been archived still renders (it is the
+  // merchant's payment record), but there is nowhere to navigate to.
   const clickable = line.booking_id !== null;
   return (
     <div
@@ -102,7 +102,7 @@ export function PayoutDetail(): JSX.Element {
       onSuccess: () => {
         setQueryOpen(false);
         setMessage("");
-        toast("Query raised — support answers payout queries within one working day.", "#6FC8F0");
+        toast("Query raised. Support answers payout queries within one working day.", "#6FC8F0");
       },
       onError: () => toast("That query didn't go through. Try again.", "#D81E32"),
     });
@@ -110,7 +110,7 @@ export function PayoutDetail(): JSX.Element {
 
   function openLine(line: PayoutRunLine): void {
     if (line.booking_id) navigate(`/bookings/${line.booking_id}`);
-    else toast("That booking has been archived — the payout line is still on your record.", "#8C97A8");
+    else toast("That booking has been archived. The payout line is still on your record.", "#8C97A8");
   }
 
   return (
@@ -173,7 +173,7 @@ export function PayoutDetail(): JSX.Element {
             <span style={{ ...P.poTotalVal, color: "#0B0F1A" }}>KES {money(payout.gross.amount)}</span>
           </div>
           <div style={P.poTotalRow}>
-            <span style={P.poTotalKey}>CRAL commission · 10%</span>
+            <span style={P.poTotalKey}>CRAL commission</span>
             <span style={{ ...P.poTotalVal, color: "#A50E22" }}>− KES {money(payout.commission.amount)}</span>
           </div>
           <div style={P.poTotalRow}>

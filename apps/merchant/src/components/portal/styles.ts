@@ -14,6 +14,17 @@ import type { CSSProperties } from "react";
 export const TABLE_GRID_COLS =
   "minmax(96px,1fr) minmax(180px,2.4fr) minmax(120px,1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
 
+/**
+ * Payout column templates, shared by each table's header and its rows so the
+ * two can never drift apart. Same reasoning as TABLE_GRID_COLS above: these
+ * are grid-template strings, not CSSProperties, so they live outside P.
+ *
+ * Money columns are wide enough for a six-figure KES amount, and the status
+ * column is wide enough for the longest label ("Processing") plus its dot.
+ */
+export const PAYOUT_HISTORY_COLS = "104px minmax(0,1fr) 116px 128px 16px";
+export const PAYOUT_LINE_COLS = "92px minmax(0,1fr) 96px 96px 108px 16px";
+
 export const P = {
   page: {
     minHeight: "100vh",
@@ -339,38 +350,9 @@ export const P = {
   poTileUnit: { font: "500 12px/1 'Instrument Sans',sans-serif" },
   poTileSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif" },
 
-  poSplit: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap", marginBottom: 16 },
-  poNextCard: { flex: 1.4, minWidth: 300, background: "#0B0F1A", borderRadius: "var(--r-lg)", padding: "clamp(18px,2.4vw,22px)" },
-  poNextHead: { display: "flex", alignItems: "center", gap: 10, marginBottom: 14 },
-  poNextRule: { display: "block", width: 20, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
-  poNextKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".11em", color: "#8C97A8" },
-  poNextBody: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 18, flexWrap: "wrap" },
-  poNextAmount: { font: "700 clamp(30px,4vw,38px)/1 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#FFFFFF", fontVariantNumeric: "tabular-nums", marginBottom: 9 },
-  poNextUnit: { font: "500 14px/1 'Instrument Sans',sans-serif", color: "#8C97A8" },
-  poNextNote: { font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#A7B0BE", maxWidth: "44ch", textWrap: "pretty" },
-  poDestChip: { display: "flex", alignItems: "center", gap: 11, padding: "11px 14px", background: "#131A28", border: "1px solid #2A3346", borderRadius: "var(--r)" },
-  poDestMark: { width: 30, height: 30, borderRadius: 999, background: "#DDF3E9", color: "#076945", font: "600 11px/30px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
-  poDestLine: { font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#F2F5F9" },
-  poDestKicker: { font: "400 11px/1.4 'IBM Plex Mono',monospace", color: "#8C97A8" },
-  poNextFoot: { display: "flex", alignItems: "center", gap: 10, marginTop: 16, paddingTop: 15, borderTop: "1px solid #2A3346", flexWrap: "wrap" },
-  poNextFootNote: { font: "400 11px/1.5 'IBM Plex Mono',monospace", letterSpacing: ".03em", color: "#8C97A8" },
-
-  poChartCard: { flex: 1, minWidth: 280, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", padding: "clamp(16px,2.4vw,20px)" },
-  poChartHead: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 16 },
-  poChartTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
-  poChartSub: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
-  poChartDelta: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".05em" },
-  poBars: { display: "flex", alignItems: "flex-end", gap: "clamp(5px,1.2vw,9px)", height: 126 },
-  poBarCol: { flex: 1, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", gap: 7, height: "100%" },
-  poBar: { width: "100%", borderRadius: "var(--r-sm) var(--r-sm) 0 0", minHeight: 4 },
-  poBarLabel: { font: "500 9px/1 'IBM Plex Mono',monospace", letterSpacing: ".04em" },
-  poChartFoot: { marginTop: 15, paddingTop: 14, borderTop: "1px solid #F1F3F6", display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, flexWrap: "wrap" },
-  poChartFootKey: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" },
-  poChartFootVal: { font: "600 15px/1.2 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
-
-  poHistoryHead: { display: "grid", gridTemplateColumns: "92px minmax(0,1fr) 92px 100px 14px", alignItems: "center", gap: 10, padding: "11px 18px", background: "#F8F9FB", borderBottom: "1px solid #E4E7EC" },
+  poHistoryHead: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, alignItems: "center", gap: 16, padding: "11px 18px", background: "#F8F9FB", borderBottom: "1px solid #E4E7EC" },
   poHistoryHeadCell: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0" },
-  poHistoryRow: { display: "grid", gridTemplateColumns: "92px minmax(0,1fr) 92px 100px 14px", alignItems: "center", gap: 10, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poHistoryRow: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, alignItems: "center", gap: 16, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
   poRefChip: { display: "block", padding: "5px 4px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", textAlign: "center" },
   poHistoryDate: { font: "500 12px/1.35 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", whiteSpace: "nowrap" },
   poHistoryCovers: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
@@ -386,7 +368,7 @@ export const P = {
   poMastUnit: { font: "500 13px/1 'Instrument Sans',sans-serif", color: "#838C9B" },
   poCodeChip: { display: "inline-block", padding: "6px 11px", background: "#F8F9FB", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "600 13px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#0B0F1A" },
 
-  poLineRow: { display: "grid", gridTemplateColumns: "88px minmax(0,1fr) 78px 78px 88px 14px", alignItems: "center", gap: "clamp(8px,1.2vw,16px)", padding: "15px 18px", borderBottom: "1px solid #F1F3F6", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poLineRow: { display: "grid", gridTemplateColumns: PAYOUT_LINE_COLS, alignItems: "center", gap: "clamp(10px,1.2vw,18px)", padding: "15px 18px", borderBottom: "1px solid #F1F3F6", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
   poLineRefChip: { display: "block", padding: "5px 6px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".02em", color: "#0B0F1A", textAlign: "center" },
   poLineHirer: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
   poLineMeta: { font: "400 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
