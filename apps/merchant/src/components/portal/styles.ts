@@ -397,4 +397,65 @@ export const P = {
   poFootnote: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#EDEFFC", border: "1px solid #B6C0F4", borderRadius: "var(--r-lg)", flexWrap: "wrap" },
   poFootnoteRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
   poFootnoteText: { flex: 1, minWidth: 220, font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#333B4A", textWrap: "pretty" },
+
+  // --- Notifications ----------------------------------------------------
+  // Literal reads off "Cruz Merchant Notifications.dc.html" and the Alerts
+  // section of "Cruz Merchant Settings.dc.html". Prefixed `nt`. Reuses
+  // P.card / P.filterPill / P.h1 / P.lede / P.emptyWrap where the design's
+  // values already match those.
+  ntMarkAllBtn: { height: 44, padding: "0 18px", background: "#FFFFFF", color: "#1A1F2B", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "600 14px/1 'Instrument Sans',sans-serif", cursor: "pointer", flex: "none" },
+
+  ntUrgent: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#FFF3DB", border: "1px solid #F5D9A3", borderRadius: "var(--r-lg)", marginBottom: 16, flexWrap: "wrap" },
+  ntUrgentDot: { width: 9, height: 9, borderRadius: 999, background: "#C77400", flex: "none" },
+  ntUrgentTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#8A5200" },
+  ntUrgentBody: { font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" },
+  ntUrgentBtn: { height: 38, padding: "0 16px", background: "#0F23A8", color: "#FFFFFF", border: "none", borderRadius: "var(--r)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer", flex: "none" },
+
+  ntFilterCount: { font: "500 11px/1 'IBM Plex Mono',monospace" },
+
+  ntGroupLabel: { padding: "11px 18px", background: "#FAFBFC", borderBottom: "1px solid #F1F3F6", font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0" },
+  ntRow: { display: "flex", alignItems: "flex-start", gap: 14, padding: "15px 18px", borderBottom: "1px solid #F8F9FB", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  ntIcon: { width: 34, height: 34, borderRadius: 999, font: "600 11px/32px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
+  ntRowMain: { flex: 1, minWidth: 180 },
+  ntRowTitleLine: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" },
+  ntRowTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  ntUnreadDot: { width: 7, height: 7, borderRadius: 999, background: "#0F23A8", flex: "none" },
+  ntRowBody: { font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginTop: 3, textWrap: "pretty" },
+  ntRowMeta: { display: "flex", alignItems: "center", gap: 9, marginTop: 6, flexWrap: "wrap" },
+  ntWhen: { font: "400 11px/1.3 'IBM Plex Mono',monospace", letterSpacing: ".03em", color: "#A7AEBB" },
+  ntRefChip: { padding: "2px 8px", background: "#F1F3F6", borderRadius: "var(--r-sm)", font: "500 11px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".04em", color: "#5A6373" },
+  ntCta: { font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#0F23A8", flex: "none", paddingTop: 8 },
+  ntFooter: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "13px 18px", background: "#FAFBFC", flexWrap: "wrap" },
+  ntFooterLeft: { font: "400 12px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".04em", color: "#838C9B" },
+  ntFooterRight: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B" },
+
+  ntSideCard: { padding: 14, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)" },
+  ntSideLabel: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 9 },
+  ntSideText: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 11 },
+  ntSideBtn: { height: 32, padding: "0 12px", background: "#FFFFFF", color: "#0F23A8", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "600 12px/1 'Instrument Sans',sans-serif", cursor: "pointer", textDecoration: "none", display: "inline-flex", alignItems: "center" },
+
+  // --- Settings: Notifications matrix ----------------------------------
+  ntSettingsWrap: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
+  ntMatrix: { flex: 1.6, minWidth: 320, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  ntCardHead: { padding: "16px 18px", borderBottom: "1px solid #F1F3F6" },
+  ntCardTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
+  ntCardSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
+  ntMatrixCols: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 70px", gap: 10, padding: "11px 18px", background: "#FAFBFC", borderBottom: "1px solid #F1F3F6" },
+  ntMatrixColLabel: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".08em", color: "#9AA2B0", textAlign: "center" },
+  ntMatrixRow: { display: "grid", gridTemplateColumns: "minmax(0,1fr) 70px 70px", gap: 10, alignItems: "center", padding: "15px 18px", borderBottom: "1px solid #F8F9FB" },
+  ntMatrixRowLabel: { font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  ntMatrixRowBody: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2 },
+  ntToggle: { width: 42, height: 24, padding: 0, borderRadius: 999, display: "flex", alignItems: "center", transition: "background 130ms cubic-bezier(.2,.8,.25,1)", border: "1px solid" },
+  ntToggleKnob: { width: 18, height: 18, margin: "0 2px", borderRadius: 999, boxShadow: "0 1px 3px rgba(11,15,26,.28)", display: "block" },
+  ntMatrixFoot: { padding: "13px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
+
+  ntQuietCard: { flex: 1, minWidth: 280, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  ntQuietBody: { padding: 18, display: "grid", gap: 16 },
+  ntQuietToggleRow: { display: "flex", alignItems: "center", gap: 14 },
+  ntQuietToggleLabel: { flex: 1, font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  ntQuietTimeGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
+  ntQuietTimeLabel: { display: "block", font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
+  ntQuietTimeInput: { width: "100%", height: 44, padding: "0 11px", background: "#FFFFFF", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "500 14px/1 'IBM Plex Mono',monospace", color: "#1A1F2B" },
+
+  ntSaveBar: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 18, flexWrap: "wrap" },
 } satisfies Record<string, CSSProperties>;

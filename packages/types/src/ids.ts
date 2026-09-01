@@ -45,6 +45,11 @@ export const ID_PREFIXES = {
   // deposit, or a no-money conduct report. Escalates to a Dispute (dsp_)
   // only once it exceeds what the deposit can cover.
   bookingReport: "bkr",
+  // Merchant portal Notifications — the feed row a merchant sees, and the
+  // per-category channel preference behind it. Internal entities, no
+  // prefix named in the spec's own identifier list.
+  notification: "ntf",
+  notificationPreference: "npr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

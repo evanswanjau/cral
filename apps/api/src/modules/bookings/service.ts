@@ -11,6 +11,8 @@ import { emailCode, emailHeading, emailLayout, emailMuted, emailParagraph } from
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { computeBookingPricing, computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
+import { notify } from "../../lib/notifications.js";
+import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import type { VehicleRow } from "../merchant/db-types.js";
 import type {
   BookingEventRow,
@@ -722,6 +724,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
           rating_open_until: new Date(now.getTime() + RATING_WINDOW_DAYS * 24 * 60 * 60 * 1000),
         };
 
+  const notificationIds: string[] = [];
   const [updatedBooking, updatedHandover] = await db.transaction(async (trx) => {
     const [handoverRow] = await trx<HandoverRow>("handovers")
       .where({ id: handover.id })
@@ -754,8 +757,26 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+
+    // Only the return leg is worth a notification — a merchant runs the
+    // pick-up handover themselves, so it isn't news to them.
+    if (handover.kind !== "pickup") {
+      notificationIds.push(
+        await notify(trx, {
+          merchantId: merchant.id,
+          category: "return",
+          title: `${bookingRow.ref} · vehicle returned and checked`,
+          body: "The return handover is done. The deposit clears in 24 hours unless you file a report.",
+          ref: bookingRow.ref,
+          subjectType: "booking",
+          subjectId: booking.id,
+        }),
+      );
+    }
     return [bookingRow, handoverRow] as const;
   });
+
+  await enqueueNotificationDelivery(merchant.id, notificationIds);
 
   const [vehicle, hirer] = await Promise.all([vehicleOf(updatedBooking.vehicle_id), hirerInfoOf(updatedBooking.hirer_id)]);
   return { booking: await serializeDetail(updatedBooking, vehicle, hirer), handover: serializeHandover(updatedHandover) };
