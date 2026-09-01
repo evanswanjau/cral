@@ -7,6 +7,8 @@ import { VehicleDetail } from "./pages/VehicleDetail.js";
 import { AddVehicle } from "./pages/AddVehicle.js";
 import { BookingList } from "./pages/BookingList.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
+import { PayoutList } from "./pages/PayoutList.js";
+import { PayoutDetail } from "./pages/PayoutDetail.js";
 import { SecuritySettings } from "./pages/SecuritySettings.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
@@ -40,6 +42,8 @@ const router = createBrowserRouter([
               { path: "vehicles/:vehicleId", element: <VehicleDetail /> },
               { path: "bookings", element: <BookingList /> },
               { path: "bookings/:bookingId", element: <BookingDetail /> },
+              { path: "payouts", element: <PayoutList /> },
+              { path: "payouts/:payoutRunId", element: <PayoutDetail /> },
               { path: "settings/security", element: <SecuritySettings /> },
             ],
           },

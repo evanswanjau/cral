@@ -1,0 +1,429 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Merchant Payouts API
+  version: "1.0.0"
+  description: >
+    Merchant-side payouts: the runs that move a completed hire's net takings
+    to the merchant, the bookings each run covers, a downloadable receipt per
+    run, a monthly statement, and the query a merchant raises when a run
+    looks wrong. Merchant portal audience only — every path acts on a payout
+    run the authenticated merchant owns.
+
+    Built at the owner's explicit request alongside the Bookings slice, ahead
+    of the delivery plan's Phase 4–6 sequencing (see CLAUDE.md's "Recorded
+    product decisions"). Contract frozen before the code, per the
+    contract-first ritual.
+
+    Scope note — there is no payment rail yet. Daraja/M-Pesa B2C is not
+    integrated, and nothing in this API disburses money. A run is created in
+    `scheduled` and only reaches `paid` when something outside this API says
+    so (today: the dev-seed, later: a Daraja callback). `provider_code` is
+    the Safaricom transaction code and stays null until then. The
+    `PayoutStatus` values are shaped so the real rail slots in later without
+    a schema change.
+
+    Money note — every amount on a `PayoutRunLine` is a **snapshot** taken
+    when the line was cut, not a live read of the booking. A later change to
+    `COMMISSION_RATE` must never rewrite what a merchant was already paid, so
+    a run's totals are the sum of its own line snapshots and are never
+    recomputed from rates. The 10% figure in the UI copy is display only.
+
+    A booking pays out exactly once — `PayoutRunLine.booking_id` is globally
+    unique. The "next payout run" reported by `listPayouts` is a live
+    projection over completed, deposit-released bookings that have no line
+    yet; it is deliberately not stored, because a stored projection needs a
+    reconciliation job that does not exist.
+
+    Destination note — the merchant portal design offers an M-Pesa/bank
+    toggle and an SMS-gated "Edit details". No bank fields exist anywhere in
+    the schema (`payout_method` is `mpesa` throughout), so this contract
+    exposes the destination read-only. Flagged, not built.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: payouts
+    description: Payout runs — the list, the detail, and what each run covers
+  - name: documents
+    description: >
+      Downloadable artefacts. The per-run receipt is a PDF (a document a
+      merchant forwards to a bank or an accountant); the monthly statement is
+      CSV (a table that wants to be opened in a spreadsheet).
+  - name: queries
+    description: A merchant's query against a run, answered by CRAL support
+
+paths:
+  # ---------------------------------------------------------------------
+  # Payout runs
+  # ---------------------------------------------------------------------
+  /merchant/payouts:
+    get:
+      tags: [payouts]
+      summary: List payout runs, newest first, with the screen's summary
+      operationId: listPayouts
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        "200":
+          description: Page of payout runs for the authenticated merchant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PayoutRunSummary" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  summary: { $ref: "#/components/schemas/PayoutSummary" }
+
+  /merchant/payouts/{payoutRunId}:
+    parameters:
+      - name: payoutRunId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [payouts]
+      summary: Full payout run detail, with the bookings it covers
+      operationId: getPayout
+      responses:
+        "200":
+          description: Payout run detail
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutRunDetail" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------
+  # Documents
+  # ---------------------------------------------------------------------
+  /merchant/payouts/{payoutRunId}/receipt:
+    parameters:
+      - name: payoutRunId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [documents]
+      summary: Download this run's receipt as a PDF
+      operationId: downloadPayoutReceipt
+      description: >
+        Returns `application/pdf` with a `Content-Disposition: attachment`
+        filename of `<ref>-receipt.pdf`, e.g. `PAY-0912-receipt.pdf`. Errors
+        are still the JSON envelope, so clients must branch on the status
+        before reading the body as binary.
+      responses:
+        "200":
+          description: The receipt
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /merchant/payouts/statement:
+    get:
+      tags: [documents]
+      summary: Download a month's payout statement as CSV
+      operationId: downloadPayoutStatement
+      description: >
+        One row per payout line across the month, then a totals row.
+        `Content-Disposition: attachment` with a filename of
+        `cral-statement-<YYYY-MM>.csv`. A month with no runs still returns a
+        well-formed CSV with only the header and a zeroed totals row — an
+        empty statement is a real answer, not a 404.
+      parameters:
+        - name: month
+          in: query
+          required: true
+          description: Nairobi calendar month, `YYYY-MM`
+          schema:
+            type: string
+            pattern: "^[0-9]{4}-(0[1-9]|1[0-2])$"
+      responses:
+        "200":
+          description: The statement
+          content:
+            text/csv:
+              schema: { type: string }
+        "422":
+          description: Malformed `month`
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  # ---------------------------------------------------------------------
+  # Queries
+  # ---------------------------------------------------------------------
+  /merchant/payouts/{payoutRunId}/queries:
+    parameters:
+      - name: payoutRunId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      tags: [queries]
+      summary: Queries this merchant has raised against the run
+      operationId: listPayoutQueries
+      responses:
+        "200":
+          description: Queries, newest first
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/PayoutQuery" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [queries]
+      summary: Raise a query against this run
+      operationId: createPayoutQuery
+      description: >
+        Records the query and emails CRAL support. Idempotent within 24h per
+        spec §2 — this does not move money, but a double-submit raising two
+        support tickets for one complaint is exactly the duplicate the header
+        exists to stop. Mail delivery is best-effort and happens after the
+        row commits: a bounced email must not lose the merchant's query.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  minLength: 1
+                  maxLength: 2000
+                  description: What looks wrong, in the merchant's own words
+      responses:
+        "201":
+          description: Query recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutQuery" }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ---------------------------------------------------------------------
+  # Dev-only fixture seeding
+  # ---------------------------------------------------------------------
+  /merchant/payouts/dev-seed:
+    post:
+      tags: [payouts]
+      summary: Seed fixture payout runs (non-production only)
+      operationId: devSeedPayouts
+      description: >
+        Documented because it is a real route, but guarded by
+        `NODE_ENV !== "production"` and absent from the production router —
+        the same arrangement as `/merchant/bookings/dev-seed`. There is no
+        customer portal and no payment rail, so this is how the Payouts
+        screen gets history to render.
+      responses:
+        "201":
+          description: Runs created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  created: { type: integer }
+                  refs:
+                    type: array
+                    items: { type: string }
+
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: Required on every call that moves money or raises a support ticket (spec §2)
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, example: KES }
+
+    PayoutStatus:
+      type: string
+      description: >
+        A fourth status vocabulary, alongside the vehicle-listing, document
+        and booking sets. `scheduled` is a run that has been cut but not
+        sent; `processing` is in flight at the rail; `paid` is settled with a
+        `provider_code`; `failed` needs CRAL to intervene.
+      enum: [scheduled, processing, paid, failed]
+
+    PayoutDestination:
+      type: object
+      description: Read-only. M-Pesa only for now — see the scope note.
+      properties:
+        method: { type: string, enum: [mpesa], example: mpesa }
+        detail: { type: string, description: The M-Pesa number, as displayed }
+        account_name: { type: string }
+
+    PayoutRunSummary:
+      type: object
+      properties:
+        id: { type: string, example: pot_01J8QM4T7Z9K2X0Q7VYB6C3H5D }
+        ref:
+          type: string
+          description: Human reference the merchant reads aloud to support
+          example: PAY-0912
+        status: { $ref: "#/components/schemas/PayoutStatus" }
+        run_date:
+          type: string
+          format: date
+          description: The Nairobi calendar day the run goes out
+        gross: { $ref: "#/components/schemas/Money" }
+        commission: { $ref: "#/components/schemas/Money" }
+        net: { $ref: "#/components/schemas/Money" }
+        line_count: { type: integer }
+        provider_code:
+          type: string
+          nullable: true
+          description: Safaricom transaction code; null until settled
+        paid_at: { type: string, format: date-time, nullable: true }
+
+    PayoutRunLine:
+      type: object
+      description: >
+        One booking's contribution to a run. Every amount is the snapshot
+        taken when the line was cut. The denormalised hirer/vehicle/date
+        fields are deliberate: a line must still render if the booking is
+        later archived.
+      properties:
+        id: { type: string }
+        booking_id: { type: string, nullable: true }
+        booking_ref: { type: string, example: CB-2811 }
+        hirer_name: { type: string }
+        vehicle_registration: { type: string, example: KDG 233V }
+        pickup_at: { type: string, format: date-time }
+        dropoff_at: { type: string, format: date-time }
+        gross: { $ref: "#/components/schemas/Money" }
+        commission: { $ref: "#/components/schemas/Money" }
+        net: { $ref: "#/components/schemas/Money" }
+
+    PayoutRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/PayoutRunSummary"
+        - type: object
+          properties:
+            destination: { $ref: "#/components/schemas/PayoutDestination" }
+            lines:
+              type: array
+              items: { $ref: "#/components/schemas/PayoutRunLine" }
+            footnote:
+              type: string
+              description: >
+                Server-composed sentence under the totals, e.g. "Sent to
+                M-Pesa 0733 376 061 at 09:36. Two completed hires in one
+                run." Composed server-side so the wording stays consistent
+                with what support sees.
+            open_query_count: { type: integer }
+
+    PayoutTile:
+      type: object
+      description: One of the three figures across the top of the Payouts screen
+      properties:
+        key: { type: string, enum: [next_payout, clearing, paid_this_month] }
+        amount: { $ref: "#/components/schemas/Money" }
+        note: { type: string, description: The sub-line, e.g. "2 hires · Monday 17 August" }
+
+    PayoutBar:
+      type: object
+      description: One column of the eight-week net-earnings chart
+      properties:
+        label: { type: string, example: W32 }
+        net: { $ref: "#/components/schemas/Money" }
+
+    PayoutSummary:
+      type: object
+      properties:
+        tiles:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutTile" }
+        bars:
+          type: array
+          description: Eight weeks of net earnings, oldest first
+          items: { $ref: "#/components/schemas/PayoutBar" }
+        bars_total: { $ref: "#/components/schemas/Money" }
+        bars_change_pct:
+          type: integer
+          nullable: true
+          description: >
+            Percent change of the latest week against the mean of the seven
+            before it. Null when there is not enough history to say anything
+            honest.
+        run_count: { type: integer, description: Runs in the list, for the foot line }
+        net_total: { $ref: "#/components/schemas/Money" }
+        destination: { $ref: "#/components/schemas/PayoutDestination" }
+        next_run_date:
+          type: string
+          format: date
+          nullable: true
+          description: Next Monday in Nairobi, or null when nothing is clearing
+
+    PayoutQuery:
+      type: object
+      properties:
+        id: { type: string }
+        payout_run_id: { type: string }
+        message: { type: string }
+        status: { type: string, enum: [filed, answered] }
+        response: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+  responses:
+    NotFound:
+      description: No such payout run for this merchant
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []
