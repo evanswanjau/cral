@@ -19,11 +19,19 @@ export const TABLE_GRID_COLS =
  * two can never drift apart. Same reasoning as TABLE_GRID_COLS above: these
  * are grid-template strings, not CSSProperties, so they live outside P.
  *
- * Money columns are wide enough for a six-figure KES amount, and the status
- * column is wide enough for the longest label ("Processing") plus its dot.
+ * Every track is a fixed width and the rows set `justifyContent:
+ * "space-between"`, so the leftover width is split evenly *between* the
+ * columns rather than absorbed *inside* one of them. Two earlier versions got
+ * this wrong: a `1fr` description column swallowed ~300px and opened a single
+ * dead gap mid-row, and making every track fractional only spread the same
+ * problem around. Fixed tracks also keep the columns aligned from row to row,
+ * which matters because each row is its own grid container.
+ *
+ * Widths are the real content: a plated ref, a six-figure KES amount, and the
+ * longest status label ("Processing") with its dot.
  */
-export const PAYOUT_HISTORY_COLS = "104px minmax(0,1fr) 116px 128px 16px";
-export const PAYOUT_LINE_COLS = "92px minmax(0,1fr) 96px 96px 108px 16px";
+export const PAYOUT_HISTORY_COLS = "104px 208px 104px 116px 16px";
+export const PAYOUT_LINE_COLS = "96px 228px 84px 92px 96px 16px";
 
 export const P = {
   page: {
@@ -350,10 +358,10 @@ export const P = {
   poTileUnit: { font: "500 12px/1 'Instrument Sans',sans-serif" },
   poTileSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif" },
 
-  poHistoryHead: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, alignItems: "center", gap: 16, padding: "11px 18px", background: "#F8F9FB", borderBottom: "1px solid #E4E7EC" },
+  poHistoryHead: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "11px 18px", background: "#F8F9FB", borderBottom: "1px solid #E4E7EC" },
   poHistoryHeadCell: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0" },
-  poHistoryRow: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, alignItems: "center", gap: 16, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
-  poRefChip: { display: "block", padding: "5px 4px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", textAlign: "center" },
+  poHistoryRow: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poRefChip: { display: "inline-block", justifySelf: "start", padding: "5px 9px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", textAlign: "center" },
   poHistoryDate: { font: "500 12px/1.35 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", whiteSpace: "nowrap" },
   poHistoryCovers: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   poHistoryNet: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
@@ -368,8 +376,8 @@ export const P = {
   poMastUnit: { font: "500 13px/1 'Instrument Sans',sans-serif", color: "#838C9B" },
   poCodeChip: { display: "inline-block", padding: "6px 11px", background: "#F8F9FB", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "600 13px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#0B0F1A" },
 
-  poLineRow: { display: "grid", gridTemplateColumns: PAYOUT_LINE_COLS, alignItems: "center", gap: "clamp(10px,1.2vw,18px)", padding: "15px 18px", borderBottom: "1px solid #F1F3F6", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
-  poLineRefChip: { display: "block", padding: "5px 6px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".02em", color: "#0B0F1A", textAlign: "center" },
+  poLineRow: { display: "grid", gridTemplateColumns: PAYOUT_LINE_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poLineRefChip: { display: "inline-block", justifySelf: "start", padding: "5px 9px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".02em", color: "#0B0F1A", textAlign: "center" },
   poLineHirer: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
   poLineMeta: { font: "400 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
   poLineGross: { textAlign: "right", font: "400 13px/1.3 'Instrument Sans',sans-serif", color: "#5A6373", fontVariantNumeric: "tabular-nums" },
