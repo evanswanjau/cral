@@ -361,6 +361,65 @@ model"):**
   `lib/vehicle-events.ts#nextListingRef`. Older `CRAL-V-*` refs and the
   `vehicle_listing_ref_seq` sequence are left in place, just unused.
 
+**Payouts was built into the merchant portal (owner's call, 2026-09-01 —
+PR "merchant payouts"), on the same ahead-of-plan footing as Bookings.**
+Contract is `openapi/merchant-payouts.yaml`, code is
+`apps/api/src/modules/payouts/` and `apps/merchant/src/pages/Payout*`.
+The design authority is `Cruz Merchant Bookings & Payouts.dc.html` — the
+same bundle the Bookings screen came from.
+
+- **There is no payment rail.** Daraja/M-Pesa B2C is not integrated and
+  nothing disburses money. A run is created `scheduled` and only reaches
+  `paid` when something outside the API says so (today the dev-seed, later
+  a Daraja callback). `payout_runs.provider_code` holds the Safaricom
+  transaction code and stays null until then.
+- **Payout statuses are a fourth vocabulary** — `scheduled / processing /
+  paid / failed` — alongside the seven vehicle-listing states, the four
+  document states and bookings' own set. `PAYOUT_STATUS` in
+  `apps/merchant/src/components/portal/status.ts`; `processing` and
+  `failed` are unreachable today and exist so a real rail is a service
+  change, not a UI one.
+- **Line amounts are snapshots, and totals are the sum of them.** A run's
+  gross/commission/net are never recomputed from `COMMISSION_RATE` — a
+  later rate change must not rewrite what a merchant was already paid.
+  `payout_run_lines` also denormalises hirer name, registration and dates
+  so a line still renders if the booking is archived.
+- **A booking pays out exactly once.** `payout_run_lines.booking_id` is
+  globally unique; the service checks first for a clean error, but the
+  constraint is what makes a double-pay impossible under concurrency.
+  `cutPayoutRun` is the single place that decides what a run contains —
+  a second copy of those rules is how a merchant gets paid twice.
+- **"Next payout" counts scheduled runs *and* payable-but-uncut bookings.**
+  The design shows the tile and the scheduled run carrying the same
+  figure, so counting only one made the tile disagree with the row
+  directly beneath it. The next run itself is a live projection, never
+  stored — a stored projection needs a reconciliation job that doesn't
+  exist.
+- **Receipt is a PDF, statement is CSV** (owner's call). The receipt is a
+  document a merchant forwards to a bank or accountant; the statement is a
+  table that wants a spreadsheet. `pdfkit` is a new `apps/api` dependency.
+  Both go through the existing `apiBlob` in `apps/merchant/src/lib/api.ts`,
+  which keeps the bearer header — a plain `<a href>` would save a 401 page
+  to the merchant's Downloads folder.
+- **The receipt's palette is the one copy of brand hexes in the backend.**
+  `packages/ui/src/tokens.ts` is still the source of truth, but its entry
+  point pulls in React and the API must not bundle that. See the comment in
+  `apps/api/src/modules/payouts/receipt-pdf.ts` — if the brand doc gets a
+  v3, those five values need updating alongside tokens.ts.
+- **"Query this payout" is real**: a `payout_queries` row written with its
+  `audit_log` entry in one transaction, then a support email *after* the
+  commit — a bounced email must not lose the merchant's query. Idempotent,
+  so a double-submit can't raise two tickets for one complaint.
+- **The bank payout destination is deliberately not built.** The design
+  offers "Pay to my bank account instead" and an SMS-gated "Edit details",
+  but no bank fields exist anywhere in the schema (`payout_method` is
+  `mpesa` throughout), so the destination card ships read-only off
+  `users.phone`. Flagged, not silently dropped.
+- **`/merchant/payouts/dev-seed` is dev/test-only**, same `NODE_ENV`
+  guard as the bookings seeder. It creates its own older completed
+  bookings rather than reusing the bookings seeder's, whose "completed"
+  fixture is mid-deposit-hold on purpose and so correctly *not* payable.
+
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own
   surfaces — the "DEPOSIT HELD" chip and the deposit row/foot-note on the

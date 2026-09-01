@@ -14,6 +14,25 @@ import type { CSSProperties } from "react";
 export const TABLE_GRID_COLS =
   "minmax(96px,1fr) minmax(180px,2.4fr) minmax(120px,1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
 
+/**
+ * Payout column templates, shared by each table's header and its rows so the
+ * two can never drift apart. Same reasoning as TABLE_GRID_COLS above: these
+ * are grid-template strings, not CSSProperties, so they live outside P.
+ *
+ * Every track is a fixed width and the rows set `justifyContent:
+ * "space-between"`, so the leftover width is split evenly *between* the
+ * columns rather than absorbed *inside* one of them. Two earlier versions got
+ * this wrong: a `1fr` description column swallowed ~300px and opened a single
+ * dead gap mid-row, and making every track fractional only spread the same
+ * problem around. Fixed tracks also keep the columns aligned from row to row,
+ * which matters because each row is its own grid container.
+ *
+ * Widths are the real content: a plated ref, a six-figure KES amount, and the
+ * longest status label ("Processing") with its dot.
+ */
+export const PAYOUT_HISTORY_COLS = "104px 208px 104px 116px 16px";
+export const PAYOUT_LINE_COLS = "96px 228px 84px 92px 96px 16px";
+
 export const P = {
   page: {
     minHeight: "100vh",
@@ -325,4 +344,57 @@ export const P = {
   emptyIcon: { width: 44, height: 44, borderRadius: 999, background: "#F1F3F6", display: "grid", placeItems: "center", color: "#9AA2B0" },
   emptyTitle: { font: "600 16px/1.3 Archivo,sans-serif", color: "#0B0F1A" },
   emptyBody: { margin: 0, font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: 360 },
+
+  // --- Payouts ------------------------------------------------------------
+  // Literal reads off "Cruz Merchant Bookings & Payouts.dc.html". Prefixed
+  // `po` because `payoutCard`/`payoutRow`/... above are already taken by the
+  // Vehicles detail screen's payout-destination side card.
+  poTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(212px,1fr))", gap: 12, marginBottom: 16 },
+  poTile: { borderRadius: "var(--r-lg)", padding: 18 },
+  poTileHead: { display: "flex", alignItems: "center", gap: 9, marginBottom: 13 },
+  poTileDot: { width: 8, height: 8, borderRadius: 999, flex: "none" },
+  poTileKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em" },
+  poTileValue: { font: "700 clamp(24px,2.6vw,29px)/1 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", fontVariantNumeric: "tabular-nums", marginBottom: 7 },
+  poTileUnit: { font: "500 12px/1 'Instrument Sans',sans-serif" },
+  poTileSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif" },
+
+  poHistoryHead: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "11px 18px", background: "#F8F9FB", borderBottom: "1px solid #E4E7EC" },
+  poHistoryHeadCell: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0" },
+  poHistoryRow: { display: "grid", gridTemplateColumns: PAYOUT_HISTORY_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poRefChip: { display: "inline-block", justifySelf: "start", padding: "5px 9px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", textAlign: "center" },
+  poHistoryDate: { font: "500 12px/1.35 'IBM Plex Mono',monospace", letterSpacing: ".01em", color: "#0B0F1A", whiteSpace: "nowrap" },
+  poHistoryCovers: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  poHistoryNet: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" },
+  poHistoryGross: { font: "400 11px/1.4 'Instrument Sans',sans-serif", color: "#A7AEBB", marginTop: 2, whiteSpace: "nowrap" },
+  poStatusPill: { display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 9px", borderRadius: 999, font: "600 11px/1.4 'Instrument Sans',sans-serif", whiteSpace: "nowrap", maxWidth: "100%" },
+  poStatusDot: { width: 7, height: 7, borderRadius: 999, flex: "none" },
+
+  // --- payout detail ------------------------------------------------------
+  poMastRef: { display: "inline-block", padding: "6px 12px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 16px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".05em", color: "#0B0F1A" },
+  poMastStatus: { display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 12px", borderRadius: 999, font: "600 13px/1.2 'Instrument Sans',sans-serif" },
+  poMastAmount: { font: "700 clamp(28px,3.6vw,34px)/1 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", fontVariantNumeric: "tabular-nums", marginBottom: 8 },
+  poMastUnit: { font: "500 13px/1 'Instrument Sans',sans-serif", color: "#838C9B" },
+  poCodeChip: { display: "inline-block", padding: "6px 11px", background: "#F8F9FB", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "600 13px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#0B0F1A" },
+
+  poLineRow: { display: "grid", gridTemplateColumns: PAYOUT_LINE_COLS, justifyContent: "space-between", alignItems: "center", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  poLineRefChip: { display: "inline-block", justifySelf: "start", padding: "5px 9px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".02em", color: "#0B0F1A", textAlign: "center" },
+  poLineHirer: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  poLineMeta: { font: "400 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  poLineGross: { textAlign: "right", font: "400 13px/1.3 'Instrument Sans',sans-serif", color: "#5A6373", fontVariantNumeric: "tabular-nums" },
+  poLineComm: { textAlign: "right", font: "400 13px/1.3 'Instrument Sans',sans-serif", color: "#A50E22", fontVariantNumeric: "tabular-nums" },
+  poLineNet: { textAlign: "right", font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
+
+  poTotals: { padding: "16px 18px", background: "#FAFBFC", display: "grid", gap: 10 },
+  poTotalRow: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
+  poTotalKey: { font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" },
+  poTotalVal: { font: "600 14px/1.3 'Instrument Sans',sans-serif", fontVariantNumeric: "tabular-nums" },
+  poTotalNetKey: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  poTotalNetVal: { font: "700 20px/1 Archivo,sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
+
+  // The design gives this note card its own 14-degree rule alongside the
+  // masthead's — the same documented exception the Vehicles reviewer-note
+  // card relies on (a note card counts as its own surface).
+  poFootnote: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#EDEFFC", border: "1px solid #B6C0F4", borderRadius: "var(--r-lg)", flexWrap: "wrap" },
+  poFootnoteRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
+  poFootnoteText: { flex: 1, minWidth: 220, font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#333B4A", textWrap: "pretty" },
 } satisfies Record<string, CSSProperties>;
