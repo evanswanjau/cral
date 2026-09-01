@@ -13,6 +13,7 @@
  */
 import type { VehicleFilter } from "../../lib/vehicles-api.js";
 import type { BookingFilter, BookingStatus } from "../../lib/bookings-api.js";
+import type { PayoutStatus } from "../../lib/payouts-api.js";
 
 export type VehicleStatus = "draft" | "pending" | "review" | "action" | "rejected" | "live" | "paused";
 export type DocReviewState = "ok" | "pending" | "expiring" | "rejected" | "missing";
@@ -34,6 +35,22 @@ export const DOC_STATE: Record<DocReviewState, { core: string; label: string; fg
   expiring: { core: "#C77400", label: "EXPIRING", fg: "#8A5200" },
   rejected: { core: "#D81E32", label: "REJECTED", fg: "#A50E22" },
   missing: { core: "#CDD2DA", label: "MISSING", fg: "#838C9B" },
+};
+
+/**
+ * A fourth status vocabulary, after the seven listing states above, the four
+ * document review states, and bookings' own set. Literal reads off the
+ * design's `PS` const in "Cruz Merchant Bookings & Payouts.dc.html".
+ *
+ * Only `scheduled` and `paid` are reachable today — `processing` and
+ * `failed` are the states a real M-Pesa B2C rail moves through, and are
+ * declared now so wiring one later is a service change, not a UI one.
+ */
+export const PAYOUT_STATUS: Record<PayoutStatus, { label: string; core: string; tint: string; border: string; text: string }> = {
+  scheduled: { label: "Scheduled", core: "#C77400", tint: "#FFF3DB", border: "#F5D9A3", text: "#8A5200" },
+  processing: { label: "Processing", core: "#0B7BC1", tint: "#E1F1FA", border: "#A9D6EE", text: "#075D93" },
+  paid: { label: "Paid", core: "#0B8A5B", tint: "#DDF3E9", border: "#A8DEC7", text: "#076945" },
+  failed: { label: "Failed", core: "#D81E32", tint: "#FDE7EA", border: "#F7BDC5", text: "#A50E22" },
 };
 
 export const TONE: Record<EventTone, string> = {
