@@ -87,5 +87,7 @@ export const TwoFactorChallengeSchema = z.object({
 
 export const Disable2faSchema = z.object({
   password: z.string(),
-  code: z.string().min(6).max(64),
+  // Optional — the Settings switch-off asks for the password only. A
+  // texted or recovery code is still honoured when supplied.
+  code: z.string().min(6).max(64).optional(),
 });

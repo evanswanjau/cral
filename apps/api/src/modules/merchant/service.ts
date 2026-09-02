@@ -305,23 +305,19 @@ const PROFILE_MERCHANT_FIELDS = [
 
 /**
  * The payout block, shared by GET /merchant/profile and the response of
- * PUT /merchant/payout-settings. `mpesa_number` falls back to the account
- * phone when "same as my phone" is set; it is only marked verified when it
- * *is* that verified number.
+ * PUT /merchant/payout-settings. The M-Pesa number is *always* the
+ * account phone — to change it you change the phone on the profile — so
+ * `mpesa_number_verified` is just `users.phone_verified`.
  */
 function serializePayout(
   merchant: MerchantRow,
   user: { phone?: string | null; phone_verified?: boolean } | undefined,
 ) {
-  const mpesaNumber = merchant.payout_same ? (user?.phone ?? null) : merchant.payout_detail;
   return {
     method: (merchant.payout_method === "bank" ? "bank" : "mpesa") as "mpesa" | "bank",
     schedule: (merchant.payout_schedule === "monthly" ? "monthly" : "weekly") as "weekly" | "monthly",
-    same_as_phone: Boolean(merchant.payout_same),
-    mpesa_number: mpesaNumber,
-    mpesa_name: merchant.payout_mpesa_name,
-    mpesa_number_verified:
-      Boolean(user?.phone_verified) && !!mpesaNumber && mpesaNumber === user?.phone,
+    mpesa_number: user?.phone ?? null,
+    mpesa_number_verified: Boolean(user?.phone_verified) && !!user?.phone,
     bank_name: merchant.bank_name,
     bank_branch: merchant.bank_branch,
     bank_account_name: merchant.bank_account_name,
@@ -329,11 +325,22 @@ function serializePayout(
   };
 }
 
+interface ProfileUser {
+  email?: string | null;
+  phone?: string | null;
+  phone_verified?: boolean;
+  status?: string | null;
+  erasure_cooling_off_until?: Date | string | null;
+}
+
 function serializeProfile(
   merchant: MerchantRow,
-  user: { email?: string | null; phone?: string | null; phone_verified?: boolean } | undefined,
+  user: ProfileUser | undefined,
   documents: DocumentRow[],
 ) {
+  const deletionAt = user?.erasure_cooling_off_until
+    ? new Date(user.erasure_cooling_off_until).toISOString()
+    : null;
   return {
     owner_type: merchant.owner_type,
     trading_name: merchant.trading_name,
@@ -350,6 +357,8 @@ function serializeProfile(
     email: user?.email ?? "",
     phone: user?.phone ?? null,
     phone_verified: Boolean(user?.phone_verified),
+    account_status: user?.status ?? "active",
+    deletion_scheduled_at: user?.status === "pending_deletion" ? deletionAt : null,
     approved_at: merchant.approved_at ? merchant.approved_at.toISOString() : null,
     member_since: merchant.created_at.toISOString(),
     payout: serializePayout(merchant, user),
@@ -461,29 +470,16 @@ export async function updatePayoutSettings(
 
   const update: Record<string, unknown> = {
     payout_method: input.method,
-    payout_schedule: input.schedule,
+    // Bank payouts always run monthly, on the 1st — no choice (owner's
+    // call). M-Pesa may be weekly or monthly.
+    payout_schedule: input.method === "bank" ? "monthly" : input.schedule,
     last_activity_at: new Date(),
   };
 
   if (input.method === "mpesa") {
-    const same = input.same_as_phone ?? false;
-    update.payout_same = same;
-    update.payout_mpesa_name = input.mpesa_name?.trim() || null;
-    if (same) {
-      update.payout_detail = null;
-    } else {
-      const normalised = normalizePhone(input.mpesa_number ?? "");
-      if (!normalised) {
-        throw new ApiError({
-          status: 422,
-          type: "validation_error",
-          code: "invalid_phone",
-          message: "That doesn't look like a valid Kenyan M-Pesa number.",
-          field: "mpesa_number",
-        });
-      }
-      update.payout_detail = normalised;
-    }
+    // The M-Pesa number is always the account phone.
+    update.payout_same = true;
+    update.payout_detail = null;
   } else {
     update.bank_name = input.bank_name?.trim() || null;
     update.bank_branch = input.bank_branch?.trim() || null;
@@ -974,7 +970,12 @@ async function sendReminderEmail(merchant: MerchantRow, tier: ReminderTier): Pro
  * The notifications module is imported lazily: it depends on this file for
  * `getOrCreateMerchant`, so a static import would be a cycle.
  */
-export async function runDailyReminderSweep(): Promise<{ sent: number; expiryNotices: number; purged: number }> {
+export async function runDailyReminderSweep(): Promise<{
+  sent: number;
+  expiryNotices: number;
+  purged: number;
+  accountsDeleted: number;
+}> {
   const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
   let sent = 0;
   for (const merchant of stalled) {
@@ -993,5 +994,10 @@ export async function runDailyReminderSweep(): Promise<{ sent: number; expiryNot
   const expiryNotices = await runExpiryNotificationSweep();
   const purged = await purgeExpiredNotifications();
 
-  return { sent, expiryNotices, purged };
+  // Accounts whose 30-day deletion grace period has elapsed. Lazy import —
+  // auth/service isn't otherwise a dependency of this module.
+  const { runAccountDeletionSweep } = await import("../auth/service.js");
+  const { purged: accountsDeleted } = await runAccountDeletionSweep();
+
+  return { sent, expiryNotices, purged, accountsDeleted };
 }

@@ -23,9 +23,8 @@ export type PayoutSchedule = "weekly" | "monthly";
 export interface PayoutSettings {
   method: PayoutMethod;
   schedule: PayoutSchedule;
-  same_as_phone: boolean;
+  /** Always the account phone — change it on the profile. */
   mpesa_number: string | null;
-  mpesa_name: string | null;
   mpesa_number_verified: boolean;
   bank_name: string | null;
   bank_branch: string | null;
@@ -36,9 +35,6 @@ export interface PayoutSettings {
 export interface PayoutSettingsInput {
   method: PayoutMethod;
   schedule: PayoutSchedule;
-  same_as_phone?: boolean;
-  mpesa_number?: string;
-  mpesa_name?: string;
   bank_name?: string;
   bank_branch?: string;
   bank_account_name?: string;
@@ -61,6 +57,8 @@ export interface MerchantProfile {
   email: string;
   phone: string | null;
   phone_verified: boolean;
+  account_status: "active" | "suspended" | "pending_deletion" | "deleted";
+  deletion_scheduled_at: string | null;
   approved_at: string | null;
   member_since: string;
   payout: PayoutSettings;

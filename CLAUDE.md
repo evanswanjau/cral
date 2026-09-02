@@ -239,12 +239,16 @@ What that meant in practice:
   `token` and nothing else — the phone+code branch is gone from the
   service, the schemas, and `identity.yaml`.
 - Opt-in SMS 2FA is implemented end to end in the API: `GET /auth/2fa`,
-  `POST /auth/2fa/enroll` → `POST /auth/2fa/verify` (two-step enrolment,
-  returns ten single-use recovery codes exactly once),
-  `POST /auth/2fa/challenge` (the post-password step at sign-in; accepts
-  the texted code or a recovery code), `POST /auth/2fa/challenge/send`, and
-  `DELETE /auth/2fa` (password + a current code; admins can't disable their
-  own). Tables in migration `20260826100000`.
+  `POST /auth/2fa/enable` (the one-tap switch — uses the already-verified
+  `users.phone`, returns ten single-use recovery codes exactly once),
+  `POST /auth/2fa/enroll` → `POST /auth/2fa/verify` (the older two-step
+  "pick a different handset" enrolment, kept but no longer used by the
+  UI), `POST /auth/2fa/challenge` (the post-password step at sign-in;
+  accepts the texted code or a recovery code),
+  `POST /auth/2fa/challenge/send`, and `DELETE /auth/2fa` (**password
+  only** as of 2026-09-03 — a texted/recovery code is still honoured if
+  supplied; admins can't disable their own). Tables in migration
+  `20260826100000`.
 - **A 2FA-pending login carries no tokens.** `POST /auth/login` returns
   `{ next: "2fa", challenge_id, masked_destination, expires_in }` and
   nothing else; the session is created by `/auth/2fa/challenge`. Don't
@@ -259,20 +263,20 @@ specified TOTP (`secret` + `otpauth_uri`). The owner chose SMS on
 app is a bigger ask of this audience. The contract was rewritten to match,
 so it is once again the source of truth.
 
-**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible).
-`apps/merchant` now has its first settings screen — **Settings → Security**
-(`/settings/security`, `pages/SecuritySettings.tsx`) — with the enrol flow
-(phone → texted code → the ten recovery codes, shown once) and the disable
-flow (password + a current/recovery code). It's a route only: deliberately
-**not** in `SideNav` yet (owner's call), reachable by URL.
-`SignIn.tsx` handles the `next: "2fa"` branch with a real code step
-(`completeTwoFactorChallenge`), not the old placeholder error. The
-server-side 2FA endpoints were already there; this is only the UI.
+**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible;
+reworked into a switch 2026-09-03). It's the **SMS code at sign-in** row
+on **Settings → Security** (`pages/settings/SecurityTab.tsx`): a toggle —
+on calls `POST /auth/2fa/enable` and shows the ten recovery codes once,
+off asks for the password. `SignIn.tsx` handles the `next: "2fa"` branch
+with a real code step (`completeTwoFactorChallenge`), not the old
+placeholder error. The server-side 2FA endpoints were already there; this
+is only the UI.
 
-`verifyLoginOtp` and `PhoneInput` in `apps/merchant` are still referenced
-by nothing (the passwordless-SMS-login tab stayed cut). `toE164` is now
-used by the 2FA settings screen. Don't delete the first two as dead code —
-they're kept against a future account-settings need.
+`verifyLoginOtp` and `apps/merchant`'s auth-`PhoneInput` are still
+referenced by nothing (the passwordless-SMS-login tab stayed cut, and the
+2FA switch dropped the enrol-by-phone UI). `toE164` is used by
+`VehicleDetail.tsx`. Don't delete the first two as dead code — they're
+kept against a future account-settings need.
 
 **Onboarding phone verification** (owner's call, 2026-08-31). The payout
 phone must pass an SMS proof-of-ownership check before onboarding can be
@@ -513,12 +517,13 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   the caller's session; audit-logged). `GET /merchant/payouts/statements`
   (last six Nairobi months with net totals, for the Statements card).
   `GET|PUT /merchant/payout-settings` (the editable payout block — also
-  embedded in `GET /merchant/profile` as `payout`). `Session` in
-  `identity.yaml` gained `user_agent`. Migrations: `20260902100000` adds
-  `merchants.trading_name` (nullable, kept but not surfaced —
-  onboarding doesn't collect it); `20260903090000` adds
-  `merchants.payout_schedule` (`weekly`/`monthly`, default `weekly`) and
-  `merchants.payout_mpesa_name` (nullable).
+  embedded in `GET /merchant/profile` as `payout`).
+  `POST /auth/2fa/enable`, `POST|DELETE /auth/account/deletion` (below).
+  `Session` in `identity.yaml` gained `user_agent`. Migrations:
+  `20260902100000` adds `merchants.trading_name` (nullable, kept but not
+  surfaced — onboarding doesn't collect it); `20260903090000` adds
+  `merchants.payout_schedule` (`weekly`/`monthly`, default `weekly`);
+  `20260903100000` adds `users.status` + deletion timestamps (below).
 - **The Business / "My profile" tab mirrors onboarding's "Your details"
   step field-for-field** (owner's call, 2026-09-03) — nothing new is asked
   for after onboarding. Individual: owner details (name, national ID, KRA
@@ -530,26 +535,57 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   Trading-name field, no WhatsApp toggle.
 - **Payouts is editable** (owner's call, 2026-09-03 — reverses the earlier
   "read-only" note). `PUT /merchant/payout-settings` replaces the whole
-  block: method (M-Pesa / bank), M-Pesa number + "name on the line" or the
-  four bank fields, and the long-booking `schedule`. **There is still no
-  payment rail** — the bank details and the schedule are collected and
-  stored, not acted on. **Company merchants are locked to bank**
-  (`method: "mpesa"` → 422 `mpesa_not_allowed_for_company`); switching the
-  profile to a company also flips `payout_method` to `bank`. This mirrors
-  onboarding's `pickOwnerType` / disabled-M-Pesa-card behaviour exactly.
-- **Long-booking instalment rhythm is stored, not acted on** (reverses the
-  earlier "omitted" note) — `merchants.payout_schedule`, surfaced as the
-  design's "Every Monday" / "Monthly, on the 1st" radio cards. A preference
-  held for when a rail exists.
+  block: method (M-Pesa / bank), the four bank fields, and the
+  long-booking `schedule`. **There is still no payment rail** — bank
+  details and the `schedule` are stored, not acted on. Rules:
+  - **The M-Pesa payout number is always `users.phone`** — no field for
+    it on this tab; to change it you change the phone on the profile. The
+    service sets `payout_same`/`payout_detail` accordingly;
+    `payout.mpesa_number` in the response is just the phone,
+    `mpesa_number_verified` mirrors `users.phone_verified`.
+  - **Company merchants are locked to bank** (`method: "mpesa"` → 422
+    `mpesa_not_allowed_for_company`); switching the profile to a company
+    also flips `payout_method` to `bank`. Mirrors onboarding's
+    `pickOwnerType`.
+  - **Bank payouts always run monthly, on the 1st** — no rhythm choice
+    (the service coerces `schedule` to `monthly` for bank). M-Pesa keeps
+    the "Every Monday" / "Monthly, on the 1st" cards
+    (`merchants.payout_schedule`, default `weekly`).
+- **SMS code at sign-in is a plain switch** (owner's call, 2026-09-03).
+  The "enter a phone, verify a code" enrol flow is gone from the UI — the
+  account phone is already proven at onboarding.
+  `POST /auth/2fa/enable` points the second factor at `users.phone` and
+  returns the ten recovery codes once. `DELETE /auth/2fa` now needs the
+  **password only** (a texted/recovery `code` is still honoured if
+  supplied). `enroll2fa` + `verify2fa` + `two_factor_phone` stay for a
+  future "different number" need; the UI no longer walks that path.
 - **Statements are CSV, not the design's "PDF"** — the card tag says
   `NET OF COMMISSION · CSV`, and Download reuses the existing per-month
   `GET /merchant/payouts/statement?month=` via `apiBlob`.
 - **WhatsApp toggle: omitted**, consistent with the Alerts matrix dropping
   the WhatsApp column.
-- **Close account is not self-service.** The red-topped card renders per
-  the design, but its button is a `wa.me` support hand-off — there's no
-  product definition yet for live listings / in-flight bookings /
-  seven-year retention on closure.
+- **Close account is real self-service** (owner's call, 2026-09-03 —
+  reverses the "not self-service / `wa.me` hand-off" note).
+  `users.status` (`active` / `suspended` / `pending_deletion` /
+  `deleted`, migration `20260903100000`, reusing the Phase-0 `erasure_*`
+  columns for the 30-day timer):
+  - `POST /auth/account/deletion` → `pending_deletion`, purge scheduled
+    30 days out, every **other** session revoked (the account "seems
+    deleted" everywhere, but the caller can still sign in to cancel).
+    Idempotent. `DELETE /auth/account/deletion` = "Keep my account".
+  - `login` rejects `suspended` (403 `account_suspended`) and `deleted`
+    (as invalid credentials); `pending_deletion` can still sign in.
+    Nothing *sets* `suspended` yet (no admin portal) — same footing as
+    `merchants.approved_at`.
+  - `runDailyReminderSweep` now also runs `runAccountDeletionSweep`
+    (`auth/service.ts`): past 30 days it scrubs the user row's PII, sets
+    `deleted`, revokes sessions, drops credentials/recovery codes — and
+    **keeps `merchants` / `vehicles` / `bookings` / `payout_runs` /
+    `audit_log`** so a hirer still sees where they booked and their
+    history.
+  - `GET /merchant/profile` carries `account_status` +
+    `deletion_scheduled_at`; the shell shows a red banner and the
+    Security card the "Keep my account" action while pending.
 - **The `✓ VERIFIED` account chip reflects real state** —
   `merchants.approved_at` (nothing sets it yet, no admin portal), so it
   shows `PENDING REVIEW` until an admin approves. Not a decorative tick.

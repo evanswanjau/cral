@@ -101,16 +101,15 @@ export type ProfilePatchInput = z.infer<typeof ProfilePatchSchema>;
 
 // --- Settings → Payouts (see openapi/merchant-settings.yaml) -----------
 //
-// A full replace of the payout block. `method: "mpesa"` is rejected
-// server-side for company merchants (they are paid to a bank account in
-// the company name — the same rule onboarding's "Your details" step
-// enforces).
+// A full replace of the payout block. Rules enforced in the service:
+//  - `method: "mpesa"` is rejected for company merchants (paid to a bank
+//    account in the company name — the same rule onboarding enforces).
+//  - The M-Pesa payout number is *always* `users.phone` — there is no
+//    field for it here; to change it, change the phone on the profile.
+//  - `schedule` is coerced to "monthly" whenever `method` is "bank".
 export const PayoutSettingsSchema = z.object({
   method: z.enum(["mpesa", "bank"]),
   schedule: z.enum(["weekly", "monthly"]),
-  same_as_phone: z.boolean().optional(),
-  mpesa_number: z.string().optional(),
-  mpesa_name: z.string().max(200).optional(),
   bank_name: z.string().optional(),
   bank_branch: z.string().optional(),
   bank_account_name: z.string().optional(),

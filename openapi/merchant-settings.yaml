@@ -173,6 +173,15 @@ components:
           nullable: true
           description: E.164, or null. Writable via PATCH; a change clears phone_verified.
         phone_verified: { type: boolean }
+        account_status:
+          type: string
+          enum: [active, suspended, pending_deletion, deleted]
+          description: See the 20260903100000 migration. `suspended` blocks sign-in.
+        deletion_scheduled_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Set only while `account_status` is `pending_deletion` — the 30-day purge instant.
         # Account-level state the Settings header renders. Nothing sets
         # approved_at yet (no admin portal), so it is genuinely nullable and
         # the "VERIFIED" chip must reflect that, not decorate.
@@ -195,19 +204,19 @@ components:
     PayoutSettings:
       type: object
       description: >
-        The payout block. `mpesa_number` falls back to the account phone
-        when `same_as_phone` is set. `mpesa_number_verified` is only true
-        when the number *is* that verified account phone. Nothing disburses
-        against any of this yet — there is no payment rail.
+        The payout block. `mpesa_number` is **always** the account phone
+        (`users.phone`) — there is no separate field; to change it, change
+        the phone on the profile. `mpesa_number_verified` mirrors
+        `users.phone_verified`. `schedule` is always `monthly` when
+        `method` is `bank`. Nothing disburses against any of this yet —
+        there is no payment rail.
       properties:
         method: { type: string, enum: [mpesa, bank] }
         schedule:
           type: string
           enum: [weekly, monthly]
-          description: Long-booking instalment rhythm — stored, not acted on
-        same_as_phone: { type: boolean }
-        mpesa_number: { type: string, nullable: true }
-        mpesa_name: { type: string, nullable: true, description: "\"Name on the M-Pesa line\"" }
+          description: Long-booking instalment rhythm — stored, not acted on. Forced to `monthly` for bank.
+        mpesa_number: { type: string, nullable: true, description: Always the account phone }
         mpesa_number_verified: { type: boolean }
         bank_name: { type: string, nullable: true }
         bank_branch: { type: string, nullable: true }
@@ -223,10 +232,10 @@ components:
           type: string
           enum: [mpesa, bank]
           description: "`mpesa` is rejected (422) for company merchants"
-        schedule: { type: string, enum: [weekly, monthly] }
-        same_as_phone: { type: boolean }
-        mpesa_number: { type: string, description: Kenyan number; normalised to E.164 server-side }
-        mpesa_name: { type: string, maxLength: 200 }
+        schedule:
+          type: string
+          enum: [weekly, monthly]
+          description: Ignored (forced to `monthly`) when method is `bank`
         bank_name: { type: string }
         bank_branch: { type: string }
         bank_account_name: { type: string }

@@ -89,6 +89,21 @@ export function Settings(): JSX.Element {
         </div>
       )}
 
+      {profile?.account_status === "pending_deletion" && (
+        <div style={{ ...P.banner, background: "#FDE7EA", borderColor: "#F7BDC5" }}>
+          <span style={P.bannerDot} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={P.bannerTitle}>This account is scheduled for deletion</div>
+            <div style={P.bannerBody}>
+              {profile.deletion_scheduled_at
+                ? `Everything is removed on ${fmtDate(profile.deletion_scheduled_at)} unless you keep it. `
+                : "Everything is removed in 30 days unless you keep it. "}
+              See the Security tab.
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={P.setTabStrip} role="tablist" aria-label="Settings sections">
         {TABS.map((t) => {
           const active = t.key === tab;

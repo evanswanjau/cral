@@ -706,24 +706,26 @@ paths:
 
     delete:
       tags: [account]
-      summary: Disable 2FA — requires password + a current code. Admins cannot disable their own.
+      summary: Disable 2FA — password only (the Settings switch-off). Admins cannot disable their own.
       operationId: disable2fa
       security: [{ bearerAuth: [] }]
       description: >
-        The code is either a six-digit challenge raised by
-        /auth/2fa/challenge/send, or one of the recovery codes. Disabling
-        destroys the remaining recovery codes and forgets the enrolled
-        number.
+        The password alone is enough — texting yourself a code to stop
+        texting yourself codes is circular friction, and the caller is
+        already authenticated. A `code` (a challenge from
+        /auth/2fa/challenge/send, or a recovery code) is still honoured if
+        supplied. Disabling destroys the remaining recovery codes and
+        forgets the enrolled number.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [password, code]
+              required: [password]
               properties:
                 password: { type: string }
-                code: { type: string }
+                code: { type: string, description: Optional — texted or recovery code }
       responses:
         "204": { description: Disabled }
         "401":
@@ -733,6 +735,86 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "403":
           description: Admins cannot disable their own 2FA
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/2fa/enable:
+    post:
+      tags: [account]
+      summary: One-tap enable — uses the already-verified account phone, no handset step
+      operationId: enable2fa
+      security: [{ bearerAuth: [] }]
+      description: >
+        The Settings → Security switch. The account phone was already
+        proven at onboarding, so this points the second factor at
+        `users.phone` and returns the ten recovery codes exactly once.
+        `/auth/2fa/enroll` + `/auth/2fa/verify` remain for a future
+        "use a different number" need.
+      responses:
+        "200":
+          description: Enabled — recovery codes shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  recovery_codes:
+                    type: array
+                    items: { type: string }
+        "409":
+          description: two_factor_already_enabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: phone_not_verified
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /auth/account/deletion:
+    post:
+      tags: [account]
+      summary: Request account deletion — 30-day grace period
+      operationId: requestAccountDeletion
+      security: [{ bearerAuth: [] }]
+      description: >
+        Flips the account to `pending_deletion`, sets the purge for 30 days
+        out, and revokes every other session — the account "seems deleted"
+        everywhere. The caller can still sign in and cancel until then.
+        Idempotent: a second call returns the same schedule.
+      responses:
+        "200":
+          description: Scheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: pending_deletion }
+                  deletion_scheduled_at: { type: string, format: date-time }
+        "409":
+          description: account_deleted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    delete:
+      tags: [account]
+      summary: '"Keep my account" — cancel a pending deletion'
+      operationId: cancelAccountDeletion
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Reactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: active }
+        "409":
+          description: no_pending_deletion
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

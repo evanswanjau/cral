@@ -70,6 +70,11 @@ export function verify2fa(code: string) {
   return apiPost<{ recovery_codes: string[] }>("/auth/2fa/verify", { code });
 }
 
+/** One-tap enable — uses the already-verified account phone. Returns the ten recovery codes, once. */
+export function enable2fa() {
+  return apiPost<{ recovery_codes: string[] }>("/auth/2fa/enable");
+}
+
 /** Raise a fresh challenge for an already-signed-in merchant (needed to disable). */
 export function sendTwoFactorChallenge() {
   return apiPost<{ challenge_id: string; masked_destination: string; expires_in: number }>(
@@ -77,8 +82,19 @@ export function sendTwoFactorChallenge() {
   );
 }
 
-export function disable2fa(password: string, code: string) {
-  return apiDelete<void>("/auth/2fa", { password, code });
+/** Switch off — password only; a texted/recovery `code` is still accepted if given. */
+export function disable2fa(password: string, code?: string) {
+  return apiDelete<void>("/auth/2fa", code ? { password, code } : { password });
+}
+
+// --- account deletion (30-day grace) -------------------------------
+
+export function requestAccountDeletion() {
+  return apiPost<{ status: string; deletion_scheduled_at: string }>("/auth/account/deletion");
+}
+
+export function cancelAccountDeletion() {
+  return apiDelete<{ status: string }>("/auth/account/deletion");
 }
 
 export function requestOtp(identifier: string, purpose: OtpPurpose) {

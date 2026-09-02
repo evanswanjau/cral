@@ -5,34 +5,30 @@ import { O } from "../../components/onboarding/styles.js";
 import { P } from "../../components/portal/styles.js";
 import { useToast } from "../../components/portal/Toast.js";
 import { ApiClientError } from "../../lib/api.js";
-import { toE164 } from "../../lib/device.js";
 import {
+  cancelAccountDeletion,
   changePassword,
   disable2fa,
-  enroll2fa,
-  getTwoFactorState,
+  enable2fa,
   listSessions,
+  requestAccountDeletion,
   revokeAllSessions,
   revokeSession,
-  sendTwoFactorChallenge,
-  verify2fa,
+  getTwoFactorState,
   type SessionRow,
 } from "../../lib/auth-api.js";
-
-/** Support line, same number as the portal's masthead "Help" link. */
-const SUPPORT_WA = "https://wa.me/254733376061?text=I%20want%20to%20close%20my%20CRAL%20merchant%20account";
+import { useProfile } from "../../lib/settings-api.js";
 
 /**
- * Settings → Security. Folds in the former standalone
- * `pages/SecuritySettings.tsx` (2FA enrol/disable) and adds the two pieces
- * the design's Security tab also carries: a password change and the
- * "where you are signed in" session list with "sign out everywhere".
- * Close-account is a support hand-off, not self-service (no product
- * definition yet for live listings / in-flight bookings / retention).
+ * Settings → Security. 2FA is a plain switch now (the account phone is
+ * already verified, so there's no handset step); the former
+ * enrol-by-phone flow is gone. Close-account is real self-service with a
+ * 30-day grace period, not a support hand-off.
  */
 export function SecurityTab(): JSX.Element {
   const qc = useQueryClient();
   const twoFa = useQuery({ queryKey: ["2fa"], queryFn: getTwoFactorState });
+  const { data: profile } = useProfile();
   const refresh2fa = () => qc.invalidateQueries({ queryKey: ["2fa"] });
 
   return (
@@ -43,23 +39,12 @@ export function SecurityTab(): JSX.Element {
           <div style={P.setFieldStack}>
             <PasswordRow />
             <div style={P.setSignDivider} />
-            <div style={P.setSignRow}>
-              <div style={P.setSignMain}>
-                <div style={P.setSignTitle}>SMS code at sign-in</div>
-                <div style={P.setSignSub}>
-                  {twoFa.data?.enabled
-                    ? `A six-digit code to ${twoFa.data.masked_destination ?? "your phone"} every time you sign in on a new device.`
-                    : "Add a texted code to your password when you sign in on a new device."}
-                </div>
-              </div>
-            </div>
-            {twoFa.isLoading || !twoFa.data ? (
-              <div style={O.helper}>Loading…</div>
-            ) : twoFa.data.enabled ? (
-              <TwoFactorOn state={twoFa.data} onChanged={refresh2fa} />
-            ) : (
-              <TwoFactorOff onChanged={refresh2fa} />
-            )}
+            <TwoFactorRow
+              state={twoFa.data}
+              loading={twoFa.isLoading}
+              phoneVerified={Boolean(profile?.phone_verified)}
+              onChanged={refresh2fa}
+            />
           </div>
         </div>
 
@@ -67,19 +52,15 @@ export function SecurityTab(): JSX.Element {
       </div>
 
       <div style={P.setBodySide}>
-        <div style={P.setCloseCard}>
-          <div style={P.setCloseBar} />
-          <div style={P.setCloseBody}>
-            <div style={P.setCloseTitle}>Close this account</div>
-            <p style={P.setCloseText}>
-              Listings come down and no new bookings can be made. Hires already running still finish
-              and still pay out. Your records stay with CRAL for seven years, as the law requires.
-            </p>
-            <a href={SUPPORT_WA} target="_blank" rel="noreferrer" style={P.setCloseBtn}>
-              Contact CRAL to close
-            </a>
-          </div>
-        </div>
+        <CloseAccountCard
+          status={profile?.account_status ?? "active"}
+          scheduledAt={profile?.deletion_scheduled_at ?? null}
+          confirmName={
+            profile?.owner_type === "company"
+              ? profile.company_name ?? ""
+              : [profile?.first_name, profile?.surname].filter(Boolean).join(" ")
+          }
+        />
       </div>
     </div>
   );
@@ -130,30 +111,174 @@ function PasswordRow(): JSX.Element {
       {open && (
         <div style={{ display: "grid", gap: 12, maxWidth: 380 }}>
           <FormField label="Current password">
-            <TextInput
-              type="password"
-              value={current}
-              onChange={(e) => setCurrent(e.target.value)}
-              autoComplete="current-password"
-            />
+            <TextInput type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" />
           </FormField>
           <FormField label="New password">
-            <TextInput
-              type="password"
-              value={next}
-              onChange={(e) => setNext(e.target.value)}
-              autoComplete="new-password"
-            />
+            <TextInput type="password" value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
           </FormField>
-          <PrimaryButton
-            onClick={() => void submit()}
-            disabled={busy || current.length < 1 || next.length < 10}
-          >
+          <PrimaryButton onClick={() => void submit()} disabled={busy || current.length < 1 || next.length < 10}>
             {busy ? "Saving…" : "Update password"}
           </PrimaryButton>
           {error && <div style={O.fieldError}>{error}</div>}
         </div>
       )}
+    </div>
+  );
+}
+
+// --- 2FA switch ----------------------------------------------------
+
+function Switch({ on, onToggle, disabled }: { on: boolean; onToggle: () => void; disabled?: boolean }): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      disabled={disabled}
+      style={{
+        ...P.ntToggle,
+        flex: "none",
+        cursor: disabled ? "not-allowed" : "pointer",
+        justifyContent: on ? "flex-end" : "flex-start",
+        background: disabled ? "#E4E7EC" : on ? "#0F23A8" : "#E4E7EC",
+        borderColor: disabled ? "#CDD2DA" : on ? "#0F23A8" : "#CDD2DA",
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <span style={{ ...P.ntToggleKnob, background: "#FFFFFF" }} />
+    </button>
+  );
+}
+
+function TwoFactorRow({
+  state,
+  loading,
+  phoneVerified,
+  onChanged,
+}: {
+  state: { enabled: boolean; masked_destination: string | null } | undefined;
+  loading: boolean;
+  phoneVerified: boolean;
+  onChanged: () => void;
+}): JSX.Element {
+  const flash = useToast();
+  const [busy, setBusy] = useState(false);
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [disabling, setDisabling] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const enabled = Boolean(state?.enabled);
+
+  async function turnOn(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await enable2fa();
+      setCodes(res.recovery_codes);
+      onChanged();
+    } catch (e) {
+      flash(e instanceof ApiClientError ? e.message : "Couldn't turn that on.", "#D81E32");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function turnOff(): Promise<void> {
+    setBusy(true);
+    setError(null);
+    try {
+      await disable2fa(password);
+      setDisabling(false);
+      setPassword("");
+      flash("SMS codes at sign-in are off.", "#8C97A8");
+      onChanged();
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "That password isn't right.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <div style={P.setSignRow}>
+        <div style={P.setSignMain}>
+          <div style={P.setSignTitle}>SMS code at sign-in</div>
+          <div style={P.setSignSub}>
+            {enabled
+              ? `A six-digit code to ${state?.masked_destination ?? "your phone"} when you sign in on a new device.`
+              : phoneVerified
+                ? "Add a texted code to your password when you sign in on a new device."
+                : "Verify your phone number on the My profile tab first."}
+          </div>
+        </div>
+        {loading ? (
+          <span style={O.helper}>…</span>
+        ) : (
+          <Switch
+            on={enabled}
+            disabled={busy || (!enabled && !phoneVerified)}
+            onToggle={() => {
+              if (enabled) setDisabling((v) => !v);
+              else void turnOn();
+            }}
+          />
+        )}
+      </div>
+
+      {disabling && enabled && (
+        <div style={{ ...P.setInlineNote, display: "grid", gap: 10, maxWidth: 380 }}>
+          <span>Enter your password to turn SMS codes off.</span>
+          <FormField label="Password">
+            <TextInput
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+            />
+          </FormField>
+          <div style={{ display: "flex", gap: 8 }}>
+            <PrimaryButton onClick={() => void turnOff()} disabled={busy || !password}>
+              {busy ? "Turning off…" : "Turn off"}
+            </PrimaryButton>
+            <button type="button" style={P.setSignBtn} onClick={() => setDisabling(false)}>
+              Cancel
+            </button>
+          </div>
+          {error && <div style={O.fieldError}>{error}</div>}
+        </div>
+      )}
+
+      {codes && <RecoveryCodes codes={codes} onDone={() => setCodes(null)} />}
+    </div>
+  );
+}
+
+function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }): JSX.Element {
+  return (
+    <div style={{ ...P.setInlineNote, display: "grid", gap: 12, maxWidth: 420 }}>
+      <div style={O.helper}>
+        SMS codes are on. Save these ten recovery codes somewhere safe — each works once if you
+        can&rsquo;t get a text. This is the only time we&rsquo;ll show them.
+      </div>
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(2, 1fr)",
+          gap: 8,
+          font: "500 14px/1.4 'IBM Plex Mono',monospace",
+          background: "#FFFFFF",
+          border: "1px solid #E4E7EC",
+          borderRadius: 10,
+          padding: 14,
+        }}
+      >
+        {codes.map((c) => (
+          <span key={c}>{c}</span>
+        ))}
+      </div>
+      <PrimaryButton onClick={onDone}>I&rsquo;ve saved them</PrimaryButton>
     </div>
   );
 }
@@ -247,9 +372,7 @@ function SessionsCard(): JSX.Element {
       ) : (
         sessions.map((s) => (
           <div key={s.id} style={P.setListRow}>
-            <span
-              style={{ ...P.setSessionDot, background: s.is_current ? "#0B8A5B" : "#CDD2DA" }}
-            />
+            <span style={{ ...P.setSessionDot, background: s.is_current ? "#0B8A5B" : "#CDD2DA" }} />
             <div style={{ flex: 1, minWidth: 160 }}>
               <div style={P.setListName}>{s.device}</div>
               <div style={P.setListMeta}>
@@ -275,214 +398,125 @@ function SessionsCard(): JSX.Element {
   );
 }
 
-// --- 2FA (ported from the former SecuritySettings page) -------------
+// --- close account ------------------------------------------------
 
-function TwoFactorOn({
-  state,
-  onChanged,
-}: {
-  state: { masked_destination: string | null; recovery_codes_remaining: number | null };
-  onChanged: () => void;
-}): JSX.Element {
-  const flash = useToast();
-  const [step, setStep] = useState<"idle" | "confirm">("idle");
-  const [password, setPassword] = useState("");
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function sendCode(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      await sendTwoFactorChallenge();
-      setStep("confirm");
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "Couldn't text a code. Try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function turnOff(): Promise<void> {
-    setBusy(true);
-    setError(null);
-    try {
-      await disable2fa(password, code.trim());
-      flash("Two-factor authentication is off.");
-      onChanged();
-    } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "That didn't work. Check your password and code.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div style={{ ...P.setInlineNote, display: "grid", gap: 12 }}>
-      <div style={O.helper}>
-        {state.recovery_codes_remaining ?? 0} recovery code
-        {state.recovery_codes_remaining === 1 ? "" : "s"} left.
-      </div>
-      {step === "idle" ? (
-        <button type="button" style={P.setSignBtn} disabled={busy} onClick={() => void sendCode()}>
-          {busy ? "Texting…" : "Turn it off"}
-        </button>
-      ) : (
-        <div style={{ display: "grid", gap: 12, maxWidth: 380 }}>
-          <FormField label="Your password">
-            <TextInput
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
-          </FormField>
-          <FormField label="Texted code (or a recovery code)">
-            <TextInput
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/[^0-9A-Za-z-]/g, "").slice(0, 20))}
-              inputMode="numeric"
-              placeholder="123456"
-            />
-          </FormField>
-          <PrimaryButton
-            onClick={() => void turnOff()}
-            disabled={busy || !password || code.trim().length < 6}
-          >
-            {busy ? "Turning off…" : "Turn off two-factor"}
-          </PrimaryButton>
-        </div>
-      )}
-      {error && <div style={O.fieldError}>{error}</div>}
-    </div>
-  );
+function fmtDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
 }
 
-function TwoFactorOff({ onChanged }: { onChanged: () => void }): JSX.Element {
+function CloseAccountCard({
+  status,
+  scheduledAt,
+  confirmName,
+}: {
+  status: string;
+  scheduledAt: string | null;
+  confirmName: string;
+}): JSX.Element {
+  const qc = useQueryClient();
   const flash = useToast();
-  const [step, setStep] = useState<"idle" | "phone" | "code" | "codes">("idle");
-  const [digits, setDigits] = useState("");
-  const [code, setCode] = useState("");
-  const [masked, setMasked] = useState("");
-  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
+  const [open, setOpen] = useState(false);
+  const [typed, setTyped] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  async function sendCode(): Promise<void> {
+  const pending = status === "pending_deletion";
+  const target = confirmName.trim();
+  const canConfirm = target.length === 0 || typed.trim().toLowerCase() === target.toLowerCase();
+
+  async function requestDelete(): Promise<void> {
     setBusy(true);
-    setError(null);
     try {
-      const res = await enroll2fa(toE164(digits));
-      setMasked(res.masked_destination);
-      setStep("code");
+      await requestAccountDeletion();
+      await qc.invalidateQueries({ queryKey: ["merchant-profile"] });
+      await qc.invalidateQueries({ queryKey: ["sessions"] });
+      setOpen(false);
+      setTyped("");
+      flash("Account scheduled for deletion. You're signed out on other devices.", "#D81E32");
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "Couldn't text that number. Check it and try again.");
+      flash(e instanceof ApiClientError ? e.message : "Couldn't do that. Try again.", "#D81E32");
     } finally {
       setBusy(false);
     }
   }
 
-  async function confirm(): Promise<void> {
+  async function keepAccount(): Promise<void> {
     setBusy(true);
-    setError(null);
     try {
-      const res = await verify2fa(code.trim());
-      setRecoveryCodes(res.recovery_codes);
-      setStep("codes");
+      await cancelAccountDeletion();
+      await qc.invalidateQueries({ queryKey: ["merchant-profile"] });
+      flash("Your account is active again.", "#0B8A5B");
     } catch (e) {
-      setError(e instanceof ApiClientError ? e.message : "That code isn't right.");
+      flash(e instanceof ApiClientError ? e.message : "Couldn't do that. Try again.", "#D81E32");
     } finally {
       setBusy(false);
     }
-  }
-
-  if (step === "idle") {
-    return (
-      <button type="button" style={P.setSignBtn} onClick={() => setStep("phone")}>
-        Set it up
-      </button>
-    );
-  }
-
-  if (step === "codes") {
-    return (
-      <div style={{ ...P.setInlineNote, display: "grid", gap: 12 }}>
-        <div style={O.helper}>
-          Save these ten recovery codes somewhere safe. Each works once if you can&rsquo;t get a text.
-          This is the only time we&rsquo;ll show them.
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(2, 1fr)",
-            gap: 8,
-            font: "500 14px/1.4 'IBM Plex Mono',monospace",
-            background: "#FFFFFF",
-            border: "1px solid #E4E7EC",
-            borderRadius: 10,
-            padding: 14,
-          }}
-        >
-          {recoveryCodes.map((c) => (
-            <span key={c}>{c}</span>
-          ))}
-        </div>
-        <PrimaryButton
-          onClick={() => {
-            flash("Two-factor authentication is on.");
-            onChanged();
-          }}
-        >
-          I&rsquo;ve saved them
-        </PrimaryButton>
-      </div>
-    );
   }
 
   return (
-    <div style={{ ...P.setInlineNote, display: "grid", gap: 12, maxWidth: 400 }}>
-      {step === "phone" ? (
-        <div style={{ display: "grid", gap: 12 }}>
-          <FormField label="Phone number">
-            <div style={{ display: "flex", gap: 8 }}>
-              <span style={O.phonePrefix}>+254</span>
-              <TextInput
-                value={digits}
-                onChange={(e) =>
-                  setDigits(e.target.value.replace(/\D/g, "").replace(/^(?:254|0)/, "").slice(0, 9))
-                }
-                placeholder="712 345 678"
-                inputMode="tel"
-                style={{ flex: 1 }}
-              />
-            </div>
-          </FormField>
-          <PrimaryButton onClick={() => void sendCode()} disabled={busy || digits.length < 9}>
-            {busy ? "Texting…" : "Send code"}
-          </PrimaryButton>
-        </div>
-      ) : (
-        <div style={{ display: "grid", gap: 12 }}>
-          <FormField label={`6-digit code texted to ${masked}`}>
-            <TextInput
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              placeholder="123456"
-            />
-          </FormField>
-          <div style={{ display: "flex", gap: 10 }}>
-            <PrimaryButton onClick={() => void confirm()} disabled={busy || code.length !== 6}>
-              {busy ? "Checking…" : "Turn on two-factor"}
-            </PrimaryButton>
-            <button type="button" style={P.setSignBtn} disabled={busy} onClick={() => void sendCode()}>
-              Resend
+    <div style={P.setCloseCard}>
+      <div style={P.setCloseBar} />
+      <div style={P.setCloseBody}>
+        <div style={P.setCloseTitle}>{pending ? "Deletion scheduled" : "Delete this account"}</div>
+        {pending ? (
+          <>
+            <p style={P.setCloseText}>
+              Your account and listings will be permanently deleted
+              {scheduledAt ? ` on ${fmtDate(scheduledAt)}` : " in 30 days"}. Bookings already running
+              still finish and still pay out. Sign in any time before then to stop it.
+            </p>
+            <button type="button" style={P.setSignBtn} onClick={() => void keepAccount()} disabled={busy}>
+              {busy ? "…" : "Keep my account"}
             </button>
+          </>
+        ) : !open ? (
+          <>
+            <p style={P.setCloseText}>
+              Listings come down and no new bookings can be made. Hires already running still finish
+              and still pay out. You have 30 days to change your mind; your records stay with CRAL for
+              seven years, as the law requires.
+            </p>
+            <button type="button" style={P.setCloseBtn} onClick={() => setOpen(true)}>
+              Delete account
+            </button>
+          </>
+        ) : (
+          <div style={{ display: "grid", gap: 10 }}>
+            <p style={P.setCloseText}>
+              This can&rsquo;t be undone after 30 days.
+              {target ? ` Type "${target}" to confirm.` : ""}
+            </p>
+            {target ? (
+              <input
+                style={P.setInput}
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder={target}
+                aria-label="Type your name to confirm"
+              />
+            ) : null}
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                type="button"
+                style={{ ...P.setCloseBtn, opacity: canConfirm && !busy ? 1 : 0.5 }}
+                onClick={() => void requestDelete()}
+                disabled={!canConfirm || busy}
+              >
+                {busy ? "…" : "Delete my account"}
+              </button>
+              <button
+                type="button"
+                style={P.setSignBtn}
+                onClick={() => {
+                  setOpen(false);
+                  setTyped("");
+                }}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
-        </div>
-      )}
-      {error && <div style={O.fieldError}>{error}</div>}
+        )}
+      </div>
     </div>
   );
 }

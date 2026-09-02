@@ -174,6 +174,30 @@ authRouter.post(
   }),
 );
 
+// --- Self-service account deletion (30-day grace) --------------------
+
+authRouter.post(
+  "/auth/account/deletion",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.requestAccountDeletion(
+      req.auth!.sub,
+      req.auth!.sid,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.delete(
+  "/auth/account/deletion",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.cancelAccountDeletion(req.auth!.sub, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
 // --- Onboarding phone verification -----------------------------------
 //
 // Proves the merchant holds the payout number before onboarding can be
@@ -250,6 +274,18 @@ authRouter.post(
   validateBody(Verify2faSchema),
   asyncHandler(async (req, res) => {
     const result = await authService.verify2fa(req.auth!.sub, req.body.code, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
+// One-tap enable: uses the already-verified account phone, no handset
+// step. Returns the ten recovery codes exactly once.
+authRouter.post(
+  "/auth/2fa/enable",
+  authenticate(),
+  rateLimit({ bucket: "two_factor_enroll", limit: 5, windowSeconds: 3600 }),
+  asyncHandler(async (req, res) => {
+    const result = await authService.enable2fa(req.auth!.sub, ctxOf(req));
     res.status(200).json(result);
   }),
 );

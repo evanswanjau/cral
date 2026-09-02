@@ -5,6 +5,7 @@ import { createApp } from "../../../app.js";
 import { db } from "../../../db/client.js";
 import { generateId } from "../../../lib/ids.js";
 import { createVerifiedTestUser } from "../../../test/helpers.js";
+import { requestAccountDeletion, runAccountDeletionSweep } from "../../auth/service.js";
 
 const app = createApp();
 const createdUserIds: string[] = [];
@@ -200,15 +201,15 @@ describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
     const res = await request(app)
       .put("/merchant/payout-settings")
       .set(auth(accessToken))
-      .send({ method: "mpesa", schedule: "monthly", same_as_phone: false, mpesa_number: "0700111222", mpesa_name: "Jane Doe" });
+      .send({ method: "mpesa", schedule: "monthly" });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       method: "mpesa",
       schedule: "monthly",
-      same_as_phone: false,
-      mpesa_number: "+254700111222",
-      mpesa_name: "Jane Doe",
-      mpesa_number_verified: false,
+      // The M-Pesa number is always the account phone, and its verified
+      // flag mirrors users.phone_verified.
+      mpesa_number: "+254712300001",
+      mpesa_number_verified: true,
     });
 
     // Reflected in the profile payload the tab reads.
@@ -221,16 +222,26 @@ describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
     expect(entry.after).toMatchObject({ payout_method: "mpesa", payout_schedule: "monthly" });
   });
 
-  it("marks the M-Pesa number verified when it is the verified account phone", async () => {
-    const { userId, accessToken } = await newMerchant();
-    await db("users").where({ id: userId }).update({ phone: "+254712300002", phone_verified: true });
-
+  it("coerces a bank payout to a monthly schedule regardless of what's sent", async () => {
+    const { accessToken } = await newMerchant();
     const res = await request(app)
       .put("/merchant/payout-settings")
       .set(auth(accessToken))
-      .send({ method: "mpesa", schedule: "weekly", same_as_phone: true });
+      .send({
+        method: "bank",
+        schedule: "weekly",
+        bank_name: "Equity Bank Kenya",
+        bank_branch: "Westlands",
+        bank_account_name: "Jane Doe",
+        bank_account_number: "0170 1984 56321",
+      });
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ same_as_phone: true, mpesa_number: "+254712300002", mpesa_number_verified: true });
+    expect(res.body).toMatchObject({
+      method: "bank",
+      schedule: "monthly",
+      bank_name: "Equity Bank Kenya",
+      bank_account_number: "0170198456321",
+    });
   });
 
   it("rejects M-Pesa for a company merchant (422)", async () => {
@@ -268,7 +279,7 @@ describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
     await request(app)
       .put("/merchant/payout-settings")
       .set(auth(accessToken))
-      .send({ method: "mpesa", schedule: "weekly", same_as_phone: true });
+      .send({ method: "mpesa", schedule: "weekly" });
 
     await request(app)
       .patch("/merchant/profile")
@@ -277,5 +288,91 @@ describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
 
     const merchant = await db("merchants").where({ user_id: userId }).first();
     expect(merchant.payout_method).toBe("bank");
+  });
+});
+
+describe("Settings → Security — account deletion", () => {
+  const ctx = { ip: null, requestId: null };
+
+  it("schedules deletion 30 days out, revokes other sessions, and audit-logs it", async () => {
+    const { userId, accessToken } = await newMerchant();
+    const other = await addSession(userId);
+
+    const res = await request(app).post("/auth/account/deletion").set(auth(accessToken));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("pending_deletion");
+    const days = (new Date(res.body.deletion_scheduled_at).getTime() - Date.now()) / 86_400_000;
+    expect(days).toBeGreaterThan(29);
+    expect(days).toBeLessThan(31);
+
+    const user = await db("users").where({ id: userId }).first();
+    expect(user.status).toBe("pending_deletion");
+    expect(user.erasure_requested).toBe(true);
+
+    const otherRow = await db("sessions").where({ id: other }).first();
+    expect(otherRow.revoked_at).not.toBeNull();
+
+    // The profile payload the Settings screen reads carries the state.
+    const profile = await request(app).get("/merchant/profile").set(auth(accessToken));
+    expect(profile.body.account_status).toBe("pending_deletion");
+    expect(profile.body.deletion_scheduled_at).toBeTruthy();
+
+    const entry = await latestAudit("user.deletion_requested", userId);
+    expect(entry).toBeTruthy();
+  });
+
+  it("is idempotent — a second request keeps the original schedule", async () => {
+    const { userId } = await newMerchant();
+    const first = await requestAccountDeletion(userId, "sid", ctx);
+    const second = await requestAccountDeletion(userId, "sid", ctx);
+    expect(second.deletion_scheduled_at).toBe(first.deletion_scheduled_at);
+  });
+
+  it('"Keep my account" reactivates', async () => {
+    const { userId, accessToken } = await newMerchant();
+    await request(app).post("/auth/account/deletion").set(auth(accessToken));
+
+    const res = await request(app).delete("/auth/account/deletion").set(auth(accessToken));
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe("active");
+
+    const user = await db("users").where({ id: userId }).first();
+    expect(user.status).toBe("active");
+    expect(user.erasure_cooling_off_until).toBeNull();
+  });
+
+  it("blocks sign-in for a suspended account", async () => {
+    const { userId, email } = await newMerchant();
+    await db("users").where({ id: userId }).update({ status: "suspended" });
+
+    const res = await request(app)
+      .post("/auth/login")
+      .send({ identifier: email, password: "correct horse battery staple", device_id: "d" });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("account_suspended");
+  });
+
+  it("the sweep scrubs PII and marks deleted once the grace period elapses, keeping records untouched", async () => {
+    const { userId, accessToken } = await newMerchant();
+    // Materialise the merchant row (lazily created) so we can assert it survives.
+    await request(app).get("/merchant/profile").set(auth(accessToken));
+    await requestAccountDeletion(userId, "sid", ctx);
+    // Fast-forward the timer.
+    await db("users")
+      .where({ id: userId })
+      .update({ erasure_cooling_off_until: new Date(Date.now() - 1000) });
+
+    const { purged } = await runAccountDeletionSweep();
+    expect(purged).toBeGreaterThanOrEqual(1);
+
+    const user = await db("users").where({ id: userId }).first();
+    expect(user.status).toBe("deleted");
+    expect(user.email).toBe(`deleted-${userId}@cral.invalid`);
+    expect(user.phone).toBeNull();
+    expect(user.two_factor_enabled).toBe(false);
+
+    // The merchant row (the business record) is still there.
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    expect(merchant).toBeTruthy();
   });
 });

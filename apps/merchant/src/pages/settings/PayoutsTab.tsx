@@ -4,7 +4,6 @@ import { money } from "../../components/portal/status.js";
 import { SaveBar } from "../../components/portal/SaveBar.js";
 import { useToast } from "../../components/portal/Toast.js";
 import { OptionCard, Select } from "../../components/onboarding/primitives.js";
-import { O } from "../../components/onboarding/styles.js";
 import { BANKS } from "../../lib/kenya.js";
 import { ApiClientError } from "../../lib/api.js";
 import { downloadStatement } from "../../lib/payouts-api.js";
@@ -17,25 +16,22 @@ import {
 } from "../../lib/settings-api.js";
 
 /**
- * Settings → Payouts, per "Cruz Merchant Settings.dc.html". Editable as of
- * 2026-09-03 (owner's call): the merchant picks the method, fills the
- * M-Pesa or bank details, and sets the long-booking rhythm.
+ * Settings → Payouts. Editable as of 2026-09-03 (owner's call).
  *
- * There is still no payment rail — nothing disburses against any of this.
- * The bank fields and `schedule` are collected and stored for when one
- * exists. **Company merchants are locked to Bank** (M-Pesa disabled),
- * mirroring onboarding; the server rejects `mpesa` for a company too.
- *
- * The statement download stays CSV (the receipt-is-PDF / statement-is-CSV
- * decision from 2026-09-01).
+ *  - **M-Pesa number is always the account phone.** There is no field for
+ *    it here; to change it, change the phone on the My profile tab.
+ *  - **Company merchants are locked to Bank** (M-Pesa disabled; server
+ *    rejects `mpesa` for a company too), mirroring onboarding.
+ *  - **Bank payouts always run monthly, on the 1st** — no rhythm choice.
+ *    M-Pesa keeps the "Every Monday" / "Monthly" choice.
+ *  - There is still **no payment rail** — bank details and the schedule
+ *    are collected and stored, not disbursed against.
+ *  - The statement download stays CSV.
  */
 
 type Draft = {
   method: PayoutSettingsInput["method"];
   schedule: PayoutSettingsInput["schedule"];
-  same_as_phone: boolean;
-  mpesa_number: string;
-  mpesa_name: string;
   bank_name: string;
   bank_branch: string;
   bank_account_name: string;
@@ -47,9 +43,6 @@ function toDraft(p: MerchantProfile): Draft {
   return {
     method: py.method,
     schedule: py.schedule,
-    same_as_phone: py.same_as_phone,
-    mpesa_number: py.same_as_phone ? "" : py.mpesa_number ?? "",
-    mpesa_name: py.mpesa_name ?? "",
     bank_name: py.bank_name ?? "",
     bank_branch: py.bank_branch ?? "",
     bank_account_name: py.bank_account_name ?? "",
@@ -61,20 +54,14 @@ function toPayload(d: Draft): PayoutSettingsInput {
   if (d.method === "bank") {
     return {
       method: "bank",
-      schedule: d.schedule,
+      schedule: "monthly",
       bank_name: d.bank_name,
       bank_branch: d.bank_branch,
       bank_account_name: d.bank_account_name,
       bank_account_number: d.bank_account_number,
     };
   }
-  return {
-    method: "mpesa",
-    schedule: d.schedule,
-    same_as_phone: d.same_as_phone,
-    ...(d.same_as_phone ? {} : { mpesa_number: d.mpesa_number }),
-    mpesa_name: d.mpesa_name,
-  };
+  return { method: "mpesa", schedule: d.schedule };
 }
 
 const SCHEDULES = [
@@ -107,13 +94,7 @@ export function PayoutsTab(): JSX.Element {
   const isCompany = profile.owner_type === "company";
   const payByBank = current.method === "bank";
   const dirty = JSON.stringify(base) !== JSON.stringify(current);
-  const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
-    setDraft({ ...(draft ?? base), [k]: v });
-
-  const mpesaShown = current.same_as_phone ? profile.phone ?? "" : current.mpesa_number;
-  const mpesaVerified = current.same_as_phone
-    ? profile.phone_verified
-    : Boolean(mpesaShown) && mpesaShown === profile.phone && profile.phone_verified;
+  const set = <K extends keyof Draft>(k: K, v: Draft[K]) => setDraft({ ...(draft ?? base), [k]: v });
 
   async function onSave(): Promise<void> {
     try {
@@ -206,76 +187,51 @@ export function PayoutsTab(): JSX.Element {
                   </div>
                 </>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => set("same_as_phone", !current.same_as_phone)}
-                    style={{ ...O.checkChip, ...(current.same_as_phone ? O.checkChipOn : {}) }}
-                  >
-                    <span
-                      style={{
-                        ...O.checkChipBox,
-                        background: current.same_as_phone ? "#0B8A5B" : "#CDD2DA",
-                      }}
-                    >
-                      {current.same_as_phone ? "✓" : ""}
+                <div style={P.setFieldGrid2}>
+                  <label style={P.setField}>
+                    <span style={P.setFieldLabelRow}>
+                      M-Pesa number
+                      {profile.phone ? (
+                        <span
+                          style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
+                        >
+                          {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
+                        </span>
+                      ) : null}
                     </span>
-                    Same as my phone number
-                  </button>
-                  <div style={P.setFieldGrid2}>
-                    <label style={P.setField}>
-                      <span style={P.setFieldLabelRow}>
-                        M-Pesa number
-                        {mpesaShown ? (
-                          <span
-                            style={{ ...P.setChip, ...(mpesaVerified ? P.setChipOk : P.setChipWarn) }}
-                          >
-                            {mpesaVerified ? "✓ VERIFIED" : "UNVERIFIED"}
-                          </span>
-                        ) : null}
-                      </span>
-                      <input
-                        style={{
-                          ...P.setInputMono,
-                          ...(current.same_as_phone ? { background: "#F8F9FB", color: "#838C9B" } : {}),
-                        }}
-                        value={mpesaShown}
-                        disabled={current.same_as_phone}
-                        inputMode="tel"
-                        onChange={(e) => set("mpesa_number", e.target.value)}
-                        placeholder="+254…"
-                      />
-                    </label>
-                    <label style={P.setField}>
-                      <span style={P.setFieldLabel}>Name on the M-Pesa line</span>
-                      <input
-                        style={P.setInput}
-                        value={current.mpesa_name}
-                        onChange={(e) => set("mpesa_name", e.target.value)}
-                        placeholder="As registered on the line"
-                      />
-                    </label>
+                    <input style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }} value={profile.phone ?? "—"} readOnly />
+                  </label>
+                  <div style={{ ...P.setField, alignSelf: "end" }}>
+                    <div style={{ ...P.setInlineNote, marginBottom: 0 }}>
+                      Payouts go to your phone number. To change it, update it on the My profile tab.
+                    </div>
                   </div>
-                </>
+                </div>
               )}
 
               <div>
                 <span style={P.setFieldLabel}>Long bookings</span>
                 <p style={{ margin: "0 0 10px", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: "64ch", textWrap: "pretty" }}>
                   Ordinary hires pay out on completion, 24 hours after you receive the vehicle. Only
-                  bookings of a month or longer pay in instalments — pick the rhythm.
+                  bookings of a month or longer pay in instalments.
                 </p>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 }}>
-                  {SCHEDULES.map((o) => (
-                    <OptionCard
-                      key={o.key}
-                      active={current.schedule === o.key}
-                      title={o.label}
-                      body={o.body}
-                      onClick={() => set("schedule", o.key)}
-                    />
-                  ))}
-                </div>
+                {payByBank ? (
+                  <div style={P.setInlineNote}>
+                    Bank payouts run <strong>monthly, on the 1st</strong>.
+                  </div>
+                ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 }}>
+                    {SCHEDULES.map((o) => (
+                      <OptionCard
+                        key={o.key}
+                        active={current.schedule === o.key}
+                        title={o.label}
+                        body={o.body}
+                        onClick={() => set("schedule", o.key)}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>

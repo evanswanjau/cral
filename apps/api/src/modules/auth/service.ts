@@ -546,6 +546,26 @@ export async function login(
     });
   }
 
+  // A suspended account can't sign in at all; a purged one behaves as if
+  // it never existed. A `pending_deletion` account *can* still sign in —
+  // that's how the merchant reaches "Keep my account" within the 30 days.
+  if (user.status === "suspended") {
+    throw new ApiError({
+      status: 403,
+      type: "auth_error",
+      code: "account_suspended",
+      message: "This account is suspended. Contact CRAL support.",
+    });
+  }
+  if (user.status === "deleted") {
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "invalid_credentials",
+      message: "That phone or email and password do not match.",
+    });
+  }
+
   if (user.failed_login_count > 0 || user.locked_until) {
     await db<UserRow>("users")
       .where({ id: user.id })
@@ -704,6 +724,178 @@ export async function revokeAllOtherSessions(
   });
 
   return { revoked };
+}
+
+// ---------------------------------------------------------------------
+// Self-service account deletion (owner's call, 2026-09-03)
+//
+// Requesting deletion flips the account to `pending_deletion` and sets a
+// 30-day timer (reusing the Phase-0 `erasure_cooling_off_until` column).
+// Every other session is revoked, so the account "seems deleted"
+// everywhere — but the merchant can still sign in and hit "Keep my
+// account" until the timer runs out. The daily sweep then scrubs PII and
+// blocks sign-in for good, keeping bookings/payouts/audit rows so a hirer
+// still sees where they booked.
+// ---------------------------------------------------------------------
+
+const DELETION_GRACE_DAYS = 30;
+
+export async function requestAccountDeletion(
+  userId: string,
+  currentSessionId: string,
+  ctx: RequestContext,
+): Promise<{ status: string; deletion_scheduled_at: string }> {
+  const user = await requireUser(userId);
+
+  if (user.status === "deleted") {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "account_deleted",
+      message: "This account has already been deleted.",
+    });
+  }
+
+  // Idempotent — asking twice keeps the original schedule.
+  if (user.status === "pending_deletion" && user.erasure_cooling_off_until) {
+    return {
+      status: "pending_deletion",
+      deletion_scheduled_at: user.erasure_cooling_off_until.toISOString(),
+    };
+  }
+
+  const scheduledAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      status: "pending_deletion",
+      status_changed_at: new Date(),
+      erasure_requested: true,
+      erasure_cooling_off_until: scheduledAt,
+    });
+    await trx<SessionRow>("sessions")
+      .where({ user_id: user.id, revoked_at: null })
+      .andWhereNot({ id: currentSessionId })
+      .update({ revoked_at: new Date(), revoked_reason: "account_deletion_requested" });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "user.deletion_requested",
+      entityType: "user",
+      entityId: user.id,
+      after: { deletion_scheduled_at: scheduledAt.toISOString() },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  const when = scheduledAt.toISOString().slice(0, 10);
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Your CRAL account is scheduled for deletion",
+    html: emailLayout({
+      preheader: `Scheduled for ${when}. Sign in and choose "Keep my account" to stop it.`,
+      bodyHtml: [
+        emailHeading("Account scheduled for deletion"),
+        emailParagraph(
+          `Your account and listings will be permanently deleted on ${when}. Bookings already running still finish and still pay out.`,
+        ),
+        emailParagraph(
+          'Changed your mind? Sign in any time before then and choose "Keep my account".',
+        ),
+        emailMuted("If you didn't ask for this, sign in now and cancel it, then change your password."),
+      ].join(""),
+    }),
+    text: `Your CRAL account is scheduled for deletion on ${when}. Sign in before then and choose "Keep my account" to stop it.`,
+  });
+
+  return { status: "pending_deletion", deletion_scheduled_at: scheduledAt.toISOString() };
+}
+
+export async function cancelAccountDeletion(
+  userId: string,
+  ctx: RequestContext,
+): Promise<{ status: string }> {
+  const user = await requireUser(userId);
+  if (user.status !== "pending_deletion") {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "no_pending_deletion",
+      message: "This account isn't scheduled for deletion.",
+    });
+  }
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      status: "active",
+      status_changed_at: new Date(),
+      erasure_requested: false,
+      erasure_cooling_off_until: null,
+    });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "user.deletion_cancelled",
+      entityType: "user",
+      entityId: user.id,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  return { status: "active" };
+}
+
+/**
+ * Run daily (folded into runDailyReminderSweep). Purges accounts whose
+ * 30-day grace period has elapsed: scrub the PII on the user row and mark
+ * it `deleted`, revoke every session, drop credentials/recovery codes.
+ * Merchants, vehicles, bookings, payouts and audit_log are deliberately
+ * left intact.
+ */
+export async function runAccountDeletionSweep(): Promise<{ purged: number }> {
+  const due = await db<UserRow>("users")
+    .where({ status: "pending_deletion" })
+    .andWhere("erasure_cooling_off_until", "<=", new Date());
+
+  let purged = 0;
+  for (const user of due) {
+    await db.transaction(async (trx) => {
+      await trx<UserRow>("users").where({ id: user.id }).update({
+        status: "deleted",
+        status_changed_at: new Date(),
+        erasure_requested: false,
+        erasure_cooling_off_until: null,
+        email: `deleted-${user.id}@cral.invalid`,
+        phone: null,
+        phone_verified: false,
+        full_name: null,
+        // Unusable hash — no valid password can produce it.
+        password_hash: "deleted",
+        two_factor_enabled: false,
+        two_factor_phone: null,
+        two_factor_enrolled_at: null,
+        pin_hash: null,
+      });
+      await trx<SessionRow>("sessions")
+        .where({ user_id: user.id, revoked_at: null })
+        .update({ revoked_at: new Date(), revoked_reason: "account_deleted" });
+      await trx("recovery_codes").where({ user_id: user.id }).del();
+      await trx("password_reset_tokens").where({ user_id: user.id }).del();
+      await writeAuditEntry(trx, {
+        actorId: null,
+        actorType: "system",
+        action: "user.deleted",
+        entityType: "user",
+        entityId: user.id,
+        after: { reason: "grace_period_elapsed" },
+      });
+    });
+    purged++;
+  }
+
+  return { purged };
 }
 
 // ---------------------------------------------------------------------
@@ -921,6 +1113,73 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
 }
 
 /**
+ * The one-tap switch (Settings → Security). The account phone has already
+ * been proven at onboarding, so there is no handset step — enabling just
+ * points the second factor at `users.phone` and issues the recovery
+ * codes. `enroll2fa` + `verify2fa` stay for any future "use a different
+ * number" need, but the UI no longer walks that path.
+ */
+export async function enable2fa(userId: string, ctx: RequestContext) {
+  const user = await requireUser(userId);
+
+  if (user.two_factor_enabled) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_already_enabled",
+      message: "Two-factor authentication is already on for this account.",
+    });
+  }
+
+  if (!user.phone || !user.phone_verified) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "phone_not_verified",
+      message: "Verify your phone number first — see the My profile tab.",
+    });
+  }
+
+  const recoveryCodes = await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      two_factor_phone: user.phone,
+      two_factor_enabled: true,
+      two_factor_enrolled_at: new Date(),
+    });
+    const codes = await issueRecoveryCodes(user.id, trx);
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "auth.two_factor.enabled",
+      entityType: "user",
+      entityId: user.id,
+      after: { two_factor_enabled: true },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return codes;
+  });
+
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Two-factor authentication is on",
+    html: emailLayout({
+      preheader: "Two-factor authentication is now on for your account",
+      bodyHtml: [
+        emailHeading("Two-factor authentication is on"),
+        emailParagraph(
+          "From now on, signing in needs your password and a code texted to your phone.",
+        ),
+        emailMuted("If this wasn't you, contact support immediately."),
+      ].join(""),
+    }),
+    text: "Two-factor authentication was switched on for your CRAL account. If this wasn't you, contact support immediately.",
+  });
+
+  return { recovery_codes: recoveryCodes };
+}
+
+/**
  * The post-password step at sign-in. Accepts the texted code or any unspent
  * recovery code, and only then creates the session.
  */
@@ -1011,7 +1270,7 @@ export async function completeTwoFactorChallenge(
 export async function disable2fa(
   userId: string,
   password: string,
-  code: string,
+  code: string | undefined,
   ctx: RequestContext,
 ) {
   const user = await requireUser(userId);
@@ -1038,33 +1297,39 @@ export async function disable2fa(
     });
   }
 
-  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
-    .where({ user_id: user.id, consumed_at: null })
-    .orderBy("created_at", "desc")
-    .first();
+  // The code is optional now (the switch off asks for the password only —
+  // texting yourself a code to stop texting yourself codes is circular
+  // friction, and the caller is already in an authenticated session). When
+  // one *is* supplied — texted or recovery — it's still honoured/consumed.
+  const trimmed = (code ?? "").trim();
+  if (trimmed) {
+    const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+      .where({ user_id: user.id, consumed_at: null })
+      .orderBy("created_at", "desc")
+      .first();
 
-  const trimmed = code.trim();
-  const matchesTexted =
-    !!challenge &&
-    challenge.expires_at > new Date() &&
-    /^[0-9]{6}$/.test(trimmed) &&
-    hashCode(trimmed) === challenge.code_hash;
-  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, trimmed);
+    const matchesTexted =
+      !!challenge &&
+      challenge.expires_at > new Date() &&
+      /^[0-9]{6}$/.test(trimmed) &&
+      hashCode(trimmed) === challenge.code_hash;
+    const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, trimmed);
 
-  if (!matchesTexted && !usedRecoveryCode) {
-    throw new ApiError({
-      status: 401,
-      type: "auth_error",
-      code: "two_factor_invalid",
-      message: "That code isn't right.",
-      field: "code",
-    });
-  }
+    if (!matchesTexted && !usedRecoveryCode) {
+      throw new ApiError({
+        status: 401,
+        type: "auth_error",
+        code: "two_factor_invalid",
+        message: "That code isn't right.",
+        field: "code",
+      });
+    }
 
-  if (challenge) {
-    await db<TwoFactorChallengeRow>("two_factor_challenges")
-      .where({ id: challenge.id })
-      .update({ consumed_at: new Date() });
+    if (challenge && matchesTexted) {
+      await db<TwoFactorChallengeRow>("two_factor_challenges")
+        .where({ id: challenge.id })
+        .update({ consumed_at: new Date() });
+    }
   }
 
   await db.transaction(async (trx) => {
