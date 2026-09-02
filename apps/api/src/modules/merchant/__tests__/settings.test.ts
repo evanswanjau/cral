@@ -201,15 +201,16 @@ describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
     const res = await request(app)
       .put("/merchant/payout-settings")
       .set(auth(accessToken))
-      .send({ method: "mpesa", schedule: "monthly" });
+      .send({ method: "mpesa", schedule: "monthly", mpesa_name: "Jane Doe" });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
       method: "mpesa",
       schedule: "monthly",
       // The M-Pesa number is always the account phone, and its verified
-      // flag mirrors users.phone_verified.
+      // flag mirrors users.phone_verified. Only the name is editable.
       mpesa_number: "+254712300001",
       mpesa_number_verified: true,
+      mpesa_name: "Jane Doe",
     });
 
     // Reflected in the profile payload the tab reads.

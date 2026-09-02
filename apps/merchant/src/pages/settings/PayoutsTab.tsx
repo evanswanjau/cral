@@ -32,6 +32,7 @@ import {
 type Draft = {
   method: PayoutSettingsInput["method"];
   schedule: PayoutSettingsInput["schedule"];
+  mpesa_name: string;
   bank_name: string;
   bank_branch: string;
   bank_account_name: string;
@@ -43,6 +44,7 @@ function toDraft(p: MerchantProfile): Draft {
   return {
     method: py.method,
     schedule: py.schedule,
+    mpesa_name: py.mpesa_name ?? "",
     bank_name: py.bank_name ?? "",
     bank_branch: py.bank_branch ?? "",
     bank_account_name: py.bank_account_name ?? "",
@@ -61,7 +63,7 @@ function toPayload(d: Draft): PayoutSettingsInput {
       bank_account_number: d.bank_account_number,
     };
   }
-  return { method: "mpesa", schedule: d.schedule };
+  return { method: "mpesa", schedule: d.schedule, mpesa_name: d.mpesa_name };
 }
 
 const SCHEDULES = [
@@ -183,33 +185,44 @@ export function PayoutsTab(): JSX.Element {
                   </div>
                 </>
               ) : (
-                <label style={{ ...P.setField, maxWidth: 340 }}>
-                  <span style={P.setFieldLabelRow}>
-                    M-Pesa number
-                    {profile.phone ? (
-                      <span
-                        style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
-                      >
-                        {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
-                      </span>
-                    ) : null}
-                  </span>
-                  <input
-                    style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }}
-                    value={profile.phone ?? "—"}
-                    readOnly
-                  />
-                  <span
-                    style={{
-                      display: "block",
-                      marginTop: 7,
-                      font: "400 12px/1.5 'Instrument Sans',sans-serif",
-                      color: "#838C9B",
-                    }}
-                  >
-                    Payouts go to your phone number. Change it on the My profile tab.
-                  </span>
-                </label>
+                <div style={P.setFieldGrid2}>
+                  <label style={P.setField}>
+                    <span style={P.setFieldLabelRow}>
+                      M-Pesa number
+                      {profile.phone ? (
+                        <span
+                          style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
+                        >
+                          {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
+                        </span>
+                      ) : null}
+                    </span>
+                    <input
+                      style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }}
+                      value={profile.phone ?? "—"}
+                      readOnly
+                    />
+                    <span
+                      style={{
+                        display: "block",
+                        marginTop: 7,
+                        font: "400 12px/1.5 'Instrument Sans',sans-serif",
+                        color: "#838C9B",
+                      }}
+                    >
+                      Payouts go to your phone number. Change it on the My profile tab.
+                    </span>
+                  </label>
+                  <label style={P.setField}>
+                    <span style={P.setFieldLabel}>Name on the M-Pesa line</span>
+                    <input
+                      style={P.setInput}
+                      value={current.mpesa_name}
+                      onChange={(e) => set("mpesa_name", e.target.value)}
+                      placeholder="As registered on the line"
+                    />
+                  </label>
+                </div>
               )}
 
               <div>

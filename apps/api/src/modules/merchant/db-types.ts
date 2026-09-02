@@ -19,6 +19,8 @@ export interface MerchantRow {
   payout_detail: string | null;
   /** Long-booking instalment rhythm — "weekly" | "monthly". Stored, not yet acted on. Always "monthly" for bank. */
   payout_schedule: string;
+  /** "Name on the M-Pesa line" (Settings → Payouts). Not collected at onboarding. */
+  payout_mpesa_name: string | null;
   bank_name: string | null;
   bank_branch: string | null;
   bank_account_name: string | null;

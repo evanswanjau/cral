@@ -218,6 +218,7 @@ components:
           description: Long-booking instalment rhythm — stored, not acted on. Forced to `monthly` for bank.
         mpesa_number: { type: string, nullable: true, description: Always the account phone }
         mpesa_number_verified: { type: boolean }
+        mpesa_name: { type: string, nullable: true, description: "\"Name on the M-Pesa line\"" }
         bank_name: { type: string, nullable: true }
         bank_branch: { type: string, nullable: true }
         bank_account_name: { type: string, nullable: true }
@@ -236,6 +237,7 @@ components:
           type: string
           enum: [weekly, monthly]
           description: Ignored (forced to `monthly`) when method is `bank`
+        mpesa_name: { type: string, maxLength: 200 }
         bank_name: { type: string }
         bank_branch: { type: string }
         bank_account_name: { type: string }

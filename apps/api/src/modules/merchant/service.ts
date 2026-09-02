@@ -318,6 +318,7 @@ function serializePayout(
     schedule: (merchant.payout_schedule === "monthly" ? "monthly" : "weekly") as "weekly" | "monthly",
     mpesa_number: user?.phone ?? null,
     mpesa_number_verified: Boolean(user?.phone_verified) && !!user?.phone,
+    mpesa_name: merchant.payout_mpesa_name,
     bank_name: merchant.bank_name,
     bank_branch: merchant.bank_branch,
     bank_account_name: merchant.bank_account_name,
@@ -477,9 +478,10 @@ export async function updatePayoutSettings(
   };
 
   if (input.method === "mpesa") {
-    // The M-Pesa number is always the account phone.
+    // The M-Pesa number is always the account phone; only the name is editable.
     update.payout_same = true;
     update.payout_detail = null;
+    update.payout_mpesa_name = input.mpesa_name?.trim() || null;
   } else {
     update.bank_name = input.bank_name?.trim() || null;
     update.bank_branch = input.bank_branch?.trim() || null;

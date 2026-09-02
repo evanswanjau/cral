@@ -110,6 +110,7 @@ export type ProfilePatchInput = z.infer<typeof ProfilePatchSchema>;
 export const PayoutSettingsSchema = z.object({
   method: z.enum(["mpesa", "bank"]),
   schedule: z.enum(["weekly", "monthly"]),
+  mpesa_name: z.string().max(200).optional(),
   bank_name: z.string().optional(),
   bank_branch: z.string().optional(),
   bank_account_name: z.string().optional(),

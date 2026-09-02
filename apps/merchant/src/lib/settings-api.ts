@@ -26,6 +26,7 @@ export interface PayoutSettings {
   /** Always the account phone — change it on the profile. */
   mpesa_number: string | null;
   mpesa_number_verified: boolean;
+  mpesa_name: string | null;
   bank_name: string | null;
   bank_branch: string | null;
   bank_account_name: string | null;
@@ -35,6 +36,7 @@ export interface PayoutSettings {
 export interface PayoutSettingsInput {
   method: PayoutMethod;
   schedule: PayoutSchedule;
+  mpesa_name?: string;
   bank_name?: string;
   bank_branch?: string;
   bank_account_name?: string;

@@ -523,6 +523,7 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   `20260902100000` adds `merchants.trading_name` (nullable, kept but not
   surfaced — onboarding doesn't collect it); `20260903090000` adds
   `merchants.payout_schedule` (`weekly`/`monthly`, default `weekly`);
+  `merchants.payout_mpesa_name` (nullable — "Name on the M-Pesa line");
   `20260903100000` adds `users.status` + deletion timestamps (below).
 - **The Business / "My profile" tab mirrors onboarding's "Your details"
   step field-for-field** (owner's call, 2026-09-03) — nothing new is asked
@@ -535,12 +536,14 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   Trading-name field, no WhatsApp toggle.
 - **Payouts is editable** (owner's call, 2026-09-03 — reverses the earlier
   "read-only" note). `PUT /merchant/payout-settings` replaces the whole
-  block: method (M-Pesa / bank), the four bank fields, and the
-  long-booking `schedule`. **There is still no payment rail** — bank
-  details and the `schedule` are stored, not acted on. Rules:
-  - **The M-Pesa payout number is always `users.phone`** — no field for
-    it on this tab; to change it you change the phone on the profile. The
-    service sets `payout_same`/`payout_detail` accordingly;
+  block: method (M-Pesa / bank), the M-Pesa line name, the four bank
+  fields, and the long-booking `schedule`. **There is still no payment
+  rail** — bank details and the `schedule` are stored, not acted on.
+  Rules:
+  - **The M-Pesa payout *number* is always `users.phone`** — no field for
+    it on this tab (shown read-only); to change it you change the phone on
+    the profile. Only "Name on the M-Pesa line" (`payout_mpesa_name`) is
+    editable. The service sets `payout_same`/`payout_detail` accordingly;
     `payout.mpesa_number` in the response is just the phone,
     `mpesa_number_verified` mirrors `users.phone_verified`.
   - **Company merchants are locked to bank** (`method: "mpesa"` → 422
