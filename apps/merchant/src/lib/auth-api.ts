@@ -179,3 +179,37 @@ export function resetPassword(input: { token: string; new_password: string }) {
     auth: false,
   });
 }
+
+// --- account settings: password + sessions ---------------------------
+
+/** Authenticated change — revokes every other session, keeps the current one. */
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiPost<{ sessions_revoked: number }>("/auth/password/change", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
+export interface SessionRow {
+  id: string;
+  device: string;
+  approximate_location: string | null;
+  user_agent: string | null;
+  last_seen_at: string;
+  is_current: boolean;
+}
+
+export function listSessions() {
+  return apiGet<{ data: SessionRow[]; next_cursor: string | null; has_more: boolean }>(
+    "/auth/sessions",
+  );
+}
+
+export function revokeSession(id: string) {
+  return apiDelete<void>(`/auth/sessions/${id}`);
+}
+
+/** "Sign out everywhere" — all sessions but this one. */
+export function revokeAllSessions() {
+  return apiPost<{ revoked: number }>("/auth/sessions/revoke-all");
+}

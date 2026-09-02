@@ -1,16 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { BackButton } from "../components/onboarding/primitives.js";
-import { P } from "../components/portal/styles.js";
-import { useToast } from "../components/portal/Toast.js";
-import { ApiClientError } from "../lib/api.js";
+import { P } from "../../components/portal/styles.js";
+import { SaveBar } from "../../components/portal/SaveBar.js";
+import { useToast } from "../../components/portal/Toast.js";
+import { ApiClientError } from "../../lib/api.js";
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
   type NotificationCategory,
   type NotificationPreferenceRow,
   type QuietHours,
-} from "../lib/notifications-api.js";
+} from "../../lib/notifications-api.js";
+
+/**
+ * Settings → Notifications. The category × channel matrix and quiet hours —
+ * shipped as "Notifications" per the 2026-09-02 naming call (the design
+ * file names the tab "Alerts"). Formerly the standalone
+ * `pages/NotificationSettings.tsx` route; folded in here unchanged except
+ * for losing its own page heading (the shell provides one) and using the
+ * shared SaveBar.
+ */
 
 type ChannelKey = "sms" | "email";
 const CHANNELS: Array<[ChannelKey, string]> = [
@@ -58,8 +66,7 @@ function Toggle({
   );
 }
 
-export function NotificationSettings(): JSX.Element {
-  const navigate = useNavigate();
+export function NotificationsTab(): JSX.Element {
   const toast = useToast();
   const { data, isLoading } = useNotificationPreferences();
   const save = useUpdateNotificationPreferences();
@@ -77,13 +84,7 @@ export function NotificationSettings(): JSX.Element {
   }, [data, draft]);
 
   if (isLoading || !data || !draft) {
-    return (
-      <div style={{ maxWidth: 760 }}>
-        <BackButton onClick={() => navigate("/notifications")}>← Back to notifications</BackButton>
-        <h1 style={P.h1}>Notifications</h1>
-        <div style={{ ...P.card, padding: 20, marginTop: 16 }}>Loading…</div>
-      </div>
-    );
+    return <div style={{ ...P.card, padding: 20 }}>Loading…</div>;
   }
 
   function flip(category: NotificationCategory, channel: ChannelKey, locked: boolean): void {
@@ -106,6 +107,10 @@ export function NotificationSettings(): JSX.Element {
 
   function setQuiet(patch: Partial<QuietHours>): void {
     setDraft((d) => (d ? { ...d, quiet: { ...d.quiet, ...patch } } : d));
+  }
+
+  function reset(): void {
+    if (data) setDraft(toDraft(data.categories, data.quiet_hours));
   }
 
   async function onSave(): Promise<void> {
@@ -132,14 +137,7 @@ export function NotificationSettings(): JSX.Element {
   }
 
   return (
-    <div style={{ maxWidth: 760 }}>
-      <BackButton onClick={() => navigate("/notifications")}>← Back to notifications</BackButton>
-      <h1 style={P.h1}>Notifications</h1>
-      <p style={{ ...P.lede, marginBottom: 20 }}>
-        Every alert always shows in the portal. Choose which ones also reach you by SMS and email. WhatsApp isn't
-        available yet.
-      </p>
-
+    <>
       <div style={P.ntSettingsWrap}>
         <div style={P.ntMatrix}>
           <div style={P.ntCardHead}>
@@ -219,16 +217,7 @@ export function NotificationSettings(): JSX.Element {
         </div>
       </div>
 
-      <div style={P.ntSaveBar}>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={!dirty || save.isPending}
-          style={{ ...P.addButton, opacity: dirty && !save.isPending ? 1 : 0.55 }}
-        >
-          {save.isPending ? "Saving…" : "Save changes"}
-        </button>
-      </div>
-    </div>
+      {dirty && <SaveBar onSave={onSave} onDiscard={reset} saving={save.isPending} />}
+    </>
   );
 }

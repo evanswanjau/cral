@@ -7,6 +7,8 @@ export interface MerchantRow {
   company_kra: string | null;
   company_email: string | null;
   company_address: string | null;
+  /** Listing-facing name when it differs from the registered one (Settings → Business). */
+  trading_name: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;

@@ -426,6 +426,22 @@ paths:
         "204": { description: Signed out }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /auth/sessions/revoke-all:
+    post:
+      tags: [sessions]
+      summary: Sign out everywhere — every session except the caller's current one
+      operationId: revokeAllSessions
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Other sessions revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  revoked: { type: integer }
+
   /auth/pin/set:
     post:
       tags: [login]
@@ -1197,7 +1213,11 @@ components:
       properties:
         id: { type: string }
         device: { type: string }
-        approximate_location: { type: string }
+        approximate_location: { type: string, nullable: true }
+        user_agent:
+          type: string
+          nullable: true
+          description: Raw UA string, for the client to render a friendly label
         last_seen_at: { type: string, format: date-time }
         is_current: { type: boolean }
 

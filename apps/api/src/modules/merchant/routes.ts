@@ -10,6 +10,7 @@ import * as merchantService from "./service.js";
 import {
   CreateVehicleSchema,
   PatchOnboardingSchema,
+  ProfilePatchSchema,
   UploadDocumentQuerySchema,
   VehicleInputSchema,
 } from "./schemas.js";
@@ -148,6 +149,27 @@ merchantRouter.post(
   authenticate(),
   asyncHandler(async (req, res) => {
     const result = await merchantService.submitOnboarding(req.auth!.sub, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
+// --- Settings → Business (see openapi/merchant-settings.yaml) ----------
+
+merchantRouter.get(
+  "/merchant/profile",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.getProfile(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+merchantRouter.patch(
+  "/merchant/profile",
+  authenticate(),
+  validateBody(ProfilePatchSchema),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.patchProfile(req.auth!.sub, req.body, ctxOf(req));
     res.status(200).json(result);
   }),
 );

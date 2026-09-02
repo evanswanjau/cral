@@ -1,0 +1,174 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Merchant Settings API
+  version: "1.0.0"
+  description: >
+    The merchant's own account profile, read and written after onboarding —
+    the Settings → Business tab of the merchant portal. A different audience
+    and lifecycle from onboarding (`merchant-onboarding.yaml`), which is a
+    one-time wizard gated on completeness; this is a small, always-editable
+    surface, so it gets its own file.
+
+    Built at the owner's explicit request alongside the rest of the Settings
+    screen (see CLAUDE.md's "Recorded product decisions"). Contract frozen
+    before the code, per the contract-first ritual.
+
+    Scope notes, all deliberate:
+
+    - **County is not here.** `merchants.county` was dropped on 2026-08-31 —
+      the location a hirer cares about is the vehicle's, not the merchant's
+      home county. The design predates that; the field is omitted.
+    - **Business type is the existing two-value `owner_type` axis**
+      (`individual`/`company`), relabelled "Sole proprietor" / "Limited
+      company" in the UI. The design's third option, "Partnership", is
+      dropped rather than adding a field that gates nothing.
+    - **A phone change routes through the same path onboarding uses** — it
+      is normalised to E.164 and clears `phone_verified`, so the payout
+      phone-verification gate (spec §10) still applies. A duplicate phone
+      returns `phone_taken` (409), same as onboarding.
+    - **Login email is read-only here.** Changing the sign-in address is a
+      separate security flow; this endpoint only writes `company_email` (the
+      booking-contact address for company merchants).
+    - **The People / team-roles tab is not built** — it is a multi-user
+      authorization feature, deferred to its own phase.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: profile
+    description: The merchant's business profile — the name hirers see, contact details, type
+
+paths:
+  /merchant/profile:
+    get:
+      tags: [profile]
+      summary: The merchant's editable profile plus the read-only account state the Settings header shows
+      operationId: getMerchantProfile
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantProfile" }
+
+    patch:
+      tags: [profile]
+      summary: Update the merchant's profile. Every field optional; an audit_log row is written in the same transaction.
+      operationId: patchMerchantProfile
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantProfilePatch" }
+      responses:
+        "200":
+          description: Updated — the full profile, same shape as GET
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantProfile" }
+        "409":
+          description: phone_taken — the phone belongs to another account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: invalid_phone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    OwnerType:
+      type: string
+      description: Relabelled "Sole proprietor" / "Limited company" in the UI.
+      enum: [individual, company]
+
+    MerchantProfile:
+      type: object
+      properties:
+        owner_type: { $ref: "#/components/schemas/OwnerType" }
+        trading_name: { type: string, nullable: true }
+        company_name: { type: string, nullable: true }
+        company_kra: { type: string, nullable: true }
+        company_email: { type: string, nullable: true }
+        company_address: { type: string, nullable: true }
+        first_name: { type: string, nullable: true }
+        middle_name: { type: string, nullable: true }
+        surname: { type: string, nullable: true }
+        kra_pin: { type: string, nullable: true }
+        national_id: { type: string, nullable: true }
+        # From the users row — read-only on this surface.
+        email: { type: string, description: The sign-in email. Read-only here. }
+        phone:
+          type: string
+          nullable: true
+          description: E.164, or null. Writable via PATCH; a change clears phone_verified.
+        phone_verified: { type: boolean }
+        # Account-level state the Settings header renders. Nothing sets
+        # approved_at yet (no admin portal), so it is genuinely nullable and
+        # the "VERIFIED" chip must reflect that, not decorate.
+        approved_at: { type: string, format: date-time, nullable: true }
+        member_since: { type: string, format: date-time, description: merchants.created_at }
+        # Read-only account-level documents (Business documents card).
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/ProfileDocument" }
+
+    ProfileDocument:
+      type: object
+      properties:
+        kind: { type: string, enum: [national_id, kra_pin] }
+        label: { type: string }
+        review_state: { type: string, enum: [ok, pending, expiring, rejected] }
+        uploaded_at: { type: string, format: date-time, nullable: true }
+        document_id: { type: string, nullable: true }
+
+    MerchantProfilePatch:
+      type: object
+      description: Every field optional. Unknown fields are rejected.
+      additionalProperties: false
+      properties:
+        owner_type: { $ref: "#/components/schemas/OwnerType" }
+        trading_name: { type: string, maxLength: 200 }
+        company_name: { type: string }
+        company_kra: { type: string }
+        company_email: { type: string, format: email }
+        company_address: { type: string }
+        first_name: { type: string }
+        middle_name: { type: string }
+        surname: { type: string }
+        kra_pin: { type: string }
+        national_id: { type: string }
+        phone: { type: string, description: Kenyan number; normalised to E.164 server-side }
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

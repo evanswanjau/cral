@@ -14,9 +14,10 @@ import { P } from "./styles.js";
  * badge is the *unread* count, which is genuinely actionable, so it shows
  * whenever it's non-zero.
  *
- * Settings → Security (`/settings/security`) and Settings → Notifications
- * (`/settings/notifications`) exist as routes but are deliberately kept out
- * of the nav for now (owner's call) — reachable by URL, not surfaced.
+ * Settings (`/settings`) is a tabbed page — Business, Payouts,
+ * Notifications, Security. It carries no badge: nothing under it is a
+ * count a merchant needs to act on. The old `/settings/security` and
+ * `/settings/notifications` URLs redirect into it.
  */
 export function SideNav({
   vehicleCount,
@@ -63,6 +64,14 @@ export function SideNav({
             {notificationUnread > 0 && (
               <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{notificationUnread}</span>
             )}
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/settings" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
+        {({ isActive }) => (
+          <>
+            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+            <span style={P.navLabel}>Settings</span>
           </>
         )}
       </NavLink>

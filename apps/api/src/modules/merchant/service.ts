@@ -24,7 +24,12 @@ import type {
   ReminderTier,
   VehicleRow,
 } from "./db-types.js";
-import type { CreateVehicleInput, PatchOnboardingInput, VehicleInput } from "./schemas.js";
+import type {
+  CreateVehicleInput,
+  PatchOnboardingInput,
+  ProfilePatchInput,
+  VehicleInput,
+} from "./schemas.js";
 
 export interface RequestContext {
   ip: string | null;
@@ -198,7 +203,11 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
 // users.phone is the actual payout-phone home (see identity's spec §4
 // deviation); the onboarding wizard's "phone" field writes there, not to
 // merchants, so patching it needs a users update alongside the merchant one.
-async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
+async function setUserPhone(
+  userId: string,
+  rawPhone: string,
+  conn: Knex | Knex.Transaction = db,
+): Promise<void> {
   const phone = normalizePhone(rawPhone);
   if (!phone) {
     throw new ApiError({
@@ -210,7 +219,7 @@ async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
     });
   }
 
-  const current = await db("users").where({ id: userId }).first();
+  const current = await conn("users").where({ id: userId }).first();
   // Changing the number drops any prior verification — the new one hasn't
   // been proven, and a verified flag must never follow a number it wasn't
   // earned on.
@@ -218,7 +227,7 @@ async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
     current?.phone === phone ? { phone } : { phone, phone_verified: false };
 
   try {
-    await db("users").where({ id: userId }).update(update);
+    await conn("users").where({ id: userId }).update(update);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new ApiError({
@@ -263,6 +272,123 @@ export async function patchOnboarding(
   if (phone) await setUserPhone(userId, phone);
 
   return getOnboardingState(userId);
+}
+
+// ---------------------------------------------------------------------
+// Settings → Business — merchant profile read + patch
+// (see openapi/merchant-settings.yaml)
+// ---------------------------------------------------------------------
+
+const PROFILE_OWNER_DOC_LABELS: Record<"national_id" | "kra_pin", string> = {
+  national_id: "Owner ID · front and back",
+  kra_pin: "KRA PIN certificate",
+};
+
+// Columns the Business tab may write. `phone` is deliberately not here —
+// it goes through setUserPhone so E.164 normalisation and the
+// phone_verified reset both still happen (spec §10 gate).
+const PROFILE_MERCHANT_FIELDS = [
+  "owner_type",
+  "trading_name",
+  "company_name",
+  "company_kra",
+  "company_email",
+  "company_address",
+  "first_name",
+  "middle_name",
+  "surname",
+  "kra_pin",
+  "national_id",
+] as const;
+
+function serializeProfile(
+  merchant: MerchantRow,
+  user: { email?: string | null; phone?: string | null; phone_verified?: boolean } | undefined,
+  documents: DocumentRow[],
+) {
+  return {
+    owner_type: merchant.owner_type,
+    trading_name: merchant.trading_name,
+    company_name: merchant.company_name,
+    company_kra: merchant.company_kra,
+    company_email: merchant.company_email,
+    company_address: merchant.company_address,
+    first_name: merchant.first_name,
+    middle_name: merchant.middle_name,
+    surname: merchant.surname,
+    kra_pin: merchant.kra_pin,
+    national_id: merchant.national_id,
+    email: user?.email ?? "",
+    phone: user?.phone ?? null,
+    phone_verified: Boolean(user?.phone_verified),
+    approved_at: merchant.approved_at ? merchant.approved_at.toISOString() : null,
+    member_since: merchant.created_at.toISOString(),
+    documents: (Object.keys(PROFILE_OWNER_DOC_LABELS) as Array<"national_id" | "kra_pin">).map(
+      (kind) => {
+        const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
+        return {
+          kind,
+          label: PROFILE_OWNER_DOC_LABELS[kind],
+          review_state: doc?.review_state ?? "pending",
+          uploaded_at: doc ? doc.created_at.toISOString() : null,
+          document_id: doc?.id ?? null,
+        };
+      },
+    ),
+  };
+}
+
+export async function getProfile(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+  const documents = await db<DocumentRow>("documents").where({ merchant_id: merchant.id });
+  return serializeProfile(merchant, user, documents);
+}
+
+export async function patchProfile(
+  userId: string,
+  patch: ProfilePatchInput,
+  ctx: RequestContext,
+): Promise<ReturnType<typeof getProfile>> {
+  const merchant = await getOrCreateMerchant(userId);
+  const { phone, ...rest } = patch;
+
+  const merchantUpdate: Record<string, unknown> = {};
+  const before: Record<string, unknown> = {};
+  for (const field of PROFILE_MERCHANT_FIELDS) {
+    if (rest[field] === undefined) continue;
+    merchantUpdate[field] = rest[field];
+    before[field] = (merchant as unknown as Record<string, unknown>)[field];
+  }
+
+  if (Object.keys(merchantUpdate).length === 0 && phone === undefined) {
+    return getProfile(userId);
+  }
+
+  await db.transaction(async (trx) => {
+    if (Object.keys(merchantUpdate).length > 0) {
+      merchantUpdate.last_activity_at = new Date();
+      await trx<MerchantRow>("merchants").where({ id: merchant.id }).update(merchantUpdate);
+    }
+    if (phone !== undefined) await setUserPhone(userId, phone, trx);
+
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "merchant.profile_updated",
+      entityType: "merchant",
+      entityId: merchant.id,
+      before: Object.keys(before).length ? before : undefined,
+      after: {
+        ...merchantUpdate,
+        ...(phone !== undefined ? { phone_changed: true } : {}),
+      },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  return getProfile(userId);
 }
 
 // ---------------------------------------------------------------------

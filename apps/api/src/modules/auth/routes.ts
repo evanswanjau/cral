@@ -160,6 +160,20 @@ authRouter.delete(
   }),
 );
 
+// "Sign out everywhere" — every session but the caller's current one.
+authRouter.post(
+  "/auth/sessions/revoke-all",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.revokeAllOtherSessions(
+      req.auth!.sub,
+      req.auth!.sid,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
 // --- Onboarding phone verification -----------------------------------
 //
 // Proves the merchant holds the payout number before onboarding can be

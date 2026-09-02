@@ -650,6 +650,9 @@ export async function listSessions(userId: string, currentSessionId: string) {
     id: s.id,
     device: s.device_label ?? s.device_id,
     approximate_location: null,
+    // Raw UA so the client can render the design's "CHROME MOBILE" line;
+    // parsing it into a friendly label is a display concern.
+    user_agent: s.user_agent ?? null,
     last_seen_at: s.last_seen_at.toISOString(),
     is_current: s.id === currentSessionId,
   }));
@@ -668,6 +671,39 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
       message: "That session doesn't exist or is already signed out.",
     });
   }
+}
+
+/**
+ * "Sign out everywhere" — revokes every active session for the caller
+ * except the one making the request. Returns how many were signed out so
+ * the UI can confirm ("Signed out on 2 other devices").
+ */
+export async function revokeAllOtherSessions(
+  userId: string,
+  currentSessionId: string,
+  ctx: RequestContext,
+): Promise<{ revoked: number }> {
+  const revoked = await db.transaction(async (trx) => {
+    const n = await trx<SessionRow>("sessions")
+      .where({ user_id: userId, revoked_at: null })
+      .andWhereNot({ id: currentSessionId })
+      .update({ revoked_at: new Date(), revoked_reason: "signed_out_everywhere" });
+
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "user.sessions_revoked_all",
+      entityType: "user",
+      entityId: userId,
+      after: { revoked: n },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+
+    return n;
+  });
+
+  return { revoked };
 }
 
 // ---------------------------------------------------------------------

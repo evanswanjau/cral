@@ -412,9 +412,14 @@ same bundle the Bookings screen came from.
   so a double-submit can't raise two tickets for one complaint.
 - **The bank payout destination is deliberately not built.** The design
   offers "Pay to my bank account instead" and an SMS-gated "Edit details",
-  but no bank fields exist anywhere in the schema (`payout_method` is
-  `mpesa` throughout), so the destination card ships read-only off
-  `users.phone`. Flagged, not silently dropped.
+  but there is **no payment rail** — nothing disburses money, and Daraja
+  B2C pays M-Pesa, not banks — so the destination card ships read-only off
+  `users.phone`. Flagged, not silently dropped. (The `merchants` table
+  *does* carry `bank_name` / `bank_branch` / `bank_account_name` /
+  `bank_account_number` from the original create-merchants migration, and
+  `payout_method` accepts `"bank"`; onboarding writes them when a merchant
+  picks bank. What's missing is the rail, not the columns — an earlier
+  version of this note wrongly said the columns didn't exist.)
 - **`/merchant/payouts/dev-seed` is dev/test-only**, same `NODE_ENV`
   guard as the bookings seeder. It creates its own older completed
   bookings rather than reusing the bookings seeder's, whose "completed"
@@ -479,6 +484,68 @@ and `apps/merchant/src/pages/Notification*`. Design authority is
   only, kept out of `SideNav` like Settings → Security. The feed itself
   (`/notifications`) **is** in the nav, with the **unread count** as its
   badge (unlike Payouts — an unread count is genuinely actionable).
+
+**The Settings screen was built (owner's call, 2026-09-02 — PR "merchant
+settings"), same ahead-of-plan footing as Bookings/Payouts/Notifications.**
+Design authority is `Cruz Merchant Settings.dc.html`. It is now one tabbed
+page at **`/settings`** (`apps/merchant/src/pages/Settings.tsx` +
+`pages/settings/*Tab.tsx`), **in `SideNav`** with no badge. The two slices
+that shipped earlier as unlisted routes are folded in as tabs;
+`/settings/security` and `/settings/notifications` now **redirect** to
+`/settings?tab=…`. Shared sticky save bar:
+`apps/merchant/src/components/portal/SaveBar.tsx` (each editable tab renders
+its own when dirty — only one tab is mounted at a time). New styles live
+under a `set*` prefix in `components/portal/styles.ts`; the card-head trio
+duplicates the `nt*` values from the Notifications tab deliberately (that
+design file was just read first for Notifications).
+
+Tabs shipped: **Business · Payouts · Notifications · Security** — four, not
+the design's five.
+
+- **New backend**: `openapi/merchant-settings.yaml` +
+  `GET|PATCH /merchant/profile` (`modules/merchant/service.ts#getProfile` /
+  `#patchProfile`, audit-logged in the same transaction; a phone change
+  routes through the existing `setUserPhone`, which now takes an optional
+  `trx`). `POST /auth/sessions/revoke-all` ("sign out everywhere", all but
+  the caller's session; audit-logged). `GET /merchant/payouts/statements`
+  (last six Nairobi months with net totals, for the Statements card).
+  `Session` in `identity.yaml` gained `user_agent`. Migration
+  `20260902100000` adds `merchants.trading_name` (nullable).
+- **County: omitted.** `merchants.county` was dropped on 2026-08-31; the
+  design's Business-tab County select is not reproduced.
+- **Business type is the two-value `owner_type` axis relabelled** ("Sole
+  proprietor" / "Limited company"). The design's third option,
+  "Partnership", is dropped — a new field would gate nothing.
+- **Bank payout destination stays read-only** (see the payouts note above,
+  now corrected): the Payouts tab shows the M-Pesa destination read-only
+  off `users.phone` with a "contact CRAL to change" note. No
+  `PUT /merchant/payout-settings` was built.
+- **Statements are CSV, not the design's "PDF"** — the card tag says
+  `NET OF COMMISSION · CSV`, and Download reuses the existing per-month
+  `GET /merchant/payouts/statement?month=` via `apiBlob`.
+- **Long-booking instalment rhythm: omitted.** Nothing implements
+  instalments; a stored preference would change nothing.
+- **WhatsApp toggle: omitted**, consistent with the Alerts matrix dropping
+  the WhatsApp column.
+- **Close account is not self-service.** The red-topped card renders per
+  the design, but its button is a `wa.me` support hand-off — there's no
+  product definition yet for live listings / in-flight bookings /
+  seven-year retention on closure.
+- **The `✓ VERIFIED` account chip reflects real state** —
+  `merchants.approved_at` (nothing sets it yet, no admin portal), so it
+  shows `PENDING REVIEW` until an admin approves. Not a decorative tick.
+- **The People / team-roles / invites tab is deferred to its own phase**
+  — same footing as the omitted WhatsApp column and `tips` alert row. It
+  is a multi-user authorization feature (invite → accept → per-merchant
+  membership → three roles with real permission differences → every
+  endpoint re-checked), not a settings screen. Shipping the roster
+  read-only would fabricate trust the way the hardcoded `id_verified`
+  badge did. `users.roles` stays a flat `merchant`/`customer`/`admin`
+  `text[]`; there is no team table.
+- **Business documents card is read-only** — it lists the account-level
+  owner docs (`national_id`, `kra_pin`) with their review state and a
+  "View". No new `DocumentKind`s (`certificate_of_incorporation` / `cr12`)
+  and no upload UI here; that's deferred with People.
 
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own
