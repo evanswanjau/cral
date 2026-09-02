@@ -11,6 +11,7 @@ import {
   quietHoursDelayMs,
   deliverNotification,
   enqueueNotificationDelivery,
+  notificationDeliveryQueue,
 } from "../../../jobs/notification-delivery.js";
 import { purgeExpiredNotifications, runExpiryNotificationSweep } from "../service.js";
 import { smsAdapter, emailAdapter } from "../../../lib/adapters.js";
@@ -226,13 +227,7 @@ describe("merchant notifications — quiet hours", () => {
     const bookingId = await seed(m.merchantId, "booking");
     const payoutId = await seed(m.merchantId, "payout");
 
-    const addBulk = vi
-      .spyOn(
-        // @ts-expect-error — reaching into the queue singleton for the test
-        (await import("../../../jobs/notification-delivery.js")).notificationDeliveryQueue,
-        "addBulk",
-      )
-      .mockResolvedValue([] as never);
+    const addBulk = vi.spyOn(notificationDeliveryQueue, "addBulk").mockResolvedValue([] as never);
 
     await enqueueNotificationDelivery(m.merchantId, [bookingId, payoutId]);
 
@@ -271,6 +266,29 @@ describe("merchant notifications — delivery", () => {
     await db("users").where({ id: m.userId }).update({ phone_verified: true });
     await deliverNotification({ notificationId: id });
     expect(smsSpy).toHaveBeenCalledTimes(1);
+
+    smsSpy.mockRestore();
+    emailSpy.mockRestore();
+  });
+
+  it("does not fail the job when one channel fails and another got through", async () => {
+    const m = await newMerchant();
+    await db("users")
+      .where({ id: m.userId })
+      .update({ phone: `+2547${randomInt(10_000_000, 99_999_999)}`, phone_verified: true });
+    const id = await seed(m.merchantId, "expiry");
+
+    // SMS runs first. If an email failure bubbled, the retry would send a
+    // second billable text — so a partial success must resolve.
+    const smsSpy = vi.spyOn(smsAdapter, "send").mockResolvedValue({ providerId: "x" });
+    const emailSpy = vi.spyOn(emailAdapter, "send").mockRejectedValue(new Error("smtp down"));
+
+    await expect(deliverNotification({ notificationId: id })).resolves.toBeUndefined();
+    expect(smsSpy).toHaveBeenCalledTimes(1);
+
+    // Both down is the case that *should* retry — nothing was delivered.
+    smsSpy.mockRejectedValue(new Error("textsms down"));
+    await expect(deliverNotification({ notificationId: id })).rejects.toThrow("every channel failed");
 
     smsSpy.mockRestore();
     emailSpy.mockRestore();
@@ -323,6 +341,44 @@ describe("merchant notifications — retention & generators", () => {
     await runExpiryNotificationSweep();
     const after = await db("notifications").where({ merchant_id: m.merchantId, category: "expiry", subject_id: vehicle.id });
     expect(after).toHaveLength(1);
+  });
+
+  it("honours an explicit `now` — the sweep must not depend on wall-clock for its own writes", async () => {
+    const m = await newMerchant();
+    // Cover lapses 100 days out: outside a sweep run today, inside one run
+    // 80 days from now. An earlier version resolved what it had just
+    // written by a `created_at >= now - 60s` window, which silently
+    // enqueued nothing (or everything) as soon as `now` wasn't real time.
+    const lapses = new Date(Date.now() + 100 * 86_400_000).toISOString().slice(0, 10);
+    const [vehicle] = await db("vehicles")
+      .insert({
+        id: generateId("vehicle"),
+        merchant_id: m.merchantId,
+        type: "sedan",
+        make: "Mazda",
+        model: "Demio",
+        year: "2017",
+        registration: `KDP ${randomInt(100, 999)}${String.fromCharCode(65 + randomInt(0, 25))}`,
+        transmission: "Automatic",
+        fuel: "Petrol",
+        county: "Nairobi",
+        pickup_address: "Nairobi",
+        daily_rate_amount: 300000,
+        status: "live",
+        insurance_expiry: lapses,
+        listing_ref: await nextListingRef(db),
+      })
+      .returning("*");
+
+    expect(
+      await db("notifications").where({ merchant_id: m.merchantId, subject_id: vehicle.id }),
+    ).toHaveLength(0);
+
+    await runExpiryNotificationSweep(new Date(Date.now() + 80 * 86_400_000));
+
+    const rows = await db("notifications").where({ merchant_id: m.merchantId, subject_id: vehicle.id });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].category).toBe("expiry");
   });
 });
 

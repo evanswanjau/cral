@@ -162,28 +162,52 @@ export async function deliverNotification({ notificationId }: DeliverJobData): P
 
   const pref = await resolvePreference(notification.merchant_id, notification.category);
 
+  // Each channel is isolated, and the job only fails when *nothing* got
+  // through. The job has `attempts: 3`, and SMS runs first — so letting an
+  // email failure bubble would retry the whole body and send a second,
+  // billable text. Retrying is only safe when no channel delivered, which
+  // is also the case that most needs it (provider or network outage).
+  let attempted = 0;
+  let delivered = 0;
+
   if (pref.sms && user.phone && user.phone_verified) {
-    const ref = notification.ref ? ` (${notification.ref})` : "";
-    await smsAdapter.send({
-      to: user.phone as string,
-      body: `CRAL: ${notification.title}${ref}. ${notification.body}`.slice(0, 320),
-    });
+    attempted++;
+    try {
+      const ref = notification.ref ? ` (${notification.ref})` : "";
+      await smsAdapter.send({
+        to: user.phone as string,
+        body: `CRAL: ${notification.title}${ref}. ${notification.body}`.slice(0, 320),
+      });
+      delivered++;
+    } catch (error) {
+      console.error("notification sms failed", { notificationId, error });
+    }
   }
 
   if (pref.email && user.email) {
-    await emailAdapter.send({
-      to: user.email as string,
-      subject: notification.title,
-      html: emailLayout({
-        preheader: notification.body,
-        bodyHtml: [
-          emailHeading(notification.title),
-          emailParagraph(escapeHtml(notification.body)),
-          notification.ref ? emailMuted(`Reference: ${escapeHtml(notification.ref)}`) : "",
-        ].join(""),
-      }),
-      text: `${notification.title}\n\n${notification.body}${notification.ref ? `\n\nReference: ${notification.ref}` : ""}`,
-    });
+    attempted++;
+    try {
+      await emailAdapter.send({
+        to: user.email as string,
+        subject: notification.title,
+        html: emailLayout({
+          preheader: notification.body,
+          bodyHtml: [
+            emailHeading(notification.title),
+            emailParagraph(escapeHtml(notification.body)),
+            notification.ref ? emailMuted(`Reference: ${escapeHtml(notification.ref)}`) : "",
+          ].join(""),
+        }),
+        text: `${notification.title}\n\n${notification.body}${notification.ref ? `\n\nReference: ${notification.ref}` : ""}`,
+      });
+      delivered++;
+    } catch (error) {
+      console.error("notification email failed", { notificationId, error });
+    }
+  }
+
+  if (attempted > 0 && delivered === 0) {
+    throw new Error(`notification ${notificationId}: every channel failed`);
   }
 }
 

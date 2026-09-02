@@ -242,23 +242,21 @@ export async function updateNotificationPreferences(
   }
 
   await db.transaction(async (trx) => {
+    // Upsert on the (merchant_id, category) unique index rather than
+    // select-then-insert: two saves racing each other would otherwise turn
+    // the constraint into a 500.
     for (const row of input.categories) {
-      const existing = await trx<NotificationPreferenceRow>("notification_preferences")
-        .where({ merchant_id: merchant.id, category: row.category })
-        .first();
-      if (existing) {
-        await trx("notification_preferences")
-          .where({ id: existing.id })
-          .update({ sms: row.sms, email: row.email, updated_at: new Date() });
-      } else {
-        await trx("notification_preferences").insert({
+      await trx("notification_preferences")
+        .insert({
           id: generateId("notificationPreference"),
           merchant_id: merchant.id,
           category: row.category,
           sms: row.sms,
           email: row.email,
-        });
-      }
+          updated_at: new Date(),
+        })
+        .onConflict(["merchant_id", "category"])
+        .merge(["sms", "email", "updated_at"]);
     }
 
     await trx("merchants").where({ id: merchant.id }).update({
@@ -315,7 +313,14 @@ export async function runExpiryNotificationSweep(now: Date = new Date()): Promis
     .where("insurance_expiry", "<=", horizon)
     .select("*");
 
-  let written = 0;
+  // Collected per merchant as we go, so the post-commit enqueue delivers
+  // exactly the rows this sweep wrote. An earlier version re-queried by a
+  // `created_at >= now - 60s` window instead, which was wrong twice over:
+  // it wasn't merchant-scoped (a concurrent writer's expiry rows would be
+  // enqueued a second time), and `now` is a parameter — pass anything but
+  // the current instant and the window matches nothing, or everything.
+  const writtenByMerchant = new Map<string, string[]>();
+
   for (const vehicle of vehicles) {
     // One flag per vehicle per 30-day run of the window — a row inside the
     // retention horizon for this vehicle+category is enough to skip.
@@ -337,8 +342,8 @@ export async function runExpiryNotificationSweep(now: Date = new Date()): Promis
       year: "numeric",
     });
 
-    await db.transaction(async (trx) => {
-      await notify(trx, {
+    const id = await db.transaction(async (trx) =>
+      notify(trx, {
         merchantId: vehicle.merchant_id,
         category: "expiry",
         title: `Insurance expires in ${days} ${days === 1 ? "day" : "days"} · ${vehicle.registration}`,
@@ -346,30 +351,25 @@ export async function runExpiryNotificationSweep(now: Date = new Date()): Promis
         ref: vehicle.registration,
         subjectType: "vehicle",
         subjectId: vehicle.id,
-      });
-    });
-    written++;
+      }),
+    );
+    writtenByMerchant.set(vehicle.merchant_id, [
+      ...(writtenByMerchant.get(vehicle.merchant_id) ?? []),
+      id,
+    ]);
   }
 
-  // Delivery is best-effort from a sweep; enqueue after the writes are
-  // committed. Imported lazily to keep the job module out of this file's
-  // import graph for tests that only exercise the pure sweep.
-  if (written > 0) {
+  // Enqueue after the writes are committed, per lib/notifications.ts.
+  // Imported lazily to keep the job module out of this file's import graph
+  // for tests that only exercise the pure sweep.
+  if (writtenByMerchant.size > 0) {
     const { enqueueNotificationDelivery } = await import("../../jobs/notification-delivery.js");
-    const fresh = await db<NotificationRow>("notifications")
-      .where({ category: "expiry" })
-      .where("created_at", ">=", new Date(now.getTime() - 60_000))
-      .select("id", "merchant_id");
-    const byMerchant = new Map<string, string[]>();
-    for (const row of fresh) {
-      byMerchant.set(row.merchant_id, [...(byMerchant.get(row.merchant_id) ?? []), row.id]);
-    }
-    for (const [merchantId, ids] of byMerchant) {
+    for (const [merchantId, ids] of writtenByMerchant) {
       await enqueueNotificationDelivery(merchantId, ids);
     }
   }
 
-  return written;
+  return [...writtenByMerchant.values()].reduce((sum, ids) => sum + ids.length, 0);
 }
 
 export { RETENTION_DAYS };

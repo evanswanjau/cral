@@ -106,8 +106,9 @@ export const FILTER_LABEL: Record<NotificationFilter, string> = {
 // Calls
 // ---------------------------------------------------------------------
 
-export function listNotifications(filter: NotificationFilter) {
-  return apiGet<NotificationListResult>(`/merchant/notifications?filter=${filter}`);
+export function listNotifications(filter: NotificationFilter, limit?: number) {
+  const query = limit === undefined ? `filter=${filter}` : `filter=${filter}&limit=${limit}`;
+  return apiGet<NotificationListResult>(`/merchant/notifications?${query}`);
 }
 
 export function markNotificationRead(id: string) {
@@ -145,14 +146,17 @@ export function useNotificationList(filter: NotificationFilter) {
 }
 
 /**
- * The SideNav badge. Reads the `all` feed's `unread` total — its own query
- * key so the badge stays fresh independently of whichever filter the
- * Notifications screen is showing.
+ * The SideNav badge, so it mounts on every portal screen. Its own query key
+ * keeps it fresh independently of whichever filter the Notifications screen
+ * is showing — but that also means it is a *second* request alongside that
+ * screen's own feed, so it asks for `limit=1`: all it reads is the `unread`
+ * total, and the contract computes counts over the whole feed rather than
+ * the returned page.
  */
 export function useNotificationUnread() {
   return useQuery({
     queryKey: ["notifications-unread"],
-    queryFn: () => listNotifications("all"),
+    queryFn: () => listNotifications("all", 1),
     select: (result) => result.unread,
   });
 }
