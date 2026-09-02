@@ -10,6 +10,8 @@ import { BookingDetail } from "./pages/BookingDetail.js";
 import { PayoutList } from "./pages/PayoutList.js";
 import { PayoutDetail } from "./pages/PayoutDetail.js";
 import { SecuritySettings } from "./pages/SecuritySettings.js";
+import { Notifications } from "./pages/Notifications.js";
+import { NotificationSettings } from "./pages/NotificationSettings.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -44,7 +46,9 @@ const router = createBrowserRouter([
               { path: "bookings/:bookingId", element: <BookingDetail /> },
               { path: "payouts", element: <PayoutList /> },
               { path: "payouts/:payoutRunId", element: <PayoutDetail /> },
+              { path: "notifications", element: <Notifications /> },
               { path: "settings/security", element: <SecuritySettings /> },
+              { path: "settings/notifications", element: <NotificationSettings /> },
             ],
           },
         ],

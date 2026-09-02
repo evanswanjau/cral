@@ -420,6 +420,66 @@ same bundle the Bookings screen came from.
   bookings rather than reusing the bookings seeder's, whose "completed"
   fixture is mid-deposit-hold on purpose and so correctly *not* payable.
 
+**Notifications was built into the merchant portal (owner's call,
+2026-09-02 — PR "merchant notifications"), same ahead-of-plan footing as
+Bookings and Payouts.** Contract is `openapi/merchant-notifications.yaml`,
+code is `apps/api/src/modules/notifications/` +
+`apps/api/src/lib/notifications.ts` + `apps/api/src/jobs/notification-delivery.ts`
+and `apps/merchant/src/pages/Notification*`. Design authority is
+`Cruz Merchant Notifications.dc.html` and the Alerts section of
+`Cruz Merchant Settings.dc.html`.
+
+- **Three channels: in-app always, plus SMS and email per preference.**
+  This is a **deliberate extension of the 2026-08-24 "SMS is only ever a
+  2FA challenge" decision** (which said every non-2FA message goes by
+  email) — notifications may now also text, subject to the merchant's
+  settings. Same shape as the 2026-08-31 onboarding phone-verification
+  extension of that rule.
+- **`payout` and `review` always text**, regardless of preference (the
+  design locks those SMS toggles), and those two also **bypass quiet
+  hours**. Everything else respects both.
+- **Two taxonomies, kept separate.** `category` (booking / payout /
+  review / expiry / return / rating) drives the channel preferences;
+  `kind` (hire / money / doc / rate) drives the feed's filter pills and
+  row icon. Map: booking/return → hire, payout → money, review/expiry →
+  doc, rating → rate. `NOTIFICATION_KIND` is duplicated in
+  `apps/api/src/lib/notifications.ts` and
+  `apps/merchant/src/components/portal/status.ts` — keep them in step.
+- **`rating` is a real category the design's Alerts matrix doesn't have**
+  (the feed shows rating notifications but Settings has no row). Added
+  here, defaulting to email-on / SMS-off. The design's `tips` row ("CRAL
+  news and pricing tips") is **omitted** — nothing in this product
+  generates it.
+- **WhatsApp is omitted and flagged** — no Business API number, no
+  adapter. The design's WhatsApp column is dropped from the Settings
+  matrix; a toggle that silently sends nothing is worse than an absent
+  one.
+- **`notify(trx, {...})` writes the in-app row inside the event's own
+  transaction** (shaped like `writeAuditEntry`). SMS/email delivery is a
+  separate BullMQ worker (`jobs/notification-delivery.ts`), **enqueued
+  only after that transaction commits** — a failed send must not roll back
+  the notification, same reasoning as the payout-query email. Quiet hours
+  are a **delay on the enqueue**, never a drop. SMS also requires
+  `users.phone_verified`.
+- **90-day retention is enforced**, not just claimed — the daily 10:00
+  Nairobi reminder sweep (`runDailyReminderSweep`) now also purges
+  notifications older than 90 days and runs the insurance-expiry
+  generator (`runExpiryNotificationSweep`), which is a *real* generator
+  today off `vehicles.insurance_expiry`.
+- **Real wire-ins today:** `submitVehicle` (→ review-queue notice),
+  `completeHandover` return leg (→ `return`), `cutPayoutRun` (→ `payout`,
+  in-trx; delivery enqueue waits for the Daraja-callback caller that
+  doesn't exist yet), and the expiry sweep. Everything else the design
+  shows (booking requested, a hirer's inbound rating, document
+  accept/reject) has no real generator yet — no customer portal, no ops
+  console — so `/merchant/notifications/dev-seed` reproduces the ten
+  design fixtures against real seeded subjects. Same `NODE_ENV` guard as
+  the other seeders; a re-seed replaces the feed rather than stacking.
+- **Settings → Notifications** (`/settings/notifications`) is a route
+  only, kept out of `SideNav` like Settings → Security. The feed itself
+  (`/notifications`) **is** in the nav, with the **unread count** as its
+  badge (unlike Payouts — an unread count is genuinely actionable).
+
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own
   surfaces — the "DEPOSIT HELD" chip and the deposit row/foot-note on the

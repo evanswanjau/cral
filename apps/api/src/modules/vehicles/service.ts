@@ -10,6 +10,8 @@ import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
+import { notify } from "../../lib/notifications.js";
+import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import type {
   DocumentReviewState,
   DocumentRow,
@@ -474,6 +476,7 @@ export async function submitVehicle(userId: string, vehicleId: string, ctx: Requ
     });
   }
 
+  const notificationIds: string[] = [];
   const updated = await db.transaction(async (trx) => {
     const [row] = await trx<VehicleRow>("vehicles")
       .where({ id: vehicle.id })
@@ -499,8 +502,22 @@ export async function submitVehicle(userId: string, vehicleId: string, ctx: Requ
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+
+    notificationIds.push(
+      await notify(trx, {
+        merchantId: merchant.id,
+        category: "review",
+        title: `${row.registration} is in the review queue`,
+        body: "Vehicle documents received. Reviews take up to two working days.",
+        ref: row.registration,
+        subjectType: "vehicle",
+        subjectId: vehicle.id,
+      }),
+    );
     return row;
   });
+
+  await enqueueNotificationDelivery(merchant.id, notificationIds);
 
   return serializeDetail(merchant, updated);
 }
