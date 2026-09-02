@@ -7,6 +7,7 @@ import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
+import { notify } from "../../lib/notifications.js";
 import type { BookingRow } from "../bookings/db-types.js";
 import type { PayoutQueryRow, PayoutRunLineRow, PayoutRunRow } from "./db-types.js";
 import type { CreatePayoutQueryInput, ListPayoutsQuery } from "./schemas.js";
@@ -255,6 +256,27 @@ export async function cutPayoutRun(
       paid_at: options.markPaid?.paidAt ?? null,
     })
     .returning("*");
+
+  // Same transaction as the run itself, per lib/notifications.ts. Delivery
+  // (SMS/email) is not enqueued here — `cutPayoutRun` takes a `trx`, not a
+  // post-commit hook, and today its only caller is the dev-seed. The real
+  // caller is a Daraja B2C callback that doesn't exist yet; that is where
+  // `enqueueNotificationDelivery` gets wired, alongside the `paid`
+  // transition. The in-app feed row is written now regardless.
+  await notify(trx, {
+    merchantId: merchantId,
+    category: "payout",
+    title: options.markPaid
+      ? `${run!.ref} · payout sent · KES ${formatAmount(net)}`
+      : `${run!.ref} · payout scheduled · KES ${formatAmount(net)}`,
+    body: options.markPaid
+      ? `${bookings.length} finished ${bookings.length === 1 ? "hire" : "hires"} cleared to M-Pesa ${destination.detail}. Safaricom code ${options.markPaid.providerCode}.`
+      : `Goes out ${weekdayOf(runDate)} to M-Pesa ${destination.detail}. Anything returned and cleared before then joins it.`,
+    ref: run!.ref,
+    subjectType: "payout_run",
+    subjectId: runId,
+    ...(options.markPaid ? { occurredAt: options.markPaid.paidAt } : {}),
+  });
 
   await trx<PayoutRunLineRow>("payout_run_lines").insert(
     bookings.map((b) => ({

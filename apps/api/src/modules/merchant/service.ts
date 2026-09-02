@@ -711,8 +711,16 @@ async function sendReminderEmail(merchant: MerchantRow, tier: ReminderTier): Pro
   });
 }
 
-/** Scans every unsubmitted merchant and sends at most one reminder each, run daily by the BullMQ worker. */
-export async function runDailyReminderSweep(): Promise<{ sent: number }> {
+/**
+ * Scans every unsubmitted merchant and sends at most one onboarding
+ * reminder each, then does the daily notification housekeeping — the
+ * insurance-expiry generator and the 90-day retention purge. Run daily by
+ * the BullMQ worker (10:00 Nairobi).
+ *
+ * The notifications module is imported lazily: it depends on this file for
+ * `getOrCreateMerchant`, so a static import would be a cycle.
+ */
+export async function runDailyReminderSweep(): Promise<{ sent: number; expiryNotices: number; purged: number }> {
   const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
   let sent = 0;
   for (const merchant of stalled) {
@@ -726,5 +734,10 @@ export async function runDailyReminderSweep(): Promise<{ sent: number }> {
     });
     sent++;
   }
-  return { sent };
+
+  const { runExpiryNotificationSweep, purgeExpiredNotifications } = await import("../notifications/service.js");
+  const expiryNotices = await runExpiryNotificationSweep();
+  const purged = await purgeExpiredNotifications();
+
+  return { sent, expiryNotices, purged };
 }

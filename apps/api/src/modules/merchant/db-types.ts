@@ -29,6 +29,10 @@ export interface MerchantRow {
   onboarding_submitted: boolean;
   /** Set only once an admin approves the account — nothing does that yet in Phase 1 (no admin portal). */
   approved_at: Date | null;
+  /** Notification quiet hours — per-account, not per-category. "HH:MM" Nairobi wall-clock. */
+  quiet_hours_enabled: boolean;
+  quiet_from: string | null;
+  quiet_until: string | null;
   last_activity_at: Date;
   created_at: Date;
   updated_at: Date;

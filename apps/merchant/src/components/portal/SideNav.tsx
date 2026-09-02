@@ -10,13 +10,23 @@ import { P } from "./styles.js";
  *
  * Payouts carries no count badge: a run count is not something a merchant
  * needs to act on, unlike an unanswered booking request, and a number there
- * would read as "N things need you".
+ * would read as "N things need you". Notifications is the opposite — its
+ * badge is the *unread* count, which is genuinely actionable, so it shows
+ * whenever it's non-zero.
  *
- * Settings → Security (`/settings/security`) exists as a route but is
- * deliberately kept out of the nav for now (owner's call) — it's
- * reachable by URL, not surfaced.
+ * Settings → Security (`/settings/security`) and Settings → Notifications
+ * (`/settings/notifications`) exist as routes but are deliberately kept out
+ * of the nav for now (owner's call) — reachable by URL, not surfaced.
  */
-export function SideNav({ vehicleCount, bookingCount }: { vehicleCount: number; bookingCount: number }): JSX.Element {
+export function SideNav({
+  vehicleCount,
+  bookingCount,
+  notificationUnread,
+}: {
+  vehicleCount: number;
+  bookingCount: number;
+  notificationUnread: number;
+}): JSX.Element {
   return (
     <nav style={P.nav}>
       <NavLink to="/vehicles" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
@@ -42,6 +52,17 @@ export function SideNav({ vehicleCount, bookingCount }: { vehicleCount: number; 
           <>
             <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
             <span style={P.navLabel}>Payouts</span>
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/notifications" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
+        {({ isActive }) => (
+          <>
+            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+            <span style={P.navLabel}>Notifications</span>
+            {notificationUnread > 0 && (
+              <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{notificationUnread}</span>
+            )}
           </>
         )}
       </NavLink>

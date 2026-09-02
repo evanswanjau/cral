@@ -86,10 +86,8 @@ async function appendEvent(
   });
 }
 
-let refCounter = 0;
 async function nextRef(): Promise<string> {
   const result = await db.raw<{ rows: { n: string }[] }>("select nextval('booking_ref_seq') as n");
-  refCounter++;
   return `CB-${result.rows[0]!.n}`;
 }
 
