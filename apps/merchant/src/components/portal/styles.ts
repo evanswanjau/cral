@@ -521,8 +521,11 @@ export const P = {
   setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 },
   setFieldStack: { padding: 18, display: "grid", gap: 16 },
   setField: { display: "block" },
-  setFieldLabel: { display: "block", font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
-  setFieldLabelRow: { display: "flex", alignItems: "center", gap: 8, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
+  // Fixed label-row height so a field with a chip (e.g. "✓ VERIFIED") and a
+  // plain-text one sit at the same height — keeps their inputs on one line
+  // when they share a grid row.
+  setFieldLabel: { display: "flex", alignItems: "center", minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
+  setFieldLabelRow: { display: "flex", alignItems: "center", gap: 8, minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
   setInput: {
     width: "100%",
     height: 44,
