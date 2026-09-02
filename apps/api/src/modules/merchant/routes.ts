@@ -10,6 +10,7 @@ import * as merchantService from "./service.js";
 import {
   CreateVehicleSchema,
   PatchOnboardingSchema,
+  PayoutSettingsSchema,
   ProfilePatchSchema,
   UploadDocumentQuerySchema,
   VehicleInputSchema,
@@ -170,6 +171,25 @@ merchantRouter.patch(
   validateBody(ProfilePatchSchema),
   asyncHandler(async (req, res) => {
     const result = await merchantService.patchProfile(req.auth!.sub, req.body, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
+merchantRouter.get(
+  "/merchant/payout-settings",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.getPayoutSettings(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+merchantRouter.put(
+  "/merchant/payout-settings",
+  authenticate(),
+  validateBody(PayoutSettingsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.updatePayoutSettings(req.auth!.sub, req.body, ctxOf(req));
     res.status(200).json(result);
   }),
 );

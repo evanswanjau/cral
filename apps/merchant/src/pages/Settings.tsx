@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
-import { useProfile } from "../lib/settings-api.js";
+import { useProfile, type OwnerType } from "../lib/settings-api.js";
 import { BusinessTab } from "./settings/BusinessTab.js";
 import { PayoutsTab } from "./settings/PayoutsTab.js";
 import { NotificationsTab } from "./settings/NotificationsTab.js";
@@ -29,6 +29,13 @@ const TABS = [
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
+
+// An individual merchant has no "business" — the first tab is their own
+// profile. Same tab key and URL, different label (owner's call 2026-09-03).
+function tabLabel(key: TabKey, ownerType: OwnerType | undefined): string {
+  if (key === "business") return ownerType === "company" ? "Business" : "My profile";
+  return TABS.find((t) => t.key === key)!.label;
+}
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", {
@@ -99,7 +106,7 @@ export function Settings(): JSX.Element {
                 borderColor: active ? "#0B0F1A" : "#CDD2DA",
               }}
             >
-              {t.label}
+              {tabLabel(t.key, profile?.owner_type)}
             </button>
           );
         })}

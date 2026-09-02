@@ -500,7 +500,10 @@ duplicates the `nt*` values from the Notifications tab deliberately (that
 design file was just read first for Notifications).
 
 Tabs shipped: **Business · Payouts · Notifications · Security** — four, not
-the design's five.
+the design's five. **For an individual merchant the first tab is labelled
+"My profile"** (not "Business") — same key (`business`), same URL, just the
+label (owner's call, 2026-09-03). It is also reachable from the account
+dropdown (`ProfileMenu`) → "My profile" → `/settings`.
 
 - **New backend**: `openapi/merchant-settings.yaml` +
   `GET|PATCH /merchant/profile` (`modules/merchant/service.ts#getProfile` /
@@ -509,22 +512,38 @@ the design's five.
   `trx`). `POST /auth/sessions/revoke-all` ("sign out everywhere", all but
   the caller's session; audit-logged). `GET /merchant/payouts/statements`
   (last six Nairobi months with net totals, for the Statements card).
-  `Session` in `identity.yaml` gained `user_agent`. Migration
-  `20260902100000` adds `merchants.trading_name` (nullable).
-- **County: omitted.** `merchants.county` was dropped on 2026-08-31; the
-  design's Business-tab County select is not reproduced.
-- **Business type is the two-value `owner_type` axis relabelled** ("Sole
-  proprietor" / "Limited company"). The design's third option,
-  "Partnership", is dropped — a new field would gate nothing.
-- **Bank payout destination stays read-only** (see the payouts note above,
-  now corrected): the Payouts tab shows the M-Pesa destination read-only
-  off `users.phone` with a "contact CRAL to change" note. No
-  `PUT /merchant/payout-settings` was built.
+  `GET|PUT /merchant/payout-settings` (the editable payout block — also
+  embedded in `GET /merchant/profile` as `payout`). `Session` in
+  `identity.yaml` gained `user_agent`. Migrations: `20260902100000` adds
+  `merchants.trading_name` (nullable, kept but not surfaced —
+  onboarding doesn't collect it); `20260903090000` adds
+  `merchants.payout_schedule` (`weekly`/`monthly`, default `weekly`) and
+  `merchants.payout_mpesa_name` (nullable).
+- **The Business / "My profile" tab mirrors onboarding's "Your details"
+  step field-for-field** (owner's call, 2026-09-03) — nothing new is asked
+  for after onboarding. Individual: owner details (name, national ID, KRA
+  PIN, read-only email) + phone/verify. Company: company block (name, cert
+  of incorporation no. → `company_cert_no`, company KRA, company email,
+  physical location) + contact-person block + phone/verify. The account
+  **entity type is not editable here** (it's fixed at onboarding — changing
+  it means new documents and a re-review, a support path). No County, no
+  Trading-name field, no WhatsApp toggle.
+- **Payouts is editable** (owner's call, 2026-09-03 — reverses the earlier
+  "read-only" note). `PUT /merchant/payout-settings` replaces the whole
+  block: method (M-Pesa / bank), M-Pesa number + "name on the line" or the
+  four bank fields, and the long-booking `schedule`. **There is still no
+  payment rail** — the bank details and the schedule are collected and
+  stored, not acted on. **Company merchants are locked to bank**
+  (`method: "mpesa"` → 422 `mpesa_not_allowed_for_company`); switching the
+  profile to a company also flips `payout_method` to `bank`. This mirrors
+  onboarding's `pickOwnerType` / disabled-M-Pesa-card behaviour exactly.
+- **Long-booking instalment rhythm is stored, not acted on** (reverses the
+  earlier "omitted" note) — `merchants.payout_schedule`, surfaced as the
+  design's "Every Monday" / "Monthly, on the 1st" radio cards. A preference
+  held for when a rail exists.
 - **Statements are CSV, not the design's "PDF"** — the card tag says
   `NET OF COMMISSION · CSV`, and Download reuses the existing per-month
   `GET /merchant/payouts/statement?month=` via `apiBlob`.
-- **Long-booking instalment rhythm: omitted.** Nothing implements
-  instalments; a stored preference would change nothing.
 - **WhatsApp toggle: omitted**, consistent with the Alerts matrix dropping
   the WhatsApp column.
 - **Close account is not self-service.** The red-topped card renders per

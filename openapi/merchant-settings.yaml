@@ -29,6 +29,15 @@ info:
     - **Login email is read-only here.** Changing the sign-in address is a
       separate security flow; this endpoint only writes `company_email` (the
       booking-contact address for company merchants).
+    - **The Business tab mirrors onboarding's "Your details" step** — the
+      same fields, so nothing new is asked for after onboarding. For an
+      individual it is labelled "My profile" in the UI.
+    - **Payouts is editable** (`PUT /merchant/payout-settings`). There is
+      still **no payment rail** — nothing disburses money — so the bank
+      details and the long-booking `schedule` are collected and stored,
+      not acted on. `method: mpesa` is **rejected for company merchants**
+      (they are paid to a bank account in the company name, the same rule
+      onboarding enforces).
     - **The People / team-roles tab is not built** — it is a multi-user
       authorization feature, deferred to its own phase.
   license:
@@ -86,6 +95,41 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
+  /merchant/payout-settings:
+    get:
+      tags: [profile]
+      summary: The merchant's payout block (also embedded in GET /merchant/profile)
+      operationId: getPayoutSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Payout settings
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutSettings" }
+
+    put:
+      tags: [profile]
+      summary: Replace the payout block. Company merchants cannot select M-Pesa.
+      operationId: updatePayoutSettings
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PayoutSettingsInput" }
+      responses:
+        "200":
+          description: Updated payout block
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutSettings" }
+        "422":
+          description: mpesa_not_allowed_for_company, or invalid_phone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
 components:
   schemas:
     ErrorEnvelope:
@@ -112,6 +156,7 @@ components:
         owner_type: { $ref: "#/components/schemas/OwnerType" }
         trading_name: { type: string, nullable: true }
         company_name: { type: string, nullable: true }
+        company_cert_no: { type: string, nullable: true, description: Certificate of incorporation number }
         company_kra: { type: string, nullable: true }
         company_email: { type: string, nullable: true }
         company_address: { type: string, nullable: true }
@@ -120,6 +165,7 @@ components:
         surname: { type: string, nullable: true }
         kra_pin: { type: string, nullable: true }
         national_id: { type: string, nullable: true }
+        payout: { $ref: "#/components/schemas/PayoutSettings" }
         # From the users row — read-only on this surface.
         email: { type: string, description: The sign-in email. Read-only here. }
         phone:
@@ -146,6 +192,46 @@ components:
         uploaded_at: { type: string, format: date-time, nullable: true }
         document_id: { type: string, nullable: true }
 
+    PayoutSettings:
+      type: object
+      description: >
+        The payout block. `mpesa_number` falls back to the account phone
+        when `same_as_phone` is set. `mpesa_number_verified` is only true
+        when the number *is* that verified account phone. Nothing disburses
+        against any of this yet — there is no payment rail.
+      properties:
+        method: { type: string, enum: [mpesa, bank] }
+        schedule:
+          type: string
+          enum: [weekly, monthly]
+          description: Long-booking instalment rhythm — stored, not acted on
+        same_as_phone: { type: boolean }
+        mpesa_number: { type: string, nullable: true }
+        mpesa_name: { type: string, nullable: true, description: "\"Name on the M-Pesa line\"" }
+        mpesa_number_verified: { type: boolean }
+        bank_name: { type: string, nullable: true }
+        bank_branch: { type: string, nullable: true }
+        bank_account_name: { type: string, nullable: true }
+        bank_account_number: { type: string, nullable: true }
+
+    PayoutSettingsInput:
+      type: object
+      additionalProperties: false
+      required: [method, schedule]
+      properties:
+        method:
+          type: string
+          enum: [mpesa, bank]
+          description: "`mpesa` is rejected (422) for company merchants"
+        schedule: { type: string, enum: [weekly, monthly] }
+        same_as_phone: { type: boolean }
+        mpesa_number: { type: string, description: Kenyan number; normalised to E.164 server-side }
+        mpesa_name: { type: string, maxLength: 200 }
+        bank_name: { type: string }
+        bank_branch: { type: string }
+        bank_account_name: { type: string }
+        bank_account_number: { type: string }
+
     MerchantProfilePatch:
       type: object
       description: Every field optional. Unknown fields are rejected.
@@ -154,6 +240,7 @@ components:
         owner_type: { $ref: "#/components/schemas/OwnerType" }
         trading_name: { type: string, maxLength: 200 }
         company_name: { type: string }
+        company_cert_no: { type: string }
         company_kra: { type: string }
         company_email: { type: string, format: email }
         company_address: { type: string }

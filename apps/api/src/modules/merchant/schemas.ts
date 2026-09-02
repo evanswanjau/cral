@@ -84,6 +84,7 @@ export const ProfilePatchSchema = z
     owner_type: z.enum(["individual", "company"]),
     trading_name: z.string().max(200),
     company_name: z.string(),
+    company_cert_no: z.string(),
     company_kra: z.string(),
     company_email: z.string().email().or(z.literal("")),
     company_address: z.string(),
@@ -97,3 +98,22 @@ export const ProfilePatchSchema = z
   .partial()
   .strict();
 export type ProfilePatchInput = z.infer<typeof ProfilePatchSchema>;
+
+// --- Settings → Payouts (see openapi/merchant-settings.yaml) -----------
+//
+// A full replace of the payout block. `method: "mpesa"` is rejected
+// server-side for company merchants (they are paid to a bank account in
+// the company name — the same rule onboarding's "Your details" step
+// enforces).
+export const PayoutSettingsSchema = z.object({
+  method: z.enum(["mpesa", "bank"]),
+  schedule: z.enum(["weekly", "monthly"]),
+  same_as_phone: z.boolean().optional(),
+  mpesa_number: z.string().optional(),
+  mpesa_name: z.string().max(200).optional(),
+  bank_name: z.string().optional(),
+  bank_branch: z.string().optional(),
+  bank_account_name: z.string().optional(),
+  bank_account_number: z.string().optional(),
+});
+export type PayoutSettingsInput = z.infer<typeof PayoutSettingsSchema>;

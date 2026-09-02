@@ -25,6 +25,20 @@ const M = {
   companyName: { flex: 1, minWidth: 0, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } satisfies CSSProperties,
   companyTag: { font: "500 9px/1 'IBM Plex Mono',monospace", letterSpacing: ".08em", color: "#076945", flex: "none" } satisfies CSSProperties,
   items: { padding: 6 } satisfies CSSProperties,
+  item: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    width: "100%",
+    padding: 10,
+    background: "none",
+    border: "none",
+    borderRadius: "var(--r)",
+    cursor: "pointer",
+    textAlign: "left",
+    font: "600 13px/1.3 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+  } satisfies CSSProperties,
   logoutWrap: { padding: 6, borderTop: "1px solid #F1F3F6" } satisfies CSSProperties,
   logoutBtn: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: 10, background: "none", border: "none", borderRadius: "var(--r)", cursor: "pointer", textAlign: "left", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#D81E32" } satisfies CSSProperties,
   confirmWrap: { padding: "15px 16px 16px" } satisfies CSSProperties,
@@ -122,7 +136,23 @@ export function ProfileMenu({
 
           {!confirming ? (
             <>
-              <div style={M.items} />
+              <div style={M.items}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/settings");
+                  }}
+                  style={M.item}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ flex: "none" }}>
+                    <circle cx="8" cy="5.5" r="2.75" fill="none" stroke="#5A6373" strokeWidth="1.5" />
+                    <path d="M2.75 13.5c.7-2.4 2.8-3.75 5.25-3.75s4.55 1.35 5.25 3.75" fill="none" stroke="#5A6373" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span style={{ flex: 1 }}>My profile</span>
+                </button>
+              </div>
               <div style={M.logoutWrap}>
                 <button type="button" role="menuitem" onClick={() => setConfirming(true)} style={M.logoutBtn}>
                   <span style={{ display: "block", width: 16, height: 16, border: "1.5px solid #D81E32", borderRightColor: "transparent", borderRadius: 999, flex: "none" }} />

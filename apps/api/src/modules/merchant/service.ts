@@ -27,6 +27,7 @@ import type {
 import type {
   CreateVehicleInput,
   PatchOnboardingInput,
+  PayoutSettingsInput,
   ProfilePatchInput,
   VehicleInput,
 } from "./schemas.js";
@@ -291,6 +292,7 @@ const PROFILE_MERCHANT_FIELDS = [
   "owner_type",
   "trading_name",
   "company_name",
+  "company_cert_no",
   "company_kra",
   "company_email",
   "company_address",
@@ -301,6 +303,32 @@ const PROFILE_MERCHANT_FIELDS = [
   "national_id",
 ] as const;
 
+/**
+ * The payout block, shared by GET /merchant/profile and the response of
+ * PUT /merchant/payout-settings. `mpesa_number` falls back to the account
+ * phone when "same as my phone" is set; it is only marked verified when it
+ * *is* that verified number.
+ */
+function serializePayout(
+  merchant: MerchantRow,
+  user: { phone?: string | null; phone_verified?: boolean } | undefined,
+) {
+  const mpesaNumber = merchant.payout_same ? (user?.phone ?? null) : merchant.payout_detail;
+  return {
+    method: (merchant.payout_method === "bank" ? "bank" : "mpesa") as "mpesa" | "bank",
+    schedule: (merchant.payout_schedule === "monthly" ? "monthly" : "weekly") as "weekly" | "monthly",
+    same_as_phone: Boolean(merchant.payout_same),
+    mpesa_number: mpesaNumber,
+    mpesa_name: merchant.payout_mpesa_name,
+    mpesa_number_verified:
+      Boolean(user?.phone_verified) && !!mpesaNumber && mpesaNumber === user?.phone,
+    bank_name: merchant.bank_name,
+    bank_branch: merchant.bank_branch,
+    bank_account_name: merchant.bank_account_name,
+    bank_account_number: merchant.bank_account_number,
+  };
+}
+
 function serializeProfile(
   merchant: MerchantRow,
   user: { email?: string | null; phone?: string | null; phone_verified?: boolean } | undefined,
@@ -310,6 +338,7 @@ function serializeProfile(
     owner_type: merchant.owner_type,
     trading_name: merchant.trading_name,
     company_name: merchant.company_name,
+    company_cert_no: merchant.company_cert_no,
     company_kra: merchant.company_kra,
     company_email: merchant.company_email,
     company_address: merchant.company_address,
@@ -323,6 +352,7 @@ function serializeProfile(
     phone_verified: Boolean(user?.phone_verified),
     approved_at: merchant.approved_at ? merchant.approved_at.toISOString() : null,
     member_since: merchant.created_at.toISOString(),
+    payout: serializePayout(merchant, user),
     documents: (Object.keys(PROFILE_OWNER_DOC_LABELS) as Array<"national_id" | "kra_pin">).map(
       (kind) => {
         const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
@@ -361,6 +391,13 @@ export async function patchProfile(
     before[field] = (merchant as unknown as Record<string, unknown>)[field];
   }
 
+  // Switching to a company forces the bank payout path — the same coupling
+  // onboarding's pickOwnerType applies, so the Payouts tab doesn't sit on a
+  // method a company can't use.
+  if (merchantUpdate.owner_type === "company" && merchant.payout_method !== "bank") {
+    merchantUpdate.payout_method = "bank";
+  }
+
   if (Object.keys(merchantUpdate).length === 0 && phone === undefined) {
     return getProfile(userId);
   }
@@ -389,6 +426,97 @@ export async function patchProfile(
   });
 
   return getProfile(userId);
+}
+
+// ---------------------------------------------------------------------
+// Settings → Payouts — full replace of the payout block
+// ---------------------------------------------------------------------
+
+export async function getPayoutSettings(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+  return serializePayout(merchant, user);
+}
+
+export async function updatePayoutSettings(
+  userId: string,
+  input: PayoutSettingsInput,
+  ctx: RequestContext,
+): Promise<ReturnType<typeof serializePayout>> {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+
+  // Companies are paid to a bank account in the company name — the same
+  // rule onboarding's "Your details" step enforces (M-Pesa card disabled
+  // for companies). Reject it here rather than silently coercing.
+  if (merchant.owner_type === "company" && input.method === "mpesa") {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "mpesa_not_allowed_for_company",
+      message: "Registered companies are paid by bank transfer only.",
+      field: "method",
+    });
+  }
+
+  const update: Record<string, unknown> = {
+    payout_method: input.method,
+    payout_schedule: input.schedule,
+    last_activity_at: new Date(),
+  };
+
+  if (input.method === "mpesa") {
+    const same = input.same_as_phone ?? false;
+    update.payout_same = same;
+    update.payout_mpesa_name = input.mpesa_name?.trim() || null;
+    if (same) {
+      update.payout_detail = null;
+    } else {
+      const normalised = normalizePhone(input.mpesa_number ?? "");
+      if (!normalised) {
+        throw new ApiError({
+          status: 422,
+          type: "validation_error",
+          code: "invalid_phone",
+          message: "That doesn't look like a valid Kenyan M-Pesa number.",
+          field: "mpesa_number",
+        });
+      }
+      update.payout_detail = normalised;
+    }
+  } else {
+    update.bank_name = input.bank_name?.trim() || null;
+    update.bank_branch = input.bank_branch?.trim() || null;
+    update.bank_account_name = input.bank_account_name?.trim() || null;
+    update.bank_account_number = (input.bank_account_number ?? "").replace(/\s/g, "") || null;
+  }
+
+  const before = {
+    payout_method: merchant.payout_method,
+    payout_schedule: merchant.payout_schedule,
+    payout_same: merchant.payout_same,
+    payout_detail: merchant.payout_detail,
+    bank_name: merchant.bank_name,
+    bank_account_number: merchant.bank_account_number,
+  };
+
+  await db.transaction(async (trx) => {
+    await trx<MerchantRow>("merchants").where({ id: merchant.id }).update(update);
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "merchant.payout_settings_updated",
+      entityType: "merchant",
+      entityId: merchant.id,
+      before,
+      after: update,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  const updated = await db<MerchantRow>("merchants").where({ id: merchant.id }).first();
+  return serializePayout(updated!, user);
 }
 
 // ---------------------------------------------------------------------

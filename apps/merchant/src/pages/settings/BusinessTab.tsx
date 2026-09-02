@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { P } from "../../components/portal/styles.js";
 import { DOC_STATE } from "../../components/portal/status.js";
@@ -16,53 +16,70 @@ import {
 } from "../../lib/settings-api.js";
 
 /**
- * Settings → Business. Edits the merchant's profile after onboarding.
+ * Settings → Business (companies) / "My profile" (individuals). The fields
+ * mirror onboarding's "Your details" step one-for-one — nothing new is
+ * asked for after onboarding (owner's call, 2026-09-03).
  *
- * Deliberate deviations from "Cruz Merchant Settings.dc.html" (all
- * confirmed — see CLAUDE.md's Settings decisions):
- *  - No "County" select. `merchants.county` was dropped on 2026-08-31;
- *    county lives on the vehicle now.
- *  - "Business type" is the two-value `owner_type` axis relabelled, not a
- *    new three-way field. "Partnership" is dropped.
- *  - No WhatsApp toggle — consistent with the Alerts matrix dropping the
- *    WhatsApp column.
+ * Deliberate omissions vs "Cruz Merchant Settings.dc.html", all confirmed:
+ *  - No "County" select. `merchants.county` was dropped on 2026-08-31.
+ *  - No "Trading name" / standalone "Yard or office address" — onboarding
+ *    doesn't collect them. (The `trading_name` column exists but is not
+ *    surfaced here.)
+ *  - No WhatsApp toggle.
  *  - "Business documents" is a read-only view of the account-level owner
- *    docs. Certificate-of-incorporation / CR12 upload is deferred with the
- *    People tab.
+ *    docs; certificate-of-incorporation / CR12 upload is deferred.
  */
 
 type Draft = {
-  owner_type: MerchantProfile["owner_type"];
-  trading_name: string;
+  first_name: string;
+  middle_name: string;
+  surname: string;
+  national_id: string;
+  kra_pin: string;
+  phone: string;
   company_name: string;
+  company_cert_no: string;
   company_kra: string;
   company_email: string;
   company_address: string;
-  first_name: string;
-  surname: string;
-  kra_pin: string;
-  phone: string;
 };
+
+// The account entity type is fixed at onboarding — changing it means new
+// documents and a re-review, so it's a support path, not a settings field
+// (same reasoning as the read-only sign-in email).
+const FIELDS: Array<keyof Draft> = [
+  "first_name",
+  "middle_name",
+  "surname",
+  "national_id",
+  "kra_pin",
+  "phone",
+  "company_name",
+  "company_cert_no",
+  "company_kra",
+  "company_email",
+  "company_address",
+];
 
 function toDraft(p: MerchantProfile): Draft {
   return {
-    owner_type: p.owner_type,
-    trading_name: p.trading_name ?? "",
+    first_name: p.first_name ?? "",
+    middle_name: p.middle_name ?? "",
+    surname: p.surname ?? "",
+    national_id: p.national_id ?? "",
+    kra_pin: p.kra_pin ?? "",
+    phone: p.phone ?? "",
     company_name: p.company_name ?? "",
+    company_cert_no: p.company_cert_no ?? "",
     company_kra: p.company_kra ?? "",
     company_email: p.company_email ?? "",
     company_address: p.company_address ?? "",
-    first_name: p.first_name ?? "",
-    surname: p.surname ?? "",
-    kra_pin: p.kra_pin ?? "",
-    phone: p.phone ?? "",
   };
 }
 
-/** Only the fields that actually changed, mapped to the PATCH body. */
 function diffPatch(base: Draft, draft: Draft): MerchantProfilePatch {
   const patch: MerchantProfilePatch = {};
-  (Object.keys(draft) as Array<keyof Draft>).forEach((k) => {
+  FIELDS.forEach((k) => {
     if (draft[k] !== base[k]) (patch as Record<string, unknown>)[k] = draft[k];
   });
   return patch;
@@ -81,17 +98,16 @@ export function BusinessTab(): JSX.Element {
     return <div style={{ ...P.card, padding: 20 }}>Loading…</div>;
   }
 
-  const isCompany = current.owner_type === "company";
+  const isCompany = profile.owner_type === "company";
   const patch = diffPatch(base, current);
   const dirty = Object.keys(patch).length > 0;
-  const set = (k: keyof Draft, v: string) =>
-    setDraft({ ...(draft ?? base), [k]: v } as Draft);
+  const set = (k: keyof Draft, v: string) => setDraft({ ...(draft ?? base), [k]: v } as Draft);
 
   async function onSave(): Promise<void> {
     try {
       await save.mutateAsync(patch);
       setDraft(null);
-      toast("Business details saved.", "#0B8A5B");
+      toast("Details saved.", "#0B8A5B");
     } catch (e) {
       toast(e instanceof ApiClientError ? e.message : "Couldn't save that. Try again.", "#D81E32");
     }
@@ -101,89 +117,74 @@ export function BusinessTab(): JSX.Element {
     <>
       <div style={P.setBodyWrap}>
         <div style={P.setBodyMain}>
-          {/* Business details */}
+          {isCompany && (
+            <div style={P.setCard}>
+              <div style={P.setCardHead}>
+                <div style={P.setCardTitle}>Company details</div>
+                <div style={P.setCardSub}>As registered with the Registrar of Companies.</div>
+              </div>
+              <div style={P.setFieldGrid}>
+                <Field label="Company name">
+                  <input style={P.setInput} value={current.company_name} onChange={(e) => set("company_name", e.target.value)} />
+                </Field>
+                <Field label="Certificate of incorporation">
+                  <input style={P.setInputMono} value={current.company_cert_no} onChange={(e) => set("company_cert_no", e.target.value)} placeholder="CPR/2020/123456" />
+                </Field>
+                <Field label="Company KRA PIN">
+                  <input style={P.setInputMono} value={current.company_kra} onChange={(e) => set("company_kra", e.target.value.toUpperCase())} placeholder="P051234567X" />
+                </Field>
+                <Field label="Company email">
+                  <input style={P.setInput} type="email" value={current.company_email} onChange={(e) => set("company_email", e.target.value)} />
+                </Field>
+                <Field label="Company physical location">
+                  <input style={P.setInput} value={current.company_address} onChange={(e) => set("company_address", e.target.value)} placeholder="Enterprise Road, Industrial Area, Nairobi" />
+                </Field>
+              </div>
+            </div>
+          )}
+
           <div style={P.setCard}>
             <div style={P.setCardHead}>
-              <div style={P.setCardTitle}>Business details</div>
+              <div style={P.setCardTitle}>{isCompany ? "Contact person" : "Owner details"}</div>
               <div style={P.setCardSub}>
-                This is the name hirers see on a listing and the name that must match your logbooks.
+                {isCompany
+                  ? "The person we deal with — their own ID and PIN."
+                  : "Exactly as written on your National ID."}
               </div>
             </div>
             <div style={P.setFieldGrid}>
-              {isCompany ? (
-                <label style={P.setField}>
-                  <span style={P.setFieldLabel}>Registered business name</span>
-                  <input
-                    style={P.setInput}
-                    value={current.company_name}
-                    onChange={(e) => set("company_name", e.target.value)}
-                  />
-                </label>
-              ) : (
-                <>
-                  <label style={P.setField}>
-                    <span style={P.setFieldLabel}>First name</span>
-                    <input
-                      style={P.setInput}
-                      value={current.first_name}
-                      onChange={(e) => set("first_name", e.target.value)}
-                    />
-                  </label>
-                  <label style={P.setField}>
-                    <span style={P.setFieldLabel}>Surname</span>
-                    <input
-                      style={P.setInput}
-                      value={current.surname}
-                      onChange={(e) => set("surname", e.target.value)}
-                    />
-                  </label>
-                </>
-              )}
-              <label style={P.setField}>
-                <span style={P.setFieldLabel}>Trading name</span>
-                <input
-                  style={P.setInput}
-                  value={current.trading_name}
-                  onChange={(e) => set("trading_name", e.target.value)}
-                  placeholder="If different from the registered name"
-                />
-              </label>
-              <label style={P.setField}>
-                <span style={P.setFieldLabel}>KRA PIN</span>
-                <input
-                  style={P.setInputMono}
-                  value={isCompany ? current.company_kra : current.kra_pin}
-                  onChange={(e) => set(isCompany ? "company_kra" : "kra_pin", e.target.value)}
-                />
-              </label>
-              <label style={P.setField}>
-                <span style={P.setFieldLabel}>Business type</span>
-                <select
-                  style={P.setSelect}
-                  value={current.owner_type}
-                  onChange={(e) => set("owner_type", e.target.value)}
-                >
-                  <option value="individual">Sole proprietor</option>
-                  <option value="company">Limited company</option>
-                </select>
-              </label>
-              <label style={P.setField}>
-                <span style={P.setFieldLabel}>Yard or office address</span>
-                <input
-                  style={P.setInput}
-                  value={current.company_address}
-                  onChange={(e) => set("company_address", e.target.value)}
-                />
-              </label>
+              <Field label="First name">
+                <input style={P.setInput} value={current.first_name} onChange={(e) => set("first_name", e.target.value)} />
+              </Field>
+              <Field label="Middle name">
+                <input style={P.setInput} value={current.middle_name} onChange={(e) => set("middle_name", e.target.value)} placeholder="Only if it appears on the ID" />
+              </Field>
+              <Field label="Surname">
+                <input style={P.setInput} value={current.surname} onChange={(e) => set("surname", e.target.value)} />
+              </Field>
+              <Field label="National ID number">
+                <input style={P.setInputMono} value={current.national_id} inputMode="numeric" onChange={(e) => set("national_id", e.target.value.replace(/\D/g, ""))} />
+              </Field>
+              <Field label="KRA PIN">
+                <input style={P.setInputMono} value={current.kra_pin} onChange={(e) => set("kra_pin", e.target.value.toUpperCase())} placeholder="A012345678Z" />
+              </Field>
+              <Field label="Email">
+                <input style={{ ...P.setInput, background: "#F8F9FB" }} value={profile.email} readOnly aria-label="Account email" />
+              </Field>
             </div>
+            {!isCompany && (
+              <div style={{ padding: "0 18px 18px", ...O.helper }}>
+                On your CRAL account — receipts and payout statements go here. Contact support to
+                change it.
+              </div>
+            )}
           </div>
 
-          {/* How CRAL reaches you */}
           <div style={P.setCard}>
             <div style={P.setCardHead}>
               <div style={P.setCardTitle}>How CRAL reaches you</div>
               <div style={P.setCardSub}>
-                Booking alerts and reviewer notes go to these. Hirers never see them.
+                Booking alerts and reviewer notes go here. Hirers never see it.
               </div>
             </div>
             <div style={P.setFieldGrid}>
@@ -192,10 +193,7 @@ export function BusinessTab(): JSX.Element {
                   Phone number
                   {profile.phone ? (
                     <span
-                      style={{
-                        ...P.setChip,
-                        ...(profile.phone_verified ? P.setChipOk : P.setChipWarn),
-                      }}
+                      style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
                     >
                       {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
                     </span>
@@ -209,25 +207,7 @@ export function BusinessTab(): JSX.Element {
                   placeholder="+254…"
                 />
               </label>
-              <label style={P.setField}>
-                <span style={P.setFieldLabel}>Email</span>
-                {isCompany ? (
-                  <input
-                    style={P.setInput}
-                    type="email"
-                    value={current.company_email}
-                    onChange={(e) => set("company_email", e.target.value)}
-                  />
-                ) : (
-                  <input style={{ ...P.setInput, background: "#F8F9FB" }} value={profile.email} readOnly />
-                )}
-              </label>
             </div>
-            {!isCompany && (
-              <div style={{ padding: "0 18px 18px", ...O.helper }}>
-                That&rsquo;s your sign-in email. Changing it is a separate step — contact CRAL.
-              </div>
-            )}
             {profile.phone && !profile.phone_verified && !dirty && (
               <div style={{ padding: "0 18px 18px" }}>
                 <PhoneVerify phone={profile.phone} />
@@ -239,7 +219,7 @@ export function BusinessTab(): JSX.Element {
         <div style={P.setBodySide}>
           <div style={P.setCard}>
             <div style={P.setCardHead}>
-              <div style={P.setCardTitle}>Business documents</div>
+              <div style={P.setCardTitle}>{isCompany ? "Business documents" : "Your documents"}</div>
               <div style={P.setCardSub}>
                 Checked once for the account, separate from each vehicle&rsquo;s papers.
               </div>
@@ -268,9 +248,7 @@ export function BusinessTab(): JSX.Element {
             <div style={P.setCardFoot}>
               A reviewer checks new uploads within two working days. To replace one of these, use the
               document drawer on a vehicle, or contact CRAL.
-              {isCompany
-                ? " Certificate of incorporation and CR12 aren't managed here yet."
-                : ""}
+              {isCompany ? " Certificate of incorporation and CR12 aren't managed here yet." : ""}
             </div>
           </div>
         </div>
@@ -278,6 +256,15 @@ export function BusinessTab(): JSX.Element {
 
       {dirty && <SaveBar onSave={onSave} onDiscard={() => setDraft(null)} saving={save.isPending} />}
     </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: ReactNode }): JSX.Element {
+  return (
+    <label style={P.setField}>
+      <span style={P.setFieldLabel}>{label}</span>
+      {children}
+    </label>
   );
 }
 

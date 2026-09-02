@@ -191,3 +191,91 @@ describe("Settings → Payouts — GET /merchant/payouts/statements", () => {
     expect(res.body).toEqual({ data: [] });
   });
 });
+
+describe("Settings → Payouts — PUT /merchant/payout-settings", () => {
+  it("round-trips an M-Pesa payout block for an individual and audit-logs it", async () => {
+    const { userId, accessToken } = await newMerchant();
+    await db("users").where({ id: userId }).update({ phone: "+254712300001", phone_verified: true });
+
+    const res = await request(app)
+      .put("/merchant/payout-settings")
+      .set(auth(accessToken))
+      .send({ method: "mpesa", schedule: "monthly", same_as_phone: false, mpesa_number: "0700111222", mpesa_name: "Jane Doe" });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      method: "mpesa",
+      schedule: "monthly",
+      same_as_phone: false,
+      mpesa_number: "+254700111222",
+      mpesa_name: "Jane Doe",
+      mpesa_number_verified: false,
+    });
+
+    // Reflected in the profile payload the tab reads.
+    const profile = await request(app).get("/merchant/profile").set(auth(accessToken));
+    expect(profile.body.payout).toMatchObject({ method: "mpesa", schedule: "monthly" });
+
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    const entry = await latestAudit("merchant.payout_settings_updated", merchant.id);
+    expect(entry).toBeTruthy();
+    expect(entry.after).toMatchObject({ payout_method: "mpesa", payout_schedule: "monthly" });
+  });
+
+  it("marks the M-Pesa number verified when it is the verified account phone", async () => {
+    const { userId, accessToken } = await newMerchant();
+    await db("users").where({ id: userId }).update({ phone: "+254712300002", phone_verified: true });
+
+    const res = await request(app)
+      .put("/merchant/payout-settings")
+      .set(auth(accessToken))
+      .send({ method: "mpesa", schedule: "weekly", same_as_phone: true });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ same_as_phone: true, mpesa_number: "+254712300002", mpesa_number_verified: true });
+  });
+
+  it("rejects M-Pesa for a company merchant (422)", async () => {
+    const { accessToken } = await newMerchant();
+    await request(app)
+      .patch("/merchant/profile")
+      .set(auth(accessToken))
+      .send({ owner_type: "company", company_name: "Fleet Ltd" });
+
+    const res = await request(app)
+      .put("/merchant/payout-settings")
+      .set(auth(accessToken))
+      .send({ method: "mpesa", schedule: "weekly", same_as_phone: true });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("mpesa_not_allowed_for_company");
+
+    // Bank is accepted for the same company.
+    const ok = await request(app)
+      .put("/merchant/payout-settings")
+      .set(auth(accessToken))
+      .send({
+        method: "bank",
+        schedule: "weekly",
+        bank_name: "KCB Bank Kenya",
+        bank_branch: "Moi Ave",
+        bank_account_name: "Fleet Ltd",
+        bank_account_number: "1234567890",
+      });
+    expect(ok.status).toBe(200);
+    expect(ok.body).toMatchObject({ method: "bank", bank_name: "KCB Bank Kenya", bank_account_number: "1234567890" });
+  });
+
+  it("forces bank payout when the profile switches to a company", async () => {
+    const { userId, accessToken } = await newMerchant();
+    await request(app)
+      .put("/merchant/payout-settings")
+      .set(auth(accessToken))
+      .send({ method: "mpesa", schedule: "weekly", same_as_phone: true });
+
+    await request(app)
+      .patch("/merchant/profile")
+      .set(auth(accessToken))
+      .send({ owner_type: "company", company_name: "Karanja Fleet Ltd" });
+
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    expect(merchant.payout_method).toBe("bank");
+  });
+});
