@@ -517,6 +517,8 @@ export const P = {
   setFieldGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 },
   // Same grid without the card padding — for use inside setFieldStack.
   setFieldGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(216px,1fr))", gap: 16 },
+  // Equal-width radio-card pairs (payout method, long-booking rhythm).
+  setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 },
   setFieldStack: { padding: 18, display: "grid", gap: 16 },
   setField: { display: "block" },
   setFieldLabel: { display: "block", font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },

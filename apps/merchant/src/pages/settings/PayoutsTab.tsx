@@ -122,24 +122,20 @@ export function PayoutsTab(): JSX.Element {
             <div style={P.setFieldStack}>
               <div>
                 <span style={P.setFieldLabel}>Payout method</span>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <div style={{ flex: "1 1 220px" }}>
-                    <OptionCard
-                      active={!payByBank}
-                      disabled={isCompany}
-                      title="M-Pesa"
-                      body={isCompany ? "Not available for companies" : "Same day, to a Safaricom line"}
-                      onClick={() => set("method", "mpesa")}
-                    />
-                  </div>
-                  <div style={{ flex: "1 1 220px" }}>
-                    <OptionCard
-                      active={payByBank}
-                      title="Bank account"
-                      body="Any bank in Kenya · 1–2 working days"
-                      onClick={() => set("method", "bank")}
-                    />
-                  </div>
+                <div style={P.setOptionGrid}>
+                  <OptionCard
+                    active={!payByBank}
+                    disabled={isCompany}
+                    title="M-Pesa"
+                    body={isCompany ? "Not available for companies" : "Same day, to a Safaricom line"}
+                    onClick={() => set("method", "mpesa")}
+                  />
+                  <OptionCard
+                    active={payByBank}
+                    title="Bank account"
+                    body="Any bank in Kenya · 1–2 working days"
+                    onClick={() => set("method", "bank")}
+                  />
                 </div>
               </div>
 
@@ -227,7 +223,7 @@ export function PayoutsTab(): JSX.Element {
                     Bank payouts run <strong>monthly, on the 1st</strong>.
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 }}>
+                  <div style={P.setOptionGrid}>
                     {SCHEDULES.map((o) => (
                       <OptionCard
                         key={o.key}
