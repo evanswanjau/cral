@@ -187,26 +187,33 @@ export function PayoutsTab(): JSX.Element {
                   </div>
                 </>
               ) : (
-                <div style={P.setFieldGrid2}>
-                  <label style={P.setField}>
-                    <span style={P.setFieldLabelRow}>
-                      M-Pesa number
-                      {profile.phone ? (
-                        <span
-                          style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
-                        >
-                          {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
-                        </span>
-                      ) : null}
-                    </span>
-                    <input style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }} value={profile.phone ?? "—"} readOnly />
-                  </label>
-                  <div style={{ ...P.setField, alignSelf: "end" }}>
-                    <div style={{ ...P.setInlineNote, marginBottom: 0 }}>
-                      Payouts go to your phone number. To change it, update it on the My profile tab.
-                    </div>
-                  </div>
-                </div>
+                <label style={{ ...P.setField, maxWidth: 340 }}>
+                  <span style={P.setFieldLabelRow}>
+                    M-Pesa number
+                    {profile.phone ? (
+                      <span
+                        style={{ ...P.setChip, ...(profile.phone_verified ? P.setChipOk : P.setChipWarn) }}
+                      >
+                        {profile.phone_verified ? "✓ VERIFIED" : "UNVERIFIED"}
+                      </span>
+                    ) : null}
+                  </span>
+                  <input
+                    style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }}
+                    value={profile.phone ?? "—"}
+                    readOnly
+                  />
+                  <span
+                    style={{
+                      display: "block",
+                      marginTop: 7,
+                      font: "400 12px/1.5 'Instrument Sans',sans-serif",
+                      color: "#838C9B",
+                    }}
+                  >
+                    Payouts go to your phone number. Change it on the My profile tab.
+                  </span>
+                </label>
               )}
 
               <div>
