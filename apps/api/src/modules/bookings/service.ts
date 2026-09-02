@@ -9,7 +9,7 @@ import { maskIdentifier } from "../../lib/mask.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailCode, emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
-import { computeBookingPricing, computeLateCancellationFee } from "../../lib/booking-pricing.js";
+import { computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";

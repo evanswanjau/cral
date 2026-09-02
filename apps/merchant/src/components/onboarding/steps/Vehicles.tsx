@@ -210,7 +210,6 @@ function VehicleForm({
     return () => {
       if (updateTimer.current) clearTimeout(updateTimer.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [v, serverVehicleId]);
 
   async function handleSave() {
