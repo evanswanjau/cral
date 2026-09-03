@@ -12,6 +12,7 @@ import {
   notify,
 } from "../../lib/notifications.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
+import { EXPIRING_WITHIN_DAYS } from "../vehicles/service.js";
 import type { VehicleRow } from "../merchant/db-types.js";
 import type {
   NotificationCategory,
@@ -63,7 +64,12 @@ function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null 
   }
 }
 
-function serialize(row: NotificationRow) {
+/**
+ * Exported as `serializeNotification` so the dashboard's activity list is
+ * literally the same rows the feed renders, CTA hrefs and all - not a
+ * second, drifting shape for the same data.
+ */
+export function serialize(row: NotificationRow) {
   const kind = NOTIFICATION_KIND[row.kind];
   return {
     id: row.id,
@@ -303,7 +309,11 @@ export async function purgeExpiredNotifications(now: Date = new Date()): Promise
  * dev-seed fixture. Also run from the daily sweep.
  */
 export async function runExpiryNotificationSweep(now: Date = new Date()): Promise<number> {
-  const horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  // Same horizon the vehicles service uses to call a document `expiring`, so
+  // the dashboard card and this notification always describe the same set.
+  const horizon = new Date(now.getTime() + EXPIRING_WITHIN_DAYS * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
   const today = now.toISOString().slice(0, 10);
 
   const vehicles = await db<VehicleRow>("vehicles")

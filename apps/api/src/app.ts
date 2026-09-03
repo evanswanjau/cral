@@ -10,6 +10,7 @@ import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { bookingsRouter } from "./modules/bookings/routes.js";
 import { payoutsRouter } from "./modules/payouts/routes.js";
 import { notificationsRouter } from "./modules/notifications/routes.js";
+import { dashboardRouter } from "./modules/dashboard/routes.js";
 
 /**
  * Allowed CORS origins. Defaults to the three local Vite dev ports so the
@@ -55,6 +56,7 @@ export function createApp(): Express {
   app.use(bookingsRouter);
   app.use(payoutsRouter);
   app.use(notificationsRouter);
+  app.use(dashboardRouter);
 
   app.use(notFoundHandler());
   app.use(errorHandler());

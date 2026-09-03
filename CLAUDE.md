@@ -152,7 +152,10 @@ status. See `apps/merchant/src/components/portal/status.ts`. That screen's
 reviewer-note card also carries its own 14° skewed rule alongside the
 masthead's — the design does this deliberately (the note card counts as its
 own surface), so it's a documented exception to "never more than once in
-view", not an oversight.
+view", not an oversight. **The Dashboard's expiring-document card takes the
+same exception** — its `18×5` `#D81E32` rule sits beside the `EXPIRES IN…`
+kicker while the masthead's is still in view. Its amber `#C77400` top bar is
+*not* skewed; only the small rule is.
 
 ### Getting the real screen source — do this, don't eyeball screenshots
 
@@ -688,6 +691,70 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
 - **Close-account copy** drops the seven-year-retention sentence.
 - The onboarding contact-person email helper drops "Contact support to
   change it."
+
+**The Dashboard was built (owner's call, 2026-09-04 — PR "merchant
+dashboard"), the last screen in the merchant design.** Design authority is
+`Cruz Merchant Dashboard.dc.html`. Contract is `openapi/merchant-dashboard.yaml`,
+code is `apps/api/src/modules/dashboard/` and
+`apps/merchant/src/pages/Dashboard.tsx`. Full plan and the calls behind it:
+[`docs/plans/merchant-dashboard.md`](./docs/plans/merchant-dashboard.md).
+
+- **`/` renders the dashboard.** It used to `Navigate` to `/vehicles`.
+  `Dashboard` is the first `SideNav` item and carries no badge — it is a
+  place, not a queue. Its comment claiming Dashboard/Notifications/Settings
+  were unbuilt is now wrong and has been corrected.
+- **One aggregate `GET /merchant/dashboard`, not client composition.** Every
+  list endpoint is cursor-paginated, so a client deriving hire-day totals,
+  payout projections or outstanding-document counts from a page's `data`
+  would describe the first page while the copy claims to describe the
+  account. `counts` is whole-set; `data` is not.
+- **The dashboard module aggregates; it never decides.** Money comes from
+  `payoutPosition`, document bands from `effectiveDocState`, activity from
+  the notifications feed. `payoutPosition` (new, exported from
+  `modules/payouts/service.ts`) is now the *single* source for what is owed,
+  clearing and paid this month — `buildSummary` was refactored onto it, so
+  `/merchant/payouts`'s `next_payout` tile and the dashboard's
+  `awaiting_payout` tile are equal by construction, and a test asserts it.
+  A second copy of these rules is how the two disagree, the same way a
+  second copy of `cutPayoutRun`'s rules is how a merchant gets paid twice.
+- **The "Next payout" card lists cut run lines *and* uncut payable
+  bookings**, because the tile above it counts both. Listing only the
+  payable half rendered "KES 0 · nothing waiting" directly under a tile
+  reading KES 22,500 — caught in the browser, fixed, and now covered by a
+  test.
+- **The API returns numbers; the sentences are the client's.** The greeting
+  ("Two vehicles are on hire today and your next payout lands on Monday"),
+  "13 hire days" and "EXPIRES IN 19 DAYS" are all composed in
+  `Dashboard.tsx`, one clause per fact with its own absent case. Display
+  formatting is a client concern (spec §2).
+- **`EXPIRING_WITHIN_DAYS` is now exported from the vehicles service** and
+  the notifications expiry sweep imports it, so the expiring-document card
+  and the notification it pairs with cannot disagree about "expiring".
+- **The chart is `payoutMonthlyNet`** — six contiguous Nairobi months,
+  zero-filled, bucketed by `payout_runs.run_date` exactly as the Statements
+  CSV is, so the chart and the statement agree. Below **three** months
+  carrying a run the client shows copy instead: two bars scaled against each
+  other read as a trend that is not there.
+- **"Bookings this week" is Monday–Sunday Nairobi, by overlap not
+  containment** — a hire that started last week and is still running is
+  exactly what "on hire today" means. The card's `hire_days` is the week's
+  share; each row's is the whole hire.
+- **The MERCHANT STATUS card hangs under the nav, and only on `/`.**
+  `SideNav` gained an optional `footer`; `AppLayout` passes
+  `MerchantStatusCard` when the route is the index. It reads the same
+  `["dashboard"]` query the page does, so it costs no second request. It
+  shows the green tick **only** when `merchants.approved_at` is genuinely
+  set — nothing sets it (no admin portal), so it normally reads "in
+  review". Same rule as the Settings `✓ VERIFIED` chip.
+- **Omitted and flagged:** the canvas's `chartMonths` (3/6) toggle,
+  `density` switch and `hideAmounts` privacy toggle. All three are design
+  props for previewing, not product features — `hideAmounts` in particular
+  would need somewhere to persist. Same footing as the dropped WhatsApp
+  toggle.
+- **Recent activity is the notifications feed** (newest five), not a second
+  stream off `audit_log`: audit rows are an append-only compliance record,
+  not merchant-facing copy, and a second source would drift from the feed
+  the merchant can open.
 
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own
