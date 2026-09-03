@@ -600,16 +600,29 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   read-only would fabricate trust the way the hardcoded `id_verified`
   badge did. `users.roles` stays a flat `merchant`/`customer`/`admin`
   `text[]`; there is no team table.
-- **Business documents card** — for a company it now has a
-  **"Business documents | My documents"** switch. "My documents" is
-  `national_id` + `kra_pin`; "Business documents" adds
-  `certificate_of_incorporation` + `cr12` (added to `DocumentKind` +
-  `UploadDocumentQuerySchema` 2026-09-04). Upload/Replace goes through the
-  existing `POST /merchant/onboarding/documents` (authenticated, works
-  post-onboarding). The **onboarding submission gate still uses only
-  `OWNER_DOC_KINDS`** (`national_id`/`kra_pin`) — `ACCOUNT_DOC_KINDS` in
-  `modules/merchant/service.ts` is the wider display/upload set and must
-  not be wired into `assertCompleteForSubmission`.
+- **`certificate_of_incorporation` + `cr12` are real company documents**
+  now (added to `DocumentKind` + both upload schemas, 2026-09-04):
+  - **Onboarding** (`Documents.tsx` "Your documents" card) shows them for
+    a company, and `assertCompleteForSubmission` **requires them for a
+    company** (`requiredOwnerDocs` = `OWNER_DOC_KINDS` + the two). An
+    individual is unchanged (`OWNER_DOC_KINDS` only). `serializeState`'s
+    `owner_docs` and the onboarding draft carry the two extra slots.
+  - **Settings → Business documents card** — for a company, a
+    **"Business documents | My documents"** switch. Upload/Replace goes
+    through `POST /merchant/onboarding/documents` and is **only shown when
+    the merchant is mid-"Request a change"** (`canEdit`); otherwise the
+    card is View-only. `ACCOUNT_DOC_KINDS` in `modules/merchant/service.ts`
+    is the display/upload set; the submission gate uses `requiredOwnerDocs`.
+- **Documents always read "PENDING REVIEW"** (`DOC_STATE.pending.label`)
+  until a reviewer accepts/rejects — nothing sets an "actively reviewed"
+  state (no admin console), so `docStateLabel`'s old draft/submitted split
+  is gone.
+- The onboarding **merchant-terms intro copy** is standard 13px body text,
+  not the 15px `stepLede`.
+- The vehicle **RateField** is a bordered full-row block (spans the form
+  grid) with a segmented `List price / What I keep` control and a
+  one-line "Hirer pays / CRAL fee / You keep" summary — the earlier
+  version was crammed into one grid cell and wrapped badly.
 
 **Round-4 Settings/portal revisions (owner's call, 2026-09-04 — PR
 "merchant portal round 4"):**

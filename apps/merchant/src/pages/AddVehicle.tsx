@@ -150,15 +150,17 @@ export function AddVehicle(): JSX.Element {
           <FormField label="Pickup address" required error={showErrors && !pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
             <TextInput value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)} placeholder="Westlands, Nairobi" error={showErrors && !pickupAddress.trim()} />
           </FormField>
-          <RateField
-            grossValue={dailyRate}
-            mode={rateMode}
-            onChange={(g, m) => {
-              setDailyRate(g);
-              setRateMode(m);
-            }}
-            error={showErrors && !dailyRate.trim()}
-          />
+          <div style={{ gridColumn: "1 / -1" }}>
+            <RateField
+              grossValue={dailyRate}
+              mode={rateMode}
+              onChange={(g, m) => {
+                setDailyRate(g);
+                setRateMode(m);
+              }}
+              error={showErrors && !dailyRate.trim()}
+            />
+          </div>
         </div>
       </div>
 

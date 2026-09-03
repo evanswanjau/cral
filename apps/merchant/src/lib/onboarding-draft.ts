@@ -74,6 +74,9 @@ export interface DraftVehicle {
 export interface OwnerDocs {
   nationalId: DraftDocument | null;
   kraPin: DraftDocument | null;
+  /** Company only. */
+  certificateOfIncorporation: DraftDocument | null;
+  cr12: DraftDocument | null;
 }
 
 export interface OnboardingDraft {
@@ -147,7 +150,7 @@ export function emptyDraft(): OnboardingDraft {
     bankAccountName: "",
     bankAccountNumber: "",
     termsAccepted: false,
-    ownerDocs: { nationalId: null, kraPin: null },
+    ownerDocs: { nationalId: null, kraPin: null, certificateOfIncorporation: null, cr12: null },
     vehicles: [],
     editingVehicleId: null,
     vehicleDraft: null,
@@ -267,7 +270,12 @@ interface WireOnboardingState {
   bank_account_name: string | null;
   bank_account_number: string | null;
   terms_accepted: boolean;
-  owner_docs: { national_id: WireDocSlot | null; kra_pin: WireDocSlot | null };
+  owner_docs: {
+    national_id: WireDocSlot | null;
+    kra_pin: WireDocSlot | null;
+    certificate_of_incorporation: WireDocSlot | null;
+    cr12: WireDocSlot | null;
+  };
   vehicles: WireVehicle[];
   submitted: boolean;
   last_activity_at: string;
@@ -353,6 +361,8 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     ownerDocs: {
       nationalId: toDraftDoc(state.owner_docs.national_id),
       kraPin: toDraftDoc(state.owner_docs.kra_pin),
+      certificateOfIncorporation: toDraftDoc(state.owner_docs.certificate_of_incorporation ?? null),
+      cr12: toDraftDoc(state.owner_docs.cr12 ?? null),
     },
     vehicles: state.vehicles.map(toDraftVehicle),
     editingVehicleId: null,
@@ -508,7 +518,10 @@ async function uploadDocument(
   return { documentId: res.document_id, name: res.original_name, size: res.size_bytes, type: res.content_type };
 }
 
-export function uploadOwnerDocument(kind: "national_id" | "kra_pin", file: File): Promise<DraftDocument> {
+export function uploadOwnerDocument(
+  kind: "national_id" | "kra_pin" | "certificate_of_incorporation" | "cr12",
+  file: File,
+): Promise<DraftDocument> {
   return uploadDocument(kind, file);
 }
 

@@ -137,9 +137,13 @@ function serializeState(
   phone: string | null,
   phoneVerified: boolean,
 ) {
+  const ownerDoc = (kind: DocumentKind) =>
+    docSlot(documents.find((d) => d.vehicle_id === null && d.kind === kind));
   const ownerDocs = {
-    national_id: docSlot(documents.find((d) => d.vehicle_id === null && d.kind === "national_id")),
-    kra_pin: docSlot(documents.find((d) => d.vehicle_id === null && d.kind === "kra_pin")),
+    national_id: ownerDoc("national_id"),
+    kra_pin: ownerDoc("kra_pin"),
+    certificate_of_incorporation: ownerDoc("certificate_of_incorporation"),
+    cr12: ownerDoc("cr12"),
   };
 
   return {
@@ -1001,9 +1005,13 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     }
   }
 
-  for (const kind of OWNER_DOC_KINDS) {
+  const requiredOwnerDocs: DocumentKind[] =
+    merchant.owner_type === "company"
+      ? [...OWNER_DOC_KINDS, "certificate_of_incorporation", "cr12"]
+      : OWNER_DOC_KINDS;
+  for (const kind of requiredOwnerDocs) {
     if (!documents.some((d) => d.vehicle_id === null && d.kind === kind)) {
-      fail("Your owner documents are incomplete.");
+      fail("Your account documents are incomplete.");
     }
   }
 

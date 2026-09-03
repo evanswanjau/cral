@@ -32,7 +32,10 @@ export const STATUS: Record<VehicleStatus, { label: string; core: string; tint: 
 
 export const DOC_STATE: Record<DocReviewState, { core: string; label: string; fg: string }> = {
   ok: { core: "#0B8A5B", label: "ACCEPTED", fg: "#076945" },
-  pending: { core: "#C77400", label: "IN REVIEW", fg: "#8A5200" },
+  // Everything uploaded-but-not-decided reads "PENDING REVIEW". There is
+  // no admin console yet, so nothing ever moves a document into an
+  // "actively being reviewed" state - the label must not imply one.
+  pending: { core: "#C77400", label: "PENDING REVIEW", fg: "#8A5200" },
   expiring: { core: "#C77400", label: "EXPIRING", fg: "#8A5200" },
   rejected: { core: "#D81E32", label: "REJECTED", fg: "#A50E22" },
   missing: { core: "#CDD2DA", label: "MISSING", fg: "#838C9B" },
@@ -96,14 +99,12 @@ export const OWNER_DOC_LABELS: Record<"national_id" | "kra_pin", [string, string
 export const OWNER_DOC_ORDER: (keyof typeof OWNER_DOC_LABELS)[] = ["national_id", "kra_pin"];
 
 /**
- * A document sitting at `pending` reads differently depending on whether
- * the *vehicle* has been submitted yet - freshly attached to a still-draft
- * listing, it's just "pending review" (waiting on the merchant to finish
- * and submit); once the whole listing has gone to CRAL it's "in review"
- * (waiting on a reviewer). Every other state's label is fixed.
+ * Kept for its call sites, but there is nothing to vary on any more: an
+ * uploaded document reads "PENDING REVIEW" until a reviewer accepts or
+ * rejects it, whether or not the listing has been submitted. Nothing sets
+ * an "actively being reviewed" state (no admin console).
  */
-export function docStateLabel(state: DocReviewState, vehicleStatus: VehicleStatus): string {
-  if (state === "pending") return vehicleStatus === "draft" ? "PENDING REVIEW" : "IN REVIEW";
+export function docStateLabel(state: DocReviewState, _vehicleStatus: VehicleStatus): string {
   return DOC_STATE[state].label;
 }
 

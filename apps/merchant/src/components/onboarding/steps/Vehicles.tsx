@@ -312,12 +312,14 @@ function VehicleForm({
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
-              <RateField
-                grossValue={v.dailyRate}
-                mode={v.rateMode}
-                onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
-                error={showErrors && !v.dailyRate.trim()}
-              />
+              <div style={{ gridColumn: "1 / -1" }}>
+                <RateField
+                  grossValue={v.dailyRate}
+                  mode={v.rateMode}
+                  onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
+                  error={showErrors && !v.dailyRate.trim()}
+                />
+              </div>
               <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
                 <Select
                   value={v.chauffeured ? "chauffeured" : "self_drive"}

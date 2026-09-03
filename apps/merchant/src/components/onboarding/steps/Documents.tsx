@@ -13,7 +13,7 @@ import {
   type OnboardingDraft,
 } from "../../../lib/onboarding-draft.js";
 
-type OwnerDocKind = "national_id" | "kra_pin";
+type OwnerDocKind = "national_id" | "kra_pin" | "certificate_of_incorporation" | "cr12";
 type VehicleDocKind = "logbook" | "comprehensive_insurance" | "tracker_certificate";
 
 export const MAX_DOC_BYTES = 10 * 1024 * 1024;
@@ -199,8 +199,16 @@ export function Documents({
 }): JSX.Element {
   const [showErrors, setShowErrors] = useState(false);
 
-  const ownerCount = Number(Boolean(draft.ownerDocs.nationalId)) + Number(Boolean(draft.ownerDocs.kraPin));
-  const ownerComplete = ownerCount === 2;
+  const isCompany = draft.ownerType === "company";
+  const ownerNeeded = isCompany ? 4 : 2;
+  const ownerCount =
+    Number(Boolean(draft.ownerDocs.nationalId)) +
+    Number(Boolean(draft.ownerDocs.kraPin)) +
+    (isCompany
+      ? Number(Boolean(draft.ownerDocs.certificateOfIncorporation)) +
+        Number(Boolean(draft.ownerDocs.cr12))
+      : 0);
+  const ownerComplete = ownerCount === ownerNeeded;
 
   function vehicleComplete(vId: string): boolean {
     const v = draft.vehicles.find((x) => x.id === vId);
@@ -253,19 +261,37 @@ export function Documents({
               color: ownerComplete ? "#076945" : "#8A5200",
             }}
           >
-            {ownerCount}/2
+            {ownerCount}/{ownerNeeded}
           </span>
         </div>
 
+        {isCompany && (
+          <>
+            <DocRow
+              title="Certificate of incorporation"
+              body="The certificate from the Registrar of Companies"
+              doc={draft.ownerDocs.certificateOfIncorporation}
+              onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, certificateOfIncorporation: doc } })}
+              kind="certificate_of_incorporation"
+            />
+            <DocRow
+              title="CR12"
+              body="Company shareholding, issued within the last 12 months"
+              doc={draft.ownerDocs.cr12}
+              onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, cr12: doc } })}
+              kind="cr12"
+            />
+          </>
+        )}
         <DocRow
-          title="National ID · both sides"
+          title={isCompany ? "Contact person's National ID · both sides" : "National ID · both sides"}
           body="Front and back, one file or two photos"
           doc={draft.ownerDocs.nationalId}
           onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, nationalId: doc } })}
           kind="national_id"
         />
         <DocRow
-          title="KRA PIN certificate"
+          title={isCompany ? "Company KRA PIN certificate" : "KRA PIN certificate"}
           body="Matching the PIN you entered"
           doc={draft.ownerDocs.kraPin}
           onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, kraPin: doc } })}

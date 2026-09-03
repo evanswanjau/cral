@@ -299,7 +299,7 @@ export function BusinessTab(): JSX.Element {
         </div>
 
         <div style={P.setBodySide}>
-          <DocumentsCard documents={profile.documents} isCompany={isCompany} />
+          <DocumentsCard documents={profile.documents} isCompany={isCompany} canEdit={canEdit} />
         </div>
       </div>
 
@@ -330,9 +330,12 @@ function Field({ label, children }: { label: string; children: ReactNode }): JSX
 function DocumentsCard({
   documents,
   isCompany,
+  canEdit,
 }: {
   documents: ProfileDocument[];
   isCompany: boolean;
+  /** Replace/Upload only when the merchant is mid-change-request; otherwise View only. */
+  canEdit: boolean;
 }): JSX.Element {
   const [group, setGroup] = useState<"business" | "personal">(isCompany ? "business" : "personal");
   const shown = documents.filter((d) => (isCompany ? d.group === group : true));
@@ -377,14 +380,18 @@ function DocumentsCard({
         </div>
       )}
       {shown.map((d) => (
-        <DocRow key={d.kind} doc={d} />
+        <DocRow key={d.kind} doc={d} canEdit={canEdit} />
       ))}
-      <div style={P.setCardFoot}>A reviewer checks new uploads within two working days.</div>
+      <div style={P.setCardFoot}>
+        {canEdit
+          ? "A reviewer checks new uploads within two working days."
+          : "To replace a document, use “Request a change” above."}
+      </div>
     </div>
   );
 }
 
-function DocRow({ doc }: { doc: ProfileDocument }): JSX.Element {
+function DocRow({ doc, canEdit }: { doc: ProfileDocument; canEdit: boolean }): JSX.Element {
   const s = DOC_STATE[doc.review_state];
   const upload = useUploadAccountDocument();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -414,21 +421,25 @@ function DocRow({ doc }: { doc: ProfileDocument }): JSX.Element {
       </div>
       <span style={{ ...P.setSessionTag, color: s.fg }}>{s.label}</span>
       {doc.document_id && <ViewDocButton documentId={doc.document_id} />}
-      <button
-        type="button"
-        style={P.setSmallBtn}
-        onClick={() => fileRef.current?.click()}
-        disabled={upload.isPending}
-      >
-        {upload.isPending ? "…" : doc.document_id ? "Replace" : "Upload"}
-      </button>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/*,application/pdf"
-        hidden
-        onChange={(e) => void onFile(e)}
-      />
+      {canEdit && (
+        <>
+          <button
+            type="button"
+            style={P.setSmallBtn}
+            onClick={() => fileRef.current?.click()}
+            disabled={upload.isPending}
+          >
+            {upload.isPending ? "…" : doc.document_id ? "Replace" : "Upload"}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,application/pdf"
+            hidden
+            onChange={(e) => void onFile(e)}
+          />
+        </>
+      )}
     </div>
   );
 }
