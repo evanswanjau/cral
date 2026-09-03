@@ -17,12 +17,12 @@ import {
 
 /**
  * Settings → Business (companies) / "My profile" (individuals). The fields
- * mirror onboarding's "Your details" step one-for-one — nothing new is
+ * mirror onboarding's "Your details" step one-for-one - nothing new is
  * asked for after onboarding (owner's call, 2026-09-03).
  *
  * Deliberate omissions vs "Cruz Merchant Settings.dc.html", all confirmed:
  *  - No "County" select. `merchants.county` was dropped on 2026-08-31.
- *  - No "Trading name" / standalone "Yard or office address" — onboarding
+ *  - No "Trading name" / standalone "Yard or office address" - onboarding
  *    doesn't collect them. (The `trading_name` column exists but is not
  *    surfaced here.)
  *  - No WhatsApp toggle.
@@ -44,7 +44,7 @@ type Draft = {
   company_address: string;
 };
 
-// The account entity type is fixed at onboarding — changing it means new
+// The account entity type is fixed at onboarding - changing it means new
 // documents and a re-review, so it's a support path, not a settings field
 // (same reasoning as the read-only sign-in email).
 const FIELDS: Array<keyof Draft> = [
@@ -148,7 +148,7 @@ export function BusinessTab(): JSX.Element {
               <div style={P.setCardTitle}>{isCompany ? "Contact person" : "Owner details"}</div>
               <div style={P.setCardSub}>
                 {isCompany
-                  ? "The person we deal with — their own ID and PIN."
+                  ? "The person we deal with - their own ID and PIN."
                   : "Exactly as written on your National ID."}
               </div>
             </div>
@@ -174,7 +174,7 @@ export function BusinessTab(): JSX.Element {
             </div>
             {!isCompany && (
               <div style={{ padding: "0 18px 18px", ...O.helper }}>
-                On your CRAL account — receipts and payout statements go here. Contact support to
+                On your CRAL account - receipts and payout statements go here. Contact support to
                 change it.
               </div>
             )}

@@ -4,7 +4,7 @@ import { logout } from "../../lib/auth-api.js";
 import { setSession } from "../../lib/auth.js";
 
 /**
- * Literal values from the design bundle's "Cruz Profile Menu.dc.html" — the
+ * Literal values from the design bundle's "Cruz Profile Menu.dc.html" - the
  * account chip in the portal header and its dropdown, including the
  * log-out confirmation state. Local to this component, same reasoning as
  * `components/onboarding/styles.ts`'s header note: kept as literals rather
@@ -94,7 +94,7 @@ export function ProfileMenu({
     try {
       await logout();
     } catch {
-      // Already signing them out locally regardless — see Onboarding.tsx's identical note.
+      // Already signing them out locally regardless - see Onboarding.tsx's identical note.
     }
     setSession(null);
     navigate("/sign-in", { replace: true });
@@ -108,7 +108,7 @@ export function ProfileMenu({
         <span style={M.avatar(30)}>{initials}</span>
         <span style={{ display: "block" }}>
           <span style={M.triggerName}>{name || email}</span>
-          <span style={M.triggerCompany}>{company ?? "—"}</span>
+          <span style={M.triggerCompany}>{company ?? " - "}</span>
         </span>
         <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true" style={{ flex: "none", display: "block", marginLeft: 1 }}>
           <path d="M1 1.5 5 5.5 9 1.5" fill="none" stroke="#838C9B" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />

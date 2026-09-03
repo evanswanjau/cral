@@ -46,7 +46,7 @@ export const O = {
     letterSpacing: ".08em",
     color: "#838C9B",
   },
-  // Understated on purpose — this isn't in the design canvas's onboarding
+  // Understated on purpose - this isn't in the design canvas's onboarding
   // screen, so it's kept to the top bar's existing mono/letter-spaced
   // idiom rather than introducing a new visual weight.
   logoutButton: {

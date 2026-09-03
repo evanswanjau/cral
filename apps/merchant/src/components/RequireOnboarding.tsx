@@ -4,7 +4,7 @@ import { isOnboardingComplete, loadDraftFromServer } from "../lib/onboarding-dra
 
 /**
  * Keeps the dashboard behind onboarding. Progress is server-side now (see
- * lib/onboarding-draft.ts), so this has to be an async check — a merchant
+ * lib/onboarding-draft.ts), so this has to be an async check - a merchant
  * on a brand-new device or browser has no localStorage to fall back on,
  * and the server is the only place that can say whether they're done.
  */

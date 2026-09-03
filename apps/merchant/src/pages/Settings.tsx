@@ -7,17 +7,17 @@ import { NotificationsTab } from "./settings/NotificationsTab.js";
 import { SecurityTab } from "./settings/SecurityTab.js";
 
 /**
- * Settings — one tabbed page, per "Cruz Merchant Settings.dc.html". The
+ * Settings - one tabbed page, per "Cruz Merchant Settings.dc.html". The
  * design has five tabs (Business · Payouts · Alerts · People · Security);
  * we ship four:
  *  - "Alerts" is "Notifications" (2026-09-02 naming call).
- *  - "People" is omitted — team accounts / roles / invites is a multi-user
+ *  - "People" is omitted - team accounts / roles / invites is a multi-user
  *    authorization feature with real permission differences, deferred to
  *    its own phase. Shipping the roster read-only would fabricate trust the
  *    way the hardcoded `id_verified` badge did. Same posture as dropping
  *    the WhatsApp column from the Alerts matrix.
  *
- * `/settings/security` and `/settings/notifications` still work — App.tsx
+ * `/settings/security` and `/settings/notifications` still work - App.tsx
  * redirects them to `?tab=…`.
  */
 
@@ -30,7 +30,7 @@ const TABS = [
 
 type TabKey = (typeof TABS)[number]["key"];
 
-// An individual merchant has no "business" — the first tab is their own
+// An individual merchant has no "business" - the first tab is their own
 // profile. Same tab key and URL, different label (owner's call 2026-09-03).
 function tabLabel(key: TabKey, ownerType: OwnerType | undefined): string {
   if (key === "business") return ownerType === "company" ? "Business" : "My profile";

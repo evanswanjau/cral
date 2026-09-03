@@ -3,13 +3,13 @@ import type { CSSProperties } from "react";
 /**
  * Merchant portal shell + Vehicles screen styles, taken verbatim from the
  * design bundle's "Cruz Merchant Portal.dc.html" (see CLAUDE.md's "Getting
- * the real screen source" note — every value here is a literal read off
+ * the real screen source" note - every value here is a literal read off
  * that file's inline styles, not a screenshot guess). Kept as literal
  * values rather than Tailwind utilities, same reasoning as
  * `apps/merchant/src/components/onboarding/styles.ts`.
  */
 // One shared column template for the vehicles table's header and every
-// row — see `table`/`tableHead`/`row` below for why this lives outside P
+// row - see `table`/`tableHead`/`row` below for why this lives outside P
 // (it's a grid-template string, not a CSSProperties object).
 export const TABLE_GRID_COLS =
   "minmax(96px,1fr) minmax(180px,2.4fr) minmax(120px,1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
@@ -133,7 +133,7 @@ export const P = {
   // One shared column template for both the header and every row, so the
   // six columns land at even, matched positions instead of a flex-grow
   // title column shoving the last three into a cramped cluster on the
-  // right (that was the "big gap" — the title column absorbing all the
+  // right (that was the "big gap" - the title column absorbing all the
   // slack while docs/rate/date stayed pinned to fixed pixel widths).
   table: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
   tableHead: { display: "grid", gridTemplateColumns: TABLE_GRID_COLS, alignItems: "center", columnGap: "clamp(12px,1.6vw,20px)", padding: "11px 18px", background: "#FAFBFC", borderBottom: "1px solid #E4E7EC" },
@@ -186,7 +186,7 @@ export const P = {
   // --- photos ---------------------------------------------------------
   // A shared explicit row height (not aspect-ratio on the main tile alone)
   // is what keeps the two-thumb column's rows evenly split and matched to
-  // the main photo's height — grid-stretching a column with no defined row
+  // the main photo's height - grid-stretching a column with no defined row
   // tracks left the thumbs auto-sized to their own content instead.
   photoGrid: { display: "grid", gridTemplateColumns: "2fr 1fr", gridTemplateRows: "clamp(220px,26vw,320px)", gap: 8 },
   photoMain: { position: "relative", borderRadius: "var(--r-lg)", border: "1px solid #E4E7EC", background: "repeating-linear-gradient(135deg,#F1F3F6 0 10px,#FAFBFC 10px 20px)", display: "grid", placeItems: "center", overflow: "hidden", width: "100%", height: "100%" },
@@ -392,7 +392,7 @@ export const P = {
   poTotalNetVal: { font: "700 20px/1 Archivo,sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
 
   // The design gives this note card its own 14-degree rule alongside the
-  // masthead's — the same documented exception the Vehicles reviewer-note
+  // masthead's - the same documented exception the Vehicles reviewer-note
   // card relies on (a note card counts as its own surface).
   poFootnote: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#EDEFFC", border: "1px solid #B6C0F4", borderRadius: "var(--r-lg)", flexWrap: "wrap" },
   poFootnoteRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
@@ -462,7 +462,7 @@ export const P = {
   // --- Settings shell + tabs ------------------------------------------
   // Literal reads off "Cruz Merchant Settings.dc.html". Prefixed `set`.
   // The card head trio (`setCardHead`/`setCardTitle`/`setCardSub`) is the
-  // same values as `ntCardHead`/`ntCardTitle`/`ntCardSub` — that design
+  // same values as `ntCardHead`/`ntCardTitle`/`ntCardSub` - that design
   // file was just first read for the Notifications tab. Kept as its own
   // keys so the Notifications rename is never forced by a Settings change.
   setBackBtn: {
@@ -515,14 +515,14 @@ export const P = {
   setCardFoot: { padding: "13px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
 
   setFieldGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 },
-  // Same grid without the card padding — for use inside setFieldStack.
+  // Same grid without the card padding - for use inside setFieldStack.
   setFieldGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(216px,1fr))", gap: 16 },
   // Equal-width radio-card pairs (payout method, long-booking rhythm).
   setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 },
   setFieldStack: { padding: 18, display: "grid", gap: 16 },
   setField: { display: "block" },
   // Fixed label-row height so a field with a chip (e.g. "✓ VERIFIED") and a
-  // plain-text one sit at the same height — keeps their inputs on one line
+  // plain-text one sit at the same height - keeps their inputs on one line
   // when they share a grid row.
   setFieldLabel: { display: "flex", alignItems: "center", minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
   setFieldLabelRow: { display: "flex", alignItems: "center", gap: 8, minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },

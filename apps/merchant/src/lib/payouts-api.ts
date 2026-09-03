@@ -108,7 +108,7 @@ export function seedDevPayouts() {
 /**
  * Hands the browser a file. Goes through `apiBlob` rather than a bare link
  * because these endpoints need the bearer header (and the shared
- * 401-refresh-and-retry behind it) — an `<a href>` would send neither and
+ * 401-refresh-and-retry behind it) - an `<a href>` would send neither and
  * get a 401 page saved to the merchant's Downloads folder.
  */
 async function saveBlob(blob: Blob, filename: string): Promise<void> {

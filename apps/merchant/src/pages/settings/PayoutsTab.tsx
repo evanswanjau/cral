@@ -22,9 +22,9 @@ import {
  *    it here; to change it, change the phone on the My profile tab.
  *  - **Company merchants are locked to Bank** (M-Pesa disabled; server
  *    rejects `mpesa` for a company too), mirroring onboarding.
- *  - **Bank payouts always run monthly, on the 1st** — no rhythm choice.
+ *  - **Bank payouts always run monthly, on the 1st** - no rhythm choice.
  *    M-Pesa keeps the "Every Monday" / "Monthly" choice.
- *  - There is still **no payment rail** — bank details and the schedule
+ *  - There is still **no payment rail** - bank details and the schedule
  *    are collected and stored, not disbursed against.
  *  - The statement download stays CSV.
  */
@@ -135,7 +135,7 @@ export function PayoutsTab(): JSX.Element {
                   <OptionCard
                     active={payByBank}
                     title="Bank account"
-                    body="Any bank in Kenya · 1–2 working days"
+                    body="Any bank in Kenya · 1 - 2 working days"
                     onClick={() => set("method", "bank")}
                   />
                 </div>
@@ -199,7 +199,7 @@ export function PayoutsTab(): JSX.Element {
                     </span>
                     <input
                       style={{ ...P.setInputMono, background: "#F8F9FB", color: "#5A6373" }}
-                      value={profile.phone ?? "—"}
+                      value={profile.phone ?? " - "}
                       readOnly
                     />
                     <span

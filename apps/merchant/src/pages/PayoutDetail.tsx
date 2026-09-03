@@ -45,7 +45,7 @@ function LineRow({ line, onOpen }: { line: PayoutRunLine; onOpen: (line: PayoutR
       <div style={{ minWidth: 0 }}>
         <div style={P.poLineHirer}>{line.hirer_name}</div>
         <div style={P.poLineMeta}>
-          {line.vehicle_registration} · {formatDay(line.pickup_at)}–{formatDay(line.dropoff_at)}
+          {line.vehicle_registration} · {formatDay(line.pickup_at)} - {formatDay(line.dropoff_at)}
         </div>
       </div>
       <span style={P.poLineGross}>{money(line.gross.amount)}</span>

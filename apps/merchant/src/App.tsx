@@ -25,11 +25,11 @@ const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
-      // Standalone, not nested in AppLayout's nav shell — onboarding is a
+      // Standalone, not nested in AppLayout's nav shell - onboarding is a
       // focused first step, not part of the main dashboard.
       { path: "/onboarding", element: <Onboarding /> },
       {
-        // The portal is gated on a finished onboarding — no vehicle, no
+        // The portal is gated on a finished onboarding - no vehicle, no
         // portal; you get returned to the step you stopped at.
         element: <RequireOnboarding />,
         children: [

@@ -56,7 +56,7 @@ function Tile({ tile }: { tile: PayoutTile }): JSX.Element {
         <span style={{ ...P.poTileKicker, color: skin.kFg }}>{TILE_LABEL[tile.key]}</span>
       </div>
       <div style={{ ...P.poTileValue, color: "#0B0F1A" }}>
-        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {amount === "—" ? "0" : amount}
+        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {amount === " - " ? "0" : amount}
       </div>
       <div style={{ ...P.poTileSub, color: skin.subFg }}>{tile.note}</div>
     </div>

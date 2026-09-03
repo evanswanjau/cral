@@ -48,7 +48,7 @@ function durationDays(pickupAt: string, dropoffAt: string): number {
   return Math.max(1, Math.round((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / (24 * 60 * 60 * 1000)));
 }
 
-/** "RESPOND BY 14:00 TODAY" only when the 12h window actually falls today — a request made at 22:00 is due tomorrow, and the label needs to say so. */
+/** "RESPOND BY 14:00 TODAY" only when the 12h window actually falls today - a request made at 22:00 is due tomorrow, and the label needs to say so. */
 function respondByLabel(iso: string): string {
   const due = new Date(iso);
   const time = due.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -214,7 +214,7 @@ function CancelModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   return (
     <Modal
       title="Cancel this booking?"
-      sub={isLate ? "It's at or after pick-up time — the 25% late fee applies." : "Free for the hirer since it's before pick-up time."}
+      sub={isLate ? "It's at or after pick-up time - the 25% late fee applies." : "Free for the hirer since it's before pick-up time."}
       onClose={onClose}
       ctaLabel={cancel.isPending ? "Cancelling…" : "Cancel booking"}
       ctaBg="#D81E32"
@@ -247,7 +247,7 @@ function CancelModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
 }
 
 // ---------------------------------------------------------------------
-// Handover modal — one flow for both pickup and return (spec §15: "the
+// Handover modal - one flow for both pickup and return (spec §15: "the
 // same machinery runs in reverse at return"). QR-proximity is skipped
 // this phase (no customer app); the OTP step is real.
 // ---------------------------------------------------------------------
@@ -362,7 +362,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
                   maxLength={6}
                 />
               </div>
-              <div style={P.helperText}>There is no chat on CRAL — if the hirer can't find their code, call CRAL support.</div>
+              <div style={P.helperText}>There is no chat on CRAL - if the hirer can't find their code, call CRAL support.</div>
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
@@ -412,7 +412,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
                 </div>
                 {photoIds.length === 0 && !skippedPhotos && canSkipPhotos && (
                   <div style={{ ...P.verifyNotice, marginTop: 10 }}>
-                    Skipping means a damage claim can't be filed against this booking later — there will be no before-state to check against.
+                    Skipping means a damage claim can't be filed against this booking later - there will be no before-state to check against.
                   </div>
                 )}
                 {photoIds.length === 0 && canSkipPhotos && (
@@ -464,7 +464,7 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   const [amount, setAmount] = useState("");
 
   const depositKes = Math.round(b.deposit.amount / 100);
-  // The merchant states the real cost — capping this client-side would
+  // The merchant states the real cost - capping this client-side would
   // silently throw away everything above the deposit and make the
   // dispute escalation (which the API does correctly) unreachable. The
   // API is the one that caps `amount` in the stored report and sets
@@ -504,8 +504,8 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
             <div style={P.toggleRowTitle}>Does this need money from the deposit?</div>
             <div style={P.toggleRowSub}>
               {kind === "claim"
-                ? `KES ${depositKes.toLocaleString("en-KE")} is held — claim more and the rest goes to a dispute.`
-                : "No deduction — this just goes on their record."}
+                ? `KES ${depositKes.toLocaleString("en-KE")} is held - claim more and the rest goes to a dispute.`
+                : "No deduction - this just goes on their record."}
             </div>
           </div>
           <button
@@ -803,7 +803,7 @@ export function BookingDetail(): JSX.Element {
             )}
             {(b.status === "active" || b.status === "completed") && !b.has_pickup_condition_photos && (
               <div style={{ padding: "0 18px 18px" }}>
-                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up — a damage claim can't be filed on this booking.</div>
+                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up - a damage claim can't be filed on this booking.</div>
               </div>
             )}
           </div>
@@ -835,11 +835,11 @@ export function BookingDetail(): JSX.Element {
               </div>
               <div>
                 <div style={P.specKey}>ON CRAL</div>
-                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `Since ${fmtDate(hirerHistory.member_since)}` : "—"}</div>
+                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `Since ${fmtDate(hirerHistory.member_since)}` : " - "}</div>
               </div>
               <div>
                 <div style={P.specKey}>COMPLETED</div>
-                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `${hirerHistory.completed_count} bookings` : "—"}</div>
+                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `${hirerHistory.completed_count} bookings` : " - "}</div>
               </div>
             </div>
             <div style={{ padding: "0 18px 18px", ...P.helperText }}>
@@ -868,7 +868,7 @@ export function BookingDetail(): JSX.Element {
             </div>
             <div style={{ padding: "0 18px 18px", ...P.helperText }}>
               {b.vehicle_chauffeured
-                ? "Driver included — you or your named driver must be available for the whole hire."
+                ? "Driver included - you or your named driver must be available for the whole hire."
                 : "Self-drive. The hirer drives; their licence is on file above."}
             </div>
           </div>
@@ -901,7 +901,7 @@ export function BookingDetail(): JSX.Element {
                 <span style={P.breakdownNetVal}><span style={P.breakdownNetPrefix}>KES</span> {money(b.merchant_net.amount)}</span>
               </div>
               <div style={P.breakdownNote}>
-                Hirer's deposit, held by CRAL: KES {money(b.deposit.amount)}. Separate from your money — released after the return check unless a claim is raised.
+                Hirer's deposit, held by CRAL: KES {money(b.deposit.amount)}. Separate from your money - released after the return check unless a claim is raised.
               </div>
             </div>
           </div>

@@ -3,21 +3,21 @@ import type { CSSProperties } from "react";
 const PROOF = [
   {
     title: "Answer requests in one tap",
-    body: "Hirers pay CRAL up front, so your yes is money already on the way — not a promise to chase.",
+    body: "Hirers pay CRAL up front, so your yes is money already on the way - not a promise to chase.",
   },
   {
     title: "Get paid your way",
-    body: "M-Pesa, bank transfer, or invoiced terms for corporate hirers — payouts move as soon as each booking wraps.",
+    body: "M-Pesa, bank transfer, or invoiced terms for corporate hirers - payouts move as soon as each booking wraps.",
   },
   {
     title: "List as many vehicles as you want",
-    body: "One account, one fleet — add your next car whenever you're ready, with no cap on how many.",
+    body: "One account, one fleet - add your next car whenever you're ready, with no cap on how many.",
   },
 ];
 
 /**
  * The dark panel, reproduced from the design canvas source
- * ("Cruz Merchant Login.dc.html") with its exact inline styles — the
+ * ("Cruz Merchant Login.dc.html") with its exact inline styles - the
  * clamp() sizing, the 14° skewed red rule, the Archivo 'wdth' 110 display
  * axis, and the radial glow anchored to this panel's bottom-right corner.
  */

@@ -9,7 +9,7 @@ import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
- * Sign in — the design's `isPassword` branch only.
+ * Sign in - the design's `isPassword` branch only.
  *
  * Password is the only way in from this form. An account with opt-in SMS
  * 2FA (enrolled from Settings → Security) gets a second step here: the
@@ -46,7 +46,7 @@ export function SignIn(): JSX.Element {
         setError("Too many failed attempts. Try again in a few minutes, or reset your password.");
       } else if (err instanceof ApiClientError && err.code === "invalid_credentials") {
         // The API's message says "phone or email" because it's shared with
-        // the customer portal, which still supports both — merchant is
+        // the customer portal, which still supports both - merchant is
         // email-only, so override with copy that matches this form.
         setError("That email and password don't match.");
       } else {

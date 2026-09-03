@@ -1,7 +1,7 @@
 /**
  * Client-side draft state for the merchant onboarding wizard.
  *
- * The server (apps/api/src/modules/merchant) is now the source of truth —
+ * The server (apps/api/src/modules/merchant) is now the source of truth - 
  * `loadDraftFromServer` reads it on mount and `syncDraftToServer`/the
  * vehicle and document functions below push every meaningful change back,
  * which is what makes resuming on a different device or browser possible.
@@ -76,7 +76,7 @@ export interface OwnerDocs {
 
 export interface OnboardingDraft {
   step: number;
-  /** Furthest step ever reached — drives which stepper tabs are clickable. */
+  /** Furthest step ever reached - drives which stepper tabs are clickable. */
   maxStepReached: number;
   screen: "fleet" | "vehicle-form";
   ownerType: OwnerType;
@@ -313,7 +313,7 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
  * `editingVehicleId` and `vehicleDraft` are ephemeral navigation state that
  * only means anything within one page session. `editingVehicleId` can't
  * survive a round-trip, so honouring a persisted `screen: "vehicle-form"`
- * used to land the merchant in a blank form that reported itself as new —
+ * used to land the merchant in a blank form that reported itself as new - 
  * and typing into it created a *duplicate* vehicle beside the one they
  * thought they were editing. Resuming always lands on the fleet list, at
  * the step they left off.
@@ -361,7 +361,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
  * yet on the server) falls back to whatever's in the local offline-typing
  * buffer, so a merchant who started filling in the form just before a
  * network hiccup doesn't lose it. Once the server has anything real, it's
- * authoritative — that's what makes resuming on a different device work.
+ * authoritative - that's what makes resuming on a different device work.
  */
 export async function loadDraftFromServer(): Promise<OnboardingDraft> {
   const state = await apiGet<WireOnboardingState>("/merchant/onboarding");
@@ -442,7 +442,7 @@ export async function syncDraftToServer(patch: Partial<OnboardingDraft>): Promis
 
 /**
  * Pushes the current phone to the server, then texts a code to it. Kept
- * here so callers don't have to know it's two calls — the debounced draft
+ * here so callers don't have to know it's two calls - the debounced draft
  * sync might not have landed the number yet when the merchant hits "Send
  * code".
  */

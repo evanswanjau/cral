@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
  * The "Unsaved changes on this page" sticky bar, taken verbatim from
  * "Cruz Merchant Settings.dc.html" (the `sc-if value="{{dirty}}"` block near
  * the end of the file). Shared because every editable Settings tab renders
- * its own copy — only one tab is mounted at a time, so `position: sticky`
+ * its own copy - only one tab is mounted at a time, so `position: sticky`
  * with a single instance matches the design's single save bar.
  *
  * It is deliberately self-contained: a tab owns its dirty state and drops

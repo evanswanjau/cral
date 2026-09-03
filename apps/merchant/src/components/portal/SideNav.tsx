@@ -2,19 +2,19 @@ import { NavLink } from "react-router-dom";
 import { P } from "./styles.js";
 
 /**
- * "Vehicles", "Bookings" and "Payouts" are shown — the design's canvas also
+ * "Vehicles", "Bookings" and "Payouts" are shown - the design's canvas also
  * has Dashboard, Notifications and Settings, but those screens haven't been
- * asked for yet (see CLAUDE.md's "Phase 1 — Identity, merchant portal only"
+ * asked for yet (see CLAUDE.md's "Phase 1 - Identity, merchant portal only"
  * scoping). Bookings and Payouts were both added explicitly by the owner
  * ahead of the delivery plan's phase order.
  *
  * Payouts carries no count badge: a run count is not something a merchant
  * needs to act on, unlike an unanswered booking request, and a number there
- * would read as "N things need you". Notifications is the opposite — its
+ * would read as "N things need you". Notifications is the opposite - its
  * badge is the *unread* count, which is genuinely actionable, so it shows
  * whenever it's non-zero.
  *
- * Settings (`/settings`) is a tabbed page — Business, Payouts,
+ * Settings (`/settings`) is a tabbed page - Business, Payouts,
  * Notifications, Security. It carries no badge: nothing under it is a
  * count a merchant needs to act on. The old `/settings/security` and
  * `/settings/notifications` URLs redirect into it.

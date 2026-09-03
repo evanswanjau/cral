@@ -23,7 +23,7 @@ export type PayoutSchedule = "weekly" | "monthly";
 export interface PayoutSettings {
   method: PayoutMethod;
   schedule: PayoutSchedule;
-  /** Always the account phone — change it on the profile. */
+  /** Always the account phone - change it on the profile. */
   mpesa_number: string | null;
   mpesa_number_verified: boolean;
   mpesa_name: string | null;

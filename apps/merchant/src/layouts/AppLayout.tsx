@@ -12,7 +12,7 @@ import { useBookingList } from "../lib/bookings-api.js";
 import { useNotificationUnread } from "../lib/notifications-api.js";
 
 export function AppLayout(): ReactNode {
-  // Shares the ["onboarding"] cache key with RequireOnboarding/Onboarding —
+  // Shares the ["onboarding"] cache key with RequireOnboarding/Onboarding - 
   // by the time AppLayout mounts, onboarding is already submitted, so this
   // is just reading the merchant's name/company for the header chip.
   const { data: draft } = useQuery({ queryKey: ["onboarding"], queryFn: loadDraftFromServer });

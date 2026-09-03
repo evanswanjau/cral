@@ -259,7 +259,7 @@ function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void 
   return (
     <div style={{ ...P.setInlineNote, display: "grid", gap: 12, maxWidth: 420 }}>
       <div style={O.helper}>
-        SMS codes are on. Save these ten recovery codes somewhere safe — each works once if you
+        SMS codes are on. Save these ten recovery codes somewhere safe - each works once if you
         can&rsquo;t get a text. This is the only time we&rsquo;ll show them.
       </div>
       <div

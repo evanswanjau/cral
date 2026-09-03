@@ -163,7 +163,7 @@ export function BookingList(): JSX.Element {
           <h1 style={P.h1}>Bookings</h1>
           <p style={P.lede}>
             Requests waiting on you, hires running now, and everything already finished. Hirers pay
-            CRAL upfront — your payout clears 24 hours after you receive the vehicle.
+            CRAL upfront - your payout clears 24 hours after you receive the vehicle.
           </p>
         </div>
         <button
@@ -208,7 +208,7 @@ export function BookingList(): JSX.Element {
               {pendingRequests.length} {pendingRequests.length === 1 ? "request is" : "requests are"} waiting for your answer
             </div>
             <div style={{ ...P.bannerBody, color: "#8A5200" }}>
-              {firstRequest.hirer_name} · {firstRequest.vehicle_registration} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)} — money is already with CRAL.
+              {firstRequest.hirer_name} · {firstRequest.vehicle_registration} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)} - money is already with CRAL.
             </div>
           </div>
           <button type="button" style={{ ...P.bannerBtn, background: "#0F23A8" }} onClick={() => navigate(`/bookings/${firstRequest.id}`)}>

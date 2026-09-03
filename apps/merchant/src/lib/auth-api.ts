@@ -70,7 +70,7 @@ export function verify2fa(code: string) {
   return apiPost<{ recovery_codes: string[] }>("/auth/2fa/verify", { code });
 }
 
-/** One-tap enable — uses the already-verified account phone. Returns the ten recovery codes, once. */
+/** One-tap enable - uses the already-verified account phone. Returns the ten recovery codes, once. */
 export function enable2fa() {
   return apiPost<{ recovery_codes: string[] }>("/auth/2fa/enable");
 }
@@ -82,7 +82,7 @@ export function sendTwoFactorChallenge() {
   );
 }
 
-/** Switch off — password only; a texted/recovery `code` is still accepted if given. */
+/** Switch off - password only; a texted/recovery `code` is still accepted if given. */
 export function disable2fa(password: string, code?: string) {
   return apiDelete<void>("/auth/2fa", code ? { password, code } : { password });
 }
@@ -117,8 +117,8 @@ export function verifyLoginOtp(identifier: string, code: string, deviceId: strin
 
 /**
  * Sign-up is email + password only. Full name and phone are collected in
- * onboarding — the phone at payout setup, where the reason for asking is
- * obvious — rather than gating the signup form behind an SMS.
+ * onboarding - the phone at payout setup, where the reason for asking is
+ * obvious - rather than gating the signup form behind an SMS.
  */
 export function register(email: string, password: string) {
   return apiPost<{
@@ -158,7 +158,7 @@ export function getRegistrationState() {
 }
 
 /**
- * The frozen `/me` contract (identity.yaml) — used by onboarding to prefill
+ * The frozen `/me` contract (identity.yaml) - used by onboarding to prefill
  * the email address collected at sign-up, so the "Your details" step
  * doesn't ask for it a second time.
  */
@@ -168,7 +168,7 @@ export function getMe() {
 
 // --- forgot / reset password ------------------------------------------
 
-/** Always emails a reset link — see the note on the server's forgotPassword. */
+/** Always emails a reset link - see the note on the server's forgotPassword. */
 export function forgotPassword(email: string) {
   return apiPost<{ status: string; channel_hint: "email"; masked: string; retry_after: number }>(
     "/auth/password/forgot",
@@ -198,7 +198,7 @@ export function resetPassword(input: { token: string; new_password: string }) {
 
 // --- account settings: password + sessions ---------------------------
 
-/** Authenticated change — revokes every other session, keeps the current one. */
+/** Authenticated change - revokes every other session, keeps the current one. */
 export function changePassword(currentPassword: string, newPassword: string) {
   return apiPost<{ sessions_revoked: number }>("/auth/password/change", {
     current_password: currentPassword,
@@ -225,7 +225,7 @@ export function revokeSession(id: string) {
   return apiDelete<void>(`/auth/sessions/${id}`);
 }
 
-/** "Sign out everywhere" — all sessions but this one. */
+/** "Sign out everywhere" - all sessions but this one. */
 export function revokeAllSessions() {
   return apiPost<{ revoked: number }>("/auth/sessions/revoke-all");
 }

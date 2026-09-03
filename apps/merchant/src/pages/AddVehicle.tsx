@@ -24,7 +24,7 @@ function formatPlate(raw: string): string {
 }
 
 /**
- * A standalone "add a vehicle to an already-submitted fleet" screen — the
+ * A standalone "add a vehicle to an already-submitted fleet" screen - the
  * design's own prototype punts this ("lives in the onboarding flow"), but
  * onboarding is a one-time wizard that's already been submitted by the
  * time a merchant reaches this screen, so it needs its own home. Reuses
@@ -73,7 +73,7 @@ export function AddVehicle(): JSX.Element {
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),
       });
-      flash("Draft created — add its documents and photos next.", "#6FC8F0");
+      flash("Draft created - add its documents and photos next.", "#6FC8F0");
       navigate(`/vehicles/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add that vehicle. Try again.");

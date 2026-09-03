@@ -162,7 +162,7 @@ function VehicleForm({
   const [v, setV] = useState<DraftVehicle>(vehicle);
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
-  // The real server-side vehicle id, once one exists — needed before photos
+  // The real server-side vehicle id, once one exists - needed before photos
   // can be uploaded (they need a real vehicle_id). Existing vehicles start
   // with one (vehicle.id is already a server id by the time it's editable);
   // a new vehicle gets one lazily, the first moment its required fields are
@@ -183,7 +183,7 @@ function VehicleForm({
   const photosOk = v.photos.length === MAX_PHOTOS;
 
   // Lazily create the vehicle on the server the first moment it's saveable
-  // in principle — this is what lets PhotoUpload attach photos to a real
+  // in principle - this is what lets PhotoUpload attach photos to a real
   // vehicle_id before the merchant clicks "Save vehicle".
   useEffect(() => {
     if (!isNew || serverVehicleId || creatingRef.current || !requiredFilled) return;
@@ -191,7 +191,7 @@ function VehicleForm({
     createVehicleOnServer(v)
       .then((created) => setServerVehicleId(created.id))
       .catch(() => {
-        // Stays null — PhotoUpload keeps showing "fill in the details
+        // Stays null - PhotoUpload keeps showing "fill in the details
         // above first" and the next field edit retries via this effect.
       })
       .finally(() => {
@@ -220,7 +220,7 @@ function VehicleForm({
     setSaving(true);
     try {
       const id = serverVehicleId ?? (await createVehicleOnServer(v)).id;
-      // The server's response is authoritative for docs/photos — they were
+      // The server's response is authoritative for docs/photos - they were
       // uploaded directly via PhotoUpload, not through this PATCH body.
       const saved = await updateVehicleOnServer(id, v);
       onSave(saved);
@@ -230,7 +230,7 @@ function VehicleForm({
   }
 
   function handleCancel() {
-    // Nothing has been committed to the draft's vehicle list yet — a
+    // Nothing has been committed to the draft's vehicle list yet - a
     // vehicle created during this session by the lazy-create effect above
     // is an orphan the merchant explicitly walked away from.
     if (isNew && serverVehicleId) void deleteVehicleOnServer(serverVehicleId);

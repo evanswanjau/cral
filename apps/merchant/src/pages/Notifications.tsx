@@ -15,7 +15,7 @@ import {
   type NotificationRow,
 } from "../lib/notifications-api.js";
 
-/** "15 AUG 2026 · 07:12" — the design's mono timestamp, in Nairobi time. */
+/** "15 AUG 2026 · 07:12" - the design's mono timestamp, in Nairobi time. */
 function formatWhen(iso: string): string {
   const shifted = new Date(new Date(iso).getTime() + 3 * 60 * 60 * 1000);
   const date = shifted
@@ -132,7 +132,7 @@ export function Notifications(): JSX.Element {
     if (sms && email) return "Alerts here also go out by SMS and by email, per your settings.";
     if (sms) return "Alerts here also go out by SMS, per your settings.";
     if (email) return "Alerts here also go out by email, per your settings.";
-    return "Right now every alert stays in-app only — turn on SMS or email in settings.";
+    return "Right now every alert stays in-app only - turn on SMS or email in settings.";
   })();
 
   return (

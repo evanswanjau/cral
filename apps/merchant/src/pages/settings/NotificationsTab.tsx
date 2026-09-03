@@ -12,7 +12,7 @@ import {
 } from "../../lib/notifications-api.js";
 
 /**
- * Settings → Notifications. The category × channel matrix and quiet hours —
+ * Settings → Notifications. The category × channel matrix and quiet hours - 
  * shipped as "Notifications" per the 2026-09-02 naming call (the design
  * file names the tab "Alerts"). Formerly the standalone
  * `pages/NotificationSettings.tsx` route; folded in here unchanged except
@@ -89,7 +89,7 @@ export function NotificationsTab(): JSX.Element {
 
   function flip(category: NotificationCategory, channel: ChannelKey, locked: boolean): void {
     if (locked) {
-      toast("This one always sends by SMS — it's about your money.", "#C77400");
+      toast("This one always sends by SMS - it's about your money.", "#C77400");
       return;
     }
     setDraft((d) =>
@@ -143,7 +143,7 @@ export function NotificationsTab(): JSX.Element {
           <div style={P.ntCardHead}>
             <div style={P.ntCardTitle}>Alerts</div>
             <div style={P.ntCardSub}>
-              Money and reviewer messages always send by SMS — those rows can't be turned off.
+              Money and reviewer messages always send by SMS - those rows can't be turned off.
             </div>
           </div>
 
