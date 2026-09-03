@@ -14,7 +14,11 @@ the fix looks the way it does; each is marked **FIXED**.
 Group 2 - **idempotency correctness** (#5, #6) - is also done, same
 branch, tests in `apps/api/src/middleware/__tests__/idempotency.test.ts`.
 
-Groups 3-6 (#7-#11, #15-#20) are still open.
+Group 3 - **reliability** (#7-#11) - is also done, same branch, tests in
+`apps/pi/src/__tests__/reliability.test.ts`. The query-retry item from #20
+landed with it.
+
+Groups 4-6 (#15-#19, and the rest of #20) are still open.
 
 ## What's already green
 
@@ -158,7 +162,7 @@ middleware's own docstring claim, and the table grows without bound.
 purge expired rows in the existing daily `runDailyReminderSweep` alongside
 the 90-day notification purge.
 
-### 7. Multer errors surface as "Something went wrong on our end"
+### 7. Multer errors surface as "Something went wrong on our end" - FIXED
 
 Nothing anywhere handles `MulterError`. A file over the 10MB limit throws
 `LIMIT_FILE_SIZE`, misses both the `ApiError` and `ZodError` branches in
@@ -170,7 +174,7 @@ reaches the server oversized gets a wrong status and a misleading message.
 **Fix:** a `MulterError` branch in `errorHandler` mapping `LIMIT_FILE_SIZE`
 to `413 file_too_large` with real copy.
 
-### 8. Revoked sessions keep working for up to 15 minutes
+### 8. Revoked sessions keep working for up to 15 minutes - FIXED
 
 `authenticate()` verifies the JWT signature and nothing else - it never
 looks up `sessions` to check whether `sid` is revoked. So `logout`,
@@ -187,7 +191,7 @@ someone is in their account, and it doesn't currently keep it.
 `authenticate()`. A Redis set of revoked session ids keeps it to one cheap
 lookup rather than a DB round-trip per request.
 
-### 9. `audit_log` is not actually append-only
+### 9. `audit_log` is not actually append-only - FIXED
 
 CLAUDE.md states the table is "append-only at the DB level
 (`REVOKE UPDATE, DELETE`)". It isn't. The app connects as `cral`, which
@@ -204,7 +208,7 @@ triggers apply to the owner too. (Running the app as a non-owner role is
 the stronger fix but a bigger operational change.) Either way the CLAUDE.md
 claim needs to match reality.
 
-### 10. No graceful shutdown
+### 10. No graceful shutdown - FIXED
 
 `server.ts` calls `app.listen` with no `SIGTERM` handler, and the three
 BullMQ workers are never closed. Every deploy kills in-flight requests
@@ -213,7 +217,7 @@ mid-transaction and drops jobs a worker had claimed.
 **Fix:** a `SIGTERM`/`SIGINT` handler that stops accepting connections,
 drains in-flight requests, then closes the workers, the Knex pool and Redis.
 
-### 11. The merchant app has no error boundary
+### 11. The merchant app has no error boundary - FIXED
 
 There is no `ErrorBoundary`, no `componentDidCatch`, and no `Suspense`
 anywhere in `apps/merchant/src`. Any render-time throw in any of the 70
@@ -370,10 +374,9 @@ Each group is independently shippable.
    `feature/security-patch`.
 2. ~~**Idempotency correctness** (#5, #6)~~ - **done**, same branch. Both
    touch the same middleware.
-3. **Reliability** (#7, #8, #9, #10, #11) - the error-shape, shutdown and
-   boundary fixes.
+3. ~~**Reliability** (#7, #8, #9, #10, #11)~~ - **done**, same branch.
 4. **Frontend test harness** (#16) - Vitest + the four suites above.
 5. **Contract catch-up** (#15, #18) - write `merchant-vehicles.yaml`, prune
    the dead identity paths, decide on `/me/data-export`.
-6. **Consistency** (#17, #19, #20) - shared commission constant, role
-   guard, query defaults.
+6. **Consistency** (#17, #19, and what's left of #20) - shared commission
+   constant, role guard, code splitting, fetch timeout.

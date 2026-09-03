@@ -5,7 +5,6 @@ import { createApp } from "../app.js";
 import { db } from "../db/client.js";
 import { createVerifiedTestUser } from "../test/helpers.js";
 import { redis } from "../lib/redis.js";
-import { signAccessToken } from "../lib/jwt.js";
 import { assertDeclaredTypeMatchesBytes } from "../lib/uploads.js";
 import { ApiError } from "@cral/types";
 
@@ -208,9 +207,10 @@ describe("access token verification", () => {
   it("still accepts a properly issued public token", async () => {
     const user = await createVerifiedTestUser();
     createdUserIds.push(user.userId);
-    const token = signAccessToken({ sub: user.userId, sid: "ses_test", roles: ["merchant"] });
 
-    const res = await request(app).get("/merchant/dashboard").set(auth(token));
+    // The helper's token is signed against a real session row — which
+    // `authenticate()` now checks, so a fabricated `sid` no longer passes.
+    const res = await request(app).get("/merchant/dashboard").set(auth(user.accessToken));
     expect(res.status).toBe(200);
   });
 });

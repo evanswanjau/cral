@@ -9,4 +9,22 @@ import { QueryClient } from "@tanstack/react-query";
  * per-user and must not survive a sign-out or outlive one account into the
  * next one. See `setSession`.
  */
-export const queryClient = new QueryClient();
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      /**
+       * Only retry what retrying can fix. The default is three attempts on
+       * any failure, so a 404 or a 422 was tried three times before the
+       * screen gave up - three times the wait to show an error that was
+       * never going to change. A 401 is excluded too: `lib/api.ts` already
+       * refreshes and retries once itself, and a second layer of retries on
+       * top of that just stampedes the refresh endpoint.
+       */
+      retry: (failureCount, error) => {
+        const status = (error as { status?: number }).status;
+        if (status !== undefined && status < 500) return false;
+        return failureCount < 2;
+      },
+    },
+  },
+});

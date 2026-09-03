@@ -850,6 +850,44 @@ Group 2 of the same review. Tests in
   sweep now does five things, and `npm run reminders:sweep -w apps/api`
   reports all of them rather than just the email count.
 
+**Reliability (2026-09-03 — PR "reliability").** Group 3 of the same
+review. Tests in `apps/api/src/__tests__/reliability.test.ts`.
+
+- **`authenticate()` checks the session, not just the signature.** A
+  revoked session used to keep working until its access token expired — up
+  to fifteen minutes after `logout`, `revoke-all`, a per-session `DELETE`
+  or close-account. This is **a primary-key lookup per authenticated
+  request, deliberately rather than a Redis denylist**: twelve places
+  revoke a session, and a denylist that misses one is a silent hole. If it
+  ever shows up in profiling, cache *positively* (session id → live, short
+  TTL); don't reintroduce a denylist. Account **suspension** is unchanged —
+  still enforced at the next refresh, by design.
+- **A fabricated `sid` no longer authenticates.** Test helpers must create
+  a real `sessions` row (`createVerifiedTestUser` does).
+- **`MulterError` has its own branch in `error-handler.ts`** —
+  `LIMIT_FILE_SIZE` → `413 file_too_large` naming the real limit. It used
+  to miss every branch and surface as a 500 "Something went wrong on our
+  end", which was the wrong status and a lie about whose end.
+- **`audit_log` is now genuinely append-only** (migration
+  `20260905090100`): a `BEFORE UPDATE OR DELETE` trigger, because the
+  original `REVOKE ... FROM PUBLIC` was a no-op — the API connects as the
+  role that *owns* the table, and owners bypass it. A `DELETE FROM
+  audit_log` from the app's own connection used to succeed. Triggers apply
+  to the owner too. **Nothing in this codebase may update or delete an
+  audit row**; if a test needs to clean up, leave the rows.
+- **The API drains on SIGTERM/SIGINT** — stop accepting connections, finish
+  open requests, close the three BullMQ workers (each drains its active
+  job), then the Knex pool and Redis, with a 15s force-exit backstop.
+- **The merchant app has error boundaries** (`components/ErrorBoundary.tsx`)
+  at two levels: one inside `AppLayout`'s shell, keyed on the pathname so a
+  broken page keeps the nav and clears on navigation, and one around the
+  whole app in `main.tsx` for what breaks outside the shell. Before this,
+  any render-time throw blanked the app to a white page.
+- **`queryClient` no longer retries 4xx.** The default retried *any* failure
+  three times, so a 404 or 422 took three round-trips to show an error that
+  was never going to change. 401 is excluded too — `lib/api.ts` already
+  refreshes and retries once itself.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
