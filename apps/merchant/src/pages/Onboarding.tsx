@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { O } from "../components/onboarding/styles.js";
 import { ErrorBanner } from "../components/onboarding/primitives.js";
@@ -48,6 +49,9 @@ export function Onboarding(): JSX.Element {
   });
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [saved, setSaved] = useState(false);
+  usePageTitle(
+    draft ? `Onboarding - ${STEPS.find((s) => s.n === draft.step)?.label ?? "Set up"}` : "Onboarding",
+  );
   const resuming = useRef(false);
   const emailFetched = useRef(false);
   const [accountEmail, setAccountEmail] = useState<string | null>(null);

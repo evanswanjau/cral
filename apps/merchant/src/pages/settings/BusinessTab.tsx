@@ -174,8 +174,7 @@ export function BusinessTab(): JSX.Element {
             </div>
             {!isCompany && (
               <div style={{ padding: "0 18px 18px", ...O.helper }}>
-                On your CRAL account - receipts and payout statements go here. Contact support to
-                change it.
+                Receipts and payout statements go to this address.
               </div>
             )}
           </div>

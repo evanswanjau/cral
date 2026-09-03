@@ -1,5 +1,3 @@
-import { randomInt } from "node:crypto";
-import type { Knex } from "knex";
 import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -17,14 +15,12 @@ import {
   emailHeading,
   emailLayout,
   emailMuted,
-  emailNotice,
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import type {
   OtpCodeRow,
   PasswordResetTokenRow,
-  RecoveryCodeRow,
   SessionRow,
   TwoFactorChallengeRow,
   UserRow,
@@ -38,7 +34,6 @@ const LOCKOUT_THRESHOLD = 10;
 const LOCKOUT_MINUTES = 15;
 const TWO_FACTOR_TTL_MINUTES = 10;
 const TWO_FACTOR_MAX_ATTEMPTS = 5;
-const RECOVERY_CODE_COUNT = 10;
 
 /**
  * Where the reset link points. The merchant portal is a separate static
@@ -902,14 +897,22 @@ export async function runAccountDeletionSweep(): Promise<{ purged: number }> {
 // §7 Opt-in SMS two-factor
 // ---------------------------------------------------------------------
 
+export type TwoFactorChannel = "sms" | "email";
+
 /**
- * Texts a fresh six-digit code and records the challenge it belongs to.
+ * Sends a fresh six-digit code and records the challenge it belongs to.
  * Any earlier unspent challenge for the same user is retired first, so a
  * second sign-in attempt can't be completed with a stale code.
+ *
+ * `channel` is normally "sms" (the enrolled number). "email" is the
+ * fallback when the text isn't arriving - the code goes to the account
+ * email instead. There are no recovery codes; email, then support, is the
+ * whole fallback chain.
  */
 async function issueTwoFactorChallenge(
   user: UserRow,
   deviceId: string,
+  channel: TwoFactorChannel = "sms",
 ): Promise<TwoFactorChallengeRow> {
   await db<TwoFactorChallengeRow>("two_factor_challenges")
     .where({ user_id: user.id, consumed_at: null })
@@ -928,49 +931,30 @@ async function issueTwoFactorChallenge(
 
   if (!challenge) throw new Error("Failed to create two-factor challenge");
 
-  await smsAdapter.send({
-    to: user.two_factor_phone as string,
-    body: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
-  });
+  if (channel === "email") {
+    await emailAdapter.send({
+      to: user.email,
+      subject: "Your CRAL sign-in code",
+      html: emailLayout({
+        preheader: `${code} - your CRAL sign-in code`,
+        bodyHtml: [
+          emailHeading("Your sign-in code"),
+          emailParagraph(
+            `Enter <strong>${code}</strong> to finish signing in. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+          ),
+          emailMuted("If you didn't try to sign in, change your password and contact support."),
+        ].join(""),
+      }),
+      text: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+    });
+  } else {
+    await smsAdapter.send({
+      to: user.two_factor_phone as string,
+      body: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+    });
+  }
 
   return challenge;
-}
-
-function generateRecoveryCode(): string {
-  // Two short groups, unambiguous alphabet — these get written down.
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const pick = (n: number) =>
-    Array.from({ length: n }, () => alphabet[randomInt(0, alphabet.length)]).join("");
-  return `${pick(4)}-${pick(4)}`;
-}
-
-async function issueRecoveryCodes(userId: string, trx: Knex.Transaction): Promise<string[]> {
-  await trx("recovery_codes").where({ user_id: userId }).del();
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
-  await trx("recovery_codes").insert(
-    codes.map((code) => ({
-      id: generateId("recoveryCode"),
-      user_id: userId,
-      code_hash: hashCode(code),
-    })),
-  );
-  return codes;
-}
-
-/** Spends a recovery code if it matches an unconsumed one. */
-async function consumeRecoveryCode(userId: string, presented: string): Promise<boolean> {
-  const row = await db<RecoveryCodeRow>("recovery_codes")
-    .where({
-      user_id: userId,
-      code_hash: hashCode(presented.trim().toUpperCase()),
-      consumed_at: null,
-    })
-    .first();
-  if (!row) return false;
-  await db<RecoveryCodeRow>("recovery_codes")
-    .where({ id: row.id })
-    .update({ consumed_at: new Date() });
-  return true;
 }
 
 async function requireUser(userId: string): Promise<UserRow> {
@@ -1021,8 +1005,9 @@ export async function enroll2fa(userId: string, rawPhone: string) {
 }
 
 /**
- * Step 2 of enrolment: the code from the text. Switches 2FA on and issues
- * the ten recovery codes — the only time they are ever shown.
+ * Step 2 of enrolment: the code from the text. Switches 2FA on. (Kept for
+ * a future "use a different number" need; the Settings UI uses the
+ * one-tap `enable2fa` instead. There are no recovery codes.)
  */
 export async function verify2fa(userId: string, code: string, ctx: RequestContext) {
   const user = await requireUser(userId);
@@ -1072,12 +1057,11 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
     });
   }
 
-  const recoveryCodes = await db.transaction(async (trx) => {
+  await db.transaction(async (trx) => {
     await trx<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ consumed_at: new Date() });
     await trx<UserRow>("users")
       .where({ id: user.id })
       .update({ two_factor_enabled: true, two_factor_enrolled_at: new Date() });
-    const codes = await issueRecoveryCodes(user.id, trx);
     await writeAuditEntry(trx, {
       actorId: user.id,
       actorType: "user",
@@ -1088,7 +1072,6 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    return codes;
   });
 
   const notice =
@@ -1109,15 +1092,18 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
     text: notice,
   });
 
-  return { recovery_codes: recoveryCodes };
+  return { enabled: true };
 }
 
 /**
  * The one-tap switch (Settings → Security). The account phone has already
- * been proven at onboarding, so there is no handset step — enabling just
- * points the second factor at `users.phone` and issues the recovery
- * codes. `enroll2fa` + `verify2fa` stay for any future "use a different
- * number" need, but the UI no longer walks that path.
+ * been proven at onboarding, so there is no handset step - enabling just
+ * points the second factor at `users.phone`.
+ *
+ * There are no recovery codes (owner's call, 2026-09-04). If a text isn't
+ * arriving, the sign-in screen can send the code by email instead; past
+ * that, support. `enroll2fa` + `verify2fa` stay for a future "use a
+ * different number" need, but the UI no longer walks that path.
  */
 export async function enable2fa(userId: string, ctx: RequestContext) {
   const user = await requireUser(userId);
@@ -1136,17 +1122,16 @@ export async function enable2fa(userId: string, ctx: RequestContext) {
       status: 422,
       type: "validation_error",
       code: "phone_not_verified",
-      message: "Verify your phone number first — see the My profile tab.",
+      message: "Verify your phone number first - see the My profile tab.",
     });
   }
 
-  const recoveryCodes = await db.transaction(async (trx) => {
+  await db.transaction(async (trx) => {
     await trx<UserRow>("users").where({ id: user.id }).update({
       two_factor_phone: user.phone,
       two_factor_enabled: true,
       two_factor_enrolled_at: new Date(),
     });
-    const codes = await issueRecoveryCodes(user.id, trx);
     await writeAuditEntry(trx, {
       actorId: user.id,
       actorType: "user",
@@ -1157,7 +1142,6 @@ export async function enable2fa(userId: string, ctx: RequestContext) {
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    return codes;
   });
 
   await emailAdapter.send({
@@ -1176,12 +1160,13 @@ export async function enable2fa(userId: string, ctx: RequestContext) {
     text: "Two-factor authentication was switched on for your CRAL account. If this wasn't you, contact support immediately.",
   });
 
-  return { recovery_codes: recoveryCodes };
+  return { enabled: true };
 }
 
 /**
- * The post-password step at sign-in. Accepts the texted code or any unspent
- * recovery code, and only then creates the session.
+ * The post-password step at sign-in. Accepts the six-digit code (texted, or
+ * emailed via the fallback) and only then creates the session. There are
+ * no recovery codes.
  */
 export async function completeTwoFactorChallenge(
   challengeId: string,
@@ -1209,9 +1194,8 @@ export async function completeTwoFactorChallenge(
 
   const code = presented.trim();
   const matchesTexted = /^[0-9]{6}$/.test(code) && hashCode(code) === challenge.code_hash;
-  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, code);
 
-  if (!matchesTexted && !usedRecoveryCode) {
+  if (!matchesTexted) {
     await db<TwoFactorChallengeRow>("two_factor_challenges")
       .where({ id: challenge.id })
       .update({ attempts: challenge.attempts + 1 });
@@ -1228,37 +1212,44 @@ export async function completeTwoFactorChallenge(
     .where({ id: challenge.id })
     .update({ consumed_at: new Date() });
 
-  if (usedRecoveryCode) {
-    const remaining = await db<RecoveryCodeRow>("recovery_codes")
-      .where({ user_id: user.id, consumed_at: null })
-      .count({ n: "*" })
-      .first();
-    const remainingCount = Number(remaining?.n ?? 0);
-    const notice = `A recovery code was used to sign in to your CRAL account. ${remainingCount} remain.`;
-    await emailAdapter.send({
-      to: user.email,
-      subject: "A recovery code was used",
-      html: emailLayout({
-        preheader: notice,
-        bodyHtml: [
-          emailHeading("A recovery code was used"),
-          emailParagraph("One of your two-factor recovery codes was just used to sign in."),
-          emailNotice(
-            `${remainingCount} recovery ${remainingCount === 1 ? "code" : "codes"} remain.`,
-          ),
-          emailMuted("If this wasn't you, change your password and contact support immediately."),
-        ].join(""),
-      }),
-      text: notice,
-    });
-  }
-
   const { session, refreshToken } = await createSession(user.id, challenge.device_id, ctx);
   return {
     ...issueTokenPair(user, session, refreshToken),
     user: serializeUser(user),
     next: null,
-    used_recovery_code: usedRecoveryCode,
+  };
+}
+
+/**
+ * Sign-in fallback: re-send the pending challenge's code, by SMS again or
+ * by email. Unauthenticated - the caller has passed a password but holds
+ * no token; the challenge id is the only thing identifying them.
+ */
+export async function resendTwoFactorChallenge(
+  challengeId: string,
+  channel: TwoFactorChannel,
+) {
+  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ id: challengeId, consumed_at: null })
+    .first();
+  if (!challenge || challenge.expires_at < new Date()) {
+    throw new ApiError({
+      status: 400,
+      type: "conflict",
+      code: "two_factor_challenge_expired",
+      message: "That sign-in attempt has expired. Start again.",
+    });
+  }
+  const user = await requireUser(challenge.user_id);
+  const fresh = await issueTwoFactorChallenge(user, challenge.device_id, channel);
+  return {
+    challenge_id: fresh.id,
+    channel,
+    masked_destination:
+      channel === "email"
+        ? maskIdentifier(user.email)
+        : maskIdentifier(user.two_factor_phone ?? user.phone ?? ""),
+    expires_in: TWO_FACTOR_TTL_MINUTES * 60,
   };
 }
 
@@ -1297,10 +1288,10 @@ export async function disable2fa(
     });
   }
 
-  // The code is optional now (the switch off asks for the password only —
+  // The code is optional (the switch off asks for the password only -
   // texting yourself a code to stop texting yourself codes is circular
   // friction, and the caller is already in an authenticated session). When
-  // one *is* supplied — texted or recovery — it's still honoured/consumed.
+  // a texted code *is* supplied it's still honoured/consumed.
   const trimmed = (code ?? "").trim();
   if (trimmed) {
     const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
@@ -1313,9 +1304,8 @@ export async function disable2fa(
       challenge.expires_at > new Date() &&
       /^[0-9]{6}$/.test(trimmed) &&
       hashCode(trimmed) === challenge.code_hash;
-    const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, trimmed);
 
-    if (!matchesTexted && !usedRecoveryCode) {
+    if (!matchesTexted) {
       throw new ApiError({
         status: 401,
         type: "auth_error",
@@ -1325,18 +1315,15 @@ export async function disable2fa(
       });
     }
 
-    if (challenge && matchesTexted) {
-      await db<TwoFactorChallengeRow>("two_factor_challenges")
-        .where({ id: challenge.id })
-        .update({ consumed_at: new Date() });
-    }
+    await db<TwoFactorChallengeRow>("two_factor_challenges")
+      .where({ id: challenge!.id })
+      .update({ consumed_at: new Date() });
   }
 
   await db.transaction(async (trx) => {
     await trx<UserRow>("users")
       .where({ id: user.id })
       .update({ two_factor_enabled: false, two_factor_phone: null, two_factor_enrolled_at: null });
-    await trx("recovery_codes").where({ user_id: user.id }).del();
     await writeAuditEntry(trx, {
       actorId: user.id,
       actorType: "user",
@@ -1367,7 +1354,7 @@ export async function disable2fa(
   });
 }
 
-/** Raises a fresh challenge for an already-signed-in merchant (used by disable). */
+/** Raises a fresh challenge for an already-signed-in merchant. */
 export async function sendTwoFactorChallenge(userId: string) {
   const user = await requireUser(userId);
   if (!user.two_factor_enabled || !user.two_factor_phone) {
@@ -1389,18 +1376,11 @@ export async function sendTwoFactorChallenge(userId: string) {
 /** What the settings screen reads to draw the 2FA card. */
 export async function getTwoFactorState(userId: string) {
   const user = await requireUser(userId);
-  const remaining = user.two_factor_enabled
-    ? await db<RecoveryCodeRow>("recovery_codes")
-        .where({ user_id: userId, consumed_at: null })
-        .count({ n: "*" })
-        .first()
-    : null;
   return {
     enabled: user.two_factor_enabled,
     method: user.two_factor_enabled ? ("sms" as const) : null,
     masked_destination: user.two_factor_phone ? maskIdentifier(user.two_factor_phone) : null,
     enrolled_at: user.two_factor_enrolled_at?.toISOString() ?? null,
-    recovery_codes_remaining: remaining ? Number(remaining.n) : null,
   };
 }
 

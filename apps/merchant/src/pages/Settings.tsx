@@ -1,5 +1,6 @@
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { useProfile, type OwnerType } from "../lib/settings-api.js";
 import { BusinessTab } from "./settings/BusinessTab.js";
 import { PayoutsTab } from "./settings/PayoutsTab.js";
@@ -54,6 +55,8 @@ export function Settings(): JSX.Element {
   const tab: TabKey = (TABS.find((t) => t.key === raw)?.key ?? "business") as TabKey;
   const setTab = (key: TabKey) =>
     setParams(key === "business" ? {} : { tab: key }, { replace: true });
+
+  usePageTitle(`Settings - ${tabLabel(tab, profile?.owner_type)}`);
 
   const name =
     profile?.owner_type === "company"

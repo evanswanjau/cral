@@ -3,10 +3,16 @@ import { Link, useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
 import { Checkbox, Field, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
-import { completeTwoFactorChallenge, isTwoFactorRequired, login } from "../lib/auth-api.js";
+import {
+  completeTwoFactorChallenge,
+  isTwoFactorRequired,
+  login,
+  resendTwoFactorChallenge,
+} from "../lib/auth-api.js";
 import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
  * Sign in - the design's `isPassword` branch only.
@@ -17,6 +23,7 @@ import { ApiClientError } from "../lib/api.js";
  * finishes it.
  */
 export function SignIn(): JSX.Element {
+  usePageTitle("Sign in");
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
 
@@ -27,8 +34,14 @@ export function SignIn(): JSX.Element {
   const [busy, setBusy] = useState(false);
 
   // Set once a password login comes back needing a code.
-  const [challenge, setChallenge] = useState<{ id: string; masked: string } | null>(null);
+  const [challenge, setChallenge] = useState<{
+    id: string;
+    masked: string;
+    channel: "sms" | "email";
+  } | null>(null);
   const [code, setCode] = useState("");
+  const [resending, setResending] = useState(false);
+  const [resentNote, setResentNote] = useState<string | null>(null);
 
   async function signInWithPassword() {
     setError(null);
@@ -36,7 +49,7 @@ export function SignIn(): JSX.Element {
     try {
       const result = await login(email.trim(), pw, deviceId());
       if (isTwoFactorRequired(result)) {
-        setChallenge({ id: result.challenge_id, masked: result.masked_destination });
+        setChallenge({ id: result.challenge_id, masked: result.masked_destination, channel: "sms" });
         return;
       }
       setSession(result, remember);
@@ -79,11 +92,35 @@ export function SignIn(): JSX.Element {
     }
   }
 
+  async function resend(channel: "sms" | "email") {
+    if (!challenge) return;
+    setResending(true);
+    setError(null);
+    try {
+      const res = await resendTwoFactorChallenge(challenge.id, channel);
+      setChallenge({ id: res.challenge_id, masked: res.masked_destination, channel: res.channel });
+      setCode("");
+      setResentNote(
+        channel === "email"
+          ? `Sent a code to ${res.masked_destination}.`
+          : `Texted a new code to ${res.masked_destination}.`,
+      );
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : "Couldn't send another code. Try again.");
+    } finally {
+      setResending(false);
+    }
+  }
+
   if (challenge) {
+    const dest =
+      challenge.channel === "email"
+        ? `emailed a 6-digit code to ${challenge.masked}`
+        : `texted a 6-digit code to ${challenge.masked}`;
     return (
       <AuthShell
         heading="Enter your code"
-        subheading={`We texted a 6-digit code to ${challenge.masked}. It expires in 10 minutes. Lost your phone? A recovery code works here too.`}
+        subheading={`We ${dest}. It expires in 10 minutes.`}
         error={error}
       >
         <form
@@ -99,13 +136,26 @@ export function SignIn(): JSX.Element {
               inputMode="numeric"
               autoComplete="one-time-code"
               value={code}
-              onChange={(e) => setCode(e.target.value.replace(/[^0-9A-Za-z-]/g, "").slice(0, 20))}
-              placeholder="123456 or a recovery code"
+              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              placeholder="123456"
             />
           </Field>
-          <PrimaryButton type="submit" disabled={busy || code.trim().length < 6}>
+          <PrimaryButton type="submit" disabled={busy || code.trim().length !== 6}>
             {busy ? "Checking…" : "Finish signing in"}
           </PrimaryButton>
+
+          {resentNote && <p style={S.helper}>{resentNote}</p>}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 14 }}>
+            <button type="button" style={S.inlineBtn} disabled={resending} onClick={() => void resend("sms")}>
+              Resend text
+            </button>
+            <button type="button" style={S.inlineBtn} disabled={resending} onClick={() => void resend("email")}>
+              Email me the code instead
+            </button>
+          </div>
+          <p style={S.helper}>
+            Still not getting it? <a href="https://wa.me/254733376061?text=2FA%20help">Contact CRAL support</a>.
+          </p>
           <button
             type="button"
             style={S.inlineBtn}
@@ -113,9 +163,10 @@ export function SignIn(): JSX.Element {
               setChallenge(null);
               setCode("");
               setError(null);
+              setResentNote(null);
             }}
           >
-            ← Start over
+            Start over
           </button>
         </form>
       </AuthShell>

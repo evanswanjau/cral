@@ -116,8 +116,7 @@ function EmptyState({ onSeed, seeding }: { onSeed: () => void; seeding: boolean 
       <div style={P.emptyIcon}>◎</div>
       <div style={P.emptyTitle}>No payouts yet</div>
       <p style={P.emptyBody}>
-        A payout run is cut once a hire is finished and the hirer's deposit has been released. Nothing has reached that
-        point yet.
+        A payout run is cut once a hire is finished and cleared. Nothing has reached that point yet.
       </p>
       {import.meta.env.DEV && (
         <button type="button" onClick={onSeed} disabled={seeding} style={P.actionBtn}>

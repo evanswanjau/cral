@@ -710,12 +710,11 @@ paths:
       operationId: disable2fa
       security: [{ bearerAuth: [] }]
       description: >
-        The password alone is enough — texting yourself a code to stop
+        The password alone is enough - texting yourself a code to stop
         texting yourself codes is circular friction, and the caller is
-        already authenticated. A `code` (a challenge from
-        /auth/2fa/challenge/send, or a recovery code) is still honoured if
-        supplied. Disabling destroys the remaining recovery codes and
-        forgets the enrolled number.
+        already authenticated. A texted `code` (from
+        /auth/2fa/challenge/send) is still honoured if supplied. Disabling
+        forgets the enrolled number. There are no recovery codes.
       requestBody:
         required: true
         content:
@@ -725,7 +724,7 @@ paths:
               required: [password]
               properties:
                 password: { type: string }
-                code: { type: string, description: Optional — texted or recovery code }
+                code: { type: string, description: Optional - a current texted code }
       responses:
         "204": { description: Disabled }
         "401":
@@ -742,26 +741,25 @@ paths:
   /auth/2fa/enable:
     post:
       tags: [account]
-      summary: One-tap enable — uses the already-verified account phone, no handset step
+      summary: One-tap enable - uses the already-verified account phone, no handset step
       operationId: enable2fa
       security: [{ bearerAuth: [] }]
       description: >
-        The Settings → Security switch. The account phone was already
+        The Settings -> Security switch. The account phone was already
         proven at onboarding, so this points the second factor at
-        `users.phone` and returns the ten recovery codes exactly once.
+        `users.phone`. There are no recovery codes - the sign-in fallback
+        is an emailed code (see /auth/2fa/challenge/resend), then support.
         `/auth/2fa/enroll` + `/auth/2fa/verify` remain for a future
         "use a different number" need.
       responses:
         "200":
-          description: Enabled — recovery codes shown once
+          description: Enabled
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  recovery_codes:
-                    type: array
-                    items: { type: string }
+                  enabled: { type: boolean }
         "409":
           description: two_factor_already_enabled
           content:
@@ -912,8 +910,9 @@ paths:
       description: >
         Unauthenticated on purpose: the caller has passed a password but
         holds no token yet, so `challenge_id` is the only thing identifying
-        them. `code` is the texted six digits or any unspent recovery code.
-        Five wrong answers kill the challenge.
+        them. `code` is the six-digit code (texted, or emailed via
+        /auth/2fa/challenge/resend). Five wrong answers kill the challenge.
+        There are no recovery codes.
       requestBody:
         required: true
         content:
@@ -929,12 +928,7 @@ paths:
           description: Signed in
           content:
             application/json:
-              schema:
-                allOf:
-                  - $ref: "#/components/schemas/SignedIn"
-                  - type: object
-                    properties:
-                      used_recovery_code: { type: boolean }
+              schema: { $ref: "#/components/schemas/SignedIn" }
         "400":
           description: two_factor_challenge_expired
           content:
@@ -942,6 +936,47 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "401":
           description: two_factor_invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /auth/2fa/challenge/resend:
+    post:
+      tags: [login]
+      summary: Sign-in fallback - re-send the pending challenge's code by SMS or email
+      operationId: resendTwoFactorChallenge
+      security: []
+      description: >
+        Unauthenticated, keyed by `challenge_id` like /auth/2fa/challenge.
+        `channel: "email"` sends the code to the account email instead of
+        the enrolled phone - the fallback when a text isn't arriving. Past
+        that, the merchant contacts support. Retires the previous unspent
+        challenge and returns the new `challenge_id`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id]
+              properties:
+                challenge_id: { type: string }
+                channel: { type: string, enum: [sms, email], default: sms }
+      responses:
+        "200":
+          description: Code re-sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  challenge_id: { type: string }
+                  channel: { type: string, enum: [sms, email] }
+                  masked_destination: { type: string }
+                  expires_in: { type: integer }
+        "400":
+          description: two_factor_challenge_expired
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -1288,7 +1323,6 @@ components:
         method: { type: string, nullable: true, enum: [sms] }
         masked_destination: { type: string, nullable: true }
         enrolled_at: { type: string, format: date-time, nullable: true }
-        recovery_codes_remaining: { type: integer, nullable: true }
 
     Session:
       type: object

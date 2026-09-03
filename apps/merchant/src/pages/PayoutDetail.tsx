@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { P } from "../components/portal/styles.js";
 import { PAYOUT_STATUS, money } from "../components/portal/status.js";
 import { Modal } from "../components/portal/Modal.js";
@@ -62,6 +63,7 @@ export function PayoutDetail(): JSX.Element {
   const toast = useToast();
   const { data: payout, isLoading } = usePayout(payoutRunId);
   const { data: queries } = usePayoutQueries(payoutRunId);
+  usePageTitle(payout ? `Payout ${payout.ref}` : "Payout");
   const raiseQuery = useCreatePayoutQuery(payoutRunId ?? "");
 
   const [queryOpen, setQueryOpen] = useState(false);

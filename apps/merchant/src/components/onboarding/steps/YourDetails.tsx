@@ -227,7 +227,7 @@ export function YourDetails({
             </FormField>
             <FormField
               label="Email"
-              helper="On your CRAL account - receipts and payout statements go here. Contact support to change it."
+              helper="Receipts and payout statements go to this address."
             >
               <TextInput
                 value={draft.email || "Loading…"}

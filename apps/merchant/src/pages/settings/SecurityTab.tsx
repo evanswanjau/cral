@@ -13,7 +13,6 @@ import {
   listSessions,
   requestAccountDeletion,
   revokeAllSessions,
-  revokeSession,
   getTwoFactorState,
   type SessionRow,
 } from "../../lib/auth-api.js";
@@ -163,7 +162,6 @@ function TwoFactorRow({
 }): JSX.Element {
   const flash = useToast();
   const [busy, setBusy] = useState(false);
-  const [codes, setCodes] = useState<string[] | null>(null);
   const [disabling, setDisabling] = useState(false);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -174,9 +172,9 @@ function TwoFactorRow({
     setBusy(true);
     setError(null);
     try {
-      const res = await enable2fa();
-      setCodes(res.recovery_codes);
+      await enable2fa();
       onChanged();
+      flash("SMS codes at sign-in are on.", "#0B8A5B");
     } catch (e) {
       flash(e instanceof ApiClientError ? e.message : "Couldn't turn that on.", "#D81E32");
     } finally {
@@ -239,9 +237,14 @@ function TwoFactorRow({
             />
           </FormField>
           <div style={{ display: "flex", gap: 8 }}>
-            <PrimaryButton onClick={() => void turnOff()} disabled={busy || !password}>
+            <button
+              type="button"
+              style={{ ...P.setSignBtn, background: "#0F23A8", color: "#fff", border: "none", opacity: busy || !password ? 0.6 : 1 }}
+              onClick={() => void turnOff()}
+              disabled={busy || !password}
+            >
               {busy ? "Turning off…" : "Turn off"}
-            </PrimaryButton>
+            </button>
             <button type="button" style={P.setSignBtn} onClick={() => setDisabling(false)}>
               Cancel
             </button>
@@ -249,36 +252,6 @@ function TwoFactorRow({
           {error && <div style={O.fieldError}>{error}</div>}
         </div>
       )}
-
-      {codes && <RecoveryCodes codes={codes} onDone={() => setCodes(null)} />}
-    </div>
-  );
-}
-
-function RecoveryCodes({ codes, onDone }: { codes: string[]; onDone: () => void }): JSX.Element {
-  return (
-    <div style={{ ...P.setInlineNote, display: "grid", gap: 12, maxWidth: 420 }}>
-      <div style={O.helper}>
-        SMS codes are on. Save these ten recovery codes somewhere safe - each works once if you
-        can&rsquo;t get a text. This is the only time we&rsquo;ll show them.
-      </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(2, 1fr)",
-          gap: 8,
-          font: "500 14px/1.4 'IBM Plex Mono',monospace",
-          background: "#FFFFFF",
-          border: "1px solid #E4E7EC",
-          borderRadius: 10,
-          padding: 14,
-        }}
-      >
-        {codes.map((c) => (
-          <span key={c}>{c}</span>
-        ))}
-      </div>
-      <PrimaryButton onClick={onDone}>I&rsquo;ve saved them</PrimaryButton>
     </div>
   );
 }
@@ -322,20 +295,6 @@ function SessionsCard(): JSX.Element {
   const qc = useQueryClient();
   const flash = useToast();
   const { data, isLoading } = useQuery({ queryKey: ["sessions"], queryFn: listSessions });
-  const [busyId, setBusyId] = useState<string | null>(null);
-
-  async function signOutOne(id: string): Promise<void> {
-    setBusyId(id);
-    try {
-      await revokeSession(id);
-      await qc.invalidateQueries({ queryKey: ["sessions"] });
-      flash("Signed out on that device.", "#8C97A8");
-    } catch (e) {
-      flash(e instanceof ApiClientError ? e.message : "Couldn't sign that one out.", "#D81E32");
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   async function signOutAll(): Promise<void> {
     try {
@@ -353,6 +312,8 @@ function SessionsCard(): JSX.Element {
   }
 
   const sessions: SessionRow[] = data?.data ?? [];
+  const otherCount = sessions.filter((s) => !s.is_current).length;
+  const current = sessions.find((s) => s.is_current);
 
   return (
     <div style={P.setCard}>
@@ -360,40 +321,34 @@ function SessionsCard(): JSX.Element {
         <span style={P.setCardTitle}>Where you are signed in</span>
         <button
           type="button"
-          style={P.setDangerBtnSmall}
+          style={{ ...P.setDangerBtnSmall, opacity: otherCount === 0 ? 0.5 : 1 }}
           onClick={() => void signOutAll()}
-          disabled={sessions.length < 2}
+          disabled={otherCount === 0}
         >
-          Sign out everywhere
+          Sign out everywhere else
         </button>
       </div>
       {isLoading ? (
         <div style={{ padding: 18, ...O.helper }}>Loading…</div>
-      ) : (
-        sessions.map((s) => (
-          <div key={s.id} style={P.setListRow}>
-            <span style={{ ...P.setSessionDot, background: s.is_current ? "#0B8A5B" : "#CDD2DA" }} />
+      ) : current ? (
+        <>
+          <div style={P.setListRow}>
+            <span style={{ ...P.setSessionDot, background: "#0B8A5B" }} />
             <div style={{ flex: 1, minWidth: 160 }}>
-              <div style={P.setListName}>{s.device}</div>
+              <div style={P.setListName}>{current.device}</div>
               <div style={P.setListMeta}>
-                {uaLabel(s.user_agent)} · {seenLabel(s.last_seen_at)}
+                {uaLabel(current.user_agent)} · {seenLabel(current.last_seen_at)}
               </div>
             </div>
-            {s.is_current ? (
-              <span style={{ ...P.setSessionTag, color: "#076945" }}>This device</span>
-            ) : (
-              <button
-                type="button"
-                style={{ ...P.setSessionTag, background: "none", border: "none", cursor: "pointer", color: "#0F23A8" }}
-                onClick={() => void signOutOne(s.id)}
-                disabled={busyId === s.id}
-              >
-                {busyId === s.id ? "Signing out…" : "Sign out"}
-              </button>
-            )}
+            <span style={{ ...P.setSessionTag, color: "#076945" }}>This device</span>
           </div>
-        ))
-      )}
+          <div style={P.setCardFoot}>
+            {otherCount === 0
+              ? "This is the only device signed in."
+              : `Signed in on ${otherCount} other ${otherCount === 1 ? "device" : "devices"}. Use "Sign out everywhere else" to end those.`}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -472,8 +427,7 @@ function CloseAccountCard({
           <>
             <p style={P.setCloseText}>
               Listings come down and no new bookings can be made. Hires already running still finish
-              and still pay out. You have 30 days to change your mind; your records stay with CRAL for
-              seven years, as the law requires.
+              and still pay out. You have 30 days to change your mind.
             </p>
             <button type="button" style={P.setCloseBtn} onClick={() => setOpen(true)}>
               Delete account

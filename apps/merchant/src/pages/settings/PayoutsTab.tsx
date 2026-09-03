@@ -273,20 +273,20 @@ export function PayoutsTab(): JSX.Element {
 
         <div style={P.setBodySide}>
           <div style={P.setCard}>
-            <div style={{ ...P.setCardHead, ...P.setCardTitle }}>Fees and deposits</div>
+            <div style={{ ...P.setCardHead, ...P.setCardTitle }}>Fees</div>
             <div style={P.setFeeBody}>
               <div style={P.setReadRow}>
                 <span>Payout fee</span>
                 <span style={P.setReadVal}>None</span>
               </div>
               <div style={P.setReadRow}>
-                <span>Security deposit</span>
-                <span style={{ ...P.setReadVal, color: "#838C9B" }}>Held by CRAL</span>
+                <span>Commission</span>
+                <span style={{ ...P.setReadVal, color: "#838C9B" }}>Only on completed hires</span>
               </div>
             </div>
             <div style={P.setCardFoot}>
-              Deposits are returned to the hirer after the return check. They never pass through your
-              payout.
+              Nothing is charged while a vehicle sits idle. Commission is taken from a completed hire
+              before your payout is cut.
             </div>
           </div>
 

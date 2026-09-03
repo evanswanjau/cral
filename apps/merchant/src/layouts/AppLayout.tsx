@@ -10,6 +10,7 @@ import { P } from "../components/portal/styles.js";
 import { useVehicleList } from "../lib/vehicles-api.js";
 import { useBookingList } from "../lib/bookings-api.js";
 import { useNotificationUnread } from "../lib/notifications-api.js";
+import { useProfile } from "../lib/settings-api.js";
 
 export function AppLayout(): ReactNode {
   // Shares the ["onboarding"] cache key with RequireOnboarding/Onboarding - 
@@ -20,6 +21,7 @@ export function AppLayout(): ReactNode {
   const { data: vehicles } = useVehicleList("all");
   const { data: bookings } = useBookingList("all");
   const { data: notificationUnread } = useNotificationUnread();
+  const { data: profile } = useProfile();
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
   const company = draft?.ownerType === "company" ? draft.companyName || null : null;
@@ -27,7 +29,12 @@ export function AppLayout(): ReactNode {
   return (
     <ToastProvider>
       <div style={P.page}>
-        <AppHeader name={name} company={company} email={me?.email ?? ""} />
+        <AppHeader
+          name={name}
+          company={company}
+          email={me?.email ?? ""}
+          approved={Boolean(profile?.approved_at)}
+        />
         <div style={P.body}>
           <div style={P.bodyInner}>
             <SideNav

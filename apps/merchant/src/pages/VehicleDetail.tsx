@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { O } from "../components/onboarding/styles.js";
 import { P } from "../components/portal/styles.js";
@@ -487,6 +488,7 @@ export function VehicleDetail(): JSX.Element {
   const navigate = useNavigate();
   const flash = useToast();
   const { data: v, isPending } = useVehicleDetail(vehicleId);
+  usePageTitle(v ? `${v.registration || `${v.make} ${v.model}`}` : "Vehicle");
   const [modal, setModal] = useState<ModalKind>(null);
   const pause = usePauseVehicle(vehicleId ?? "");
   const resume = useResumeVehicle(vehicleId ?? "");

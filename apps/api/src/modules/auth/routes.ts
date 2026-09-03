@@ -22,6 +22,7 @@ import {
   RegisterSchema,
   ResetPasswordSchema,
   TwoFactorChallengeSchema,
+  TwoFactorResendSchema,
   Verify2faSchema,
 } from "./schemas.js";
 
@@ -319,6 +320,26 @@ authRouter.post(
   rateLimit({ bucket: "two_factor_reauth", limit: 5, windowSeconds: 3600 }),
   asyncHandler(async (req, res) => {
     const result = await authService.sendTwoFactorChallenge(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+// Sign-in fallback: re-send the pending challenge's code by SMS again or
+// by email. Unauthenticated - keyed by the challenge id, like /challenge.
+authRouter.post(
+  "/auth/2fa/challenge/resend",
+  rateLimit({
+    bucket: "two_factor_resend",
+    limit: 6,
+    windowSeconds: 900,
+    keyFn: (req) => req.body?.challenge_id ?? req.ip ?? "unknown",
+  }),
+  validateBody(TwoFactorResendSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.resendTwoFactorChallenge(
+      req.body.challenge_id,
+      req.body.channel ?? "sms",
+    );
     res.status(200).json(result);
   }),
 );

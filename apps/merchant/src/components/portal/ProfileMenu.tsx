@@ -59,10 +59,13 @@ export function ProfileMenu({
   name,
   company,
   email,
+  approved,
 }: {
   name: string;
   company: string | null;
   email: string;
+  /** merchants.approved_at - drives the company chip. Nothing sets it yet (no admin portal). */
+  approved: boolean;
 }): JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -127,9 +130,19 @@ export function ProfileMenu({
             </div>
             {company && (
               <div style={M.companyRow}>
-                <span style={M.companyDot}>✓</span>
+                <span
+                  style={{
+                    ...M.companyDot,
+                    background: approved ? "#DDF3E9" : "#FFF3DB",
+                    color: approved ? "#076945" : "#8A5200",
+                  }}
+                >
+                  {approved ? "✓" : "•"}
+                </span>
                 <span style={M.companyName}>{company}</span>
-                <span style={M.companyTag}>VERIFIED</span>
+                <span style={{ ...M.companyTag, color: approved ? "#076945" : "#8A5200" }}>
+                  {approved ? "VERIFIED" : "PENDING REVIEW"}
+                </span>
               </div>
             )}
           </div>

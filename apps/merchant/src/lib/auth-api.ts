@@ -37,13 +37,23 @@ export function login(identifier: string, password: string, deviceId: string) {
   );
 }
 
-/** Second half of a 2FA sign-in: the texted code (or a recovery code). */
+/** Second half of a 2FA sign-in: the six-digit code (texted or emailed). */
 export function completeTwoFactorChallenge(challengeId: string, code: string) {
-  return apiPost<SignedIn & { used_recovery_code: boolean }>(
+  return apiPost<SignedIn>(
     "/auth/2fa/challenge",
     { challenge_id: challengeId, code },
     { auth: false },
   );
+}
+
+/** Sign-in fallback: re-send the pending code by SMS again, or by email. */
+export function resendTwoFactorChallenge(challengeId: string, channel: "sms" | "email") {
+  return apiPost<{
+    challenge_id: string;
+    channel: "sms" | "email";
+    masked_destination: string;
+    expires_in: number;
+  }>("/auth/2fa/challenge/resend", { challenge_id: challengeId, channel }, { auth: false });
 }
 
 // --- 2FA (account settings) -----------------------------------------
@@ -53,7 +63,6 @@ export interface TwoFactorState {
   method: "sms" | null;
   masked_destination: string | null;
   enrolled_at: string | null;
-  recovery_codes_remaining: number | null;
 }
 
 export function getTwoFactorState() {
@@ -70,9 +79,9 @@ export function verify2fa(code: string) {
   return apiPost<{ recovery_codes: string[] }>("/auth/2fa/verify", { code });
 }
 
-/** One-tap enable - uses the already-verified account phone. Returns the ten recovery codes, once. */
+/** One-tap enable - uses the already-verified account phone. No recovery codes. */
 export function enable2fa() {
-  return apiPost<{ recovery_codes: string[] }>("/auth/2fa/enable");
+  return apiPost<{ enabled: boolean }>("/auth/2fa/enable");
 }
 
 /** Raise a fresh challenge for an already-signed-in merchant (needed to disable). */
