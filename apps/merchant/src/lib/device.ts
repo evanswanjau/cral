@@ -11,8 +11,8 @@ export function deviceId(): string {
 
 /**
  * Any way someone might type a Kenyan mobile number into a field that
- * already shows "+254" — "733 376 061", "0733376061", "254733376061",
- * "+254733376061" — to the E.164 form the API expects. The server's
+ * already shows "+254" - "733 376 061", "0733376061", "254733376061",
+ * "+254733376061" - to the E.164 form the API expects. The server's
  * normalizePhone is the real validator; this just does its best.
  */
 export function toE164(national: string): string {

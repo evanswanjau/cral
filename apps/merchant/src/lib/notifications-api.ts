@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut } from "./api.js";
 
 /**
- * Merchant Notifications — the feed, its filters, mark-read, and the
+ * Merchant Notifications - the feed, its filters, mark-read, and the
  * category x channel preference matrix. Mirrors `lib/payouts-api.ts`.
  *
  * Two axes, same as the API (see openapi/merchant-notifications.yaml):
@@ -148,7 +148,7 @@ export function useNotificationList(filter: NotificationFilter) {
 /**
  * The SideNav badge, so it mounts on every portal screen. Its own query key
  * keeps it fresh independently of whichever filter the Notifications screen
- * is showing — but that also means it is a *second* request alongside that
+ * is showing - but that also means it is a *second* request alongside that
  * screen's own feed, so it asks for `limit=1`: all it reads is the `unread`
  * total, and the contract computes counts over the whole feed rather than
  * the returned page.

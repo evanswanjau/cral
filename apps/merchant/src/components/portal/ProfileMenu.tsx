@@ -4,7 +4,7 @@ import { logout } from "../../lib/auth-api.js";
 import { setSession } from "../../lib/auth.js";
 
 /**
- * Literal values from the design bundle's "Cruz Profile Menu.dc.html" — the
+ * Literal values from the design bundle's "Cruz Profile Menu.dc.html" - the
  * account chip in the portal header and its dropdown, including the
  * log-out confirmation state. Local to this component, same reasoning as
  * `components/onboarding/styles.ts`'s header note: kept as literals rather
@@ -25,6 +25,20 @@ const M = {
   companyName: { flex: 1, minWidth: 0, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } satisfies CSSProperties,
   companyTag: { font: "500 9px/1 'IBM Plex Mono',monospace", letterSpacing: ".08em", color: "#076945", flex: "none" } satisfies CSSProperties,
   items: { padding: 6 } satisfies CSSProperties,
+  item: {
+    display: "flex",
+    alignItems: "center",
+    gap: 9,
+    width: "100%",
+    padding: 10,
+    background: "none",
+    border: "none",
+    borderRadius: "var(--r)",
+    cursor: "pointer",
+    textAlign: "left",
+    font: "600 13px/1.3 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+  } satisfies CSSProperties,
   logoutWrap: { padding: 6, borderTop: "1px solid #F1F3F6" } satisfies CSSProperties,
   logoutBtn: { display: "flex", alignItems: "center", gap: 9, width: "100%", padding: 10, background: "none", border: "none", borderRadius: "var(--r)", cursor: "pointer", textAlign: "left", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#D81E32" } satisfies CSSProperties,
   confirmWrap: { padding: "15px 16px 16px" } satisfies CSSProperties,
@@ -45,10 +59,13 @@ export function ProfileMenu({
   name,
   company,
   email,
+  approved,
 }: {
   name: string;
   company: string | null;
   email: string;
+  /** merchants.approved_at - drives the company chip. Nothing sets it yet (no admin portal). */
+  approved: boolean;
 }): JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -80,7 +97,7 @@ export function ProfileMenu({
     try {
       await logout();
     } catch {
-      // Already signing them out locally regardless — see Onboarding.tsx's identical note.
+      // Already signing them out locally regardless - see Onboarding.tsx's identical note.
     }
     setSession(null);
     navigate("/sign-in", { replace: true });
@@ -94,7 +111,7 @@ export function ProfileMenu({
         <span style={M.avatar(30)}>{initials}</span>
         <span style={{ display: "block" }}>
           <span style={M.triggerName}>{name || email}</span>
-          <span style={M.triggerCompany}>{company ?? "—"}</span>
+          <span style={M.triggerCompany}>{company ?? " - "}</span>
         </span>
         <svg width="10" height="7" viewBox="0 0 10 7" aria-hidden="true" style={{ flex: "none", display: "block", marginLeft: 1 }}>
           <path d="M1 1.5 5 5.5 9 1.5" fill="none" stroke="#838C9B" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" />
@@ -113,16 +130,42 @@ export function ProfileMenu({
             </div>
             {company && (
               <div style={M.companyRow}>
-                <span style={M.companyDot}>✓</span>
+                <span
+                  style={{
+                    ...M.companyDot,
+                    background: approved ? "#DDF3E9" : "#FFF3DB",
+                    color: approved ? "#076945" : "#8A5200",
+                  }}
+                >
+                  {approved ? "✓" : "•"}
+                </span>
                 <span style={M.companyName}>{company}</span>
-                <span style={M.companyTag}>VERIFIED</span>
+                <span style={{ ...M.companyTag, color: approved ? "#076945" : "#8A5200" }}>
+                  {approved ? "VERIFIED" : "PENDING REVIEW"}
+                </span>
               </div>
             )}
           </div>
 
           {!confirming ? (
             <>
-              <div style={M.items} />
+              <div style={M.items}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/settings");
+                  }}
+                  style={M.item}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ flex: "none" }}>
+                    <circle cx="8" cy="5.5" r="2.75" fill="none" stroke="#5A6373" strokeWidth="1.5" />
+                    <path d="M2.75 13.5c.7-2.4 2.8-3.75 5.25-3.75s4.55 1.35 5.25 3.75" fill="none" stroke="#5A6373" strokeWidth="1.5" strokeLinecap="round" />
+                  </svg>
+                  <span style={{ flex: 1 }}>My profile</span>
+                </button>
+              </div>
               <div style={M.logoutWrap}>
                 <button type="button" role="menuitem" onClick={() => setConfirming(true)} style={M.logoutBtn}>
                   <span style={{ display: "block", width: 16, height: 16, border: "1.5px solid #D81E32", borderRightColor: "transparent", borderRadius: 999, flex: "none" }} />

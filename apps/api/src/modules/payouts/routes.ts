@@ -47,6 +47,17 @@ payoutsRouter.get(
   }),
 );
 
+// The months the Statements card lists, with net totals. Registered before
+// "/:payoutRunId" so "statements" is not captured as a run id.
+payoutsRouter.get(
+  "/merchant/payouts/statements",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await payoutsService.listStatements(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
 payoutsRouter.get(
   "/merchant/payouts/:payoutRunId",
   authenticate(),

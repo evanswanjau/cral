@@ -7,7 +7,7 @@
  * after the vehicle form has long since unmounted.
  *
  * Object URLs never survive a reload, so on a fresh page load the cache
- * starts empty — the bytes are re-fetched from
+ * starts empty - the bytes are re-fetched from
  * `GET /merchant/onboarding/documents/:id` on demand (see `loadPhotoPreview`)
  * rather than showing a "reattach this" placeholder for a photo that is
  * in fact safely stored. The fetch is authenticated like every other

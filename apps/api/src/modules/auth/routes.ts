@@ -22,6 +22,7 @@ import {
   RegisterSchema,
   ResetPasswordSchema,
   TwoFactorChallengeSchema,
+  TwoFactorResendSchema,
   Verify2faSchema,
 } from "./schemas.js";
 
@@ -160,6 +161,44 @@ authRouter.delete(
   }),
 );
 
+// "Sign out everywhere" — every session but the caller's current one.
+authRouter.post(
+  "/auth/sessions/revoke-all",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.revokeAllOtherSessions(
+      req.auth!.sub,
+      req.auth!.sid,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
+// --- Self-service account deletion (30-day grace) --------------------
+
+authRouter.post(
+  "/auth/account/deletion",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.requestAccountDeletion(
+      req.auth!.sub,
+      req.auth!.sid,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
+authRouter.delete(
+  "/auth/account/deletion",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await authService.cancelAccountDeletion(req.auth!.sub, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
 // --- Onboarding phone verification -----------------------------------
 //
 // Proves the merchant holds the payout number before onboarding can be
@@ -240,6 +279,18 @@ authRouter.post(
   }),
 );
 
+// One-tap enable: uses the already-verified account phone, no handset
+// step. Returns the ten recovery codes exactly once.
+authRouter.post(
+  "/auth/2fa/enable",
+  authenticate(),
+  rateLimit({ bucket: "two_factor_enroll", limit: 5, windowSeconds: 3600 }),
+  asyncHandler(async (req, res) => {
+    const result = await authService.enable2fa(req.auth!.sub, ctxOf(req));
+    res.status(200).json(result);
+  }),
+);
+
 // Unauthenticated on purpose — the caller has passed a password but has no
 // token yet. The challenge id is the only thing that identifies them.
 authRouter.post(
@@ -269,6 +320,26 @@ authRouter.post(
   rateLimit({ bucket: "two_factor_reauth", limit: 5, windowSeconds: 3600 }),
   asyncHandler(async (req, res) => {
     const result = await authService.sendTwoFactorChallenge(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+// Sign-in fallback: re-send the pending challenge's code by SMS again or
+// by email. Unauthenticated - keyed by the challenge id, like /challenge.
+authRouter.post(
+  "/auth/2fa/challenge/resend",
+  rateLimit({
+    bucket: "two_factor_resend",
+    limit: 6,
+    windowSeconds: 900,
+    keyFn: (req) => req.body?.challenge_id ?? req.ip ?? "unknown",
+  }),
+  validateBody(TwoFactorResendSchema),
+  asyncHandler(async (req, res) => {
+    const result = await authService.resendTwoFactorChallenge(
+      req.body.challenge_id,
+      req.body.channel ?? "sms",
+    );
     res.status(200).json(result);
   }),
 );

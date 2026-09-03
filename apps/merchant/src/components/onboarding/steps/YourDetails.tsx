@@ -227,7 +227,7 @@ export function YourDetails({
             </FormField>
             <FormField
               label="Email"
-              helper="On your CRAL account — receipts and payout statements go here. Contact support to change it."
+              helper="Receipts and payout statements go to this address."
             >
               <TextInput
                 value={draft.email || "Loading…"}
@@ -292,7 +292,7 @@ export function YourDetails({
             <OptionCard
               active={payByBank}
               title="Bank account"
-              body="Any bank in Kenya · 1–2 working days"
+              body="Any bank in Kenya · 1 - 2 working days"
               onClick={() => onChange({ payoutMethod: "bank" })}
             />
           </div>
@@ -398,7 +398,7 @@ export function YourDetails({
 
 /**
  * The SMS proof-of-ownership check on the payout phone (owner's call,
- * 2026-08-31). Required before onboarding can be submitted — see
+ * 2026-08-31). Required before onboarding can be submitted - see
  * `assertCompleteForSubmission`. `startPhoneVerification` also pushes the
  * current number to the server first, so a merchant can hit "Send code"
  * before the debounced draft sync has landed it.

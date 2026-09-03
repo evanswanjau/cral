@@ -114,11 +114,24 @@ export function Review({
             <EditButton onClick={() => onEditStep(4)} />
           </div>
           <div style={O.reviewCardBody}>
-            <ReviewComplete label="Your documents" complete={Boolean(draft.ownerDocs.nationalId) && Boolean(draft.ownerDocs.kraPin)} />
+            {draft.ownerType === "company" && (
+              <ReviewComplete
+                label="Company documents"
+                complete={
+                  Boolean(draft.ownerDocs.certificateOfIncorporation) &&
+                  Boolean(draft.ownerDocs.companyKraPin) &&
+                  Boolean(draft.ownerDocs.cr12)
+                }
+              />
+            )}
+            <ReviewComplete
+              label="Your documents"
+              complete={Boolean(draft.ownerDocs.nationalId) && Boolean(draft.ownerDocs.kraPin)}
+            />
             {draft.vehicles.map((v) => (
               <ReviewComplete
                 key={v.id}
-                label={`${v.registration || "Vehicle"} · vehicle papers`}
+                label={`${v.registration || "Vehicle"} · car documents`}
                 complete={Boolean(v.docs.logbook) && Boolean(v.docs.comprehensiveInsurance) && Boolean(v.docs.trackerCertificate)}
               />
             ))}
@@ -178,7 +191,14 @@ export function Review({
           <span style={O.reviewRequiredPill}>REQUIRED</span>
         </div>
         <div style={O.reviewCardBody}>
-          <p style={{ ...O.stepLede, margin: "0 0 4px", maxWidth: "none" }}>
+          <p
+            style={{
+              margin: "0 0 4px",
+              font: "400 13px/1.55 'Instrument Sans',sans-serif",
+              color: "#5A6373",
+              textWrap: "pretty",
+            }}
+          >
             The merchant terms are the agreement between you and CRAL. Please read them in full
             before you submit. They apply to every vehicle on this account, and to every booking,
             for as long as you list with us.

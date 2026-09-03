@@ -52,6 +52,7 @@ export interface VehicleDetail extends VehicleSummary {
   colour: string | null;
   minimum_hire_days: number;
   chauffeured: boolean;
+  rate_mode: "list" | "net";
   verification_badge_expires_at: string | null;
   reviewer_note: string | null;
   reviewer_note_meta: string | null;
@@ -65,7 +66,7 @@ export interface VehicleDetail extends VehicleSummary {
   events: VehicleEvent[];
   owner_documents_complete: boolean;
   owner_documents_uploaded_at: string | null;
-  /** Set only once an admin has approved the merchant account — see CLAUDE.md's note on merchant approval. */
+  /** Set only once an admin has approved the merchant account - see CLAUDE.md's note on merchant approval. */
   merchant_approved: boolean;
   owner_documents: {
     national_id: VehicleDocInfo | null;
@@ -104,6 +105,7 @@ export interface CreateVehicleInput {
   county: string;
   pickup_address: string;
   daily_rate: string;
+  rate_mode?: "list" | "net" | undefined;
   minimum_hire_days?: number | undefined;
   chauffeured?: boolean | undefined;
 }
@@ -114,6 +116,7 @@ export function createVehicle(input: CreateVehicleInput) {
 
 export interface PriceAvailabilityInput {
   daily_rate?: string;
+  rate_mode?: "list" | "net";
   minimum_hire_days?: number;
   county?: string;
   pickup_address?: string;
@@ -249,7 +252,7 @@ export function useUploadVehicleDocument(id: string) {
 }
 
 // Photos go through the onboarding documents endpoint (kind=vehicle_photo)
-// rather than the vehicles module's own document endpoint — it already
+// rather than the vehicles module's own document endpoint - it already
 // handles the 3-photo cap and works for any vehicle the caller owns,
 // onboarding or not, so there's no reason to duplicate it here.
 export function useUploadVehiclePhoto(id: string) {
@@ -268,7 +271,7 @@ export function useDeleteVehiclePhoto(id: string) {
   });
 }
 
-/** A vehicle document (logbook/insurance/tracker) can be removed the same way a photo can — only wired up while the vehicle is still a draft. */
+/** A vehicle document (logbook/insurance/tracker) can be removed the same way a photo can - only wired up while the vehicle is still a draft. */
 export function useDeleteVehicleDocument(id: string) {
   const invalidate = useInvalidateVehicles();
   return useMutation({

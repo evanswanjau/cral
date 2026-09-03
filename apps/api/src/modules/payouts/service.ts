@@ -572,6 +572,49 @@ export async function buildStatement(userId: string, month: string): Promise<Run
   };
 }
 
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** "2026-07" → "July 2026". Fixed table, no locale or timezone in play. */
+function monthLabel(month: string): string {
+  const name = MONTH_NAMES[Number(month.slice(5, 7)) - 1] ?? month.slice(5, 7);
+  return `${name} ${month.slice(0, 4)}`;
+}
+
+/**
+ * The Statements card on Settings → Payouts: the last six Nairobi calendar
+ * months that have at least one payout run, each with its net-of-commission
+ * total. The per-month CSV is still downloaded through
+ * `GET /merchant/payouts/statement?month=`; this only supplies the amounts
+ * the card shows, which nothing returned before.
+ *
+ * Net is summed from `payout_runs.net_amount` — itself the sum of that
+ * run's line snapshots — so a later COMMISSION_RATE change can't rewrite a
+ * month a merchant was already paid.
+ */
+export async function listStatements(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const runs = await db<PayoutRunRow>("payout_runs")
+    .where({ merchant_id: merchant.id })
+    .orderBy("run_date", "desc")
+    .select("run_date", "net_amount");
+
+  const byMonth = new Map<string, number>();
+  for (const run of runs) {
+    const month = String(run.run_date).slice(0, 7);
+    byMonth.set(month, (byMonth.get(month) ?? 0) + run.net_amount);
+  }
+
+  const data = [...byMonth.entries()]
+    .sort((a, b) => (a[0] < b[0] ? 1 : -1))
+    .slice(0, 6)
+    .map(([month, amount]) => ({ month, label: monthLabel(month), net: kes(amount) }));
+
+  return { data };
+}
+
 // ---------------------------------------------------------------------
 // Queries
 // ---------------------------------------------------------------------

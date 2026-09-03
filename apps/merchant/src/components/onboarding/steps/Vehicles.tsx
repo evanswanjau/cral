@@ -5,6 +5,7 @@ import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
 import { VEHICLE_CATEGORIES, vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import { COUNTIES } from "../../../lib/kenya.js";
+import { RateField } from "../RateField.js";
 import {
   BackButton,
   FormField,
@@ -162,7 +163,7 @@ function VehicleForm({
   const [v, setV] = useState<DraftVehicle>(vehicle);
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
-  // The real server-side vehicle id, once one exists — needed before photos
+  // The real server-side vehicle id, once one exists - needed before photos
   // can be uploaded (they need a real vehicle_id). Existing vehicles start
   // with one (vehicle.id is already a server id by the time it's editable);
   // a new vehicle gets one lazily, the first moment its required fields are
@@ -183,7 +184,7 @@ function VehicleForm({
   const photosOk = v.photos.length === MAX_PHOTOS;
 
   // Lazily create the vehicle on the server the first moment it's saveable
-  // in principle — this is what lets PhotoUpload attach photos to a real
+  // in principle - this is what lets PhotoUpload attach photos to a real
   // vehicle_id before the merchant clicks "Save vehicle".
   useEffect(() => {
     if (!isNew || serverVehicleId || creatingRef.current || !requiredFilled) return;
@@ -191,7 +192,7 @@ function VehicleForm({
     createVehicleOnServer(v)
       .then((created) => setServerVehicleId(created.id))
       .catch(() => {
-        // Stays null — PhotoUpload keeps showing "fill in the details
+        // Stays null - PhotoUpload keeps showing "fill in the details
         // above first" and the next field edit retries via this effect.
       })
       .finally(() => {
@@ -220,7 +221,7 @@ function VehicleForm({
     setSaving(true);
     try {
       const id = serverVehicleId ?? (await createVehicleOnServer(v)).id;
-      // The server's response is authoritative for docs/photos — they were
+      // The server's response is authoritative for docs/photos - they were
       // uploaded directly via PhotoUpload, not through this PATCH body.
       const saved = await updateVehicleOnServer(id, v);
       onSave(saved);
@@ -230,7 +231,7 @@ function VehicleForm({
   }
 
   function handleCancel() {
-    // Nothing has been committed to the draft's vehicle list yet — a
+    // Nothing has been committed to the draft's vehicle list yet - a
     // vehicle created during this session by the lazy-create effect above
     // is an orphan the merchant explicitly walked away from.
     if (isNew && serverVehicleId) void deleteVehicleOnServer(serverVehicleId);
@@ -311,19 +312,14 @@ function VehicleForm({
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
-              <FormField label="Daily rate" required error={showErrors && !v.dailyRate.trim() ? "Required." : undefined} helper="What a hirer pays per day. You can change it later from your dashboard.">
-                <div style={{ display: "flex" }}>
-                  <span style={O.kesPrefixTag}>KES</span>
-                  <TextInput
-                    value={v.dailyRate}
-                    onChange={(e) => patch({ dailyRate: e.target.value.replace(/\D/g, "") })}
-                    placeholder="8,500"
-                    inputMode="numeric"
-                    style={{ borderRadius: "0 8px 8px 0" }}
-                    error={showErrors && !v.dailyRate.trim()}
-                  />
-                </div>
-              </FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <RateField
+                  grossValue={v.dailyRate}
+                  mode={v.rateMode}
+                  onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
+                  error={showErrors && !v.dailyRate.trim()}
+                />
+              </div>
               <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
                 <Select
                   value={v.chauffeured ? "chauffeured" : "self_drive"}

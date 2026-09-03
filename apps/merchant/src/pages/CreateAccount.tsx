@@ -16,12 +16,12 @@ import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
- * Create account — the design's `isRegister` / `isRegisterVerify` branches,
+ * Create account - the design's `isRegister` / `isRegisterVerify` branches,
  * built to the canvas exactly: email and a password, nothing else.
  *
  * Name and phone deliberately are not asked for here. They're collected in
  * onboarding, where the phone sits next to "this is where your payouts
- * land" and the reason for asking is self-evident — instead of putting an
+ * land" and the reason for asking is self-evident - instead of putting an
  * SMS round-trip in front of someone who hasn't seen the product yet.
  * `GET /auth/registration-state` reports what's still outstanding.
  *
@@ -65,14 +65,14 @@ export function CreateAccount(): JSX.Element {
   const verify = () =>
     run(async () => {
       await verifySignupOtp(email.trim(), code);
-      // /auth/otp/verify's signup branch only flips email_verified — it
+      // /auth/otp/verify's signup branch only flips email_verified - it
       // doesn't issue a session (see identity.yaml), so sign in with the
       // password still held in state rather than sending someone who just
       // finished signing up back to a sign-in form to type it again.
       const result = await login(email.trim(), pw, deviceId());
       if (isTwoFactorRequired(result)) {
         // Nobody can enrol yet (no settings UI), so a brand-new account
-        // never hits this — but if that ever changes, fail toward sign-in
+        // never hits this - but if that ever changes, fail toward sign-in
         // rather than pretending the session exists.
         navigate("/sign-in", { replace: true });
         return;

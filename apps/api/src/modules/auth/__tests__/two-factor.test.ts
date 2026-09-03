@@ -37,7 +37,6 @@ async function signUpAndSignIn(): Promise<string> {
 }
 
 let accessToken: string;
-let recoveryCodes: string[] = [];
 
 beforeAll(async () => {
   accessToken = await signUpAndSignIn();
@@ -64,7 +63,7 @@ describe("opt-in SMS two-factor", () => {
     expect(loginRes.body.next).toBeNull();
   });
 
-  it("enrols in two steps and hands back ten recovery codes", async () => {
+  it("enrols in two steps (no recovery codes)", async () => {
     const smsSpy = vi.spyOn(smsAdapter, "send");
 
     const enrolRes = await request(app)
@@ -74,7 +73,7 @@ describe("opt-in SMS two-factor", () => {
     expect(enrolRes.status).toBe(200);
     expect(enrolRes.body.masked_destination).toContain("•");
 
-    // Still off until the code comes back — holding the handset is the point.
+    // Still off until the code comes back - holding the handset is the point.
     const midRes = await request(app)
       .get("/auth/2fa")
       .set("Authorization", `Bearer ${accessToken}`);
@@ -86,17 +85,13 @@ describe("opt-in SMS two-factor", () => {
       .set("Authorization", `Bearer ${accessToken}`)
       .send({ code });
     expect(verifyRes.status).toBe(200);
-    expect(verifyRes.body.recovery_codes).toHaveLength(10);
-    recoveryCodes = verifyRes.body.recovery_codes;
+    expect(verifyRes.body.recovery_codes).toBeUndefined();
 
     const afterRes = await request(app)
       .get("/auth/2fa")
       .set("Authorization", `Bearer ${accessToken}`);
-    expect(afterRes.body).toMatchObject({
-      enabled: true,
-      method: "sms",
-      recovery_codes_remaining: 10,
-    });
+    expect(afterRes.body).toMatchObject({ enabled: true, method: "sms" });
+    expect(afterRes.body.recovery_codes_remaining).toBeUndefined();
 
     smsSpy.mockRestore();
   });
@@ -127,9 +122,9 @@ describe("opt-in SMS two-factor", () => {
       .send({ challenge_id: loginRes.body.challenge_id, code });
     expect(challengeRes.status).toBe(200);
     expect(challengeRes.body.access_token).toBeTruthy();
-    expect(challengeRes.body.used_recovery_code).toBe(false);
+    expect(challengeRes.body.used_recovery_code).toBeUndefined();
 
-    // Single use — the same code can't buy a second session.
+    // Single use - the same code can't buy a second session.
     const replayRes = await request(app)
       .post("/auth/2fa/challenge")
       .send({ challenge_id: loginRes.body.challenge_id, code });
@@ -138,43 +133,39 @@ describe("opt-in SMS two-factor", () => {
     smsSpy.mockRestore();
   });
 
-  it("accepts a recovery code when the handset is gone, and spends it", async () => {
-    const smsSpy = vi.spyOn(smsAdapter, "send");
+  it("emails the code as a fallback when the text isn't arriving", async () => {
     const emailSpy = vi.spyOn(emailAdapter, "send");
 
     const loginRes = await request(app)
       .post("/auth/login")
-      .send({ identifier: email, password, device_id: "dev_recovery" });
+      .send({ identifier: email, password, device_id: "dev_email_fallback" });
     expect(loginRes.body.next).toBe("2fa");
+
+    const resendRes = await request(app)
+      .post("/auth/2fa/challenge/resend")
+      .send({ challenge_id: loginRes.body.challenge_id, channel: "email" });
+    expect(resendRes.status).toBe(200);
+    expect(resendRes.body.channel).toBe("email");
+    expect(resendRes.body.challenge_id).toBeTruthy();
+    // The new code went to the account email, and the old challenge is retired.
+    const emailedCode = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
+    expect(emailSpy.mock.calls.at(-1)?.[0]?.subject).toBe("Your CRAL sign-in code");
+
+    const oldRes = await request(app)
+      .post("/auth/2fa/challenge")
+      .send({ challenge_id: loginRes.body.challenge_id, code: emailedCode });
+    expect(oldRes.status).toBe(400); // superseded
 
     const challengeRes = await request(app)
       .post("/auth/2fa/challenge")
-      .send({ challenge_id: loginRes.body.challenge_id, code: recoveryCodes[0] });
+      .send({ challenge_id: resendRes.body.challenge_id, code: emailedCode });
     expect(challengeRes.status).toBe(200);
-    expect(challengeRes.body.used_recovery_code).toBe(true);
+    expect(challengeRes.body.access_token).toBeTruthy();
 
-    // Using one is worth telling the merchant about.
-    expect(emailSpy.mock.calls.at(-1)?.[0]?.subject).toBe("A recovery code was used");
-
-    const stateRes = await request(app)
-      .get("/auth/2fa")
-      .set("Authorization", `Bearer ${challengeRes.body.access_token}`);
-    expect(stateRes.body.recovery_codes_remaining).toBe(9);
-
-    // Spent codes are spent.
-    const secondLogin = await request(app)
-      .post("/auth/login")
-      .send({ identifier: email, password, device_id: "dev_recovery_2" });
-    const reuseRes = await request(app)
-      .post("/auth/2fa/challenge")
-      .send({ challenge_id: secondLogin.body.challenge_id, code: recoveryCodes[0] });
-    expect(reuseRes.status).toBe(401);
-
-    smsSpy.mockRestore();
     emailSpy.mockRestore();
   });
 
-  it("needs both a password and a current code to switch off", async () => {
+  it("switches off with the password (a texted code is still accepted)", async () => {
     const smsSpy = vi.spyOn(smsAdapter, "send");
 
     const sendRes = await request(app)

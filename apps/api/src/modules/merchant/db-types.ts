@@ -7,6 +7,8 @@ export interface MerchantRow {
   company_kra: string | null;
   company_email: string | null;
   company_address: string | null;
+  /** Listing-facing name when it differs from the registered one (Settings → Business). */
+  trading_name: string | null;
   first_name: string | null;
   middle_name: string | null;
   surname: string | null;
@@ -15,6 +17,10 @@ export interface MerchantRow {
   payout_same: boolean;
   payout_method: string;
   payout_detail: string | null;
+  /** Long-booking instalment rhythm — "weekly" | "monthly". Stored, not yet acted on. Always "monthly" for bank. */
+  payout_schedule: string;
+  /** "Name on the M-Pesa line" (Settings → Payouts). Not collected at onboarding. */
+  payout_mpesa_name: string | null;
   bank_name: string | null;
   bank_branch: string | null;
   bank_account_name: string | null;
@@ -56,6 +62,8 @@ export interface VehicleRow {
   pickup_address: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;
+  /** "list" | "net" - which price view the merchant used (see 20260904090000). Display only. */
+  rate_mode: string;
   insurance_expiry: string | null;
   status: VehicleStatus;
   listing_ref: string | null;
@@ -75,6 +83,9 @@ export interface VehicleRow {
 export type DocumentKind =
   | "national_id"
   | "kra_pin"
+  | "certificate_of_incorporation"
+  | "company_kra_pin"
+  | "cr12"
   | "logbook"
   | "comprehensive_insurance"
   | "tracker_certificate"
@@ -112,6 +123,19 @@ export interface VehicleEventRow {
   actor_type: EventActorType;
   actor_name: string | null;
   occurred_at: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ProfileChangeRequestRow {
+  id: string;
+  merchant_id: string;
+  requested_by: string;
+  status: "pending" | "approved" | "rejected";
+  changes: Record<string, unknown>;
+  reviewer_id: string | null;
+  reviewer_note: string | null;
+  decided_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

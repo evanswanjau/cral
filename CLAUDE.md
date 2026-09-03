@@ -239,12 +239,16 @@ What that meant in practice:
   `token` and nothing else — the phone+code branch is gone from the
   service, the schemas, and `identity.yaml`.
 - Opt-in SMS 2FA is implemented end to end in the API: `GET /auth/2fa`,
-  `POST /auth/2fa/enroll` → `POST /auth/2fa/verify` (two-step enrolment,
-  returns ten single-use recovery codes exactly once),
-  `POST /auth/2fa/challenge` (the post-password step at sign-in; accepts
-  the texted code or a recovery code), `POST /auth/2fa/challenge/send`, and
-  `DELETE /auth/2fa` (password + a current code; admins can't disable their
-  own). Tables in migration `20260826100000`.
+  `POST /auth/2fa/enable` (the one-tap switch — uses the already-verified
+  `users.phone`, returns ten single-use recovery codes exactly once),
+  `POST /auth/2fa/enroll` → `POST /auth/2fa/verify` (the older two-step
+  "pick a different handset" enrolment, kept but no longer used by the
+  UI), `POST /auth/2fa/challenge` (the post-password step at sign-in;
+  accepts the texted code or a recovery code),
+  `POST /auth/2fa/challenge/send`, and `DELETE /auth/2fa` (**password
+  only** as of 2026-09-03 — a texted/recovery code is still honoured if
+  supplied; admins can't disable their own). Tables in migration
+  `20260826100000`.
 - **A 2FA-pending login carries no tokens.** `POST /auth/login` returns
   `{ next: "2fa", challenge_id, masked_destination, expires_in }` and
   nothing else; the session is created by `/auth/2fa/challenge`. Don't
@@ -259,20 +263,20 @@ specified TOTP (`secret` + `otpauth_uri`). The owner chose SMS on
 app is a bigger ask of this audience. The contract was rewritten to match,
 so it is once again the source of truth.
 
-**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible).
-`apps/merchant` now has its first settings screen — **Settings → Security**
-(`/settings/security`, `pages/SecuritySettings.tsx`) — with the enrol flow
-(phone → texted code → the ten recovery codes, shown once) and the disable
-flow (password + a current/recovery code). It's a route only: deliberately
-**not** in `SideNav` yet (owner's call), reachable by URL.
-`SignIn.tsx` handles the `next: "2fa"` branch with a real code step
-(`completeTwoFactorChallenge`), not the old placeholder error. The
-server-side 2FA endpoints were already there; this is only the UI.
+**The 2FA UI is built** (2026-08-31, once TextSMS made delivery possible;
+reworked into a switch 2026-09-03). It's the **SMS code at sign-in** row
+on **Settings → Security** (`pages/settings/SecurityTab.tsx`): a toggle —
+on calls `POST /auth/2fa/enable` and shows the ten recovery codes once,
+off asks for the password. `SignIn.tsx` handles the `next: "2fa"` branch
+with a real code step (`completeTwoFactorChallenge`), not the old
+placeholder error. The server-side 2FA endpoints were already there; this
+is only the UI.
 
-`verifyLoginOtp` and `PhoneInput` in `apps/merchant` are still referenced
-by nothing (the passwordless-SMS-login tab stayed cut). `toE164` is now
-used by the 2FA settings screen. Don't delete the first two as dead code —
-they're kept against a future account-settings need.
+`verifyLoginOtp` and `apps/merchant`'s auth-`PhoneInput` are still
+referenced by nothing (the passwordless-SMS-login tab stayed cut, and the
+2FA switch dropped the enrol-by-phone UI). `toE164` is used by
+`VehicleDetail.tsx`. Don't delete the first two as dead code — they're
+kept against a future account-settings need.
 
 **Onboarding phone verification** (owner's call, 2026-08-31). The payout
 phone must pass an SMS proof-of-ownership check before onboarding can be
@@ -412,9 +416,14 @@ same bundle the Bookings screen came from.
   so a double-submit can't raise two tickets for one complaint.
 - **The bank payout destination is deliberately not built.** The design
   offers "Pay to my bank account instead" and an SMS-gated "Edit details",
-  but no bank fields exist anywhere in the schema (`payout_method` is
-  `mpesa` throughout), so the destination card ships read-only off
-  `users.phone`. Flagged, not silently dropped.
+  but there is **no payment rail** — nothing disburses money, and Daraja
+  B2C pays M-Pesa, not banks — so the destination card ships read-only off
+  `users.phone`. Flagged, not silently dropped. (The `merchants` table
+  *does* carry `bank_name` / `bank_branch` / `bank_account_name` /
+  `bank_account_number` from the original create-merchants migration, and
+  `payout_method` accepts `"bank"`; onboarding writes them when a merchant
+  picks bank. What's missing is the rail, not the columns — an earlier
+  version of this note wrongly said the columns didn't exist.)
 - **`/merchant/payouts/dev-seed` is dev/test-only**, same `NODE_ENV`
   guard as the bookings seeder. It creates its own older completed
   bookings rather than reusing the bookings seeder's, whose "completed"
@@ -479,6 +488,206 @@ and `apps/merchant/src/pages/Notification*`. Design authority is
   only, kept out of `SideNav` like Settings → Security. The feed itself
   (`/notifications`) **is** in the nav, with the **unread count** as its
   badge (unlike Payouts — an unread count is genuinely actionable).
+
+**The Settings screen was built (owner's call, 2026-09-02 — PR "merchant
+settings"), same ahead-of-plan footing as Bookings/Payouts/Notifications.**
+Design authority is `Cruz Merchant Settings.dc.html`. It is now one tabbed
+page at **`/settings`** (`apps/merchant/src/pages/Settings.tsx` +
+`pages/settings/*Tab.tsx`), **in `SideNav`** with no badge. The two slices
+that shipped earlier as unlisted routes are folded in as tabs;
+`/settings/security` and `/settings/notifications` now **redirect** to
+`/settings?tab=…`. Shared sticky save bar:
+`apps/merchant/src/components/portal/SaveBar.tsx` (each editable tab renders
+its own when dirty — only one tab is mounted at a time). New styles live
+under a `set*` prefix in `components/portal/styles.ts`; the card-head trio
+duplicates the `nt*` values from the Notifications tab deliberately (that
+design file was just read first for Notifications).
+
+Tabs shipped: **Business · Payouts · Notifications · Security** — four, not
+the design's five. **For an individual merchant the first tab is labelled
+"My profile"** (not "Business") — same key (`business`), same URL, just the
+label (owner's call, 2026-09-03). It is also reachable from the account
+dropdown (`ProfileMenu`) → "My profile" → `/settings`.
+
+- **New backend**: `openapi/merchant-settings.yaml` +
+  `GET|PATCH /merchant/profile` (`modules/merchant/service.ts#getProfile` /
+  `#patchProfile`, audit-logged in the same transaction; a phone change
+  routes through the existing `setUserPhone`, which now takes an optional
+  `trx`). `POST /auth/sessions/revoke-all` ("sign out everywhere", all but
+  the caller's session; audit-logged). `GET /merchant/payouts/statements`
+  (last six Nairobi months with net totals, for the Statements card).
+  `GET|PUT /merchant/payout-settings` (the editable payout block — also
+  embedded in `GET /merchant/profile` as `payout`).
+  `POST /auth/2fa/enable`, `POST|DELETE /auth/account/deletion` (below).
+  `Session` in `identity.yaml` gained `user_agent`. Migrations:
+  `20260902100000` adds `merchants.trading_name` (nullable, kept but not
+  surfaced — onboarding doesn't collect it); `20260903090000` adds
+  `merchants.payout_schedule` (`weekly`/`monthly`, default `weekly`);
+  `merchants.payout_mpesa_name` (nullable — "Name on the M-Pesa line");
+  `20260903100000` adds `users.status` + deletion timestamps (below).
+- **The Business / "My profile" tab mirrors onboarding's "Your details"
+  step field-for-field** (owner's call, 2026-09-03) — nothing new is asked
+  for after onboarding. Individual: owner details (name, national ID, KRA
+  PIN, read-only email) + phone/verify. Company: company block (name, cert
+  of incorporation no. → `company_cert_no`, company KRA, company email,
+  physical location) + contact-person block + phone/verify. The account
+  **entity type is not editable here** (it's fixed at onboarding — changing
+  it means new documents and a re-review, a support path). No County, no
+  Trading-name field, no WhatsApp toggle.
+- **Payouts is editable** (owner's call, 2026-09-03 — reverses the earlier
+  "read-only" note). `PUT /merchant/payout-settings` replaces the whole
+  block: method (M-Pesa / bank), the M-Pesa line name, the four bank
+  fields, and the long-booking `schedule`. **There is still no payment
+  rail** — bank details and the `schedule` are stored, not acted on.
+  Rules:
+  - **The M-Pesa payout *number* is always `users.phone`** — no field for
+    it on this tab (shown read-only); to change it you change the phone on
+    the profile. Only "Name on the M-Pesa line" (`payout_mpesa_name`) is
+    editable. The service sets `payout_same`/`payout_detail` accordingly;
+    `payout.mpesa_number` in the response is just the phone,
+    `mpesa_number_verified` mirrors `users.phone_verified`.
+  - **Company merchants are locked to bank** (`method: "mpesa"` → 422
+    `mpesa_not_allowed_for_company`); switching the profile to a company
+    also flips `payout_method` to `bank`. Mirrors onboarding's
+    `pickOwnerType`.
+  - **Bank payouts always run monthly, on the 1st** — no rhythm choice
+    (the service coerces `schedule` to `monthly` for bank). M-Pesa keeps
+    the "Every Monday" / "Monthly, on the 1st" cards
+    (`merchants.payout_schedule`, default `weekly`).
+- **SMS code at sign-in is a plain switch** (owner's call, 2026-09-03).
+  The "enter a phone, verify a code" enrol flow is gone from the UI — the
+  account phone is already proven at onboarding.
+  `POST /auth/2fa/enable` points the second factor at `users.phone` and
+  returns the ten recovery codes once. `DELETE /auth/2fa` now needs the
+  **password only** (a texted/recovery `code` is still honoured if
+  supplied). `enroll2fa` + `verify2fa` + `two_factor_phone` stay for a
+  future "different number" need; the UI no longer walks that path.
+- **Statements are CSV, not the design's "PDF"** — the card tag says
+  `NET OF COMMISSION · CSV`, and Download reuses the existing per-month
+  `GET /merchant/payouts/statement?month=` via `apiBlob`.
+- **WhatsApp toggle: omitted**, consistent with the Alerts matrix dropping
+  the WhatsApp column.
+- **Close account is real self-service** (owner's call, 2026-09-03 —
+  reverses the "not self-service / `wa.me` hand-off" note).
+  `users.status` (`active` / `suspended` / `pending_deletion` /
+  `deleted`, migration `20260903100000`, reusing the Phase-0 `erasure_*`
+  columns for the 30-day timer):
+  - `POST /auth/account/deletion` → `pending_deletion`, purge scheduled
+    30 days out, every **other** session revoked (the account "seems
+    deleted" everywhere, but the caller can still sign in to cancel).
+    Idempotent. `DELETE /auth/account/deletion` = "Keep my account".
+  - `login` rejects `suspended` (403 `account_suspended`) and `deleted`
+    (as invalid credentials); `pending_deletion` can still sign in.
+    Nothing *sets* `suspended` yet (no admin portal) — same footing as
+    `merchants.approved_at`.
+  - `runDailyReminderSweep` now also runs `runAccountDeletionSweep`
+    (`auth/service.ts`): past 30 days it scrubs the user row's PII, sets
+    `deleted`, revokes sessions, drops credentials/recovery codes — and
+    **keeps `merchants` / `vehicles` / `bookings` / `payout_runs` /
+    `audit_log`** so a hirer still sees where they booked and their
+    history.
+  - `GET /merchant/profile` carries `account_status` +
+    `deletion_scheduled_at`; the shell shows a red banner and the
+    Security card the "Keep my account" action while pending.
+- **The `✓ VERIFIED` account chip reflects real state** —
+  `merchants.approved_at` (nothing sets it yet, no admin portal), so it
+  shows `PENDING REVIEW` until an admin approves. Not a decorative tick.
+- **The People / team-roles / invites tab is deferred to its own phase**
+  — same footing as the omitted WhatsApp column and `tips` alert row. It
+  is a multi-user authorization feature (invite → accept → per-merchant
+  membership → three roles with real permission differences → every
+  endpoint re-checked), not a settings screen. Shipping the roster
+  read-only would fabricate trust the way the hardcoded `id_verified`
+  badge did. `users.roles` stays a flat `merchant`/`customer`/`admin`
+  `text[]`; there is no team table.
+- **`certificate_of_incorporation` + `cr12` are real company documents**
+  now (added to `DocumentKind` + both upload schemas, 2026-09-04):
+  - **Account documents split into three groups** (owner's call). A
+    **fourth doc kind, `company_kra_pin`**, was added so a company has its
+    own KRA PIN certificate distinct from the contact person's.
+    - **Company documents** (company only) = `certificate_of_incorporation`
+      + `company_kra_pin` + `cr12`.
+    - **Your documents** (everyone) = `national_id` + `kra_pin` (the
+      person's own two).
+    - **Car documents** = the existing per-vehicle logbook / insurance /
+      tracker cards.
+  - **Onboarding** (`Documents.tsx`) renders a "Company documents" card
+    (3/3) above the "Your documents" card (2/2) for a company; the Review
+    step lists "Company documents", "Your documents", then per-vehicle
+    "car documents". `requiredOwnerDocs` in `assertCompleteForSubmission`
+    = `OWNER_DOC_KINDS` + `certificate_of_incorporation` +
+    `company_kra_pin` + `cr12` for a company. `serializeState.owner_docs`
+    and the onboarding draft carry the three company slots.
+  - **Settings → Business documents card** — for a company, a
+    **"Company documents | My documents"** switch. `PROFILE_DOC_META`
+    groups `certificate_of_incorporation` / `company_kra_pin` / `cr12` as
+    "business", `national_id` / `kra_pin` as "personal". Upload/Replace
+    goes through `POST /merchant/onboarding/documents` and is **only shown
+    while the merchant is mid-"Request a change"** (`canEdit`); otherwise
+    View-only.
+- **Documents always read "PENDING REVIEW"** (`DOC_STATE.pending.label`)
+  until a reviewer accepts/rejects — nothing sets an "actively reviewed"
+  state (no admin console), so `docStateLabel`'s old draft/submitted split
+  is gone.
+- The onboarding **merchant-terms intro copy** is standard 13px body text,
+  not the 15px `stepLede`.
+- The vehicle **RateField** is a bordered full-row block (spans the form
+  grid) with a segmented `List price / What I keep` control and a
+  one-line "Hirer pays / CRAL fee / You keep" summary — the earlier
+  version was crammed into one grid cell and wrapped badly.
+
+**Round-4 Settings/portal revisions (owner's call, 2026-09-04 — PR
+"merchant portal round 4"):**
+- **No em dashes anywhere in the merchant portal.** `—`/`–` → `-`
+  site-wide, and new copy follows suit.
+- **Every page sets a specific `document.title`** via
+  `apps/merchant/src/lib/use-page-title.ts` (`usePageTitle("<page>")`,
+  detail pages pass the entity, Settings the tab, Onboarding the step).
+- **Business / "My profile" fields are locked once onboarding is
+  submitted.** `PATCH /merchant/profile` → 409 `profile_locked`. Edits go
+  through `profile_change_requests` (migration `20260904100000`) +
+  `GET|POST|DELETE /merchant/profile/change-request`; `GET
+  /merchant/profile` carries `profile_locked` + `pending_change`. An admin
+  approves via `reviewProfileChange` (applies the diff, sets
+  `merchants.approved_at = null` to reopen review) — no admin portal yet,
+  so `npm run review:profile-change -w apps/api -- <id> approve|reject`.
+  Full admin-side design in `docs/plans/profile-change-review.md`.
+- **SMS 2FA has no recovery codes** (reverses the 2026-08-31/09-03 notes).
+  `POST /auth/2fa/enable` returns `{ enabled: true }`; `verify2fa` stops
+  issuing codes; `completeTwoFactorChallenge` / `disable2fa` stop
+  accepting them; `TwoFactorState` drops `recovery_codes_remaining`. The
+  sign-in fallback is **an emailed code** —
+  `POST /auth/2fa/challenge/resend { challenge_id, channel: sms|email }` —
+  then support. The `recovery_codes` table stays, unused.
+- **"Where you are signed in" shows only the current device** + a count of
+  the others; "Sign out everywhere else" ends them.
+- **The deposit is never shown to the merchant, anywhere** (extends the
+  2026-08-31 note from "not on their own surfaces" to "not in Bookings
+  either"). The Payouts "Fees and deposits" card is now just "Fees"; the
+  booking money breakdown and the claim/report modal drop every deposit
+  figure and the cap copy. The API still caps a claim at the deposit and
+  escalates the overflow to a dispute — that logic is now entirely
+  server-side and invisible to the merchant.
+- **Adding a vehicle offers a price-entry switch** — "Set the list price"
+  (a hirer's price, unchanged) or "Set what I keep" (take-home; the form
+  grosses it up by `COMMISSION_RATE` for the stored/list price).
+  `vehicles.rate_mode` (`list`/`net`, migration `20260904090000`) only
+  remembers the view — `daily_rate_amount` is always the gross price, so
+  bookings/payouts are unaffected. Shared `RateField` component
+  (`components/onboarding/RateField.tsx`), used by onboarding's Vehicles
+  step and the standalone Add-a-vehicle page.
+- **`suspended` accounts lose access at the next token refresh** —
+  `refreshToken` rejects `suspended` (403) and `deleted` and revokes the
+  session, so an admin suspension ends a live merchant's access within a
+  refresh cycle (this is what "a suspended merchant's vehicles can't be
+  hired" reduces to until the customer portal exists). Nothing sets
+  `suspended` yet.
+- **The profile-menu company chip reflects `merchants.approved_at`** —
+  "PENDING REVIEW" (amber) until an admin approves, not a hardcoded
+  "VERIFIED".
+- **Close-account copy** drops the seven-year-retention sentence.
+- The onboarding contact-person email helper drops "Contact support to
+  change it."
 
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own

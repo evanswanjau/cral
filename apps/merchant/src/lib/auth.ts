@@ -40,7 +40,7 @@ export function useIsAuthenticated(): boolean {
 
 /**
  * The `sub` claim (user id) read straight off the access token, used only to
- * namespace this user's local data — an onboarding draft must not leak to
+ * namespace this user's local data - an onboarding draft must not leak to
  * whoever signs in next on the same browser. This is deliberately not a
  * security check: the payload is read without verifying the signature, and
  * the server validates the token on every request.
@@ -68,7 +68,7 @@ export function getRefreshToken(): string | null {
 
 function notify(): void {
   // useSyncExternalStore only re-renders on a "storage" event, which the
-  // browser fires in *other* tabs — dispatch it here too so the tab that
+  // browser fires in *other* tabs - dispatch it here too so the tab that
   // made the change also re-renders.
   window.dispatchEvent(new StorageEvent("storage", { key: ACCESS_TOKEN_KEY }));
 }
@@ -78,8 +78,8 @@ export function setSession(
   remember = true,
 ): void {
   // Cached query data belongs to whoever was signed in a moment ago. Clear
-  // it on *every* session change — sign-out, sign-in, and the silent drop
-  // in lib/api.ts when a refresh fails — so the next account never hydrates
+  // it on *every* session change - sign-out, sign-in, and the silent drop
+  // in lib/api.ts when a refresh fails - so the next account never hydrates
   // against the previous one's cached onboarding draft. The localStorage
   // draft is namespaced per user id for exactly this reason (see
   // getCurrentUserId); without this the query cache defeats that.
@@ -104,7 +104,7 @@ export function setSession(
   notify();
 }
 
-/** Updates just the access/refresh pair in whichever storage is already active — used after a token refresh. */
+/** Updates just the access/refresh pair in whichever storage is already active - used after a token refresh. */
 export function updateTokens(tokens: { access_token: string; refresh_token: string }): void {
   const target = activeStorage();
   target.setItem(ACCESS_TOKEN_KEY, tokens.access_token);

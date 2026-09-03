@@ -1,11 +1,11 @@
 /**
- * The portal's status vocabulary — seven listing states plus a separate
+ * The portal's status vocabulary - seven listing states plus a separate
  * verification-badge axis, and the four document review states. Values are
  * literal reads off "Cruz Merchant Portal.dc.html"'s `S` / `DS` / `TONE`
  * consts (see CLAUDE.md's "Getting the real screen source" note).
  *
  * This is wider than the five states CLAUDE.md's design-token note
- * describes (pending / review / verified / rejected / boosted) — `draft`,
+ * describes (pending / review / verified / rejected / boosted) - `draft`,
  * `action`, `live` and `paused` are portal-specific additions the design
  * introduces for the Vehicles screen, and `verified` here is the separate
  * badge axis rather than a listing status. The design file is the
@@ -32,7 +32,10 @@ export const STATUS: Record<VehicleStatus, { label: string; core: string; tint: 
 
 export const DOC_STATE: Record<DocReviewState, { core: string; label: string; fg: string }> = {
   ok: { core: "#0B8A5B", label: "ACCEPTED", fg: "#076945" },
-  pending: { core: "#C77400", label: "IN REVIEW", fg: "#8A5200" },
+  // Everything uploaded-but-not-decided reads "PENDING REVIEW". There is
+  // no admin console yet, so nothing ever moves a document into an
+  // "actively being reviewed" state - the label must not imply one.
+  pending: { core: "#C77400", label: "PENDING REVIEW", fg: "#8A5200" },
   expiring: { core: "#C77400", label: "EXPIRING", fg: "#8A5200" },
   rejected: { core: "#D81E32", label: "REJECTED", fg: "#A50E22" },
   missing: { core: "#CDD2DA", label: "MISSING", fg: "#838C9B" },
@@ -43,7 +46,7 @@ export const DOC_STATE: Record<DocReviewState, { core: string; label: string; fg
  * document review states, and bookings' own set. Literal reads off the
  * design's `PS` const in "Cruz Merchant Bookings & Payouts.dc.html".
  *
- * Only `scheduled` and `paid` are reachable today — `processing` and
+ * Only `scheduled` and `paid` are reachable today - `processing` and
  * `failed` are the states a real M-Pesa B2C rail moves through, and are
  * declared now so wiring one later is a service change, not a UI one.
  */
@@ -55,10 +58,10 @@ export const PAYOUT_STATUS: Record<PayoutStatus, { label: string; core: string; 
 };
 
 /**
- * A fifth status vocabulary — the Notifications feed's four `KIND` groups.
+ * A fifth status vocabulary - the Notifications feed's four `KIND` groups.
  * Literal reads off "Cruz Merchant Notifications.dc.html"'s `KIND` const
  * (icon / tint / border / text / filter group). The API mirrors this table
- * in `apps/api/src/lib/notifications.ts#NOTIFICATION_KIND` — keep the two
+ * in `apps/api/src/lib/notifications.ts#NOTIFICATION_KIND` - keep the two
  * in step.
  *
  * `kind` is a separate axis from the preference `category`: `booking` and
@@ -96,14 +99,12 @@ export const OWNER_DOC_LABELS: Record<"national_id" | "kra_pin", [string, string
 export const OWNER_DOC_ORDER: (keyof typeof OWNER_DOC_LABELS)[] = ["national_id", "kra_pin"];
 
 /**
- * A document sitting at `pending` reads differently depending on whether
- * the *vehicle* has been submitted yet — freshly attached to a still-draft
- * listing, it's just "pending review" (waiting on the merchant to finish
- * and submit); once the whole listing has gone to CRAL it's "in review"
- * (waiting on a reviewer). Every other state's label is fixed.
+ * Kept for its call sites, but there is nothing to vary on any more: an
+ * uploaded document reads "PENDING REVIEW" until a reviewer accepts or
+ * rejects it, whether or not the listing has been submitted. Nothing sets
+ * an "actively being reviewed" state (no admin console).
  */
-export function docStateLabel(state: DocReviewState, vehicleStatus: VehicleStatus): string {
-  if (state === "pending") return vehicleStatus === "draft" ? "PENDING REVIEW" : "IN REVIEW";
+export function docStateLabel(state: DocReviewState, _vehicleStatus: VehicleStatus): string {
   return DOC_STATE[state].label;
 }
 
@@ -122,12 +123,12 @@ export function filterLabel(f: VehicleFilter): string {
 }
 
 export function money(cents: number | null | undefined): string {
-  if (!cents) return "—";
+  if (!cents) return " - ";
   return Math.round(cents / 100).toLocaleString("en-KE");
 }
 
 /**
- * A third status vocabulary — bookings are neither the brand's five
+ * A third status vocabulary - bookings are neither the brand's five
  * verification states nor the Vehicles screen's seven listing states.
  * Reuses the *same* quartet hex values as STATUS above (this is the same
  * design system, not a new palette): pending's amber for a fresh request,

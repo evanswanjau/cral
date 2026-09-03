@@ -111,7 +111,7 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
           <span style={P.rowTitle}>{v.make} {v.model}</span>
           {v.verification_badge === "active" && <span style={P.verifiedTag}>✓ VERIFIED</span>}
         </div>
-        <div style={P.rowMeta}>{vehicleTypeLabel(v.type)} · {v.year} · {v.seats} seats · {v.county ?? v.pickup_address ?? "—"}</div>
+        <div style={P.rowMeta}>{vehicleTypeLabel(v.type)} · {v.year} · {v.seats} seats · {v.county ?? v.pickup_address ?? " - "}</div>
       </div>
       <span style={{ ...P.statusTag, background: meta.tint, border: `1px solid ${meta.border}`, color: meta.text }}>
         <span style={{ ...P.statusDot, background: meta.core }} />
@@ -124,7 +124,7 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
         {v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "No rate yet"}
       </span>
       <span style={P.dateLabel}>
-        {v.status === "draft" ? "NOT SENT" : v.submitted_at ? new Date(v.submitted_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase() : "—"}
+        {v.status === "draft" ? "NOT SENT" : v.submitted_at ? new Date(v.submitted_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase() : " - "}
       </span>
       <span style={P.chevron}>›</span>
     </div>
@@ -163,7 +163,7 @@ export function VehicleList(): JSX.Element {
               {needsAction.length} {needsAction.length === 1 ? "vehicle needs" : "vehicles need"} something from you
             </div>
             <div style={P.bannerBody}>
-              {first.registration} · {first.make} {first.model} — the reviewer left you a note.
+              {first.registration} · {first.make} {first.model} - the reviewer left you a note.
             </div>
           </div>
           <button type="button" style={P.bannerBtn} onClick={() => navigate(`/vehicles/${first.id}`)}>

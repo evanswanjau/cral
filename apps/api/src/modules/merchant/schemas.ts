@@ -42,6 +42,8 @@ export const VehicleInputSchema = z.object({
   county: z.string().optional(),
   pickup_address: z.string().optional(),
   daily_rate: z.string().optional(),
+  // Display-only preference; `daily_rate` is always the gross/list price.
+  rate_mode: z.enum(["list", "net"]).optional(),
   insurance_expiry: z.string().nullable().optional(),
   chauffeured: z.boolean().optional(),
 });
@@ -63,6 +65,9 @@ export type CreateVehicleInput = z.infer<typeof CreateVehicleSchema>;
 const DOCUMENT_KINDS = [
   "national_id",
   "kra_pin",
+  "certificate_of_incorporation",
+  "company_kra_pin",
+  "cr12",
   "logbook",
   "comprehensive_insurance",
   "tracker_certificate",
@@ -74,3 +79,46 @@ export const UploadDocumentQuerySchema = z.object({
   vehicle_id: z.string().optional(),
 });
 export type UploadDocumentQuery = z.infer<typeof UploadDocumentQuerySchema>;
+
+// --- Settings → Business (see openapi/merchant-settings.yaml) ----------
+//
+// Every field optional; `.strict()` so a typo'd key is a 422 rather than a
+// silent no-op. `phone` is handled specially (routed through setUserPhone).
+export const ProfilePatchSchema = z
+  .object({
+    owner_type: z.enum(["individual", "company"]),
+    trading_name: z.string().max(200),
+    company_name: z.string(),
+    company_cert_no: z.string(),
+    company_kra: z.string(),
+    company_email: z.string().email().or(z.literal("")),
+    company_address: z.string(),
+    first_name: z.string(),
+    middle_name: z.string(),
+    surname: z.string(),
+    kra_pin: z.string(),
+    national_id: z.string(),
+    phone: z.string(),
+  })
+  .partial()
+  .strict();
+export type ProfilePatchInput = z.infer<typeof ProfilePatchSchema>;
+
+// --- Settings → Payouts (see openapi/merchant-settings.yaml) -----------
+//
+// A full replace of the payout block. Rules enforced in the service:
+//  - `method: "mpesa"` is rejected for company merchants (paid to a bank
+//    account in the company name — the same rule onboarding enforces).
+//  - The M-Pesa payout number is *always* `users.phone` — there is no
+//    field for it here; to change it, change the phone on the profile.
+//  - `schedule` is coerced to "monthly" whenever `method` is "bank".
+export const PayoutSettingsSchema = z.object({
+  method: z.enum(["mpesa", "bank"]),
+  schedule: z.enum(["weekly", "monthly"]),
+  mpesa_name: z.string().max(200).optional(),
+  bank_name: z.string().optional(),
+  bank_branch: z.string().optional(),
+  bank_account_name: z.string().optional(),
+  bank_account_number: z.string().optional(),
+});
+export type PayoutSettingsInput = z.infer<typeof PayoutSettingsSchema>;

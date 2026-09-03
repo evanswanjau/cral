@@ -21,10 +21,17 @@ import type {
   DocumentRow,
   MerchantOnboardingReminderRow,
   MerchantRow,
+  ProfileChangeRequestRow,
   ReminderTier,
   VehicleRow,
 } from "./db-types.js";
-import type { CreateVehicleInput, PatchOnboardingInput, VehicleInput } from "./schemas.js";
+import type {
+  CreateVehicleInput,
+  PatchOnboardingInput,
+  PayoutSettingsInput,
+  ProfilePatchInput,
+  VehicleInput,
+} from "./schemas.js";
 
 export interface RequestContext {
   ip: string | null;
@@ -130,9 +137,14 @@ function serializeState(
   phone: string | null,
   phoneVerified: boolean,
 ) {
+  const ownerDoc = (kind: DocumentKind) =>
+    docSlot(documents.find((d) => d.vehicle_id === null && d.kind === kind));
   const ownerDocs = {
-    national_id: docSlot(documents.find((d) => d.vehicle_id === null && d.kind === "national_id")),
-    kra_pin: docSlot(documents.find((d) => d.vehicle_id === null && d.kind === "kra_pin")),
+    national_id: ownerDoc("national_id"),
+    kra_pin: ownerDoc("kra_pin"),
+    certificate_of_incorporation: ownerDoc("certificate_of_incorporation"),
+    company_kra_pin: ownerDoc("company_kra_pin"),
+    cr12: ownerDoc("cr12"),
   };
 
   return {
@@ -184,6 +196,7 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
+    rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
     chauffeured: vehicle.chauffeured,
     insurance_expiry: vehicle.insurance_expiry,
     docs: {
@@ -198,7 +211,11 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
 // users.phone is the actual payout-phone home (see identity's spec §4
 // deviation); the onboarding wizard's "phone" field writes there, not to
 // merchants, so patching it needs a users update alongside the merchant one.
-async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
+async function setUserPhone(
+  userId: string,
+  rawPhone: string,
+  conn: Knex | Knex.Transaction = db,
+): Promise<void> {
   const phone = normalizePhone(rawPhone);
   if (!phone) {
     throw new ApiError({
@@ -210,7 +227,7 @@ async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
     });
   }
 
-  const current = await db("users").where({ id: userId }).first();
+  const current = await conn("users").where({ id: userId }).first();
   // Changing the number drops any prior verification — the new one hasn't
   // been proven, and a verified flag must never follow a number it wasn't
   // earned on.
@@ -218,7 +235,7 @@ async function setUserPhone(userId: string, rawPhone: string): Promise<void> {
     current?.phone === phone ? { phone } : { phone, phone_verified: false };
 
   try {
-    await db("users").where({ id: userId }).update(update);
+    await conn("users").where({ id: userId }).update(update);
   } catch (err) {
     if (isUniqueViolation(err)) {
       throw new ApiError({
@@ -263,6 +280,432 @@ export async function patchOnboarding(
   if (phone) await setUserPhone(userId, phone);
 
   return getOnboardingState(userId);
+}
+
+// ---------------------------------------------------------------------
+// Settings → Business — merchant profile read + patch
+// (see openapi/merchant-settings.yaml)
+// ---------------------------------------------------------------------
+
+// Account-level documents shown on Settings -> Business. `group` decides
+// which pill they sit under; for a company the KRA PIN certificate is the
+// *company's*, so it groups with the business papers. `personalGroup` is
+// what an individual account uses (there is no company/personal split
+// there - everything is "personal"). Display + upload only; the
+// submission gate is `requiredOwnerDocs` in assertCompleteForSubmission.
+const PROFILE_DOC_META: Record<string, { label: string; group: "personal" | "business" }> = {
+  certificate_of_incorporation: { label: "Certificate of incorporation", group: "business" },
+  company_kra_pin: { label: "Company KRA PIN certificate", group: "business" },
+  cr12: { label: "CR12 - company shareholding", group: "business" },
+  national_id: { label: "National ID - front and back", group: "personal" },
+  kra_pin: { label: "KRA PIN certificate", group: "personal" },
+};
+/** Account-level document kinds that may be uploaded from Settings -> Business. */
+export const ACCOUNT_DOC_KINDS = Object.keys(PROFILE_DOC_META) as DocumentKind[];
+
+// Columns the Business tab may write. `phone` is deliberately not here —
+// it goes through setUserPhone so E.164 normalisation and the
+// phone_verified reset both still happen (spec §10 gate).
+const PROFILE_MERCHANT_FIELDS = [
+  "owner_type",
+  "trading_name",
+  "company_name",
+  "company_cert_no",
+  "company_kra",
+  "company_email",
+  "company_address",
+  "first_name",
+  "middle_name",
+  "surname",
+  "kra_pin",
+  "national_id",
+] as const;
+
+/**
+ * The payout block, shared by GET /merchant/profile and the response of
+ * PUT /merchant/payout-settings. The M-Pesa number is *always* the
+ * account phone — to change it you change the phone on the profile — so
+ * `mpesa_number_verified` is just `users.phone_verified`.
+ */
+function serializePayout(
+  merchant: MerchantRow,
+  user: { phone?: string | null; phone_verified?: boolean } | undefined,
+) {
+  return {
+    method: (merchant.payout_method === "bank" ? "bank" : "mpesa") as "mpesa" | "bank",
+    schedule: (merchant.payout_schedule === "monthly" ? "monthly" : "weekly") as "weekly" | "monthly",
+    mpesa_number: user?.phone ?? null,
+    mpesa_number_verified: Boolean(user?.phone_verified) && !!user?.phone,
+    mpesa_name: merchant.payout_mpesa_name,
+    bank_name: merchant.bank_name,
+    bank_branch: merchant.bank_branch,
+    bank_account_name: merchant.bank_account_name,
+    bank_account_number: merchant.bank_account_number,
+  };
+}
+
+interface ProfileUser {
+  email?: string | null;
+  phone?: string | null;
+  phone_verified?: boolean;
+  status?: string | null;
+  erasure_cooling_off_until?: Date | string | null;
+}
+
+function serializeProfile(
+  merchant: MerchantRow,
+  user: ProfileUser | undefined,
+  documents: DocumentRow[],
+) {
+  const deletionAt = user?.erasure_cooling_off_until
+    ? new Date(user.erasure_cooling_off_until).toISOString()
+    : null;
+  return {
+    owner_type: merchant.owner_type,
+    trading_name: merchant.trading_name,
+    company_name: merchant.company_name,
+    company_cert_no: merchant.company_cert_no,
+    company_kra: merchant.company_kra,
+    company_email: merchant.company_email,
+    company_address: merchant.company_address,
+    first_name: merchant.first_name,
+    middle_name: merchant.middle_name,
+    surname: merchant.surname,
+    kra_pin: merchant.kra_pin,
+    national_id: merchant.national_id,
+    email: user?.email ?? "",
+    phone: user?.phone ?? null,
+    phone_verified: Boolean(user?.phone_verified),
+    account_status: user?.status ?? "active",
+    deletion_scheduled_at: user?.status === "pending_deletion" ? deletionAt : null,
+    approved_at: merchant.approved_at ? merchant.approved_at.toISOString() : null,
+    member_since: merchant.created_at.toISOString(),
+    payout: serializePayout(merchant, user),
+    documents: Object.entries(PROFILE_DOC_META)
+      // "personal" docs (National ID + KRA PIN) always; the "business"
+      // group only for a company.
+      .filter(([, meta]) => meta.group === "personal" || merchant.owner_type === "company")
+      .map(([kind, meta]) => {
+        const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
+        return {
+          kind,
+          label: meta.label,
+          group: meta.group,
+          review_state: doc?.review_state ?? "pending",
+          uploaded_at: doc ? doc.created_at.toISOString() : null,
+          document_id: doc?.id ?? null,
+        };
+      }),
+  };
+}
+
+function serializeChangeRequest(row: ProfileChangeRequestRow) {
+  return {
+    id: row.id,
+    status: row.status,
+    changes: row.changes,
+    reviewer_note: row.reviewer_note,
+    submitted_at: row.created_at.toISOString(),
+    decided_at: row.decided_at ? row.decided_at.toISOString() : null,
+  };
+}
+
+export async function getProfile(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+  const documents = await db<DocumentRow>("documents").where({ merchant_id: merchant.id });
+  const pending = await db<ProfileChangeRequestRow>("profile_change_requests")
+    .where({ merchant_id: merchant.id, status: "pending" })
+    .first();
+  return {
+    ...serializeProfile(merchant, user, documents),
+    // Once onboarding is submitted the fields are locked - changes go
+    // through review (see requestProfileChange).
+    profile_locked: merchant.onboarding_submitted,
+    pending_change: pending ? serializeChangeRequest(pending) : null,
+  };
+}
+
+/** The set of fields a change request may touch (merchant columns + phone). */
+const CHANGE_REQUEST_FIELDS = [...PROFILE_MERCHANT_FIELDS, "phone"] as const;
+
+/**
+ * Post-submission profile edits don't apply directly - they're captured as
+ * a `profile_change_requests` row an admin approves, at which point the
+ * account goes back to review. Pre-submission (the wizard hasn't finished)
+ * the same call still applies immediately.
+ */
+export async function patchProfile(
+  userId: string,
+  patch: ProfilePatchInput,
+  ctx: RequestContext,
+): Promise<ReturnType<typeof getProfile>> {
+  const merchant = await getOrCreateMerchant(userId);
+
+  if (merchant.onboarding_submitted) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "profile_locked",
+      message: "These details are locked after submission. Request a change for review instead.",
+    });
+  }
+
+  const { phone, ...rest } = patch;
+  const merchantUpdate: Record<string, unknown> = {};
+  const before: Record<string, unknown> = {};
+  for (const field of PROFILE_MERCHANT_FIELDS) {
+    if (rest[field] === undefined) continue;
+    merchantUpdate[field] = rest[field];
+    before[field] = (merchant as unknown as Record<string, unknown>)[field];
+  }
+
+  if (merchantUpdate.owner_type === "company" && merchant.payout_method !== "bank") {
+    merchantUpdate.payout_method = "bank";
+  }
+
+  if (Object.keys(merchantUpdate).length === 0 && phone === undefined) {
+    return getProfile(userId);
+  }
+
+  await db.transaction(async (trx) => {
+    if (Object.keys(merchantUpdate).length > 0) {
+      merchantUpdate.last_activity_at = new Date();
+      await trx<MerchantRow>("merchants").where({ id: merchant.id }).update(merchantUpdate);
+    }
+    if (phone !== undefined) await setUserPhone(userId, phone, trx);
+
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "merchant.profile_updated",
+      entityType: "merchant",
+      entityId: merchant.id,
+      before: Object.keys(before).length ? before : undefined,
+      after: {
+        ...merchantUpdate,
+        ...(phone !== undefined ? { phone_changed: true } : {}),
+      },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  return getProfile(userId);
+}
+
+export async function getProfileChangeRequest(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const pending = await db<ProfileChangeRequestRow>("profile_change_requests")
+    .where({ merchant_id: merchant.id, status: "pending" })
+    .first();
+  return pending ? serializeChangeRequest(pending) : null;
+}
+
+export async function requestProfileChange(
+  userId: string,
+  patch: ProfilePatchInput,
+  ctx: RequestContext,
+) {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+
+  // Only fields that actually differ from what's on file.
+  const changes: Record<string, unknown> = {};
+  for (const field of CHANGE_REQUEST_FIELDS) {
+    const next = (patch as Record<string, unknown>)[field];
+    if (next === undefined) continue;
+    const current =
+      field === "phone"
+        ? (user?.phone ?? "")
+        : ((merchant as unknown as Record<string, unknown>)[field] ?? "");
+    if (String(next) !== String(current)) changes[field] = next;
+  }
+
+  if (Object.keys(changes).length === 0) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "no_changes",
+      message: "Nothing here is different from what's on file.",
+    });
+  }
+
+  const id = generateId("profileChangeRequest");
+  const row = await db.transaction(async (trx) => {
+    // One open request at a time - a new submission replaces the last.
+    await trx("profile_change_requests")
+      .where({ merchant_id: merchant.id, status: "pending" })
+      .delete();
+    const [inserted] = await trx<ProfileChangeRequestRow>("profile_change_requests")
+      .insert({ id, merchant_id: merchant.id, requested_by: userId, status: "pending", changes })
+      .returning("*");
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "merchant.profile_change_requested",
+      entityType: "merchant",
+      entityId: merchant.id,
+      after: { request_id: id, fields: Object.keys(changes) },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return inserted!;
+  });
+
+  return serializeChangeRequest(row);
+}
+
+export async function withdrawProfileChangeRequest(userId: string, ctx: RequestContext) {
+  const merchant = await getOrCreateMerchant(userId);
+  const deleted = await db("profile_change_requests")
+    .where({ merchant_id: merchant.id, status: "pending" })
+    .delete();
+  if (deleted === 0) {
+    throw new ApiError({
+      status: 404,
+      type: "not_found",
+      code: "no_pending_change",
+      message: "There's no change waiting for review.",
+    });
+  }
+  await writeAuditEntry(db, {
+    actorId: userId,
+    actorType: "user",
+    action: "merchant.profile_change_withdrawn",
+    entityType: "merchant",
+    entityId: merchant.id,
+    requestId: ctx.requestId,
+    ip: ctx.ip,
+  });
+}
+
+/**
+ * Admin decision on a change request. No admin portal yet, so this runs
+ * from `apps/api/src/scripts/review-profile-change.ts`. Approving applies
+ * the diff and sends the account back to review (`approved_at` -> null).
+ */
+export async function reviewProfileChange(
+  requestId: string,
+  decision: "approve" | "reject",
+  reviewerId: string,
+  note: string | null,
+) {
+  const req = await db<ProfileChangeRequestRow>("profile_change_requests")
+    .where({ id: requestId })
+    .first();
+  if (!req) throw new Error(`No profile change request ${requestId}`);
+  if (req.status !== "pending") throw new Error(`Request ${requestId} is already ${req.status}`);
+
+  await db.transaction(async (trx) => {
+    if (decision === "approve") {
+      const { phone, ...merchantFields } = req.changes as Record<string, unknown>;
+      if (Object.keys(merchantFields).length > 0) {
+        await trx<MerchantRow>("merchants")
+          .where({ id: req.merchant_id })
+          .update({ ...merchantFields, last_activity_at: new Date() });
+      }
+      if (phone !== undefined) {
+        const merchant = await trx<MerchantRow>("merchants").where({ id: req.merchant_id }).first();
+        if (merchant) await setUserPhone(merchant.user_id, String(phone), trx);
+      }
+      // Back to review - the papers behind these fields need a fresh look.
+      await trx<MerchantRow>("merchants").where({ id: req.merchant_id }).update({ approved_at: null });
+    }
+    await trx<ProfileChangeRequestRow>("profile_change_requests").where({ id: requestId }).update({
+      status: decision === "approve" ? "approved" : "rejected",
+      reviewer_id: reviewerId,
+      reviewer_note: note,
+      decided_at: new Date(),
+    });
+    await writeAuditEntry(trx, {
+      actorId: reviewerId,
+      actorType: "admin",
+      action: `merchant.profile_change_${decision === "approve" ? "approved" : "rejected"}`,
+      entityType: "merchant",
+      entityId: req.merchant_id,
+      after: { request_id: requestId, note },
+    });
+  });
+}
+
+// ---------------------------------------------------------------------
+// Settings → Payouts — full replace of the payout block
+// ---------------------------------------------------------------------
+
+export async function getPayoutSettings(userId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+  return serializePayout(merchant, user);
+}
+
+export async function updatePayoutSettings(
+  userId: string,
+  input: PayoutSettingsInput,
+  ctx: RequestContext,
+): Promise<ReturnType<typeof serializePayout>> {
+  const merchant = await getOrCreateMerchant(userId);
+  const user = await db("users").where({ id: userId }).first();
+
+  // Companies are paid to a bank account in the company name — the same
+  // rule onboarding's "Your details" step enforces (M-Pesa card disabled
+  // for companies). Reject it here rather than silently coercing.
+  if (merchant.owner_type === "company" && input.method === "mpesa") {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "mpesa_not_allowed_for_company",
+      message: "Registered companies are paid by bank transfer only.",
+      field: "method",
+    });
+  }
+
+  const update: Record<string, unknown> = {
+    payout_method: input.method,
+    // Bank payouts always run monthly, on the 1st — no choice (owner's
+    // call). M-Pesa may be weekly or monthly.
+    payout_schedule: input.method === "bank" ? "monthly" : input.schedule,
+    last_activity_at: new Date(),
+  };
+
+  if (input.method === "mpesa") {
+    // The M-Pesa number is always the account phone; only the name is editable.
+    update.payout_same = true;
+    update.payout_detail = null;
+    update.payout_mpesa_name = input.mpesa_name?.trim() || null;
+  } else {
+    update.bank_name = input.bank_name?.trim() || null;
+    update.bank_branch = input.bank_branch?.trim() || null;
+    update.bank_account_name = input.bank_account_name?.trim() || null;
+    update.bank_account_number = (input.bank_account_number ?? "").replace(/\s/g, "") || null;
+  }
+
+  const before = {
+    payout_method: merchant.payout_method,
+    payout_schedule: merchant.payout_schedule,
+    payout_same: merchant.payout_same,
+    payout_detail: merchant.payout_detail,
+    bank_name: merchant.bank_name,
+    bank_account_number: merchant.bank_account_number,
+  };
+
+  await db.transaction(async (trx) => {
+    await trx<MerchantRow>("merchants").where({ id: merchant.id }).update(update);
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "merchant.payout_settings_updated",
+      entityType: "merchant",
+      entityId: merchant.id,
+      before,
+      after: update,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  const updated = await db<MerchantRow>("merchants").where({ id: merchant.id }).first();
+  return serializePayout(updated!, user);
 }
 
 // ---------------------------------------------------------------------
@@ -346,7 +789,7 @@ function buildStorageKey(merchantId: string, vehicleId: string | null, kind: Doc
 
 export async function uploadDocument(userId: string, input: UploadDocumentInput, _ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
-  const isOwnerKind = OWNER_DOC_KINDS.includes(input.kind);
+  const isOwnerKind = ACCOUNT_DOC_KINDS.includes(input.kind);
   const isVehicleKind = VEHICLE_DOC_KINDS.includes(input.kind) || input.kind === "vehicle_photo";
 
   if (isOwnerKind && input.vehicleId) {
@@ -568,9 +1011,13 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     }
   }
 
-  for (const kind of OWNER_DOC_KINDS) {
+  const requiredOwnerDocs: DocumentKind[] =
+    merchant.owner_type === "company"
+      ? [...OWNER_DOC_KINDS, "certificate_of_incorporation", "company_kra_pin", "cr12"]
+      : OWNER_DOC_KINDS;
+  for (const kind of requiredOwnerDocs) {
     if (!documents.some((d) => d.vehicle_id === null && d.kind === kind)) {
-      fail("Your owner documents are incomplete.");
+      fail("Your account documents are incomplete.");
     }
   }
 
@@ -720,7 +1167,12 @@ async function sendReminderEmail(merchant: MerchantRow, tier: ReminderTier): Pro
  * The notifications module is imported lazily: it depends on this file for
  * `getOrCreateMerchant`, so a static import would be a cycle.
  */
-export async function runDailyReminderSweep(): Promise<{ sent: number; expiryNotices: number; purged: number }> {
+export async function runDailyReminderSweep(): Promise<{
+  sent: number;
+  expiryNotices: number;
+  purged: number;
+  accountsDeleted: number;
+}> {
   const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
   let sent = 0;
   for (const merchant of stalled) {
@@ -739,5 +1191,10 @@ export async function runDailyReminderSweep(): Promise<{ sent: number; expiryNot
   const expiryNotices = await runExpiryNotificationSweep();
   const purged = await purgeExpiredNotifications();
 
-  return { sent, expiryNotices, purged };
+  // Accounts whose 30-day deletion grace period has elapsed. Lazy import —
+  // auth/service isn't otherwise a dependency of this module.
+  const { runAccountDeletionSweep } = await import("../auth/service.js");
+  const { purged: accountsDeleted } = await runAccountDeletionSweep();
+
+  return { sent, expiryNotices, purged, accountsDeleted };
 }

@@ -9,9 +9,8 @@ import { BookingList } from "./pages/BookingList.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
 import { PayoutList } from "./pages/PayoutList.js";
 import { PayoutDetail } from "./pages/PayoutDetail.js";
-import { SecuritySettings } from "./pages/SecuritySettings.js";
 import { Notifications } from "./pages/Notifications.js";
-import { NotificationSettings } from "./pages/NotificationSettings.js";
+import { Settings } from "./pages/Settings.js";
 import { Onboarding } from "./pages/Onboarding.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -26,11 +25,11 @@ const router = createBrowserRouter([
   {
     element: <RequireAuth />,
     children: [
-      // Standalone, not nested in AppLayout's nav shell — onboarding is a
+      // Standalone, not nested in AppLayout's nav shell - onboarding is a
       // focused first step, not part of the main dashboard.
       { path: "/onboarding", element: <Onboarding /> },
       {
-        // The portal is gated on a finished onboarding — no vehicle, no
+        // The portal is gated on a finished onboarding - no vehicle, no
         // portal; you get returned to the step you stopped at.
         element: <RequireOnboarding />,
         children: [
@@ -47,8 +46,13 @@ const router = createBrowserRouter([
               { path: "payouts", element: <PayoutList /> },
               { path: "payouts/:payoutRunId", element: <PayoutDetail /> },
               { path: "notifications", element: <Notifications /> },
-              { path: "settings/security", element: <SecuritySettings /> },
-              { path: "settings/notifications", element: <NotificationSettings /> },
+              { path: "settings", element: <Settings /> },
+              // The two slices that shipped before the shell keep working.
+              { path: "settings/security", element: <Navigate to="/settings?tab=security" replace /> },
+              {
+                path: "settings/notifications",
+                element: <Navigate to="/settings?tab=notifications" replace />,
+              },
             ],
           },
         ],

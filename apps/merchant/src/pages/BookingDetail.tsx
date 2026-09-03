@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { P } from "../components/portal/styles.js";
 import { BOOKING_STATUS, TONE, money } from "../components/portal/status.js";
 import { Modal } from "../components/portal/Modal.js";
@@ -48,7 +49,7 @@ function durationDays(pickupAt: string, dropoffAt: string): number {
   return Math.max(1, Math.round((new Date(dropoffAt).getTime() - new Date(pickupAt).getTime()) / (24 * 60 * 60 * 1000)));
 }
 
-/** "RESPOND BY 14:00 TODAY" only when the 12h window actually falls today — a request made at 22:00 is due tomorrow, and the label needs to say so. */
+/** "RESPOND BY 14:00 TODAY" only when the 12h window actually falls today - a request made at 22:00 is due tomorrow, and the label needs to say so. */
 function respondByLabel(iso: string): string {
   const due = new Date(iso);
   const time = due.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -214,7 +215,7 @@ function CancelModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   return (
     <Modal
       title="Cancel this booking?"
-      sub={isLate ? "It's at or after pick-up time — the 25% late fee applies." : "Free for the hirer since it's before pick-up time."}
+      sub={isLate ? "It's at or after pick-up time - the 25% late fee applies." : "Free for the hirer since it's before pick-up time."}
       onClose={onClose}
       ctaLabel={cancel.isPending ? "Cancelling…" : "Cancel booking"}
       ctaBg="#D81E32"
@@ -247,7 +248,7 @@ function CancelModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
 }
 
 // ---------------------------------------------------------------------
-// Handover modal — one flow for both pickup and return (spec §15: "the
+// Handover modal - one flow for both pickup and return (spec §15: "the
 // same machinery runs in reverse at return"). QR-proximity is skipped
 // this phase (no customer app); the OTP step is real.
 // ---------------------------------------------------------------------
@@ -311,7 +312,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
               completeHandover.mutate(confirmed.id, {
                 onSuccess: () => {
                   onClose();
-                  flash(kind === "pickup" ? "Vehicle handed over. The hire is now active." : "Return confirmed. Deposit clears in 24 hours.");
+                  flash(kind === "pickup" ? "Vehicle handed over. The hire is now active." : "Return confirmed. Your payout clears 24 hours from now.");
                 },
                 onError: (err) => setError(err instanceof ApiClientError ? err.message : "Couldn't complete the handover."),
               });
@@ -362,7 +363,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
                   maxLength={6}
                 />
               </div>
-              <div style={P.helperText}>There is no chat on CRAL — if the hirer can't find their code, call CRAL support.</div>
+              <div style={P.helperText}>There is no chat on CRAL - if the hirer can't find their code, call CRAL support.</div>
             </div>
           ) : (
             <div style={{ display: "grid", gap: 16 }}>
@@ -412,7 +413,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
                 </div>
                 {photoIds.length === 0 && !skippedPhotos && canSkipPhotos && (
                   <div style={{ ...P.verifyNotice, marginTop: 10 }}>
-                    Skipping means a damage claim can't be filed against this booking later — there will be no before-state to check against.
+                    Skipping means a damage claim can't be filed against this booking later - there will be no before-state to check against.
                   </div>
                 )}
                 {photoIds.length === 0 && canSkipPhotos && (
@@ -463,20 +464,15 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
 
-  const depositKes = Math.round(b.deposit.amount / 100);
-  // The merchant states the real cost — capping this client-side would
-  // silently throw away everything above the deposit and make the
-  // dispute escalation (which the API does correctly) unreachable. The
-  // API is the one that caps `amount` in the stored report and sets
-  // `escalated_dispute_id`; this only decides what gets *sent*.
+  // The merchant states the real cost. The API decides what is actually
+  // recoverable and settles it - none of that reaches this screen.
   const amountNum = (parseInt(amount.replace(/\D/g, ""), 10) || 0) * 100;
-  const willEscalate = kind === "claim" && amountNum > b.deposit.amount;
   const photosBlocked = category === "damage" && !b.has_pickup_condition_photos;
 
   return (
     <Modal
       title="Report an issue"
-      sub="The hirer's deposit is held by CRAL specifically to resolve this kind of thing."
+      sub="CRAL reviews claims like this and settles what the hirer owes."
       onClose={onClose}
       ctaLabel={create.isPending ? "Filing…" : "File report"}
       ctaDisabled={create.isPending || !description.trim() || (kind === "claim" && !amount) || photosBlocked}
@@ -491,7 +487,7 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
           {
             onSuccess: () => {
               onClose();
-              flash(kind === "claim" ? "Claim filed. CRAL is reviewing it against the deposit." : "Reported. This is added to the hirer's record.");
+              flash(kind === "claim" ? "Claim filed. CRAL is reviewing it." : "Reported. This is added to the hirer's record.");
             },
             onError: (err) => flash(err instanceof ApiClientError ? err.message : "Couldn't file that. Try again.", "#FF8A8A"),
           },
@@ -501,11 +497,11 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
       <div style={{ display: "grid", gap: 16 }}>
         <div style={P.toggleRow}>
           <div>
-            <div style={P.toggleRowTitle}>Does this need money from the deposit?</div>
+            <div style={P.toggleRowTitle}>Does this need money back from the hirer?</div>
             <div style={P.toggleRowSub}>
               {kind === "claim"
-                ? `KES ${depositKes.toLocaleString("en-KE")} is held — claim more and the rest goes to a dispute.`
-                : "No deduction — this just goes on their record."}
+                ? "CRAL reviews the amount and recovers what it can."
+                : "No money - this just goes on their record."}
             </div>
           </div>
           <button
@@ -530,12 +526,6 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
           <div>
             <label style={P.fieldLabel}>Amount claimed (KES)</label>
             <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} placeholder="0" />
-            {willEscalate && (
-              <div style={{ ...P.verifyNotice, marginTop: 10 }}>
-                That's above the KES {depositKes.toLocaleString("en-KE")} deposit. CRAL will pay out the deposit and open a
-                dispute for the KES {(Math.round((amountNum - b.deposit.amount) / 100)).toLocaleString("en-KE")} above it.
-              </div>
-            )}
           </div>
         )}
 
@@ -670,6 +660,7 @@ export function BookingDetail(): JSX.Element {
   const flash = useToast();
   const { data: b, isPending } = useBookingDetail(bookingId);
   const { data: hirerHistory } = useHirerHistory(bookingId);
+  usePageTitle(b ? `Booking ${b.ref}` : "Booking");
   const [modal, setModal] = useState<ModalKind>(null);
   const [handoverKind, setHandoverKind] = useState<"pickup" | "return">("pickup");
 
@@ -803,7 +794,7 @@ export function BookingDetail(): JSX.Element {
             )}
             {(b.status === "active" || b.status === "completed") && !b.has_pickup_condition_photos && (
               <div style={{ padding: "0 18px 18px" }}>
-                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up — a damage claim can't be filed on this booking.</div>
+                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up - a damage claim can't be filed on this booking.</div>
               </div>
             )}
           </div>
@@ -835,11 +826,11 @@ export function BookingDetail(): JSX.Element {
               </div>
               <div>
                 <div style={P.specKey}>ON CRAL</div>
-                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `Since ${fmtDate(hirerHistory.member_since)}` : "—"}</div>
+                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `Since ${fmtDate(hirerHistory.member_since)}` : " - "}</div>
               </div>
               <div>
                 <div style={P.specKey}>COMPLETED</div>
-                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `${hirerHistory.completed_count} bookings` : "—"}</div>
+                <div style={{ ...P.specVal, fontSize: 13 }}>{hirerHistory ? `${hirerHistory.completed_count} bookings` : " - "}</div>
               </div>
             </div>
             <div style={{ padding: "0 18px 18px", ...P.helperText }}>
@@ -868,7 +859,7 @@ export function BookingDetail(): JSX.Element {
             </div>
             <div style={{ padding: "0 18px 18px", ...P.helperText }}>
               {b.vehicle_chauffeured
-                ? "Driver included — you or your named driver must be available for the whole hire."
+                ? "Driver included - you or your named driver must be available for the whole hire."
                 : "Self-drive. The hirer drives; their licence is on file above."}
             </div>
           </div>
@@ -899,9 +890,6 @@ export function BookingDetail(): JSX.Element {
               <div style={P.breakdownNet}>
                 <span style={P.breakdownNetKey}>You keep</span>
                 <span style={P.breakdownNetVal}><span style={P.breakdownNetPrefix}>KES</span> {money(b.merchant_net.amount)}</span>
-              </div>
-              <div style={P.breakdownNote}>
-                Hirer's deposit, held by CRAL: KES {money(b.deposit.amount)}. Separate from your money — released after the return check unless a claim is raised.
               </div>
             </div>
           </div>

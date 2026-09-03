@@ -19,13 +19,13 @@ export class ApiClientError extends Error {
 interface RequestOptions {
   method?: "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
   body?: unknown;
-  /** Multipart body — mutually exclusive with `body`. Skips the JSON Content-Type header so the browser sets its own multipart boundary. */
+  /** Multipart body - mutually exclusive with `body`. Skips the JSON Content-Type header so the browser sets its own multipart boundary. */
   formData?: FormData;
   /** Attach the access token, and transparently refresh-and-retry once on a 401. Default true. */
   auth?: boolean;
   /** Read a successful response as a Blob instead of JSON. Errors are still parsed as the JSON envelope. */
   blob?: boolean;
-  /** Extra headers merged in on top of Content-Type/Authorization — e.g. Idempotency-Key. */
+  /** Extra headers merged in on top of Content-Type/Authorization - e.g. Idempotency-Key. */
   headers?: Record<string, string>;
 }
 
@@ -62,7 +62,7 @@ async function tryRefresh(): Promise<boolean> {
 async function request<T>(path: string, options: RequestOptions, isRetry = false): Promise<T> {
   const { method = "GET", body, formData, auth = true, blob = false } = options;
   const headers: Record<string, string> = { ...options.headers };
-  // formData: no Content-Type here — the browser sets its own multipart
+  // formData: no Content-Type here - the browser sets its own multipart
   // boundary, which it can only do if this fetch doesn't specify one.
   if (formData === undefined && body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {
@@ -88,7 +88,7 @@ async function request<T>(path: string, options: RequestOptions, isRetry = false
   if (res.status === 204) return undefined as T;
 
   // Errors are always the JSON envelope, even from endpoints that return
-  // binary on success — so decide on `res.ok` first, not on `blob`.
+  // binary on success - so decide on `res.ok` first, not on `blob`.
   if (!res.ok) {
     const payload = await res.json().catch(() => null);
     const error = payload?.error;
@@ -126,7 +126,7 @@ export const apiUpload = <T>(path: string, formData: FormData, options: Omit<Req
 /**
  * GETs a binary response as a Blob. Goes through `request()` rather than
  * calling fetch directly so it keeps the bearer header and the shared
- * 401-refresh-and-retry — several of these fire at once when a page of
+ * 401-refresh-and-retry - several of these fire at once when a page of
  * photos loads, and `refreshInFlight` is what stops them stampeding the
  * refresh endpoint.
  */
