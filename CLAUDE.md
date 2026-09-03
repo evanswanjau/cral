@@ -600,10 +600,69 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   read-only would fabricate trust the way the hardcoded `id_verified`
   badge did. `users.roles` stays a flat `merchant`/`customer`/`admin`
   `text[]`; there is no team table.
-- **Business documents card is read-only** — it lists the account-level
-  owner docs (`national_id`, `kra_pin`) with their review state and a
-  "View". No new `DocumentKind`s (`certificate_of_incorporation` / `cr12`)
-  and no upload UI here; that's deferred with People.
+- **Business documents card** — for a company it now has a
+  **"Business documents | My documents"** switch. "My documents" is
+  `national_id` + `kra_pin`; "Business documents" adds
+  `certificate_of_incorporation` + `cr12` (added to `DocumentKind` +
+  `UploadDocumentQuerySchema` 2026-09-04). Upload/Replace goes through the
+  existing `POST /merchant/onboarding/documents` (authenticated, works
+  post-onboarding). The **onboarding submission gate still uses only
+  `OWNER_DOC_KINDS`** (`national_id`/`kra_pin`) — `ACCOUNT_DOC_KINDS` in
+  `modules/merchant/service.ts` is the wider display/upload set and must
+  not be wired into `assertCompleteForSubmission`.
+
+**Round-4 Settings/portal revisions (owner's call, 2026-09-04 — PR
+"merchant portal round 4"):**
+- **No em dashes anywhere in the merchant portal.** `—`/`–` → `-`
+  site-wide, and new copy follows suit.
+- **Every page sets a specific `document.title`** via
+  `apps/merchant/src/lib/use-page-title.ts` (`usePageTitle("<page>")`,
+  detail pages pass the entity, Settings the tab, Onboarding the step).
+- **Business / "My profile" fields are locked once onboarding is
+  submitted.** `PATCH /merchant/profile` → 409 `profile_locked`. Edits go
+  through `profile_change_requests` (migration `20260904100000`) +
+  `GET|POST|DELETE /merchant/profile/change-request`; `GET
+  /merchant/profile` carries `profile_locked` + `pending_change`. An admin
+  approves via `reviewProfileChange` (applies the diff, sets
+  `merchants.approved_at = null` to reopen review) — no admin portal yet,
+  so `npm run review:profile-change -w apps/api -- <id> approve|reject`.
+  Full admin-side design in `docs/plans/profile-change-review.md`.
+- **SMS 2FA has no recovery codes** (reverses the 2026-08-31/09-03 notes).
+  `POST /auth/2fa/enable` returns `{ enabled: true }`; `verify2fa` stops
+  issuing codes; `completeTwoFactorChallenge` / `disable2fa` stop
+  accepting them; `TwoFactorState` drops `recovery_codes_remaining`. The
+  sign-in fallback is **an emailed code** —
+  `POST /auth/2fa/challenge/resend { challenge_id, channel: sms|email }` —
+  then support. The `recovery_codes` table stays, unused.
+- **"Where you are signed in" shows only the current device** + a count of
+  the others; "Sign out everywhere else" ends them.
+- **The deposit is never shown to the merchant, anywhere** (extends the
+  2026-08-31 note from "not on their own surfaces" to "not in Bookings
+  either"). The Payouts "Fees and deposits" card is now just "Fees"; the
+  booking money breakdown and the claim/report modal drop every deposit
+  figure and the cap copy. The API still caps a claim at the deposit and
+  escalates the overflow to a dispute — that logic is now entirely
+  server-side and invisible to the merchant.
+- **Adding a vehicle offers a price-entry switch** — "Set the list price"
+  (a hirer's price, unchanged) or "Set what I keep" (take-home; the form
+  grosses it up by `COMMISSION_RATE` for the stored/list price).
+  `vehicles.rate_mode` (`list`/`net`, migration `20260904090000`) only
+  remembers the view — `daily_rate_amount` is always the gross price, so
+  bookings/payouts are unaffected. Shared `RateField` component
+  (`components/onboarding/RateField.tsx`), used by onboarding's Vehicles
+  step and the standalone Add-a-vehicle page.
+- **`suspended` accounts lose access at the next token refresh** —
+  `refreshToken` rejects `suspended` (403) and `deleted` and revokes the
+  session, so an admin suspension ends a live merchant's access within a
+  refresh cycle (this is what "a suspended merchant's vehicles can't be
+  hired" reduces to until the customer portal exists). Nothing sets
+  `suspended` yet.
+- **The profile-menu company chip reflects `merchants.approved_at`** —
+  "PENDING REVIEW" (amber) until an admin approves, not a hardcoded
+  "VERIFIED".
+- **Close-account copy** drops the seven-year-retention sentence.
+- The onboarding contact-person email helper drops "Contact support to
+  change it."
 
 **Onboarding polish (owner's call, 2026-08-31 — PR "onboarding polish"):**
 - **The merchant is never shown the hirer's deposit** on their own

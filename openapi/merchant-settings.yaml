@@ -70,9 +70,13 @@ paths:
 
     patch:
       tags: [profile]
-      summary: Update the merchant's profile. Every field optional; an audit_log row is written in the same transaction.
+      summary: Update the profile directly. Only allowed *before* onboarding is submitted.
       operationId: patchMerchantProfile
       security: [{ bearerAuth: [] }]
+      description: >
+        Once `profile_locked` is true (onboarding submitted), this returns
+        409 `profile_locked` - use POST /merchant/profile/change-request
+        instead, which captures the edit for admin review.
       requestBody:
         required: true
         content:
@@ -80,12 +84,12 @@ paths:
             schema: { $ref: "#/components/schemas/MerchantProfilePatch" }
       responses:
         "200":
-          description: Updated — the full profile, same shape as GET
+          description: Updated - the full profile, same shape as GET
           content:
             application/json:
               schema: { $ref: "#/components/schemas/MerchantProfile" }
         "409":
-          description: phone_taken — the phone belongs to another account
+          description: profile_locked (submitted) | phone_taken
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -94,6 +98,58 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /merchant/profile/change-request:
+    get:
+      tags: [profile]
+      summary: The merchant's open profile change request, or null
+      operationId: getProfileChangeRequest
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The pending request or null
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/ProfileChangeRequest" }
+                  - { type: "null" }
+    post:
+      tags: [profile]
+      summary: Ask for locked profile fields to be changed - goes to admin review
+      operationId: requestProfileChange
+      security: [{ bearerAuth: [] }]
+      description: >
+        Body is the same shape as PATCH; only fields that differ from
+        what's on file are recorded. Replaces any existing pending request.
+        Nothing on `merchants` moves until an admin approves it, at which
+        point the account goes back to review (`approved_at` -> null).
+        There is no admin portal yet - approval runs from
+        `apps/api/src/scripts/review-profile-change.ts`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MerchantProfilePatch" }
+      responses:
+        "201":
+          description: Request captured
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileChangeRequest" }
+        "422":
+          description: no_changes | invalid_phone
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    delete:
+      tags: [profile]
+      summary: Withdraw the pending change request
+      operationId: withdrawProfileChangeRequest
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Withdrawn }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /merchant/payout-settings:
     get:
@@ -187,6 +243,12 @@ components:
         # the "VERIFIED" chip must reflect that, not decorate.
         approved_at: { type: string, format: date-time, nullable: true }
         member_since: { type: string, format: date-time, description: merchants.created_at }
+        profile_locked:
+          type: boolean
+          description: True once onboarding is submitted - edits then go through change-request review.
+        pending_change:
+          nullable: true
+          allOf: [{ $ref: "#/components/schemas/ProfileChangeRequest" }]
         # Read-only account-level documents (Business documents card).
         documents:
           type: array
@@ -261,6 +323,26 @@ components:
         kra_pin: { type: string }
         national_id: { type: string }
         phone: { type: string, description: Kenyan number; normalised to E.164 server-side }
+
+    ProfileChangeRequest:
+      type: object
+      properties:
+        id: { type: string }
+        status: { type: string, enum: [pending, approved, rejected] }
+        changes:
+          type: object
+          additionalProperties: true
+          description: The fields the merchant asked to change, `{ field: newValue }`.
+        reviewer_note: { type: string, nullable: true }
+        submitted_at: { type: string, format: date-time }
+        decided_at: { type: string, format: date-time, nullable: true }
+
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
   securitySchemes:
     bearerAuth:

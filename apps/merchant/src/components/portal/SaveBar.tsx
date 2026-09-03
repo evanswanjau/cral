@@ -66,17 +66,21 @@ export function SaveBar({
   onSave,
   onDiscard,
   saving = false,
+  label = "Save changes",
+  message = "Unsaved changes on this page",
 }: {
   onSave: () => void;
   onDiscard: () => void;
   saving?: boolean;
+  label?: string;
+  message?: string;
 }): JSX.Element {
   return (
     <div style={S.bar}>
       <div style={S.inner}>
         <div style={S.left}>
           <span style={S.dot} />
-          <span style={S.label}>Unsaved changes on this page</span>
+          <span style={S.label}>{message}</span>
         </div>
         <div style={S.actions}>
           <button type="button" style={S.discard} onClick={onDiscard} disabled={saving}>
@@ -88,7 +92,7 @@ export function SaveBar({
             onClick={onSave}
             disabled={saving}
           >
-            {saving ? "Saving…" : "Save changes"}
+            {saving ? "Working…" : label}
           </button>
         </div>
       </div>

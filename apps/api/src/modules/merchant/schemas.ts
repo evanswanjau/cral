@@ -65,6 +65,8 @@ export type CreateVehicleInput = z.infer<typeof CreateVehicleSchema>;
 const DOCUMENT_KINDS = [
   "national_id",
   "kra_pin",
+  "certificate_of_incorporation",
+  "cr12",
   "logbook",
   "comprehensive_insurance",
   "tracker_certificate",

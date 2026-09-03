@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPatch, apiPut } from "./api.js";
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiUpload } from "./api.js";
 
 /**
  * Settings → Business (merchant profile) and the Statements list on
@@ -9,12 +9,28 @@ import { apiGet, apiPatch, apiPut } from "./api.js";
 
 export type OwnerType = "individual" | "company";
 
+export type AccountDocKind =
+  | "national_id"
+  | "kra_pin"
+  | "certificate_of_incorporation"
+  | "cr12";
+
 export interface ProfileDocument {
-  kind: "national_id" | "kra_pin";
+  kind: AccountDocKind;
   label: string;
+  group: "personal" | "business";
   review_state: "ok" | "pending" | "expiring" | "rejected";
   uploaded_at: string | null;
   document_id: string | null;
+}
+
+export interface ProfileChangeRequest {
+  id: string;
+  status: "pending" | "approved" | "rejected";
+  changes: Record<string, string>;
+  reviewer_note: string | null;
+  submitted_at: string;
+  decided_at: string | null;
 }
 
 export type PayoutMethod = "mpesa" | "bank";
@@ -63,6 +79,9 @@ export interface MerchantProfile {
   deletion_scheduled_at: string | null;
   approved_at: string | null;
   member_since: string;
+  /** True once onboarding is submitted - edits then go through change-request review. */
+  profile_locked: boolean;
+  pending_change: ProfileChangeRequest | null;
   payout: PayoutSettings;
   documents: ProfileDocument[];
 }
@@ -107,6 +126,49 @@ export function useUpdateProfile() {
       void qc.invalidateQueries({ queryKey: ["onboarding"] });
       void qc.invalidateQueries({ queryKey: ["me"] });
     },
+  });
+}
+
+// --- profile change requests (post-submission edits) --------------
+
+export function requestProfileChange(patch: MerchantProfilePatch) {
+  return apiPost<ProfileChangeRequest>("/merchant/profile/change-request", patch);
+}
+
+export function withdrawProfileChangeRequest() {
+  return apiDelete<void>("/merchant/profile/change-request");
+}
+
+export function useRequestProfileChange() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: requestProfileChange,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["merchant-profile"] }),
+  });
+}
+
+export function useWithdrawProfileChangeRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: withdrawProfileChangeRequest,
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["merchant-profile"] }),
+  });
+}
+
+/** Upload/replace an account-level document (owner ID, KRA, cert of incorporation, CR12). */
+export function uploadAccountDocument(kind: AccountDocKind, file: File) {
+  const form = new FormData();
+  form.append("kind", kind);
+  form.append("file", file);
+  return apiUpload<{ document_id: string }>("/merchant/onboarding/documents", form);
+}
+
+export function useUploadAccountDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ kind, file }: { kind: AccountDocKind; file: File }) =>
+      uploadAccountDocument(kind, file),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["merchant-profile"] }),
   });
 }
 

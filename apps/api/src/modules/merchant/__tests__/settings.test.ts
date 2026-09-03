@@ -6,6 +6,7 @@ import { db } from "../../../db/client.js";
 import { generateId } from "../../../lib/ids.js";
 import { createVerifiedTestUser } from "../../../test/helpers.js";
 import { requestAccountDeletion, runAccountDeletionSweep } from "../../auth/service.js";
+import { reviewProfileChange } from "../service.js";
 
 const app = createApp();
 const createdUserIds: string[] = [];
@@ -137,6 +138,81 @@ describe("Settings → Business — GET/PATCH /merchant/profile", () => {
     expect(entry).toBeTruthy();
     expect(entry.actor_id).toBe(userId);
     expect(entry.after).toMatchObject({ trading_name: "Audited Co" });
+  });
+});
+
+describe("Settings → Business — locked after submission", () => {
+  async function submittedMerchant() {
+    const m = await newMerchant();
+    await request(app).get("/merchant/profile").set(auth(m.accessToken)); // materialise the row
+    await db("merchants").where({ user_id: m.userId }).update({ onboarding_submitted: true });
+    return m;
+  }
+
+  it("PATCH is refused once onboarding is submitted", async () => {
+    const { accessToken } = await submittedMerchant();
+    const res = await request(app)
+      .patch("/merchant/profile")
+      .set(auth(accessToken))
+      .send({ surname: "Newname" });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("profile_locked");
+  });
+
+  it("captures a change request, shows it on the profile, and withdraws it", async () => {
+    const { userId, accessToken } = await submittedMerchant();
+
+    const create = await request(app)
+      .post("/merchant/profile/change-request")
+      .set(auth(accessToken))
+      .send({ surname: "Otieno", national_id: "12345678" });
+    expect(create.status).toBe(201);
+    expect(create.body.status).toBe("pending");
+    expect(Object.keys(create.body.changes).sort()).toEqual(["national_id", "surname"]);
+
+    // Nothing on the merchant row moved.
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    expect(merchant.surname).not.toBe("Otieno");
+
+    const profile = await request(app).get("/merchant/profile").set(auth(accessToken));
+    expect(profile.body.profile_locked).toBe(true);
+    expect(profile.body.pending_change.id).toBe(create.body.id);
+
+    // A second submission replaces the first.
+    const replace = await request(app)
+      .post("/merchant/profile/change-request")
+      .set(auth(accessToken))
+      .send({ surname: "Kamau" });
+    expect(replace.status).toBe(201);
+    const openCount = await db("profile_change_requests")
+      .where({ merchant_id: merchant.id, status: "pending" })
+      .count<{ n: string }[]>("id as n");
+    expect(Number(openCount[0]!.n)).toBe(1);
+
+    const withdraw = await request(app)
+      .delete("/merchant/profile/change-request")
+      .set(auth(accessToken));
+    expect(withdraw.status).toBe(204);
+    const after = await request(app).get("/merchant/profile").set(auth(accessToken));
+    expect(after.body.pending_change).toBeNull();
+  });
+
+  it("approving a change applies the diff and sends the account back to review", async () => {
+    const { userId, accessToken } = await submittedMerchant();
+    await db("merchants").where({ user_id: userId }).update({ approved_at: new Date() });
+
+    const create = await request(app)
+      .post("/merchant/profile/change-request")
+      .set(auth(accessToken))
+      .send({ surname: "Approved-Name" });
+
+    await reviewProfileChange(create.body.id, "approve", "test-reviewer", null);
+
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    expect(merchant.surname).toBe("Approved-Name");
+    expect(merchant.approved_at).toBeNull();
+    const req = await db("profile_change_requests").where({ id: create.body.id }).first();
+    expect(req.status).toBe("approved");
   });
 });
 

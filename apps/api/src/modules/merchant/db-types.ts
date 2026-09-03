@@ -83,6 +83,8 @@ export interface VehicleRow {
 export type DocumentKind =
   | "national_id"
   | "kra_pin"
+  | "certificate_of_incorporation"
+  | "cr12"
   | "logbook"
   | "comprehensive_insurance"
   | "tracker_certificate"
@@ -120,6 +122,19 @@ export interface VehicleEventRow {
   actor_type: EventActorType;
   actor_name: string | null;
   occurred_at: Date;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export interface ProfileChangeRequestRow {
+  id: string;
+  merchant_id: string;
+  requested_by: string;
+  status: "pending" | "approved" | "rejected";
+  changes: Record<string, unknown>;
+  reviewer_id: string | null;
+  reviewer_note: string | null;
+  decided_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

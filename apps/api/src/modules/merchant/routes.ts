@@ -175,6 +175,36 @@ merchantRouter.patch(
   }),
 );
 
+// After onboarding submission the profile fields are locked - a change is
+// captured for admin review instead (see openapi/merchant-settings.yaml).
+merchantRouter.get(
+  "/merchant/profile/change-request",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.getProfileChangeRequest(req.auth!.sub);
+    res.status(200).json(result);
+  }),
+);
+
+merchantRouter.post(
+  "/merchant/profile/change-request",
+  authenticate(),
+  validateBody(ProfilePatchSchema),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.requestProfileChange(req.auth!.sub, req.body, ctxOf(req));
+    res.status(201).json(result);
+  }),
+);
+
+merchantRouter.delete(
+  "/merchant/profile/change-request",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    await merchantService.withdrawProfileChangeRequest(req.auth!.sub, ctxOf(req));
+    res.status(204).send();
+  }),
+);
+
 merchantRouter.get(
   "/merchant/payout-settings",
   authenticate(),
