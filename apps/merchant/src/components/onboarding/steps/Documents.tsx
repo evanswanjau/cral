@@ -13,7 +13,12 @@ import {
   type OnboardingDraft,
 } from "../../../lib/onboarding-draft.js";
 
-type OwnerDocKind = "national_id" | "kra_pin" | "certificate_of_incorporation" | "cr12";
+type OwnerDocKind =
+  | "national_id"
+  | "kra_pin"
+  | "certificate_of_incorporation"
+  | "company_kra_pin"
+  | "cr12";
 type VehicleDocKind = "logbook" | "comprehensive_insurance" | "tracker_certificate";
 
 export const MAX_DOC_BYTES = 10 * 1024 * 1024;
@@ -201,15 +206,16 @@ export function Documents({
 
   const isCompany = draft.ownerType === "company";
   const d = draft.ownerDocs;
-  // Company: three company papers + the contact person's ID.
-  // Individual: your ID + your KRA certificate.
+  // "Your documents" = National ID + KRA PIN, for everyone.
+  // "Company documents" (company only) = cert of incorporation, company
+  // KRA PIN, CR12.
   const companyCount =
-    Number(Boolean(d.certificateOfIncorporation)) + Number(Boolean(d.cr12)) + Number(Boolean(d.kraPin));
+    Number(Boolean(d.certificateOfIncorporation)) +
+    Number(Boolean(d.companyKraPin)) +
+    Number(Boolean(d.cr12));
   const companyComplete = !isCompany || companyCount === 3;
-  const yourNeeded = isCompany ? 1 : 2;
-  const yourCount =
-    Number(Boolean(d.nationalId)) + (isCompany ? 0 : Number(Boolean(d.kraPin)));
-  const yourComplete = yourCount === yourNeeded;
+  const yourCount = Number(Boolean(d.nationalId)) + Number(Boolean(d.kraPin));
+  const yourComplete = yourCount === 2;
   const ownerComplete = companyComplete && yourComplete;
 
   function vehicleComplete(vId: string): boolean {
@@ -278,18 +284,18 @@ export function Documents({
             kind="certificate_of_incorporation"
           />
           <DocRow
+            title="Company KRA PIN certificate"
+            body="The company's PIN, not your personal one"
+            doc={d.companyKraPin}
+            onChange={(doc) => onChange({ ownerDocs: { ...d, companyKraPin: doc } })}
+            kind="company_kra_pin"
+          />
+          <DocRow
             title="CR12"
             body="Company shareholding, issued within the last 12 months"
             doc={d.cr12}
             onChange={(doc) => onChange({ ownerDocs: { ...d, cr12: doc } })}
             kind="cr12"
-          />
-          <DocRow
-            title="Company KRA PIN certificate"
-            body="The company's PIN, not your personal one"
-            doc={d.kraPin}
-            onChange={(doc) => onChange({ ownerDocs: { ...d, kraPin: doc } })}
-            kind="kra_pin"
           />
         </div>
       )}
@@ -301,7 +307,7 @@ export function Documents({
             <div>
               <div style={O.cardTitle}>Your documents</div>
               <div style={O.optionBody}>
-                {isCompany ? "The contact person's own ID" : "Uploaded once - they cover every vehicle you list"}
+                {isCompany ? "The contact person's own ID and PIN" : "Uploaded once - they cover every vehicle you list"}
               </div>
             </div>
           </div>
@@ -313,7 +319,7 @@ export function Documents({
               color: yourComplete ? "#076945" : "#8A5200",
             }}
           >
-            {yourCount}/{yourNeeded}
+            {yourCount}/2
           </span>
         </div>
         <DocRow
@@ -323,15 +329,13 @@ export function Documents({
           onChange={(doc) => onChange({ ownerDocs: { ...d, nationalId: doc } })}
           kind="national_id"
         />
-        {!isCompany && (
-          <DocRow
-            title="KRA PIN certificate"
-            body="Matching the PIN you entered"
-            doc={d.kraPin}
-            onChange={(doc) => onChange({ ownerDocs: { ...d, kraPin: doc } })}
-            kind="kra_pin"
-          />
-        )}
+        <DocRow
+          title="KRA PIN certificate"
+          body={isCompany ? "Your personal KRA PIN certificate" : "Matching the PIN you entered"}
+          doc={d.kraPin}
+          onChange={(doc) => onChange({ ownerDocs: { ...d, kraPin: doc } })}
+          kind="kra_pin"
+        />
       </div>
 
       {draft.vehicles.map((v) => {

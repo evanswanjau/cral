@@ -602,25 +602,29 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   `text[]`; there is no team table.
 - **`certificate_of_incorporation` + `cr12` are real company documents**
   now (added to `DocumentKind` + both upload schemas, 2026-09-04):
-  - **Account documents split into three groups** (company request). For a
-    company: **Company documents** = `certificate_of_incorporation` +
-    `cr12` + `kra_pin` (the *company's* KRA PIN certificate); **Your
-    documents** = `national_id` (the contact person's ID); **Car
-    documents** = the existing per-vehicle logbook/insurance/tracker
-    cards. An individual keeps one "Your documents" card
-    (`national_id` + `kra_pin`).
-  - **Onboarding** (`Documents.tsx`) renders those cards; a company
-    submission requires all three company docs +
-    `national_id` (`requiredOwnerDocs` in `assertCompleteForSubmission` =
-    `OWNER_DOC_KINDS` + `certificate_of_incorporation` + `cr12`).
-    `serializeState.owner_docs` and the onboarding draft carry the extra
-    slots.
+  - **Account documents split into three groups** (owner's call). A
+    **fourth doc kind, `company_kra_pin`**, was added so a company has its
+    own KRA PIN certificate distinct from the contact person's.
+    - **Company documents** (company only) = `certificate_of_incorporation`
+      + `company_kra_pin` + `cr12`.
+    - **Your documents** (everyone) = `national_id` + `kra_pin` (the
+      person's own two).
+    - **Car documents** = the existing per-vehicle logbook / insurance /
+      tracker cards.
+  - **Onboarding** (`Documents.tsx`) renders a "Company documents" card
+    (3/3) above the "Your documents" card (2/2) for a company; the Review
+    step lists "Company documents", "Your documents", then per-vehicle
+    "car documents". `requiredOwnerDocs` in `assertCompleteForSubmission`
+    = `OWNER_DOC_KINDS` + `certificate_of_incorporation` +
+    `company_kra_pin` + `cr12` for a company. `serializeState.owner_docs`
+    and the onboarding draft carry the three company slots.
   - **Settings → Business documents card** — for a company, a
-    **"Company documents | My documents"** switch (`PROFILE_DOC_META`
-    groups `kra_pin` with "business" for a company, "personal" for an
-    individual). Upload/Replace goes through `POST
-    /merchant/onboarding/documents` and is **only shown when the merchant
-    is mid-"Request a change"** (`canEdit`); otherwise View-only.
+    **"Company documents | My documents"** switch. `PROFILE_DOC_META`
+    groups `certificate_of_incorporation` / `company_kra_pin` / `cr12` as
+    "business", `national_id` / `kra_pin` as "personal". Upload/Replace
+    goes through `POST /merchant/onboarding/documents` and is **only shown
+    while the merchant is mid-"Request a change"** (`canEdit`); otherwise
+    View-only.
 - **Documents always read "PENDING REVIEW"** (`DOC_STATE.pending.label`)
   until a reviewer accepts/rejects — nothing sets an "actively reviewed"
   state (no admin console), so `docStateLabel`'s old draft/submitted split

@@ -76,6 +76,7 @@ export interface OwnerDocs {
   kraPin: DraftDocument | null;
   /** Company only. */
   certificateOfIncorporation: DraftDocument | null;
+  companyKraPin: DraftDocument | null;
   cr12: DraftDocument | null;
 }
 
@@ -150,7 +151,13 @@ export function emptyDraft(): OnboardingDraft {
     bankAccountName: "",
     bankAccountNumber: "",
     termsAccepted: false,
-    ownerDocs: { nationalId: null, kraPin: null, certificateOfIncorporation: null, cr12: null },
+    ownerDocs: {
+      nationalId: null,
+      kraPin: null,
+      certificateOfIncorporation: null,
+      companyKraPin: null,
+      cr12: null,
+    },
     vehicles: [],
     editingVehicleId: null,
     vehicleDraft: null,
@@ -274,6 +281,7 @@ interface WireOnboardingState {
     national_id: WireDocSlot | null;
     kra_pin: WireDocSlot | null;
     certificate_of_incorporation: WireDocSlot | null;
+    company_kra_pin: WireDocSlot | null;
     cr12: WireDocSlot | null;
   };
   vehicles: WireVehicle[];
@@ -362,6 +370,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
       nationalId: toDraftDoc(state.owner_docs.national_id),
       kraPin: toDraftDoc(state.owner_docs.kra_pin),
       certificateOfIncorporation: toDraftDoc(state.owner_docs.certificate_of_incorporation ?? null),
+      companyKraPin: toDraftDoc(state.owner_docs.company_kra_pin ?? null),
       cr12: toDraftDoc(state.owner_docs.cr12 ?? null),
     },
     vehicles: state.vehicles.map(toDraftVehicle),
@@ -519,7 +528,12 @@ async function uploadDocument(
 }
 
 export function uploadOwnerDocument(
-  kind: "national_id" | "kra_pin" | "certificate_of_incorporation" | "cr12",
+  kind:
+    | "national_id"
+    | "kra_pin"
+    | "certificate_of_incorporation"
+    | "company_kra_pin"
+    | "cr12",
   file: File,
 ): Promise<DraftDocument> {
   return uploadDocument(kind, file);

@@ -114,19 +114,24 @@ export function Review({
             <EditButton onClick={() => onEditStep(4)} />
           </div>
           <div style={O.reviewCardBody}>
+            {draft.ownerType === "company" && (
+              <ReviewComplete
+                label="Company documents"
+                complete={
+                  Boolean(draft.ownerDocs.certificateOfIncorporation) &&
+                  Boolean(draft.ownerDocs.companyKraPin) &&
+                  Boolean(draft.ownerDocs.cr12)
+                }
+              />
+            )}
             <ReviewComplete
               label="Your documents"
-              complete={
-                Boolean(draft.ownerDocs.nationalId) &&
-                Boolean(draft.ownerDocs.kraPin) &&
-                (draft.ownerType !== "company" ||
-                  (Boolean(draft.ownerDocs.certificateOfIncorporation) && Boolean(draft.ownerDocs.cr12)))
-              }
+              complete={Boolean(draft.ownerDocs.nationalId) && Boolean(draft.ownerDocs.kraPin)}
             />
             {draft.vehicles.map((v) => (
               <ReviewComplete
                 key={v.id}
-                label={`${v.registration || "Vehicle"} · vehicle papers`}
+                label={`${v.registration || "Vehicle"} · car documents`}
                 complete={Boolean(v.docs.logbook) && Boolean(v.docs.comprehensiveInsurance) && Boolean(v.docs.trackerCertificate)}
               />
             ))}

@@ -499,8 +499,15 @@ describe("merchant onboarding — submit", () => {
         daily_rate: "9000",
       });
     const vehicleId = vehicleRes.body.id;
-    // A company needs its own two documents on top of the owner's.
-    for (const kind of ["national_id", "kra_pin", "certificate_of_incorporation", "cr12"]) {
+    // A company needs its three company documents on top of the contact
+    // person's National ID + KRA PIN.
+    for (const kind of [
+      "national_id",
+      "kra_pin",
+      "certificate_of_incorporation",
+      "company_kra_pin",
+      "cr12",
+    ]) {
       await request(app)
         .post("/merchant/onboarding/documents")
         .set(auth(accessToken))

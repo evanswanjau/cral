@@ -84,6 +84,7 @@ export type DocumentKind =
   | "national_id"
   | "kra_pin"
   | "certificate_of_incorporation"
+  | "company_kra_pin"
   | "cr12"
   | "logbook"
   | "comprehensive_insurance"

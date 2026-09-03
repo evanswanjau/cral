@@ -249,6 +249,7 @@ components:
           national_id,
           kra_pin,
           certificate_of_incorporation,
+          company_kra_pin,
           cr12,
           logbook,
           comprehensive_insurance,
@@ -384,13 +385,16 @@ components:
         bank_account_number: { type: string, nullable: true }
         terms_accepted: { type: boolean }
         owner_docs:
-          # certificate_of_incorporation + cr12 are present but only
-          # required (and rendered) when owner_type is "company".
+          # "Your documents" = national_id + kra_pin (individual and the
+          # contact person of a company). certificate_of_incorporation +
+          # company_kra_pin + cr12 are the "Company documents" set, present
+          # and required only when owner_type is "company".
           type: object
           properties:
             national_id: { $ref: "#/components/schemas/DocumentSlot" }
             kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
             certificate_of_incorporation: { $ref: "#/components/schemas/DocumentSlot" }
+            company_kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
             cr12: { $ref: "#/components/schemas/DocumentSlot" }
         vehicles:
           type: array

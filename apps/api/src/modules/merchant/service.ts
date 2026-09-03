@@ -143,6 +143,7 @@ function serializeState(
     national_id: ownerDoc("national_id"),
     kra_pin: ownerDoc("kra_pin"),
     certificate_of_incorporation: ownerDoc("certificate_of_incorporation"),
+    company_kra_pin: ownerDoc("company_kra_pin"),
     cr12: ownerDoc("cr12"),
   };
 
@@ -292,23 +293,12 @@ export async function patchOnboarding(
 // what an individual account uses (there is no company/personal split
 // there - everything is "personal"). Display + upload only; the
 // submission gate is `requiredOwnerDocs` in assertCompleteForSubmission.
-const PROFILE_DOC_META: Record<
-  string,
-  { label: (isCompany: boolean) => string; companyGroup: "personal" | "business" }
-> = {
-  certificate_of_incorporation: {
-    label: () => "Certificate of incorporation",
-    companyGroup: "business",
-  },
-  cr12: { label: () => "CR12 - company shareholding", companyGroup: "business" },
-  kra_pin: {
-    label: (c) => (c ? "Company KRA PIN certificate" : "KRA PIN certificate"),
-    companyGroup: "business",
-  },
-  national_id: {
-    label: (c) => (c ? "Contact person's National ID" : "National ID - front and back"),
-    companyGroup: "personal",
-  },
+const PROFILE_DOC_META: Record<string, { label: string; group: "personal" | "business" }> = {
+  certificate_of_incorporation: { label: "Certificate of incorporation", group: "business" },
+  company_kra_pin: { label: "Company KRA PIN certificate", group: "business" },
+  cr12: { label: "CR12 - company shareholding", group: "business" },
+  national_id: { label: "National ID - front and back", group: "personal" },
+  kra_pin: { label: "KRA PIN certificate", group: "personal" },
 };
 /** Account-level document kinds that may be uploaded from Settings -> Business. */
 export const ACCOUNT_DOC_KINDS = Object.keys(PROFILE_DOC_META) as DocumentKind[];
@@ -392,17 +382,15 @@ function serializeProfile(
     member_since: merchant.created_at.toISOString(),
     payout: serializePayout(merchant, user),
     documents: Object.entries(PROFILE_DOC_META)
-      // A company shows all four; an individual only their own two.
-      .filter(([kind]) =>
-        merchant.owner_type === "company" ? true : kind === "national_id" || kind === "kra_pin",
-      )
+      // "personal" docs (National ID + KRA PIN) always; the "business"
+      // group only for a company.
+      .filter(([, meta]) => meta.group === "personal" || merchant.owner_type === "company")
       .map(([kind, meta]) => {
-        const isCompany = merchant.owner_type === "company";
         const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
         return {
           kind,
-          label: meta.label(isCompany),
-          group: isCompany ? meta.companyGroup : ("personal" as const),
+          label: meta.label,
+          group: meta.group,
           review_state: doc?.review_state ?? "pending",
           uploaded_at: doc ? doc.created_at.toISOString() : null,
           document_id: doc?.id ?? null,
@@ -1025,7 +1013,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
 
   const requiredOwnerDocs: DocumentKind[] =
     merchant.owner_type === "company"
-      ? [...OWNER_DOC_KINDS, "certificate_of_incorporation", "cr12"]
+      ? [...OWNER_DOC_KINDS, "certificate_of_incorporation", "company_kra_pin", "cr12"]
       : OWNER_DOC_KINDS;
   for (const kind of requiredOwnerDocs) {
     if (!documents.some((d) => d.vehicle_id === null && d.kind === kind)) {
