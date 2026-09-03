@@ -286,15 +286,29 @@ export async function patchOnboarding(
 // (see openapi/merchant-settings.yaml)
 // ---------------------------------------------------------------------
 
-// Account-level documents shown on Settings -> Business. "personal" ones
-// are always shown; "business" ones only for a company. This is display +
-// upload only - the onboarding submission gate still uses OWNER_DOC_KINDS
-// (national_id + kra_pin) and is untouched.
-const PROFILE_DOC_META: Record<string, { label: string; group: "personal" | "business" }> = {
-  national_id: { label: "Owner ID - front and back", group: "personal" },
-  kra_pin: { label: "KRA PIN certificate", group: "personal" },
-  certificate_of_incorporation: { label: "Certificate of incorporation", group: "business" },
-  cr12: { label: "CR12 - company shareholding", group: "business" },
+// Account-level documents shown on Settings -> Business. `group` decides
+// which pill they sit under; for a company the KRA PIN certificate is the
+// *company's*, so it groups with the business papers. `personalGroup` is
+// what an individual account uses (there is no company/personal split
+// there - everything is "personal"). Display + upload only; the
+// submission gate is `requiredOwnerDocs` in assertCompleteForSubmission.
+const PROFILE_DOC_META: Record<
+  string,
+  { label: (isCompany: boolean) => string; companyGroup: "personal" | "business" }
+> = {
+  certificate_of_incorporation: {
+    label: () => "Certificate of incorporation",
+    companyGroup: "business",
+  },
+  cr12: { label: () => "CR12 - company shareholding", companyGroup: "business" },
+  kra_pin: {
+    label: (c) => (c ? "Company KRA PIN certificate" : "KRA PIN certificate"),
+    companyGroup: "business",
+  },
+  national_id: {
+    label: (c) => (c ? "Contact person's National ID" : "National ID - front and back"),
+    companyGroup: "personal",
+  },
 };
 /** Account-level document kinds that may be uploaded from Settings -> Business. */
 export const ACCOUNT_DOC_KINDS = Object.keys(PROFILE_DOC_META) as DocumentKind[];
@@ -378,13 +392,17 @@ function serializeProfile(
     member_since: merchant.created_at.toISOString(),
     payout: serializePayout(merchant, user),
     documents: Object.entries(PROFILE_DOC_META)
-      .filter(([, meta]) => meta.group === "personal" || merchant.owner_type === "company")
+      // A company shows all four; an individual only their own two.
+      .filter(([kind]) =>
+        merchant.owner_type === "company" ? true : kind === "national_id" || kind === "kra_pin",
+      )
       .map(([kind, meta]) => {
+        const isCompany = merchant.owner_type === "company";
         const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
         return {
           kind,
-          label: meta.label,
-          group: meta.group,
+          label: meta.label(isCompany),
+          group: isCompany ? meta.companyGroup : ("personal" as const),
           review_state: doc?.review_state ?? "pending",
           uploaded_at: doc ? doc.created_at.toISOString() : null,
           document_id: doc?.id ?? null,

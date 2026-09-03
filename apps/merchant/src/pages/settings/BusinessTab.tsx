@@ -352,7 +352,7 @@ function DocumentsCard({
         <div style={{ display: "flex", gap: 6, padding: "12px 18px 0" }}>
           {(
             [
-              ["business", "Business documents"],
+              ["business", "Company documents"],
               ["personal", "My documents"],
             ] as const
           ).map(([key, label]) => {

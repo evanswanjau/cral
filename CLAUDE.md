@@ -602,17 +602,25 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   `text[]`; there is no team table.
 - **`certificate_of_incorporation` + `cr12` are real company documents**
   now (added to `DocumentKind` + both upload schemas, 2026-09-04):
-  - **Onboarding** (`Documents.tsx` "Your documents" card) shows them for
-    a company, and `assertCompleteForSubmission` **requires them for a
-    company** (`requiredOwnerDocs` = `OWNER_DOC_KINDS` + the two). An
-    individual is unchanged (`OWNER_DOC_KINDS` only). `serializeState`'s
-    `owner_docs` and the onboarding draft carry the two extra slots.
+  - **Account documents split into three groups** (company request). For a
+    company: **Company documents** = `certificate_of_incorporation` +
+    `cr12` + `kra_pin` (the *company's* KRA PIN certificate); **Your
+    documents** = `national_id` (the contact person's ID); **Car
+    documents** = the existing per-vehicle logbook/insurance/tracker
+    cards. An individual keeps one "Your documents" card
+    (`national_id` + `kra_pin`).
+  - **Onboarding** (`Documents.tsx`) renders those cards; a company
+    submission requires all three company docs +
+    `national_id` (`requiredOwnerDocs` in `assertCompleteForSubmission` =
+    `OWNER_DOC_KINDS` + `certificate_of_incorporation` + `cr12`).
+    `serializeState.owner_docs` and the onboarding draft carry the extra
+    slots.
   - **Settings → Business documents card** — for a company, a
-    **"Business documents | My documents"** switch. Upload/Replace goes
-    through `POST /merchant/onboarding/documents` and is **only shown when
-    the merchant is mid-"Request a change"** (`canEdit`); otherwise the
-    card is View-only. `ACCOUNT_DOC_KINDS` in `modules/merchant/service.ts`
-    is the display/upload set; the submission gate uses `requiredOwnerDocs`.
+    **"Company documents | My documents"** switch (`PROFILE_DOC_META`
+    groups `kra_pin` with "business" for a company, "personal" for an
+    individual). Upload/Replace goes through `POST
+    /merchant/onboarding/documents` and is **only shown when the merchant
+    is mid-"Request a change"** (`canEdit`); otherwise View-only.
 - **Documents always read "PENDING REVIEW"** (`DOC_STATE.pending.label`)
   until a reviewer accepts/rejects — nothing sets an "actively reviewed"
   state (no admin console), so `docStateLabel`'s old draft/submitted split
