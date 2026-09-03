@@ -1,12 +1,15 @@
+import type { ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { P } from "./styles.js";
 
 /**
- * "Vehicles", "Bookings" and "Payouts" are shown - the design's canvas also
- * has Dashboard, Notifications and Settings, but those screens haven't been
- * asked for yet (see CLAUDE.md's "Phase 1 - Identity, merchant portal only"
- * scoping). Bookings and Payouts were both added explicitly by the owner
- * ahead of the delivery plan's phase order.
+ * Every screen in the design's canvas is now built, and all six are listed.
+ * Bookings, Payouts, Notifications, Settings and the Dashboard were each
+ * added explicitly by the owner ahead of the delivery plan's phase order.
+ *
+ * Dashboard is first and is the portal's index route - "/" renders it rather
+ * than redirecting to Vehicles, as it did before the screen existed. It
+ * carries no count: it is a place, not a queue.
  *
  * Payouts carries no count badge: a run count is not something a merchant
  * needs to act on, unlike an unanswered booking request, and a number there
@@ -23,13 +26,24 @@ export function SideNav({
   vehicleCount,
   bookingCount,
   notificationUnread,
+  footer,
 }: {
   vehicleCount: number;
   bookingCount: number;
   notificationUnread: number;
+  /** Hangs below the links. Only the dashboard passes one (its status card). */
+  footer?: ReactNode;
 }): JSX.Element {
   return (
     <nav style={P.nav}>
+      <NavLink to="/" end style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
+        {({ isActive }) => (
+          <>
+            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+            <span style={P.navLabel}>Dashboard</span>
+          </>
+        )}
+      </NavLink>
       <NavLink to="/vehicles" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
         {({ isActive }) => (
           <>
@@ -75,6 +89,7 @@ export function SideNav({
           </>
         )}
       </NavLink>
+      {footer}
     </nav>
   );
 }

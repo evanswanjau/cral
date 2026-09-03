@@ -2,6 +2,7 @@ import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom"
 import { AppLayout } from "./layouts/AppLayout.js";
 import { RequireAuth } from "./components/RequireAuth.js";
 import { RequireOnboarding } from "./components/RequireOnboarding.js";
+import { Dashboard } from "./pages/Dashboard.js";
 import { VehicleList } from "./pages/VehicleList.js";
 import { VehicleDetail } from "./pages/VehicleDetail.js";
 import { AddVehicle } from "./pages/AddVehicle.js";
@@ -37,7 +38,7 @@ const router = createBrowserRouter([
             path: "/",
             element: <AppLayout />,
             children: [
-              { index: true, element: <Navigate to="/vehicles" replace /> },
+              { index: true, element: <Dashboard /> },
               { path: "vehicles", element: <VehicleList /> },
               { path: "vehicles/new", element: <AddVehicle /> },
               { path: "vehicles/:vehicleId", element: <VehicleDetail /> },

@@ -29,10 +29,21 @@ import type {
   VehicleFilter,
 } from "./schemas.js";
 
-const VEHICLE_DOC_KINDS = ["logbook", "comprehensive_insurance", "tracker_certificate"] as const;
+/**
+ * The three documents a listing needs. Exported so the dashboard's fleet
+ * bands read the same list in the same order as this screen does.
+ */
+export const VEHICLE_DOC_KINDS = ["logbook", "comprehensive_insurance", "tracker_certificate"] as const;
 type VehicleDocKind = (typeof VEHICLE_DOC_KINDS)[number];
 const OWNER_DOC_KINDS = ["national_id", "kra_pin"] as const;
-const EXPIRING_WITHIN_DAYS = 30;
+/**
+ * How close to its expiry date a document starts reading as `expiring`.
+ * Exported because the dashboard's expiring-document card and the daily
+ * expiry-notification sweep must agree on what 'expiring' means - two
+ * horizons would put a card on the dashboard for a document no
+ * notification was ever sent about, or the reverse.
+ */
+export const EXPIRING_WITHIN_DAYS = 30;
 const VERIFICATION_FEE = kes(150000); // KES 1,500
 const VERIFICATION_VALID_DAYS = 365;
 
@@ -86,7 +97,7 @@ function moneyOrNull(vehicle: VehicleRow): Money | null {
  * "Automatic check" timeline entry) on top of the stored review_state. A
  * missing row is its own state, not modeled in the documents table.
  */
-function effectiveDocState(doc: DocumentRow | undefined): DocumentReviewState | "missing" {
+export function effectiveDocState(doc: DocumentRow | undefined): DocumentReviewState | "missing" {
   if (!doc) return "missing";
   if (doc.review_state === "rejected") return "rejected";
   if (doc.expires_at) {
