@@ -1,0 +1,486 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Merchant Dashboard API
+  version: "1.0.0"
+  description: >
+    The merchant portal's landing screen: one aggregate read that answers
+    "what needs me, what am I owed, and what happened". Design authority is
+    "Cruz Merchant Dashboard.dc.html".
+
+    **Why one endpoint rather than composing on the client.** Every list
+    endpoint in this API is cursor-paginated (spec §2 — no offset paging,
+    anywhere). A client that derived hire-day totals, payout projections or
+    outstanding-document counts from a list's `data` would be describing the
+    first page only, while the design's copy claims to describe the whole
+    account. `counts` is whole-set; `data` is not. So the aggregation happens
+    server-side, where the whole set is in reach.
+
+    **This endpoint owns no rules of its own.** Every figure here is read
+    from the service that already owns it — `payoutPosition` for anything
+    money-shaped, `effectiveDocState` for document bands, the notifications
+    feed for activity. A second copy of the payout maths is how this screen's
+    "awaiting payout" tile ends up disagreeing with the row on `/payouts`, in
+    the same way a second copy of `cutPayoutRun`'s rules is how a merchant
+    gets paid twice. Callers must be able to assert the two are equal.
+
+    **Numbers, not prose.** Money is the usual `{ amount, currency }` integer
+    pair and dates are RFC 3339 or bare Nairobi calendar days. The design's
+    greeting sentence ("Two vehicles are on hire today and your next payout
+    lands on Monday"), the "13 hire days" summary and the "EXPIRES IN 19
+    DAYS" kicker are all composed by the client from these fields —
+    display formatting is a client concern, never the API's (spec §2).
+
+    **Honest states.** `merchant_status.approved` reflects
+    `merchants.approved_at`, which nothing sets in Phase 1 because there is
+    no admin portal. The design's green "Company documents accepted · checked
+    12 Aug 2026" card renders only when that is genuinely true; otherwise the
+    client shows the in-review variant, with no tick and no date. This is the
+    same rule as the Settings `✓ VERIFIED` chip and the reason the fabricated
+    `id_verified` badge was removed.
+
+    Three controls on the design's canvas are deliberately **not** modeled:
+    the 3-month/6-month chart toggle, the `density` switch and `hideAmounts`.
+    They are canvas props for previewing the design, not product features —
+    `hideAmounts` in particular is a privacy feature that would need somewhere
+    to persist. Same footing as the omitted WhatsApp toggle.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: dashboard
+    description: The merchant portal's landing read
+
+paths:
+  /merchant/dashboard:
+    get:
+      tags: [dashboard]
+      summary: Everything the merchant dashboard renders, in one read
+      operationId: getMerchantDashboard
+      description: >
+        Scoped to the authenticated merchant. Every block has a defined empty
+        shape — a brand-new account with no vehicles, no bookings and no
+        payout history returns zeroes and empty arrays, never nulls standing
+        in for numbers.
+      responses:
+        "200":
+          description: The dashboard
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Dashboard" }
+        "401":
+          description: Not signed in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Integer minor units (cents). Never a float.
+        currency:
+          type: string
+          example: KES
+
+    Dashboard:
+      type: object
+      required:
+        [
+          greeting,
+          merchant_status,
+          needs_action,
+          tiles,
+          earnings,
+          week_bookings,
+          fleet,
+          next_payout,
+          expiring,
+          activity,
+        ]
+      properties:
+        greeting: { $ref: "#/components/schemas/Greeting" }
+        merchant_status: { $ref: "#/components/schemas/MerchantStatus" }
+        needs_action: { $ref: "#/components/schemas/NeedsAction" }
+        tiles: { $ref: "#/components/schemas/Tiles" }
+        earnings: { $ref: "#/components/schemas/Earnings" }
+        week_bookings: { $ref: "#/components/schemas/WeekBookings" }
+        fleet: { $ref: "#/components/schemas/Fleet" }
+        next_payout: { $ref: "#/components/schemas/NextPayout" }
+        expiring:
+          allOf: [{ $ref: "#/components/schemas/ExpiringDocument" }]
+          nullable: true
+          description: The soonest vehicle document inside the expiry horizon, or null.
+        activity:
+          type: array
+          description: >
+            The five newest notifications. The dashboard deliberately reuses
+            the notifications feed rather than deriving a second activity
+            stream from `audit_log`: audit rows are an append-only compliance
+            record, not merchant-facing copy, and a second source would drift
+            from the feed the merchant can actually open.
+          items: { $ref: "#/components/schemas/ActivityItem" }
+
+    Greeting:
+      type: object
+      required: [first_name, today, on_hire_count]
+      description: >
+        The raw facts behind the design's greeting sentence. The client
+        assembles a clause per fact and has a real zero state; there is no
+        server-composed sentence with holes in it.
+      properties:
+        first_name:
+          type: string
+          nullable: true
+          description: Null before onboarding collects a name.
+        today:
+          type: string
+          format: date
+          description: Today's Nairobi calendar day.
+        on_hire_count:
+          type: integer
+          description: Vehicles out on hire right now.
+        next_payout_date:
+          type: string
+          format: date
+          nullable: true
+          description: Nairobi day the next payout lands, or null when nothing is owed.
+
+    MerchantStatus:
+      type: object
+      required: [owner_type, approved, documents_complete, outstanding_document_count]
+      properties:
+        owner_type:
+          type: string
+          enum: [individual, company]
+        display_name:
+          type: string
+          nullable: true
+        approved:
+          type: boolean
+          description: >
+            `merchants.approved_at IS NOT NULL`. Nothing sets it in Phase 1 —
+            there is no admin portal — so this is normally false and the
+            client must render the in-review variant, not a decorative tick.
+        approved_at:
+          type: string
+          format: date-time
+          nullable: true
+        documents_complete:
+          type: boolean
+          description: Every account-level document required for this owner type is on file.
+        outstanding_document_count:
+          type: integer
+          description: Account-level documents still missing or rejected.
+
+    NeedsAction:
+      type: object
+      required: [vehicle_count, vehicles]
+      description: >
+        The red banner. `vehicle_count` is the whole-set count from the
+        vehicles service, not the length of `vehicles` — the list is capped so
+        the banner stays one strip.
+      properties:
+        vehicle_count:
+          type: integer
+        vehicles:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            required: [id, registration]
+            properties:
+              id: { type: string }
+              registration: { type: string }
+              reviewer_note:
+                type: string
+                nullable: true
+
+    Tiles:
+      type: object
+      required: [paid_this_month, on_hire, week, awaiting_payout]
+      properties:
+        paid_this_month:
+          type: object
+          required: [amount, run_count, previous_month_amount]
+          properties:
+            amount: { $ref: "#/components/schemas/Money" }
+            run_count: { type: integer }
+            previous_month_amount:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              description: Last month's net, so the client can render the delta itself.
+        on_hire:
+          type: object
+          required: [count, live_vehicle_count]
+          properties:
+            count: { type: integer }
+            live_vehicle_count: { type: integer }
+        week:
+          type: object
+          required: [booking_count, hire_days, request_count]
+          properties:
+            booking_count: { type: integer }
+            hire_days:
+              type: integer
+              description: Hire days falling inside this Nairobi week, not each booking's full length.
+            request_count:
+              type: integer
+              description: Requests still awaiting a response.
+        awaiting_payout:
+          type: object
+          required: [amount, hire_count]
+          properties:
+            amount:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              description: >
+                Identical to the `next_payout` tile on `GET /merchant/payouts`
+                — both read `payoutPosition`. If these ever differ, one of
+                them has forked the rules.
+            hire_count: { type: integer }
+            date:
+              type: string
+              format: date
+              nullable: true
+
+    Earnings:
+      type: object
+      required: [months, series]
+      description: >
+        The "What you kept" chart — net of commission, by Nairobi calendar
+        month, contiguous and zero-filled so a month with no run does not
+        collapse the axis. Buckets by `payout_runs.run_date`, exactly as the
+        Statements CSV does, so the chart and the statement cannot disagree.
+      properties:
+        months:
+          type: integer
+          description: Length of the series. Fixed at 6.
+        months_with_data:
+          type: integer
+          description: >
+            Months in the series carrying a run. Below three the client
+            replaces the chart with copy rather than drawing two bars scaled
+            against each other, which reads as a trend that is not there.
+        series:
+          type: array
+          items:
+            type: object
+            required: [month, label, net, current]
+            properties:
+              month:
+                type: string
+                example: "2026-08"
+              label:
+                type: string
+                example: AUG
+              net: { $ref: "#/components/schemas/Money" }
+              current:
+                type: boolean
+                description: The month in progress.
+
+    WeekBookings:
+      type: object
+      required: [from, to, booking_count, hire_days, bookings]
+      description: >
+        Bookings overlapping the current Nairobi week (Monday to Sunday).
+        Overlap, not containment — a hire that started last week and is still
+        running is exactly what "on hire today" means.
+      properties:
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        booking_count: { type: integer }
+        hire_days: { type: integer }
+        bookings:
+          type: array
+          items:
+            type: object
+            required:
+              [id, ref, status, hirer_name, vehicle_id, vehicle_registration, pickup_at, dropoff_at, merchant_net, gross, hire_days]
+            properties:
+              id: { type: string }
+              ref: { type: string }
+              status:
+                type: string
+                enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+              hirer_name: { type: string }
+              vehicle_id: { type: string }
+              vehicle_registration: { type: string }
+              vehicle_label:
+                type: string
+                description: Make, model and hire shape — the row's second line.
+              pickup_at: { type: string, format: date-time }
+              dropoff_at: { type: string, format: date-time }
+              hire_days: { type: integer }
+              merchant_net: { $ref: "#/components/schemas/Money" }
+              gross: { $ref: "#/components/schemas/Money" }
+
+    Fleet:
+      type: object
+      required: [vehicle_count, outstanding_document_count, vehicles]
+      properties:
+        vehicle_count:
+          type: integer
+          description: Whole-set count, not the length of `vehicles`.
+        outstanding_document_count:
+          type: integer
+          description: Vehicle documents missing or rejected across the whole fleet.
+        vehicles:
+          type: array
+          maxItems: 4
+          items:
+            type: object
+            required: [id, registration, title, status, verification_badge, documents]
+            properties:
+              id: { type: string }
+              registration: { type: string }
+              title:
+                type: string
+                description: Make, model and year as one line.
+              status:
+                type: string
+                enum: [draft, pending, review, action, rejected, live, paused]
+              verification_badge:
+                type: string
+                enum: [none, pending, active]
+              daily_rate:
+                allOf: [{ $ref: "#/components/schemas/Money" }]
+                nullable: true
+                description: Null on a draft with no rate set yet.
+              documents:
+                type: array
+                description: >
+                  One band per required vehicle document, always three, always
+                  in logbook / tracker / insurance order so the bands line up
+                  down the column. State comes from the vehicles service's own
+                  `effectiveDocState`, which is what makes the dashboard band
+                  and the vehicle detail chip agree.
+                items:
+                  type: object
+                  required: [kind, state]
+                  properties:
+                    kind:
+                      type: string
+                      enum: [logbook, tracker_certificate, comprehensive_insurance]
+                    state:
+                      type: string
+                      enum: [missing, ok, pending, expiring, rejected]
+
+    NextPayout:
+      type: object
+      required: [date, gross, commission, net, lines, clearing]
+      description: >
+        A projection of the run that has not been cut yet, plus what is still
+        clearing. Never stored — storing a projection means owning a
+        reconciliation job that does not exist.
+      properties:
+        date:
+          type: string
+          format: date
+          nullable: true
+        destination:
+          type: object
+          required: [method, detail]
+          properties:
+            method: { type: string, enum: [mpesa, bank] }
+            detail: { type: string }
+        gross: { $ref: "#/components/schemas/Money" }
+        commission:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: >
+            The difference between the summed line snapshots, never
+            `gross × COMMISSION_RATE`. A later rate change must not rewrite
+            what a merchant is about to be paid.
+        net: { $ref: "#/components/schemas/Money" }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/PayoutProjectionLine" }
+        clearing:
+          type: array
+          description: >
+            Bookings whose money is not payable yet — still on hire, or
+            returned with the hold not lapsed. The design greys these and
+            marks them "Next run".
+          items: { $ref: "#/components/schemas/PayoutProjectionLine" }
+
+    PayoutProjectionLine:
+      type: object
+      required: [booking_id, ref, hirer_name, vehicle_registration, dropoff_at, hire_days, net]
+      properties:
+        booking_id: { type: string }
+        ref: { type: string }
+        hirer_name: { type: string }
+        vehicle_registration: { type: string }
+        dropoff_at: { type: string, format: date-time }
+        hire_days: { type: integer }
+        net: { $ref: "#/components/schemas/Money" }
+
+    ExpiringDocument:
+      type: object
+      required: [vehicle_id, registration, kind, expires_on]
+      description: >
+        The soonest vehicle document inside the expiry horizon. The horizon is
+        the vehicles service's own `EXPIRING_WITHIN_DAYS`, shared with the
+        daily expiry-notification sweep, so this card and the notification it
+        pairs with cannot disagree about what "expiring" means.
+      properties:
+        vehicle_id: { type: string }
+        registration: { type: string }
+        kind:
+          type: string
+          enum: [comprehensive_insurance, logbook, tracker_certificate]
+        expires_on:
+          type: string
+          format: date
+          description: Bare Nairobi calendar day. The "in N days" figure is the client's to compute.
+
+    ActivityItem:
+      type: object
+      required: [id, title, kind, occurred_at, read]
+      properties:
+        id: { type: string }
+        title: { type: string }
+        body:
+          type: string
+          nullable: true
+        kind:
+          type: string
+          enum: [hire, money, doc, rate]
+        ref:
+          type: string
+          nullable: true
+        occurred_at: { type: string, format: date-time }
+        read: { type: boolean }
+        cta_href:
+          type: string
+          nullable: true
+
+security:
+  - bearerAuth: []

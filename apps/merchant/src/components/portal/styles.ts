@@ -687,4 +687,181 @@ export const P = {
   setPaidTitle: { font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A", marginBottom: 6 },
   setPaidBody: { margin: 0, font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
   setFeeBody: { padding: "16px 18px", display: "grid", gap: 11, fontVariantNumeric: "tabular-nums" },
+
+  // =====================================================================
+  // Dashboard - literal reads off "Cruz Merchant Dashboard.dc.html".
+  //
+  // The shell (page, nav, body) is shared with every other screen and is
+  // already above; everything here is the landing screen's own furniture.
+  // Card chrome repeats the `setCard`/`ntCard*` values on purpose - the
+  // design uses one card everywhere and each screen was simply built in a
+  // different session.
+  // =====================================================================
+
+  // --- greeting ---------------------------------------------------------
+  dashHead: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 },
+  dashH1: {
+    margin: "0 0 7px",
+    // The `wdth` axis needs the variable Archivo cut; with a wght-only
+    // build this declaration silently does nothing and the type renders
+    // too narrow (see CLAUDE.md's design-tokens note).
+    font: "600 clamp(25px,3.4vw,32px)/1.1 Archivo,sans-serif",
+    fontVariationSettings: "'wdth' 106",
+    letterSpacing: "-.022em",
+    color: "#0B0F1A",
+  },
+  dashLede: { margin: 0, font: "400 14px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: 560, textWrap: "pretty" },
+  dashHeadBtns: { display: "flex", gap: 8, flex: "none" },
+  dashGhostBtn: {
+    height: 44,
+    padding: "0 17px",
+    background: "#FFFFFF",
+    color: "#1A1F2B",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "600 14px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+  },
+  dashPrimaryBtn: {
+    height: 44,
+    padding: "0 20px",
+    background: "#0F23A8",
+    color: "#fff",
+    border: "none",
+    borderRadius: "var(--r)",
+    font: "600 14px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    transition: "background 120ms cubic-bezier(.2,.8,.25,1)",
+  },
+
+  // --- nav merchant-status card ----------------------------------------
+  dashNavCard: { marginTop: 14, padding: 14, background: "#FFFFFF", borderRadius: "var(--r-lg)" },
+  dashNavCardLabel: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 9 },
+  dashNavCardRow: { display: "flex", alignItems: "center", gap: 8, marginBottom: 7 },
+  dashNavCardGlyph: { width: 18, height: 18, borderRadius: 999, font: "600 10px/18px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
+  dashNavCardTitle: { font: "600 13px/1.3 'Instrument Sans',sans-serif" },
+  dashNavCardBody: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
+
+  // --- stat tiles -------------------------------------------------------
+  dashTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 16 },
+  dashTile: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", padding: "16px 17px" },
+  dashTileKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 11 },
+  dashTileValue: {
+    display: "flex",
+    alignItems: "baseline",
+    gap: 6,
+    font: "700 24px/1 Archivo,sans-serif",
+    fontVariationSettings: "'wdth' 108",
+    color: "#0B0F1A",
+    fontVariantNumeric: "tabular-nums",
+  },
+  dashTileUnit: { font: "500 12px/1 'Instrument Sans',sans-serif", color: "#838C9B" },
+  dashTileFoot: { display: "flex", alignItems: "center", gap: 7, marginTop: 9 },
+  dashTileDelta: { font: "600 12px/1.3 'Instrument Sans',sans-serif" },
+  dashTileNote: { font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" },
+
+  // --- two-column body --------------------------------------------------
+  dashCols: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
+  dashColMain: { flex: 1.55, minWidth: 320, display: "grid", gap: 16 },
+  dashColSide: { flex: 1, minWidth: 290, display: "grid", gap: 16 },
+  dashCard: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  dashCardHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", flexWrap: "wrap" },
+  dashCardTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
+  dashCardTag: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#9AA2B0" },
+
+  // --- "What you kept" chart -------------------------------------------
+  dashChartHead: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 12, padding: "16px 18px", borderBottom: "1px solid #F1F3F6", flexWrap: "wrap" },
+  dashChart: { padding: "20px 18px 16px", display: "flex", alignItems: "flex-end", gap: "clamp(8px,1.6vw,18px)", height: 186 },
+  dashChartCol: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", gap: 8, height: "100%" },
+  dashChartValue: { font: "500 11px/1 'IBM Plex Mono',monospace", fontVariantNumeric: "tabular-nums" },
+  dashChartBar: { width: "100%", borderRadius: "var(--r-sm) var(--r-sm) 0 0" },
+  dashChartLabel: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".08em" },
+  dashChartEmpty: { padding: "28px 18px 32px", display: "grid", gap: 8, justifyItems: "center", textAlign: "center" },
+
+  // --- list rows (bookings this week, your fleet) -----------------------
+  dashRow: { display: "flex", alignItems: "center", gap: "clamp(10px,1.4vw,16px)", padding: "15px 18px", borderBottom: "1px solid #F8F9FB", cursor: "pointer", flexWrap: "wrap", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  dashPlate: {
+    display: "inline-block",
+    padding: "5px 10px",
+    border: "1.5px solid #0B0F1A",
+    borderRadius: "var(--r-sm)",
+    font: "600 13px/1.2 'IBM Plex Mono',monospace",
+    letterSpacing: ".05em",
+    color: "#0B0F1A",
+    flex: "none",
+    fontVariantNumeric: "tabular-nums",
+    cursor: "pointer",
+    background: "transparent",
+  },
+  dashRowMain: { flex: 1, minWidth: 150 },
+  dashRowTitle: { font: "600 14px/1.25 'Instrument Sans',sans-serif", color: "#0B0F1A", textDecoration: "underline", textDecorationColor: "#CDD2DA", textUnderlineOffset: 3 },
+  dashRowMeta: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2 },
+  dashPill: { display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: 999, font: "600 12px/1.3 'Instrument Sans',sans-serif", flex: "none" },
+  dashPillDot: { width: 7, height: 7, borderRadius: 999, flex: "none" },
+  dashRowMoney: { width: 120, textAlign: "right", flex: "none" },
+  dashRowKeep: { display: "block", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
+  dashRowGross: { display: "block", font: "400 11px/1.3 'IBM Plex Mono',monospace", color: "#A7AEBB", marginTop: 2 },
+  dashChevron: { font: "400 16px/1 'Instrument Sans',sans-serif", color: "#CDD2DA", flex: "none" },
+
+  // --- fleet row -------------------------------------------------------
+  dashFleetMain: { flex: 1, minWidth: 160 },
+  dashFleetTitleLine: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  dashFleetTitle: { font: "600 14px/1.25 Archivo,sans-serif", color: "#0B0F1A" },
+  dashFleetBadge: { display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", background: "#DDF3E9", border: "1px solid #A8DEC7", borderRadius: 999, font: "600 10px/1.5 'IBM Plex Mono',monospace", letterSpacing: ".05em", color: "#076945" },
+  dashDocBands: { display: "flex", gap: 4, marginTop: 6 },
+  dashDocBand: { width: 34, height: 4, borderRadius: 999 },
+  dashFleetRate: { width: 112, textAlign: "right", font: "600 13px/1.3 'Instrument Sans',sans-serif", flex: "none", fontVariantNumeric: "tabular-nums" },
+  dashCardFoot: { padding: "13px 18px", background: "#FAFBFC" },
+  dashFootBtn: { height: 34, padding: "0 14px", background: "#FFFFFF", color: "#0F23A8", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
+
+  // --- next payout card ------------------------------------------------
+  dashPayoutHead: { padding: "16px 18px", borderBottom: "1px solid #F1F3F6" },
+  dashPayoutTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
+  dashPayoutSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
+  dashPayoutBody: { padding: "16px 18px", display: "grid", gap: 13, fontVariantNumeric: "tabular-nums" },
+  dashPayoutLine: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 },
+  dashPayoutPlate: { display: "block", font: "600 13px/1.35 'Instrument Sans',sans-serif" },
+  dashPayoutMeta: { display: "block", font: "400 11px/1.45 'IBM Plex Mono',monospace", color: "#A7AEBB", marginTop: 3 },
+  dashPayoutAmount: { font: "600 13px/1.3 'Instrument Sans',sans-serif", flex: "none", whiteSpace: "nowrap" },
+  dashPayoutComm: { display: "flex", justifyContent: "space-between", gap: 12, paddingTop: 12, borderTop: "1px dashed #E4E7EC", font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" },
+  dashPayoutCommVal: { fontWeight: 600, color: "#D81E32" },
+  dashPayoutTotal: { display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, padding: "15px 18px", borderTop: "1px solid #E4E7EC" },
+  dashPayoutTotalKey: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  dashPayoutTotalVal: { font: "700 24px/1 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
+  dashPayoutTotalUnit: { font: "500 12px/1 'Instrument Sans',sans-serif", color: "#838C9B" },
+  dashPayoutFoot: { display: "flex", alignItems: "center", gap: 9, padding: "12px 18px", background: "#FAFBFC", borderTop: "1px solid #F1F3F6" },
+  dashPayoutFootDot: { width: 7, height: 7, borderRadius: 999, background: "#C77400", flex: "none" },
+  dashPayoutFootText: { font: "600 12px/1.4 'Instrument Sans',sans-serif", color: "#8A5200" },
+
+  // --- expiring card ----------------------------------------------------
+  // The 14 deg skewed rule below is the product's one angled element, and
+  // the masthead already spends it. This card is the same documented
+  // exception the Vehicles reviewer-note card takes: the design treats the
+  // card as its own surface. The amber top bar is *not* skewed.
+  dashExpiryCard: { background: "#FFFFFF", border: "1px solid #F5D9A3", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  dashExpiryBar: { height: 5, background: "#C77400" },
+  dashExpiryBody: { padding: "16px 18px" },
+  dashExpiryKickerRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 },
+  dashExpiryRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
+  dashExpiryKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".11em", color: "#838C9B" },
+  dashExpiryTitle: { font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A", marginBottom: 6 },
+  dashExpiryText: { margin: "0 0 14px", font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
+  dashExpiryBtn: { height: 38, padding: "0 15px", background: "#0F23A8", color: "#fff", border: "none", borderRadius: "var(--r)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
+
+  // --- recent activity --------------------------------------------------
+  dashActivityHead: { padding: "15px 18px", borderBottom: "1px solid #F1F3F6", font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
+  dashActivityBody: { padding: "16px 18px", display: "grid", gap: 0 },
+  dashActivityRow: { display: "grid", gridTemplateColumns: "9px minmax(0,1fr)", gap: 12 },
+  dashActivityRail: { display: "flex", flexDirection: "column", alignItems: "center" },
+  dashActivityDot: { width: 9, height: 9, borderRadius: 999, marginTop: 5, flex: "none" },
+  dashActivityLine: { flex: 1, width: 1, background: "#F1F3F6" },
+  dashActivityMain: { paddingBottom: 15 },
+  dashActivityLabel: { font: "600 13px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  dashActivityText: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginTop: 2 },
+  dashActivityWhen: { font: "400 11px/1.3 'IBM Plex Mono',monospace", letterSpacing: ".03em", color: "#A7AEBB", marginTop: 4 },
+
+  // --- in-card empty state ---------------------------------------------
+  dashCardEmpty: { padding: "28px 18px 30px", display: "grid", gap: 6, justifyItems: "center", textAlign: "center" },
+  dashCardEmptyTitle: { font: "600 14px/1.3 Archivo,sans-serif", color: "#0B0F1A" },
+  dashCardEmptyBody: { margin: 0, font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B", maxWidth: 300 },
 } satisfies Record<string, CSSProperties>;

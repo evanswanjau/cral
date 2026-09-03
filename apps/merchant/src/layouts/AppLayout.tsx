@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { loadDraftFromServer } from "../lib/onboarding-draft.js";
 import { getMe } from "../lib/auth-api.js";
 import { AppHeader } from "../components/portal/AppHeader.js";
 import { SideNav } from "../components/portal/SideNav.js";
+import { MerchantStatusCard } from "../components/portal/MerchantStatusCard.js";
 import { ToastProvider } from "../components/portal/Toast.js";
 import { P } from "../components/portal/styles.js";
 import { useVehicleList } from "../lib/vehicles-api.js";
@@ -21,6 +22,10 @@ export function AppLayout(): ReactNode {
   const { data: vehicles } = useVehicleList("all");
   const { data: bookings } = useBookingList("all");
   const { data: notificationUnread } = useNotificationUnread();
+  // The design hangs the merchant-status card under the nav, and only on
+  // the dashboard. It reads the dashboard query the page has already
+  // fetched, so this costs no second request.
+  const onDashboard = useLocation().pathname === "/";
   const { data: profile } = useProfile();
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
@@ -41,6 +46,7 @@ export function AppLayout(): ReactNode {
               vehicleCount={vehicles?.counts.all ?? 0}
               bookingCount={bookings?.counts.all ?? 0}
               notificationUnread={notificationUnread ?? 0}
+              footer={onDashboard ? <MerchantStatusCard /> : null}
             />
             <div style={P.main}>
               <Outlet />

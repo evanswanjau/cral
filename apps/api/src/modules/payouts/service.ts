@@ -178,7 +178,7 @@ function composeFootnote(run: PayoutRunRow, lineCount: number): string {
  * exactly once; the unique index on `booking_id` is what makes that true
  * under concurrency rather than just usually.
  */
-async function payableBookings(trx: Knex.Transaction | Knex, merchantId: string): Promise<BookingRow[]> {
+export async function payableBookings(trx: Knex.Transaction | Knex, merchantId: string): Promise<BookingRow[]> {
   return trx<BookingRow>("bookings")
     .leftJoin("payout_run_lines", "payout_run_lines.booking_id", "bookings.id")
     .where("bookings.merchant_id", merchantId)
@@ -320,9 +320,38 @@ async function lineCounts(runIds: string[]): Promise<Map<string, number>> {
  * is a projection over bookings that have not been cut into a run yet, and
  * storing a projection means owning a reconciliation job that doesn't exist.
  */
-async function buildSummary(merchantId: string, destination: { method: string; detail: string; accountName: string }) {
-  const now = new Date();
+export interface PayoutPosition {
+  /** Runs cut and waiting to go out. */
+  pendingRuns: PayoutRunRow[];
+  /** Completed, deposit released, not yet on any run - the next run's contents. */
+  payable: BookingRow[];
+  /** Still on hire, or returned with the deposit hold not yet lapsed. */
+  clearing: BookingRow[];
+  /** Sum of `payable` plus every pending run's net. */
+  nextPayoutAmount: number;
+  /** Sum of `clearing`. */
+  clearingAmount: number;
+  /** Bookings in `clearing` that are out on hire right now. */
+  onHireCount: number;
+  /** Hires the next payout covers - payable bookings plus pending run lines. */
+  nextHires: number;
+  /** Nairobi day the next payout lands, or null when nothing is owed. */
+  nextDate: string | null;
+  /** Net paid out so far this Nairobi calendar month, and over how many runs. */
+  paidThisMonth: number;
+  paidThisMonthRuns: number;
+}
 
+/**
+ * Everything owed, clearing and recently paid, in one read.
+ *
+ * Exported because the dashboard shows the same figures as the Payouts
+ * screen and they have to agree exactly. A second copy of these rules is how
+ * a dashboard tile ends up disagreeing with the row on `/payouts`, the same
+ * way a second copy of `cutPayoutRun`'s rules is how a merchant gets paid
+ * twice. Every caller reads this; nobody re-derives it.
+ */
+export async function payoutPosition(merchantId: string, now: Date = new Date()): Promise<PayoutPosition> {
   // "Next payout" is everything owed but not yet sent: runs already cut and
   // waiting to go out, plus payable bookings no run has picked up yet. The
   // design shows the tile and the scheduled run carrying the same figure —
@@ -341,34 +370,50 @@ async function buildSummary(merchantId: string, destination: { method: string; d
 
   // Money that will become payable but isn't yet: the hire is still running,
   // or it finished and the deposit hold hasn't lapsed.
-  const clearingRows = await db<BookingRow>("bookings")
+  const clearing = await db<BookingRow>("bookings")
     .where({ merchant_id: merchantId })
     .where((q) =>
       q
         .whereIn("status", ["confirmed", "active"])
         .orWhere((inner) => inner.where("status", "completed").where("deposit_released", false)),
     )
-    .select("merchant_net_amount", "status");
-  const clearingAmount = clearingRows.reduce((sum, b) => sum + b.merchant_net_amount, 0);
-  const onHireCount = clearingRows.filter((b) => b.status === "active").length;
+    .orderBy("dropoff_at", "asc")
+    .select("*");
+  const clearingAmount = clearing.reduce((sum, b) => sum + b.merchant_net_amount, 0);
+  const onHireCount = clearing.filter((b) => b.status === "active").length;
 
   const monthStart = nairobiDayStart(`${nairobiDay(now).slice(0, 7)}-01`);
   const paidRuns = await db<PayoutRunRow>("payout_runs")
     .where({ merchant_id: merchantId, status: "paid" })
     .whereNotNull("paid_at")
     .select("net_amount", "paid_at");
-  const paidThisMonth = paidRuns
-    .filter((r) => r.paid_at !== null && r.paid_at >= monthStart)
-    .reduce((sum, r) => sum + r.net_amount, 0);
+  const paidThisMonthRuns = paidRuns.filter((r) => r.paid_at !== null && r.paid_at >= monthStart);
 
-  const allRuns = await db<PayoutRunRow>("payout_runs").where({ merchant_id: merchantId }).select("net_amount");
-
-  const nextHires =
-    payable.length + pendingRuns.reduce((sum, r) => sum + (pendingLineCounts.get(r.id) ?? 0), 0);
+  const nextHires = payable.length + pendingRuns.reduce((sum, r) => sum + (pendingLineCounts.get(r.id) ?? 0), 0);
   // The soonest run already on the books wins; otherwise the next Monday, and
   // only when there is actually something to send.
   const scheduledDates = pendingRuns.map((r) => r.run_date).sort();
   const nextDate = scheduledDates[0] ?? (nextPayoutAmount > 0 ? nextMonday(now) : null);
+
+  return {
+    pendingRuns,
+    payable,
+    clearing,
+    nextPayoutAmount,
+    clearingAmount,
+    onHireCount,
+    nextHires,
+    nextDate,
+    paidThisMonth: paidThisMonthRuns.reduce((sum, r) => sum + r.net_amount, 0),
+    paidThisMonthRuns: paidThisMonthRuns.length,
+  };
+}
+
+async function buildSummary(merchantId: string, destination: { method: string; detail: string; accountName: string }) {
+  const position = await payoutPosition(merchantId);
+  const { nextPayoutAmount, clearingAmount, onHireCount, nextHires, nextDate } = position;
+
+  const allRuns = await db<PayoutRunRow>("payout_runs").where({ merchant_id: merchantId }).select("net_amount");
 
   return {
     tiles: [
@@ -389,8 +434,8 @@ async function buildSummary(merchantId: string, destination: { method: string; d
       },
       {
         key: "paid_this_month" as const,
-        amount: kes(paidThisMonth),
-        note: `${paidRuns.filter((r) => r.paid_at !== null && r.paid_at >= monthStart).length} runs · after commission`,
+        amount: kes(position.paidThisMonth),
+        note: `${position.paidThisMonthRuns} runs · after commission`,
       },
     ],
     run_count: allRuns.length,
@@ -594,6 +639,51 @@ function monthLabel(month: string): string {
  * run's line snapshots — so a later COMMISSION_RATE change can't rewrite a
  * month a merchant was already paid.
  */
+/**
+ * Net kept per Nairobi calendar month, newest month last, for the dashboard's
+ * "What you kept" chart.
+ *
+ * Contiguous and zero-filled: a month with no run is a real zero, and
+ * dropping it would put non-adjacent months side by side on an axis that
+ * reads as continuous. `months_with_data` is returned alongside so the client
+ * can decline to draw a trend it does not have enough points for.
+ *
+ * Buckets by `run_date` over every run, exactly as `listStatements` does, so
+ * the chart and the statement CSV for the same month always agree.
+ */
+export async function payoutMonthlyNet(
+  merchantId: string,
+  months = 6,
+  now: Date = new Date(),
+): Promise<{ months: number; months_with_data: number; series: { month: string; net: number; current: boolean }[] }> {
+  const runs = await db<PayoutRunRow>("payout_runs")
+    .where({ merchant_id: merchantId })
+    .select("run_date", "net_amount");
+
+  const byMonth = new Map<string, number>();
+  for (const run of runs) {
+    const month = String(run.run_date).slice(0, 7);
+    byMonth.set(month, (byMonth.get(month) ?? 0) + run.net_amount);
+  }
+
+  const current = nairobiDay(now).slice(0, 7);
+  const [year, month] = current.split("-").map(Number) as [number, number];
+  const series: { month: string; net: number; current: boolean }[] = [];
+  for (let back = months - 1; back >= 0; back--) {
+    // Date arithmetic on a UTC anchor - month keys are calendar labels, not
+    // instants, so there is nothing here to shift across a zone boundary.
+    const d = new Date(Date.UTC(year, month - 1 - back, 1));
+    const key = d.toISOString().slice(0, 7);
+    series.push({ month: key, net: byMonth.get(key) ?? 0, current: key === current });
+  }
+
+  return {
+    months,
+    months_with_data: series.filter((m) => m.net !== 0).length,
+    series,
+  };
+}
+
 export async function listStatements(userId: string) {
   const merchant = await getOrCreateMerchant(userId);
   const runs = await db<PayoutRunRow>("payout_runs")
