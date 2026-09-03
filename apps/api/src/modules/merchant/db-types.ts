@@ -62,6 +62,8 @@ export interface VehicleRow {
   pickup_address: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;
+  /** "list" | "net" - which price view the merchant used (see 20260904090000). Display only. */
+  rate_mode: string;
   insurance_expiry: string | null;
   status: VehicleStatus;
   listing_ref: string | null;

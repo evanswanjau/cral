@@ -52,6 +52,7 @@ export interface VehicleDetail extends VehicleSummary {
   colour: string | null;
   minimum_hire_days: number;
   chauffeured: boolean;
+  rate_mode: "list" | "net";
   verification_badge_expires_at: string | null;
   reviewer_note: string | null;
   reviewer_note_meta: string | null;
@@ -104,6 +105,7 @@ export interface CreateVehicleInput {
   county: string;
   pickup_address: string;
   daily_rate: string;
+  rate_mode?: "list" | "net" | undefined;
   minimum_hire_days?: number | undefined;
   chauffeured?: boolean | undefined;
 }
@@ -114,6 +116,7 @@ export function createVehicle(input: CreateVehicleInput) {
 
 export interface PriceAvailabilityInput {
   daily_rate?: string;
+  rate_mode?: "list" | "net";
   minimum_hire_days?: number;
   county?: string;
   pickup_address?: string;

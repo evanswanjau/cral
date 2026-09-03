@@ -42,6 +42,8 @@ export const VehicleInputSchema = z.object({
   county: z.string().optional(),
   pickup_address: z.string().optional(),
   daily_rate: z.string().optional(),
+  // Display-only preference; `daily_rate` is always the gross/list price.
+  rate_mode: z.enum(["list", "net"]).optional(),
   insurance_expiry: z.string().nullable().optional(),
   chauffeured: z.boolean().optional(),
 });

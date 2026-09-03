@@ -62,6 +62,8 @@ export interface DraftVehicle {
   county: string;
   pickupAddress: string;
   dailyRate: string;
+  /** "list" = dailyRate is the price a hirer pays; "net" = it was grossed up from a take-home amount. */
+  rateMode: "list" | "net";
   /** true = hire comes with the owner's driver; false = self-drive. */
   chauffeured: boolean;
   photos: DraftPhoto[];
@@ -167,6 +169,7 @@ export function emptyVehicle(id: string): DraftVehicle {
     county: "",
     pickupAddress: "",
     dailyRate: "",
+    rateMode: "list",
     chauffeured: true,
     photos: [],
     docs: { logbook: null, comprehensiveInsurance: null, trackerCertificate: null },
@@ -228,6 +231,7 @@ interface WireVehicle {
   county: string | null;
   pickup_address: string | null;
   daily_rate: string;
+  rate_mode?: "list" | "net";
   chauffeured: boolean;
   insurance_expiry: string | null;
   docs: {
@@ -294,6 +298,7 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     pickupAddress: v.pickup_address ?? "",
     chauffeured: v.chauffeured ?? true,
     dailyRate: v.daily_rate,
+    rateMode: v.rate_mode === "net" ? "net" : "list",
     photos: v.photos
       .filter((p): p is WireDocSlot => p !== null)
       .map((p) => ({ id: p.document_id, documentId: p.document_id, name: p.original_name, size: p.size_bytes, type: p.content_type })),
@@ -458,10 +463,11 @@ export async function confirmPhoneVerification(code: string): Promise<void> {
 // --- vehicles --------------------------------------------------------
 
 function vehicleToWireInput(v: Partial<DraftVehicle>) {
-  const { pickupAddress, dailyRate, insuranceExpiry, ...rest } = v;
+  const { pickupAddress, dailyRate, rateMode, insuranceExpiry, ...rest } = v;
   const body: Record<string, unknown> = { ...rest };
   if (pickupAddress !== undefined) body.pickup_address = pickupAddress;
   if (dailyRate !== undefined) body.daily_rate = dailyRate;
+  if (rateMode !== undefined) body.rate_mode = rateMode;
   if (insuranceExpiry !== undefined) body.insurance_expiry = insuranceExpiry || null;
   return body;
 }

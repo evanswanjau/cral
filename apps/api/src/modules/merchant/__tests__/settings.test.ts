@@ -353,6 +353,29 @@ describe("Settings → Security — account deletion", () => {
     expect(res.body.error.code).toBe("account_suspended");
   });
 
+  it("kills a live session at the next refresh once the account is suspended", async () => {
+    const { userId, email } = await newMerchant();
+    const login = await request(app)
+      .post("/auth/login")
+      .send({ identifier: email, password: "correct horse battery staple", device_id: "d-refresh" });
+    const refresh = login.body.refresh_token as string;
+    expect(refresh).toBeTruthy();
+
+    await db("users").where({ id: userId }).update({ status: "suspended" });
+
+    const res = await request(app).post("/auth/token/refresh").send({ refresh_token: refresh });
+    expect(res.status).toBe(403);
+    expect(res.body.error.code).toBe("account_suspended");
+
+    // That session is now revoked and a second refresh with the same token fails too.
+    const again = await request(app).post("/auth/token/refresh").send({ refresh_token: refresh });
+    expect(again.status).toBe(401);
+    const revoked = await db("sessions")
+      .where({ user_id: userId, revoked_reason: "account_suspended" })
+      .first();
+    expect(revoked).toBeTruthy();
+  });
+
   it("the sweep scrubs PII and marks deleted once the grace period elapses, keeping records untouched", async () => {
     const { userId, accessToken } = await newMerchant();
     // Materialise the merchant row (lazily created) so we can assert it survives.

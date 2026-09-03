@@ -610,6 +610,24 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
       });
     }
 
+    // A suspended or deleted account can't extend its session - within one
+    // refresh cycle its access token stops working everywhere (which
+    // includes accepting bookings). Same rule as `login`.
+    if (user.status === "suspended" || user.status === "deleted") {
+      await db<SessionRow>("sessions")
+        .where({ id: byCurrentHash.id })
+        .update({ revoked_at: new Date(), revoked_reason: `account_${user.status}` });
+      throw new ApiError({
+        status: user.status === "suspended" ? 403 : 401,
+        type: "auth_error",
+        code: user.status === "suspended" ? "account_suspended" : "invalid_refresh_token",
+        message:
+          user.status === "suspended"
+            ? "This account is suspended. Contact CRAL support."
+            : "Please sign in again.",
+      });
+    }
+
     const newRefreshToken = generateOpaqueToken();
     const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000);
 

@@ -24,6 +24,7 @@ export const CreateVehicleSchema = z.object({
   county: z.string().min(1),
   pickup_address: z.string().min(1),
   daily_rate: z.string().min(1),
+  rate_mode: z.enum(["list", "net"]).optional(),
   minimum_hire_days: z.number().int().min(1).max(30).optional(),
   chauffeured: z.boolean().optional(),
 });
@@ -32,6 +33,7 @@ export type CreateVehicleInput = z.infer<typeof CreateVehicleSchema>;
 /** Body for the "Price & availability" modal — only what that modal edits. */
 export const PriceAvailabilitySchema = z.object({
   daily_rate: z.string().optional(),
+  rate_mode: z.enum(["list", "net"]).optional(),
   minimum_hire_days: z.number().int().min(1).max(30).optional(),
   county: z.string().optional(),
   pickup_address: z.string().optional(),

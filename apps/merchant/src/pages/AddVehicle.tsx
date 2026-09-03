@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Combobox } from "../components/onboarding/Combobox.js";
 import { Earnings } from "../components/onboarding/steps/Vehicles.js";
+import { RateField } from "../components/onboarding/RateField.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../lib/vehicle-catalogue.js";
 import { VEHICLE_CATEGORIES, type VehicleType } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
@@ -49,6 +50,7 @@ export function AddVehicle(): JSX.Element {
   const [county, setCounty] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
   const [dailyRate, setDailyRate] = useState("");
+  const [rateMode, setRateMode] = useState<"list" | "net">("list");
 
   const requiredFilled = make.trim() && model.trim() && year.trim() && registration.trim() && county.trim() && pickupAddress.trim() && dailyRate.trim();
 
@@ -72,6 +74,7 @@ export function AddVehicle(): JSX.Element {
         county: county.trim(),
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),
+        rate_mode: rateMode,
       });
       flash("Draft created - add its documents and photos next.", "#6FC8F0");
       navigate(`/vehicles/${created.id}`);
@@ -147,12 +150,15 @@ export function AddVehicle(): JSX.Element {
           <FormField label="Pickup address" required error={showErrors && !pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
             <TextInput value={pickupAddress} onChange={(e) => setPickupAddress(e.target.value)} placeholder="Westlands, Nairobi" error={showErrors && !pickupAddress.trim()} />
           </FormField>
-          <FormField label="Daily rate" required error={showErrors && !dailyRate.trim() ? "Required." : undefined} helper="What a hirer pays per day. You can change it later.">
-            <div style={{ display: "flex" }}>
-              <span style={O.kesPrefixTag}>KES</span>
-              <TextInput value={dailyRate} onChange={(e) => setDailyRate(e.target.value.replace(/\D/g, ""))} placeholder="8,500" inputMode="numeric" style={{ borderRadius: "0 8px 8px 0" }} error={showErrors && !dailyRate.trim()} />
-            </div>
-          </FormField>
+          <RateField
+            grossValue={dailyRate}
+            mode={rateMode}
+            onChange={(g, m) => {
+              setDailyRate(g);
+              setRateMode(m);
+            }}
+            error={showErrors && !dailyRate.trim()}
+          />
         </div>
       </div>
 

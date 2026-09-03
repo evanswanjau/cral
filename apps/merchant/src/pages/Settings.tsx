@@ -92,6 +92,19 @@ export function Settings(): JSX.Element {
         </div>
       )}
 
+      {profile?.account_status === "suspended" && (
+        <div style={{ ...P.banner, background: "#FDE7EA", borderColor: "#F7BDC5" }}>
+          <span style={P.bannerDot} />
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={P.bannerTitle}>This account is suspended</div>
+            <div style={P.bannerBody}>
+              Your listings can't be hired while this is in place. Contact CRAL support to sort it
+              out.
+            </div>
+          </div>
+        </div>
+      )}
+
       {profile?.account_status === "pending_deletion" && (
         <div style={{ ...P.banner, background: "#FDE7EA", borderColor: "#F7BDC5" }}>
           <span style={P.bannerDot} />

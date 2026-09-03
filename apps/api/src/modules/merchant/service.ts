@@ -190,6 +190,7 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
+    rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
     chauffeured: vehicle.chauffeured,
     insurance_expiry: vehicle.insurance_expiry,
     docs: {

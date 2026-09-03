@@ -5,6 +5,7 @@ import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
 import { VEHICLE_CATEGORIES, vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import { COUNTIES } from "../../../lib/kenya.js";
+import { RateField } from "../RateField.js";
 import {
   BackButton,
   FormField,
@@ -311,19 +312,12 @@ function VehicleForm({
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
-              <FormField label="Daily rate" required error={showErrors && !v.dailyRate.trim() ? "Required." : undefined} helper="What a hirer pays per day. You can change it later from your dashboard.">
-                <div style={{ display: "flex" }}>
-                  <span style={O.kesPrefixTag}>KES</span>
-                  <TextInput
-                    value={v.dailyRate}
-                    onChange={(e) => patch({ dailyRate: e.target.value.replace(/\D/g, "") })}
-                    placeholder="8,500"
-                    inputMode="numeric"
-                    style={{ borderRadius: "0 8px 8px 0" }}
-                    error={showErrors && !v.dailyRate.trim()}
-                  />
-                </div>
-              </FormField>
+              <RateField
+                grossValue={v.dailyRate}
+                mode={v.rateMode}
+                onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
+                error={showErrors && !v.dailyRate.trim()}
+              />
               <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
                 <Select
                   value={v.chauffeured ? "chauffeured" : "self_drive"}
