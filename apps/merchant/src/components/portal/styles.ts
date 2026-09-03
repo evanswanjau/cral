@@ -3,13 +3,13 @@ import type { CSSProperties } from "react";
 /**
  * Merchant portal shell + Vehicles screen styles, taken verbatim from the
  * design bundle's "Cruz Merchant Portal.dc.html" (see CLAUDE.md's "Getting
- * the real screen source" note — every value here is a literal read off
+ * the real screen source" note - every value here is a literal read off
  * that file's inline styles, not a screenshot guess). Kept as literal
  * values rather than Tailwind utilities, same reasoning as
  * `apps/merchant/src/components/onboarding/styles.ts`.
  */
 // One shared column template for the vehicles table's header and every
-// row — see `table`/`tableHead`/`row` below for why this lives outside P
+// row - see `table`/`tableHead`/`row` below for why this lives outside P
 // (it's a grid-template string, not a CSSProperties object).
 export const TABLE_GRID_COLS =
   "minmax(96px,1fr) minmax(180px,2.4fr) minmax(120px,1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
@@ -133,7 +133,7 @@ export const P = {
   // One shared column template for both the header and every row, so the
   // six columns land at even, matched positions instead of a flex-grow
   // title column shoving the last three into a cramped cluster on the
-  // right (that was the "big gap" — the title column absorbing all the
+  // right (that was the "big gap" - the title column absorbing all the
   // slack while docs/rate/date stayed pinned to fixed pixel widths).
   table: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
   tableHead: { display: "grid", gridTemplateColumns: TABLE_GRID_COLS, alignItems: "center", columnGap: "clamp(12px,1.6vw,20px)", padding: "11px 18px", background: "#FAFBFC", borderBottom: "1px solid #E4E7EC" },
@@ -186,7 +186,7 @@ export const P = {
   // --- photos ---------------------------------------------------------
   // A shared explicit row height (not aspect-ratio on the main tile alone)
   // is what keeps the two-thumb column's rows evenly split and matched to
-  // the main photo's height — grid-stretching a column with no defined row
+  // the main photo's height - grid-stretching a column with no defined row
   // tracks left the thumbs auto-sized to their own content instead.
   photoGrid: { display: "grid", gridTemplateColumns: "2fr 1fr", gridTemplateRows: "clamp(220px,26vw,320px)", gap: 8 },
   photoMain: { position: "relative", borderRadius: "var(--r-lg)", border: "1px solid #E4E7EC", background: "repeating-linear-gradient(135deg,#F1F3F6 0 10px,#FAFBFC 10px 20px)", display: "grid", placeItems: "center", overflow: "hidden", width: "100%", height: "100%" },
@@ -392,7 +392,7 @@ export const P = {
   poTotalNetVal: { font: "700 20px/1 Archivo,sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
 
   // The design gives this note card its own 14-degree rule alongside the
-  // masthead's — the same documented exception the Vehicles reviewer-note
+  // masthead's - the same documented exception the Vehicles reviewer-note
   // card relies on (a note card counts as its own surface).
   poFootnote: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#EDEFFC", border: "1px solid #B6C0F4", borderRadius: "var(--r-lg)", flexWrap: "wrap" },
   poFootnoteRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
@@ -458,4 +458,233 @@ export const P = {
   ntQuietTimeInput: { width: "100%", height: 44, padding: "0 11px", background: "#FFFFFF", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "500 14px/1 'IBM Plex Mono',monospace", color: "#1A1F2B" },
 
   ntSaveBar: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 18, flexWrap: "wrap" },
+
+  // --- Settings shell + tabs ------------------------------------------
+  // Literal reads off "Cruz Merchant Settings.dc.html". Prefixed `set`.
+  // The card head trio (`setCardHead`/`setCardTitle`/`setCardSub`) is the
+  // same values as `ntCardHead`/`ntCardTitle`/`ntCardSub` - that design
+  // file was just first read for the Notifications tab. Kept as its own
+  // keys so the Notifications rename is never forced by a Settings change.
+  setBackBtn: {
+    height: 44,
+    padding: "0 17px",
+    background: "#FFFFFF",
+    color: "#1A1F2B",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "600 14px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    flex: "none",
+  },
+  setTabStrip: {
+    display: "flex",
+    gap: 6,
+    flexWrap: "wrap",
+    paddingBottom: 14,
+    marginBottom: 18,
+    borderBottom: "1px solid #E4E7EC",
+  },
+  setTab: {
+    height: 38,
+    padding: "0 15px",
+    borderRadius: 999,
+    border: "1px solid",
+    font: "600 13px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    transition: "background 120ms cubic-bezier(.2,.8,.25,1)",
+  },
+
+  setBodyWrap: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
+  setBodyMain: { flex: 1.6, minWidth: 320, display: "grid", gap: 16 },
+  setBodySide: { flex: 1, minWidth: 280, display: "grid", gap: 16 },
+
+  setCard: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  setCardHead: { padding: "16px 18px", borderBottom: "1px solid #F1F3F6" },
+  setCardHeadRow: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "15px 18px",
+    borderBottom: "1px solid #F1F3F6",
+    flexWrap: "wrap",
+  },
+  setCardTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
+  setCardSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
+  setCardHeadTag: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#9AA2B0" },
+  setCardFoot: { padding: "13px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
+
+  setFieldGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 },
+  // Same grid without the card padding - for use inside setFieldStack.
+  setFieldGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(216px,1fr))", gap: 16 },
+  // Equal-width radio-card pairs (payout method, long-booking rhythm).
+  setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 },
+  setFieldStack: { padding: 18, display: "grid", gap: 16 },
+  setField: { display: "block" },
+  // Fixed label-row height so a field with a chip (e.g. "✓ VERIFIED") and a
+  // plain-text one sit at the same height - keeps their inputs on one line
+  // when they share a grid row.
+  setFieldLabel: { display: "flex", alignItems: "center", minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
+  setFieldLabelRow: { display: "flex", alignItems: "center", gap: 8, minHeight: 26, font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
+  setInput: {
+    width: "100%",
+    height: 44,
+    padding: "0 13px",
+    background: "#FFFFFF",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "400 14px/1 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+  },
+  setInputMono: {
+    width: "100%",
+    height: 44,
+    padding: "0 13px",
+    background: "#FFFFFF",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "500 14px/1 'IBM Plex Mono',monospace",
+    letterSpacing: ".04em",
+    color: "#1A1F2B",
+  },
+  setSelect: {
+    width: "100%",
+    height: 44,
+    padding: "0 11px",
+    background: "#FFFFFF",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "400 14px/1 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+    cursor: "pointer",
+  },
+  setInlineNote: {
+    padding: "12px 14px",
+    background: "#F8F9FB",
+    border: "1px solid #E4E7EC",
+    borderRadius: "var(--r)",
+    font: "400 12px/1.5 'Instrument Sans',sans-serif",
+    color: "#5A6373",
+    textWrap: "pretty",
+  },
+  setReadRow: {
+    display: "flex",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 12,
+    font: "400 13px/1.4 'Instrument Sans',sans-serif",
+    color: "#5A6373",
+  },
+  setReadVal: { font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
+
+  // verified / pending chip (side ACCOUNT card + inline field badges)
+  setChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    padding: "3px 10px",
+    borderRadius: 999,
+    font: "600 11px/1.5 'IBM Plex Mono',monospace",
+    letterSpacing: ".05em",
+  },
+  setChipOk: { background: "#DDF3E9", border: "1px solid #A8DEC7", color: "#076945" },
+  setChipWarn: { background: "#FFF3DB", border: "1px solid #F5D9A3", color: "#8A5200" },
+
+  setAccountCard: { padding: 14, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", marginBottom: 18 },
+  setAccountLabel: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 9 },
+  setAccountText: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#5A6373", marginTop: 9 },
+
+  // rows shared by Business documents + Security sessions
+  setListRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    padding: "14px 18px",
+    borderBottom: "1px solid #F8F9FB",
+    flexWrap: "wrap",
+  },
+  setListName: { font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  setListMeta: { font: "400 11px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".03em", color: "#A7AEBB", marginTop: 3 },
+  setStatusPill: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    padding: "5px 11px",
+    borderRadius: 999,
+    font: "600 12px/1.3 'Instrument Sans',sans-serif",
+    flex: "none",
+  },
+  setStatusPillDot: { width: 7, height: 7, borderRadius: 999, flex: "none" },
+  setSmallBtn: {
+    height: 32,
+    padding: "0 12px",
+    background: "#FFFFFF",
+    color: "#0F23A8",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "600 12px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    flex: "none",
+    textDecoration: "none",
+  },
+  setDangerBtnSmall: {
+    height: 32,
+    padding: "0 12px",
+    background: "#FFFFFF",
+    color: "#A50E22",
+    border: "1px solid #F7BDC5",
+    borderRadius: "var(--r)",
+    font: "600 12px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    flex: "none",
+  },
+
+  // Security → "Signing in" card
+  setSignRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
+  setSignMain: { flex: 1, minWidth: 200 },
+  setSignTitle: { font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
+  setSignSub: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2 },
+  setSignDivider: { height: 1, background: "#F1F3F6" },
+  setSignBtn: {
+    height: 38,
+    padding: "0 15px",
+    background: "#FFFFFF",
+    color: "#1A1F2B",
+    border: "1px solid #CDD2DA",
+    borderRadius: "var(--r)",
+    font: "600 13px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    flex: "none",
+  },
+  setSessionDot: { width: 9, height: 9, borderRadius: 999, flex: "none" },
+  setSessionTag: { font: "600 12px/1.3 'Instrument Sans',sans-serif", flex: "none" },
+
+  // Security → "Close this account" (the one red-topped card)
+  setCloseCard: { background: "#FFFFFF", border: "1px solid #F7BDC5", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  setCloseBar: { height: 5, background: "#D81E32" },
+  setCloseBody: { padding: "16px 18px" },
+  setCloseTitle: { font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A", marginBottom: 6 },
+  setCloseText: { margin: "0 0 14px", font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
+  setCloseBtn: {
+    height: 38,
+    padding: "0 15px",
+    background: "#FFFFFF",
+    color: "#A50E22",
+    border: "1px solid #F7BDC5",
+    borderRadius: "var(--r)",
+    font: "600 13px/1 'Instrument Sans',sans-serif",
+    cursor: "pointer",
+    textDecoration: "none",
+    display: "inline-flex",
+    alignItems: "center",
+  },
+
+  // Payouts tab statics
+  setPaidCard: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", padding: "16px 18px" },
+  setPaidKickerRow: { display: "flex", alignItems: "center", gap: 10, marginBottom: 10 },
+  setPaidRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
+  setPaidKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".11em", color: "#838C9B" },
+  setPaidTitle: { font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A", marginBottom: 6 },
+  setPaidBody: { margin: 0, font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
+  setFeeBody: { padding: "16px 18px", display: "grid", gap: 11, fontVariantNumeric: "tabular-nums" },
 } satisfies Record<string, CSSProperties>;

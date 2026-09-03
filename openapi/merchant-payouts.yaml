@@ -168,6 +168,35 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
+  /merchant/payouts/statements:
+    get:
+      tags: [documents]
+      summary: The months the Settings → Payouts "Statements" card lists, with net totals
+      operationId: listPayoutStatements
+      description: >
+        The last six Nairobi calendar months that have at least one payout
+        run, newest first, each with its net-of-commission total. Supplies
+        only the amounts the card renders — the actual download is still the
+        per-month CSV at `GET /merchant/payouts/statement?month=`. Net is the
+        sum of `payout_runs.net_amount` (itself a sum of line snapshots), so
+        a later commission-rate change never rewrites a paid month.
+      responses:
+        "200":
+          description: Months with totals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        month: { type: string, description: "`YYYY-MM`, Nairobi" }
+                        label: { type: string, example: "July 2026" }
+                        net: { $ref: "#/components/schemas/Money" }
+
   # ---------------------------------------------------------------------
   # Queries
   # ---------------------------------------------------------------------

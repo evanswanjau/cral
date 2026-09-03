@@ -13,7 +13,12 @@ import {
   type OnboardingDraft,
 } from "../../../lib/onboarding-draft.js";
 
-type OwnerDocKind = "national_id" | "kra_pin";
+type OwnerDocKind =
+  | "national_id"
+  | "kra_pin"
+  | "certificate_of_incorporation"
+  | "company_kra_pin"
+  | "cr12";
 type VehicleDocKind = "logbook" | "comprehensive_insurance" | "tracker_certificate";
 
 export const MAX_DOC_BYTES = 10 * 1024 * 1024;
@@ -199,8 +204,19 @@ export function Documents({
 }): JSX.Element {
   const [showErrors, setShowErrors] = useState(false);
 
-  const ownerCount = Number(Boolean(draft.ownerDocs.nationalId)) + Number(Boolean(draft.ownerDocs.kraPin));
-  const ownerComplete = ownerCount === 2;
+  const isCompany = draft.ownerType === "company";
+  const d = draft.ownerDocs;
+  // "Your documents" = National ID + KRA PIN, for everyone.
+  // "Company documents" (company only) = cert of incorporation, company
+  // KRA PIN, CR12.
+  const companyCount =
+    Number(Boolean(d.certificateOfIncorporation)) +
+    Number(Boolean(d.companyKraPin)) +
+    Number(Boolean(d.cr12));
+  const companyComplete = !isCompany || companyCount === 3;
+  const yourCount = Number(Boolean(d.nationalId)) + Number(Boolean(d.kraPin));
+  const yourComplete = yourCount === 2;
+  const ownerComplete = companyComplete && yourComplete;
 
   function vehicleComplete(vId: string): boolean {
     const v = draft.vehicles.find((x) => x.id === vId);
@@ -232,9 +248,57 @@ export function Documents({
       <div style={O.stepEyebrow}>STEP 4 OF 5</div>
       <h1 style={O.h1Step}>Documents</h1>
       <p style={{ ...O.stepLede, marginBottom: 20 }}>
-        Your own papers first, then the papers for each vehicle. Photos are fine - every corner
-        readable, including expiry dates. {ACCEPTED_DOC_LABEL} up to 10MB.
+        {isCompany
+          ? "Company papers, then the contact person's ID, then the papers for each vehicle."
+          : "Your own papers first, then the papers for each vehicle."}{" "}
+        Photos are fine - every corner readable, including expiry dates. {ACCEPTED_DOC_LABEL} up to
+        10MB.
       </p>
+
+      {isCompany && (
+        <div style={O.card}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={O.sectionBadge}><User size={20} weight="fill" color="#FFFFFF" /></span>
+              <div>
+                <div style={O.cardTitle}>Company documents</div>
+                <div style={O.optionBody}>As registered with the Registrar of Companies and KRA</div>
+              </div>
+            </div>
+            <span
+              style={{
+                ...O.statusPillBase,
+                background: companyComplete ? "#DDF3E9" : "#FFF3DB",
+                border: `1px solid ${companyComplete ? "#A8DEC7" : "#F5D9A3"}`,
+                color: companyComplete ? "#076945" : "#8A5200",
+              }}
+            >
+              {companyCount}/3
+            </span>
+          </div>
+          <DocRow
+            title="Certificate of incorporation"
+            body="The certificate from the Registrar of Companies"
+            doc={d.certificateOfIncorporation}
+            onChange={(doc) => onChange({ ownerDocs: { ...d, certificateOfIncorporation: doc } })}
+            kind="certificate_of_incorporation"
+          />
+          <DocRow
+            title="Company KRA PIN certificate"
+            body="The company's PIN, not your personal one"
+            doc={d.companyKraPin}
+            onChange={(doc) => onChange({ ownerDocs: { ...d, companyKraPin: doc } })}
+            kind="company_kra_pin"
+          />
+          <DocRow
+            title="CR12"
+            body="Company shareholding, issued within the last 12 months"
+            doc={d.cr12}
+            onChange={(doc) => onChange({ ownerDocs: { ...d, cr12: doc } })}
+            kind="cr12"
+          />
+        </div>
+      )}
 
       <div style={O.card}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
@@ -242,33 +306,34 @@ export function Documents({
             <span style={O.sectionBadge}><User size={20} weight="fill" color="#FFFFFF" /></span>
             <div>
               <div style={O.cardTitle}>Your documents</div>
-              <div style={O.optionBody}>Uploaded once - they cover every vehicle you list</div>
+              <div style={O.optionBody}>
+                {isCompany ? "The contact person's own ID and PIN" : "Uploaded once - they cover every vehicle you list"}
+              </div>
             </div>
           </div>
           <span
             style={{
               ...O.statusPillBase,
-              background: ownerComplete ? "#DDF3E9" : "#FFF3DB",
-              border: `1px solid ${ownerComplete ? "#A8DEC7" : "#F5D9A3"}`,
-              color: ownerComplete ? "#076945" : "#8A5200",
+              background: yourComplete ? "#DDF3E9" : "#FFF3DB",
+              border: `1px solid ${yourComplete ? "#A8DEC7" : "#F5D9A3"}`,
+              color: yourComplete ? "#076945" : "#8A5200",
             }}
           >
-            {ownerCount}/2
+            {yourCount}/2
           </span>
         </div>
-
         <DocRow
           title="National ID · both sides"
           body="Front and back, one file or two photos"
-          doc={draft.ownerDocs.nationalId}
-          onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, nationalId: doc } })}
+          doc={d.nationalId}
+          onChange={(doc) => onChange({ ownerDocs: { ...d, nationalId: doc } })}
           kind="national_id"
         />
         <DocRow
           title="KRA PIN certificate"
-          body="Matching the PIN you entered"
-          doc={draft.ownerDocs.kraPin}
-          onChange={(doc) => onChange({ ownerDocs: { ...draft.ownerDocs, kraPin: doc } })}
+          body={isCompany ? "Your personal KRA PIN certificate" : "Matching the PIN you entered"}
+          doc={d.kraPin}
+          onChange={(doc) => onChange({ ownerDocs: { ...d, kraPin: doc } })}
           kind="kra_pin"
         />
       </div>

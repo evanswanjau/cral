@@ -50,6 +50,10 @@ export const ID_PREFIXES = {
   // prefix named in the spec's own identifier list.
   notification: "ntf",
   notificationPreference: "npr",
+  // A merchant's request to change locked profile fields after onboarding
+  // submission - an admin approves it and the account goes back to review.
+  // Internal entity, no prefix named in the spec's own identifier list.
+  profileChangeRequest: "pcr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

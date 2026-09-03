@@ -14,7 +14,7 @@ type View = "checking" | "form" | "expired" | "done";
  *
  * One path, per spec §6: the emailed link (`?token=`). We verify the token
  * up front via /auth/password/reset/check, so an expired link says so *before* the
- * person types a new password twice — the delivery plan calls that dead end
+ * person types a new password twice - the delivery plan calls that dead end
  * out explicitly as a gap in the original designs.
  */
 export function ResetPassword(): JSX.Element {

@@ -8,7 +8,7 @@ interface ToastState {
 
 const ToastContext = createContext<((message: string, dot?: string) => void) | null>(null);
 
-/** 3.6s pill toast — matches the design's flash() timing exactly. */
+/** 3.6s pill toast - matches the design's flash() timing exactly. */
 export function ToastProvider({ children }: { children: ReactNode }): JSX.Element {
   const [toast, setToast] = useState<ToastState | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);

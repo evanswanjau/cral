@@ -7,8 +7,8 @@ import { forgotPassword } from "../lib/auth-api.js";
 /**
  * Forgot password. No canvas file exists for this screen (the design's auth
  * template covers sign-in, register and their code steps only), so it is
- * composed entirely from the shared auth primitives — same shell, fields,
- * banner and button — rather than invented styling.
+ * composed entirely from the shared auth primitives - same shell, fields,
+ * banner and button - rather than invented styling.
  *
  * Email only, matching sign-in and sign-up: the account's identity is its
  * email address, so the way back in is always an emailed link.

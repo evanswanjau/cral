@@ -1,5 +1,5 @@
 /**
- * Vehicle category vocabulary for the merchant portal — the client mirror
+ * Vehicle category vocabulary for the merchant portal - the client mirror
  * of `apps/api/src/modules/vehicles/categories.ts` (owner's call,
  * 2026-08-31, replacing the old Car / SUV / Van / Pickup / Lorry list).
  * Keep the two in step.

@@ -2,9 +2,9 @@ import type { CSSProperties } from "react";
 
 /**
  * Auth screen styles, taken verbatim from the design canvas source
- * ("Cruz Merchant Login.dc.html"). That file is the whole auth flow — one
+ * ("Cruz Merchant Login.dc.html"). That file is the whole auth flow - one
  * template with `sc-if` branches for password sign-in, phone entry, code
- * entry, register and register-verify — so these values are shared across
+ * entry, register and register-verify - so these values are shared across
  * every auth screen rather than re-derived per page.
  *
  * Keep these as literal values. Re-expressing them as Tailwind utilities is
@@ -92,7 +92,7 @@ export const S = {
     font: "400 15px/1 'Instrument Sans',sans-serif",
     color: "#1A1F2B",
   },
-  /** The six-digit OTP field — deliberately larger and monospaced. */
+  /** The six-digit OTP field - deliberately larger and monospaced. */
   codeInput: {
     width: "100%",
     height: 56,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { O } from "../components/onboarding/styles.js";
 import { ErrorBanner } from "../components/onboarding/primitives.js";
@@ -33,10 +34,10 @@ const STEPS = [
  * design source" note).
  *
  * Progress lives server-side (apps/api/src/modules/merchant) so it resumes
- * on any device — GET /merchant/onboarding on mount, a debounced PATCH on
+ * on any device - GET /merchant/onboarding on mount, a debounced PATCH on
  * every top-level field change, and real endpoints for vehicles/documents
  * called directly from their step components. localStorage is still
- * written on every change as a same-device offline-typing buffer only —
+ * written on every change as a same-device offline-typing buffer only - 
  * see lib/onboarding-draft.ts's file header.
  */
 export function Onboarding(): JSX.Element {
@@ -48,6 +49,9 @@ export function Onboarding(): JSX.Element {
   });
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [saved, setSaved] = useState(false);
+  usePageTitle(
+    draft ? `Onboarding - ${STEPS.find((s) => s.n === draft.step)?.label ?? "Set up"}` : "Onboarding",
+  );
   const resuming = useRef(false);
   const emailFetched = useRef(false);
   const [accountEmail, setAccountEmail] = useState<string | null>(null);
@@ -66,7 +70,7 @@ export function Onboarding(): JSX.Element {
     getMe()
       .then((me) => setAccountEmail(me.email ?? null))
       .catch(() => {
-        // Onboarding still works without it — the email field just stays
+        // Onboarding still works without it - the email field just stays
         // "Loading…" rather than blocking the whole wizard on a /me failure.
       });
   }, []);
@@ -83,7 +87,7 @@ export function Onboarding(): JSX.Element {
   /**
    * Local-only: merges into the in-memory draft (and, via the effect below,
    * the localStorage offline-typing buffer) so typing feels instant. Does
-   * NOT talk to the server — that only happens at a deliberate commit point
+   * NOT talk to the server - that only happens at a deliberate commit point
    * (moving to another step, or submitting), via `commitAndSync` below, so
    * a field never depends on a debounce window firing before the merchant
    * navigates away.
@@ -98,7 +102,7 @@ export function Onboarding(): JSX.Element {
     saveDraft(draft);
     // Keep the shared query cache mirroring the live draft. Without this,
     // ["onboarding"] stays frozen at whatever `initialDraft` looked like on
-    // this component's first mount — so RequireOnboarding (which shares the
+    // this component's first mount - so RequireOnboarding (which shares the
     // same cache key) sees a stale, pre-submission snapshot the instant it
     // mounts, redirects back to /onboarding, and a fresh Onboarding mount
     // then rehydrates its own `draft` from that same stale entry, making
@@ -140,7 +144,7 @@ export function Onboarding(): JSX.Element {
     void syncDraftToServer(merged)
       .then(() => setSaved(true))
       .catch(() => {
-        // The local/offline buffer already has this change — the next
+        // The local/offline buffer already has this change - the next
         // commit point (another step change, or submit) tries again with
         // whatever's current at that time.
       });
@@ -160,7 +164,7 @@ export function Onboarding(): JSX.Element {
     setSubmitError(null);
     try {
       // Review's terms-accepted toggle (and anything else touched on this
-      // last step) has no later "continue" to piggyback a sync onto — this
+      // last step) has no later "continue" to piggyback a sync onto - this
       // is the final commit point before the real submit endpoint reads
       // the merchant row, so send it first.
       await syncDraftToServer(draft);
@@ -168,7 +172,7 @@ export function Onboarding(): JSX.Element {
       setDraft(next);
       window.scrollTo({ top: 0 });
     } catch (err) {
-      // The wizard's own client-side gates should normally prevent this —
+      // The wizard's own client-side gates should normally prevent this - 
       // this is the honest backstop when the server disagrees.
       setSubmitError(err instanceof Error ? err.message : "Couldn't submit. Please try again.");
     } finally {
@@ -185,7 +189,7 @@ export function Onboarding(): JSX.Element {
       await logout();
     } catch {
       // The progress is already server-side (that's the whole point of
-      // this rewrite) — a failed revoke call still shouldn't trap someone
+      // this rewrite) - a failed revoke call still shouldn't trap someone
       // on this screen, so sign them out locally regardless.
     }
     setSession(null);

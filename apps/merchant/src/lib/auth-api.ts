@@ -37,13 +37,23 @@ export function login(identifier: string, password: string, deviceId: string) {
   );
 }
 
-/** Second half of a 2FA sign-in: the texted code (or a recovery code). */
+/** Second half of a 2FA sign-in: the six-digit code (texted or emailed). */
 export function completeTwoFactorChallenge(challengeId: string, code: string) {
-  return apiPost<SignedIn & { used_recovery_code: boolean }>(
+  return apiPost<SignedIn>(
     "/auth/2fa/challenge",
     { challenge_id: challengeId, code },
     { auth: false },
   );
+}
+
+/** Sign-in fallback: re-send the pending code by SMS again, or by email. */
+export function resendTwoFactorChallenge(challengeId: string, channel: "sms" | "email") {
+  return apiPost<{
+    challenge_id: string;
+    channel: "sms" | "email";
+    masked_destination: string;
+    expires_in: number;
+  }>("/auth/2fa/challenge/resend", { challenge_id: challengeId, channel }, { auth: false });
 }
 
 // --- 2FA (account settings) -----------------------------------------
@@ -53,7 +63,6 @@ export interface TwoFactorState {
   method: "sms" | null;
   masked_destination: string | null;
   enrolled_at: string | null;
-  recovery_codes_remaining: number | null;
 }
 
 export function getTwoFactorState() {
@@ -70,6 +79,11 @@ export function verify2fa(code: string) {
   return apiPost<{ recovery_codes: string[] }>("/auth/2fa/verify", { code });
 }
 
+/** One-tap enable - uses the already-verified account phone. No recovery codes. */
+export function enable2fa() {
+  return apiPost<{ enabled: boolean }>("/auth/2fa/enable");
+}
+
 /** Raise a fresh challenge for an already-signed-in merchant (needed to disable). */
 export function sendTwoFactorChallenge() {
   return apiPost<{ challenge_id: string; masked_destination: string; expires_in: number }>(
@@ -77,8 +91,19 @@ export function sendTwoFactorChallenge() {
   );
 }
 
-export function disable2fa(password: string, code: string) {
-  return apiDelete<void>("/auth/2fa", { password, code });
+/** Switch off - password only; a texted/recovery `code` is still accepted if given. */
+export function disable2fa(password: string, code?: string) {
+  return apiDelete<void>("/auth/2fa", code ? { password, code } : { password });
+}
+
+// --- account deletion (30-day grace) -------------------------------
+
+export function requestAccountDeletion() {
+  return apiPost<{ status: string; deletion_scheduled_at: string }>("/auth/account/deletion");
+}
+
+export function cancelAccountDeletion() {
+  return apiDelete<{ status: string }>("/auth/account/deletion");
 }
 
 export function requestOtp(identifier: string, purpose: OtpPurpose) {
@@ -101,8 +126,8 @@ export function verifyLoginOtp(identifier: string, code: string, deviceId: strin
 
 /**
  * Sign-up is email + password only. Full name and phone are collected in
- * onboarding — the phone at payout setup, where the reason for asking is
- * obvious — rather than gating the signup form behind an SMS.
+ * onboarding - the phone at payout setup, where the reason for asking is
+ * obvious - rather than gating the signup form behind an SMS.
  */
 export function register(email: string, password: string) {
   return apiPost<{
@@ -142,7 +167,7 @@ export function getRegistrationState() {
 }
 
 /**
- * The frozen `/me` contract (identity.yaml) — used by onboarding to prefill
+ * The frozen `/me` contract (identity.yaml) - used by onboarding to prefill
  * the email address collected at sign-up, so the "Your details" step
  * doesn't ask for it a second time.
  */
@@ -152,7 +177,7 @@ export function getMe() {
 
 // --- forgot / reset password ------------------------------------------
 
-/** Always emails a reset link — see the note on the server's forgotPassword. */
+/** Always emails a reset link - see the note on the server's forgotPassword. */
 export function forgotPassword(email: string) {
   return apiPost<{ status: string; channel_hint: "email"; masked: string; retry_after: number }>(
     "/auth/password/forgot",
@@ -178,4 +203,38 @@ export function resetPassword(input: { token: string; new_password: string }) {
   return apiPost<{ status: string; sessions_revoked: number }>("/auth/password/reset", input, {
     auth: false,
   });
+}
+
+// --- account settings: password + sessions ---------------------------
+
+/** Authenticated change - revokes every other session, keeps the current one. */
+export function changePassword(currentPassword: string, newPassword: string) {
+  return apiPost<{ sessions_revoked: number }>("/auth/password/change", {
+    current_password: currentPassword,
+    new_password: newPassword,
+  });
+}
+
+export interface SessionRow {
+  id: string;
+  device: string;
+  approximate_location: string | null;
+  user_agent: string | null;
+  last_seen_at: string;
+  is_current: boolean;
+}
+
+export function listSessions() {
+  return apiGet<{ data: SessionRow[]; next_cursor: string | null; has_more: boolean }>(
+    "/auth/sessions",
+  );
+}
+
+export function revokeSession(id: string) {
+  return apiDelete<void>(`/auth/sessions/${id}`);
+}
+
+/** "Sign out everywhere" - all sessions but this one. */
+export function revokeAllSessions() {
+  return apiPost<{ revoked: number }>("/auth/sessions/revoke-all");
 }

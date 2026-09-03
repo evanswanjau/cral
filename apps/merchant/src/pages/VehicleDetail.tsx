@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { usePageTitle } from "../lib/use-page-title.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { O } from "../components/onboarding/styles.js";
 import { P } from "../components/portal/styles.js";
@@ -34,23 +35,23 @@ type ModalKind = "price" | "message" | "verify" | "delete" | null;
 type DocKind = keyof typeof DOC_LABELS;
 type OwnerDocKind = keyof typeof OWNER_DOC_LABELS;
 
-/** A listing with a reviewer holding it — nothing to edit or discuss until they've had a first look. */
+/** A listing with a reviewer holding it - nothing to edit or discuss until they've had a first look. */
 function isPriceLocked(status: VehicleStatus): boolean {
   return status === "pending";
 }
 
-/** Nothing to discuss with a reviewer who hasn't looked at the listing yet — draft (no reviewer assigned) or pending (not opened). */
+/** Nothing to discuss with a reviewer who hasn't looked at the listing yet - draft (no reviewer assigned) or pending (not opened). */
 function isMessageLocked(status: VehicleStatus): boolean {
   return status === "draft" || status === "pending";
 }
 
-/** M-Pesa numbers are stored however the merchant typed them at onboarding — always show the full +254 form here, never the bare national digits. */
+/** M-Pesa numbers are stored however the merchant typed them at onboarding - always show the full +254 form here, never the bare national digits. */
 function formatMpesaNumber(detail: string | null): string | null {
   if (!detail) return null;
   return toE164(detail);
 }
 
-/** Today, local time, as the date input's `min` needs it (YYYY-MM-DD) — same as onboarding's Documents.tsx. */
+/** Today, local time, as the date input's `min` needs it (YYYY-MM-DD) - same as onboarding's Documents.tsx. */
 function todayIso(): string {
   const d = new Date();
   const tz = d.getTimezoneOffset();
@@ -84,7 +85,7 @@ function DocRow({
   if (info?.expires_at) sub = (state === "expiring" ? "Expires " : "Valid to ") + new Date(info.expires_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
   if (state === "missing") sub = "Not uploaded yet";
   if (state === "rejected") sub = "Rejected by the reviewer";
-  // Still building the draft — every document stays freely replaceable and
+  // Still building the draft - every document stays freely replaceable and
   // removable, not just the ones the design's `needs` flag would normally
   // put a button on (missing/rejected/expiring).
   const canManage = vehicleStatus === "draft";
@@ -158,7 +159,7 @@ function DocRow({
   );
 }
 
-/** Owner-level documents are uploaded once during onboarding — this screen only ever displays their state, never re-uploads them. */
+/** Owner-level documents are uploaded once during onboarding - this screen only ever displays their state, never re-uploads them. */
 function OwnerDocRow({ kind, info, vehicleStatus }: { kind: OwnerDocKind; info: VehicleDocInfo | null; vehicleStatus: VehicleStatus }): JSX.Element {
   const state = info?.review_state ?? "missing";
   const d = DOC_STATE[state];
@@ -177,7 +178,7 @@ function OwnerDocRow({ kind, info, vehicleStatus }: { kind: OwnerDocKind; info: 
   );
 }
 
-/** One photo slot — a real thumbnail once its bytes are back from the server, an "Add photos" tile while empty. */
+/** One photo slot - a real thumbnail once its bytes are back from the server, an "Add photos" tile while empty. */
 function PhotoSlot({
   photo,
   variant,
@@ -311,21 +312,21 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
         <div style={P.breakdown}>
           <div style={P.breakdownRow}>
             <span style={P.breakdownKey}>Hirer pays, per day</span>
-            <span style={P.breakdownVal}>{rateNum ? `KES ${money(rateNum * 100)}` : "—"}</span>
+            <span style={P.breakdownVal}>{rateNum ? `KES ${money(rateNum * 100)}` : " - "}</span>
           </div>
           <div style={{ ...P.breakdownRow, ...P.breakdownRowTop }}>
             <span style={P.breakdownKey}>CRAL commission · 10%</span>
-            <span style={{ ...P.breakdownVal, color: "#A50E22" }}>{rateNum ? `− KES ${money(comm * 100)}` : "—"}</span>
+            <span style={{ ...P.breakdownVal, color: "#A50E22" }}>{rateNum ? `− KES ${money(comm * 100)}` : " - "}</span>
           </div>
           <div style={P.breakdownNet}>
             <span style={P.breakdownNetKey}>You keep, per day</span>
             <span style={P.breakdownNetVal}>
-              <span style={P.breakdownNetPrefix}>KES</span> {rateNum ? money(net * 100) : "—"}
+              <span style={P.breakdownNetPrefix}>KES</span> {rateNum ? money(net * 100) : " - "}
             </span>
           </div>
           <div style={P.breakdownNote}>
             {rateNum
-              ? `A ${days}-day hire pays you KES ${money(net * days * 100)} — KES ${money(rateNum * days * 100)} less KES ${money(comm * days * 100)} commission.`
+              ? `A ${days}-day hire pays you KES ${money(net * days * 100)} - KES ${money(rateNum * days * 100)} less KES ${money(comm * days * 100)} commission.`
               : "Type a daily rate to see what you keep."}
           </div>
         </div>
@@ -370,7 +371,7 @@ function MessageModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
         <textarea
           value={msg}
           onChange={(e) => setMsg(e.target.value)}
-          placeholder="The insurance certificate is being renewed this week — the broker will email it by Friday."
+          placeholder="The insurance certificate is being renewed this week - the broker will email it by Friday."
           style={P.textarea}
         />
         <div style={P.helperText}>Replies arrive by SMS and email. Typical response time is one working day.</div>
@@ -387,7 +388,7 @@ function VerifyModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void
   return (
     <Modal
       title="Verified badge"
-      sub="A paid, optional service — separate from the free document review."
+      sub="A paid, optional service - separate from the free document review."
       onClose={onClose}
       ctaLabel={verify.isPending ? "Sending…" : "Send M-Pesa request"}
       ctaDisabled={verify.isPending}
@@ -395,7 +396,7 @@ function VerifyModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void
         verify.mutate(undefined, {
           onSuccess: () => {
             onClose();
-            flash("M-Pesa request sent — enter your PIN on the prompt.", "#FFC46B");
+            flash("M-Pesa request sent - enter your PIN on the prompt.", "#FFC46B");
           },
         });
       }}
@@ -487,6 +488,7 @@ export function VehicleDetail(): JSX.Element {
   const navigate = useNavigate();
   const flash = useToast();
   const { data: v, isPending } = useVehicleDetail(vehicleId);
+  usePageTitle(v ? `${v.registration || `${v.make} ${v.model}`}` : "Vehicle");
   const [modal, setModal] = useState<ModalKind>(null);
   const pause = usePauseVehicle(vehicleId ?? "");
   const resume = useResumeVehicle(vehicleId ?? "");
@@ -498,7 +500,7 @@ export function VehicleDetail(): JSX.Element {
   const removePhoto = useDeleteVehiclePhoto(vehicleId ?? "");
   const photoInputRef = useRef<HTMLInputElement>(null);
   // Every upload/remove above shares one mutation instance across every
-  // row — tracking *which* row is busy locally is what stops every other
+  // row - tracking *which* row is busy locally is what stops every other
   // document/photo from showing a loading state whenever any one of them
   // is uploading.
   const [uploadingDocKind, setUploadingDocKind] = useState<DocKind | null>(null);
@@ -561,7 +563,7 @@ export function VehicleDetail(): JSX.Element {
         : {
             kicker: "OPTIONAL · PAID",
             title: "Get the verified badge",
-            body: "Available once your listing has been approved and is live — not while it's still with a reviewer.",
+            body: "Available once your listing has been approved and is live - not while it's still with a reviewer.",
             cta: "Verify for KES 1,500",
             note: "AVAILABLE ONCE APPROVED",
             opacity: 0.45,
@@ -589,7 +591,7 @@ export function VehicleDetail(): JSX.Element {
               )}
             </div>
             <h1 style={P.mastH1}>{v.make} {v.model}</h1>
-            <div style={P.mastSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.seats} seats · {v.county ?? v.pickup_address ?? "—"}</div>
+            <div style={P.mastSub}>{vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.seats} seats · {v.county ?? v.pickup_address ?? " - "}</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={P.mastRefLabel}>LISTING REF</div>
@@ -603,7 +605,7 @@ export function VehicleDetail(): JSX.Element {
             style={{ ...P.actionBtn, cursor: priceLocked ? "not-allowed" : "pointer", opacity: priceLocked ? 0.45 : 1 }}
             onClick={() => {
               if (priceLocked) {
-                flash("This listing is with a reviewer — you can edit it again once they've had a first look.", "#8C97A8");
+                flash("This listing is with a reviewer - you can edit it again once they've had a first look.", "#8C97A8");
                 return;
               }
               setModal("price");
@@ -636,7 +638,7 @@ export function VehicleDetail(): JSX.Element {
                 flash(
                   v.status === "draft"
                     ? "There's no reviewer assigned until you submit this listing."
-                    : "This listing is with a reviewer — there's nothing to discuss until they've had a first look.",
+                    : "This listing is with a reviewer - there's nothing to discuss until they've had a first look.",
                   "#8C97A8",
                 );
                 return;
@@ -652,7 +654,7 @@ export function VehicleDetail(): JSX.Element {
             onClick={() =>
               duplicate.mutate(undefined, {
                 onSuccess: (copy) => {
-                  flash("Draft created — each vehicle needs its own logbook and insurance.", "#6FC8F0");
+                  flash("Draft created - each vehicle needs its own logbook and insurance.", "#6FC8F0");
                   navigate(`/vehicles/${copy.id}`);
                 },
               })
@@ -746,7 +748,7 @@ export function VehicleDetail(): JSX.Element {
                   <span style={{ fontWeight: 600, color: "#076945" }}>{v.merchant_name ?? "You"} {v.merchant_name ? "is an approved merchant." : "are an approved merchant."}</span>{" "}
                   Certificate of incorporation, company KRA PIN and director ID were accepted
                   {v.owner_documents_uploaded_at ? ` on ${new Date(v.owner_documents_uploaded_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}` : ""}
-                  {" "}— you never upload those again. Every vehicle needs only these three.
+                  {" "} - you never upload those again. Every vehicle needs only these three.
                 </span>
               </div>
             ) : (
@@ -771,7 +773,7 @@ export function VehicleDetail(): JSX.Element {
                         flash(
                           v.status === "draft"
                             ? `${DOC_LABELS[kind][0]} attached.`
-                            : `${DOC_LABELS[kind][0]} uploaded — back with the reviewer.`,
+                            : `${DOC_LABELS[kind][0]} uploaded - back with the reviewer.`,
                           "#6FC8F0",
                         ),
                       onSettled: () => setUploadingDocKind(null),
@@ -804,9 +806,9 @@ export function VehicleDetail(): JSX.Element {
                 ["SEATS", String(v.seats)],
                 ["TRANSMISSION", v.transmission],
                 ["FUEL", v.fuel],
-                ["COLOUR", v.colour ?? "—"],
-                ["COUNTY", v.county ?? "—"],
-                ["BASED IN", v.pickup_address ?? "—"],
+                ["COLOUR", v.colour ?? " - "],
+                ["COUNTY", v.county ?? " - "],
+                ["BASED IN", v.pickup_address ?? " - "],
               ].map(([k, val]) => (
                 <div key={k}>
                   <div style={P.specKey}>{k}</div>
@@ -877,7 +879,7 @@ export function VehicleDetail(): JSX.Element {
                 style={{ ...P.priceEditBtn, opacity: priceLocked ? 0.5 : 1, cursor: priceLocked ? "not-allowed" : "pointer" }}
                 onClick={() => {
                   if (priceLocked) {
-                    flash("This listing is with a reviewer — you can edit it again once they've had a first look.", "#8C97A8");
+                    flash("This listing is with a reviewer - you can edit it again once they've had a first look.", "#8C97A8");
                     return;
                   }
                   setModal("price");
@@ -891,7 +893,7 @@ export function VehicleDetail(): JSX.Element {
                 ["Daily rate", v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "Not set"],
                 ["Minimum hire", `${v.minimum_hire_days} ${v.minimum_hire_days === 1 ? "day" : "days"}`],
                 ["Driver", v.chauffeured ? "Included" : "Self-drive"],
-                ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : "—"],
+                ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : " - "],
               ].map(([k, val]) => (
                 <div key={k} style={P.priceRow}>
                   <span style={P.priceKey}>{k}</span>
@@ -938,9 +940,9 @@ export function VehicleDetail(): JSX.Element {
               <div>
                 <div style={P.payoutName}>
                   {v.payout.method === "mpesa" ? "M-Pesa" : "Bank"} ·{" "}
-                  {v.payout.method === "mpesa" ? (formatMpesaNumber(v.payout.detail) ?? "—") : (v.payout.detail ?? "—")}
+                  {v.payout.method === "mpesa" ? (formatMpesaNumber(v.payout.detail) ?? " - ") : (v.payout.detail ?? " - ")}
                 </div>
-                <div style={P.payoutSub}>{v.payout.account_name ?? "—"}</div>
+                <div style={P.payoutSub}>{v.payout.account_name ?? " - "}</div>
               </div>
             </div>
           </div>

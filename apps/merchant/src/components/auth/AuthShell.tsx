@@ -35,12 +35,12 @@ export function AuthShell({
     <div style={S.page}>
       {/*
         The grid's own `auto-fit,minmax(min(100%,430px),1fr)` (styles.ts)
-        already stacks these two panels below ~860px — that part needs no
+        already stacks these two panels below ~860px - that part needs no
         media query. What it doesn't do is reorder them: DOM order keeps the
         brand panel first, so on a phone someone scrolls past the whole
         pitch before reaching the actual sign-in form. This flips the form
         to the top only below that same 860px stacking point, and is
-        deliberately a real media query rather than a JS width check —
+        deliberately a real media query rather than a JS width check - 
         `S.formPanel` still holds every pixel value verbatim from the
         design, this only reorders the two existing DOM nodes.
       */}
@@ -61,7 +61,7 @@ export function AuthShell({
                 type="button"
                 onClick={() =>
                   setGoogleNotice(
-                    "Google sign-in isn’t connected yet — use your email and password for now.",
+                    "Google sign-in isn’t connected yet - use your email and password for now.",
                   )
                 }
                 style={S.googleBtn}

@@ -8,7 +8,7 @@ import { deleteDocument, uploadVehiclePhoto, type DraftPhoto } from "../../lib/o
 
 /**
  * One filled photo slot. Split out so each tile can resolve its own preview
- * — after a reload the object URL is gone and the bytes have to come back
+ * - after a reload the object URL is gone and the bytes have to come back
  * from the server, which is a per-photo async load.
  */
 function PhotoTile({
@@ -56,11 +56,11 @@ const CAPTIONS = ["Front three-quarter", "Interior · dashboard", "Rear or side"
 /**
  * Real drag-and-drop / click-to-browse photo picker, capped at exactly
  * `MAX_PHOTOS`. Each accepted file uploads immediately via
- * POST /merchant/onboarding/documents (kind=vehicle_photo) — needs a real
+ * POST /merchant/onboarding/documents (kind=vehicle_photo) - needs a real
  * server-side vehicle id, so this is disabled until the vehicle has been
  * created (see VehicleForm in steps/Vehicles.tsx). The preview image itself
  * still lives in the page-level blob-URL cache (photo-preview-cache.ts),
- * not the server — re-fetching it isn't wired up yet, so a photo whose
+ * not the server - re-fetching it isn't wired up yet, so a photo whose
  * local blob is gone (e.g. after a reload) shows a generic icon and
  * filename instead of a broken thumbnail.
  */

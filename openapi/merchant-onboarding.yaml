@@ -248,6 +248,9 @@ components:
         [
           national_id,
           kra_pin,
+          certificate_of_incorporation,
+          company_kra_pin,
+          cr12,
           logbook,
           comprehensive_insurance,
           tracker_certificate,
@@ -286,7 +289,16 @@ components:
         colour: { type: string }
         county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
-        daily_rate: { type: string, description: "KES, whole shillings, as a numeric string" }
+        daily_rate: { type: string, description: "KES, whole shillings, as a numeric string. Always the gross/list price the hirer pays, even when rate_mode is 'net'." }
+        rate_mode:
+          type: string
+          enum: [list, net]
+          default: list
+          description: >
+            Which price view the merchant used. "list" = they typed
+            `daily_rate` directly; "net" = they typed a take-home amount and
+            the form grossed it up. Display-only - `daily_rate` is the gross
+            price either way.
         chauffeured: { type: boolean, description: "true = hire comes with the owner's driver; false = self-drive" }
         insurance_expiry: { type: string, format: date, nullable: true }
 
@@ -373,10 +385,17 @@ components:
         bank_account_number: { type: string, nullable: true }
         terms_accepted: { type: boolean }
         owner_docs:
+          # "Your documents" = national_id + kra_pin (individual and the
+          # contact person of a company). certificate_of_incorporation +
+          # company_kra_pin + cr12 are the "Company documents" set, present
+          # and required only when owner_type is "company".
           type: object
           properties:
             national_id: { $ref: "#/components/schemas/DocumentSlot" }
             kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
+            certificate_of_incorporation: { $ref: "#/components/schemas/DocumentSlot" }
+            company_kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
+            cr12: { $ref: "#/components/schemas/DocumentSlot" }
         vehicles:
           type: array
           items: { $ref: "#/components/schemas/Vehicle" }

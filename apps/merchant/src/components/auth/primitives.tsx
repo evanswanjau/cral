@@ -46,7 +46,7 @@ export function CodeInput(props: InputHTMLAttributes<HTMLInputElement>): JSX.Ele
   return <input inputMode="numeric" maxLength={6} placeholder="000000" style={{ ...S.codeInput, ...style }} {...rest} />;
 }
 
-/** Kenyan phone entry — fixed +254 prefix, national part in the input. */
+/** Kenyan phone entry - fixed +254 prefix, national part in the input. */
 export function PhoneInput({
   id,
   value,

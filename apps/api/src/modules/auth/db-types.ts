@@ -20,8 +20,14 @@ export interface UserRow {
   /** The handset the challenge is texted to; deliberately not `phone`. */
   two_factor_phone: string | null;
   two_factor_enrolled_at: Date | null;
+  /** GDPR groundwork, now the deletion mechanism: set with status "pending_deletion". */
   erasure_requested: boolean;
+  /** The scheduled purge instant — now + 30 days when deletion is requested. */
   erasure_cooling_off_until: Date | null;
+  /** "active" | "suspended" | "pending_deletion" | "deleted" — see the 20260903100000 migration. */
+  status: string;
+  status_changed_at: Date | null;
+  suspended_reason: string | null;
   created_at: Date;
   updated_at: Date;
 }

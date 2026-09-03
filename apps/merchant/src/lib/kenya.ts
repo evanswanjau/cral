@@ -43,7 +43,7 @@ export const COUNTIES = [
   "Nyeri",
   "Samburu",
   "Siaya",
-  "Taita–Taveta",
+  "Taita - Taveta",
   "Tana River",
   "Tharaka-Nithi",
   "Trans Nzoia",

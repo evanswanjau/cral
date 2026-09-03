@@ -1,5 +1,3 @@
-import { randomInt } from "node:crypto";
-import type { Knex } from "knex";
 import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -17,14 +15,12 @@ import {
   emailHeading,
   emailLayout,
   emailMuted,
-  emailNotice,
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import type {
   OtpCodeRow,
   PasswordResetTokenRow,
-  RecoveryCodeRow,
   SessionRow,
   TwoFactorChallengeRow,
   UserRow,
@@ -38,7 +34,6 @@ const LOCKOUT_THRESHOLD = 10;
 const LOCKOUT_MINUTES = 15;
 const TWO_FACTOR_TTL_MINUTES = 10;
 const TWO_FACTOR_MAX_ATTEMPTS = 5;
-const RECOVERY_CODE_COUNT = 10;
 
 /**
  * Where the reset link points. The merchant portal is a separate static
@@ -546,6 +541,26 @@ export async function login(
     });
   }
 
+  // A suspended account can't sign in at all; a purged one behaves as if
+  // it never existed. A `pending_deletion` account *can* still sign in —
+  // that's how the merchant reaches "Keep my account" within the 30 days.
+  if (user.status === "suspended") {
+    throw new ApiError({
+      status: 403,
+      type: "auth_error",
+      code: "account_suspended",
+      message: "This account is suspended. Contact CRAL support.",
+    });
+  }
+  if (user.status === "deleted") {
+    throw new ApiError({
+      status: 401,
+      type: "auth_error",
+      code: "invalid_credentials",
+      message: "That phone or email and password do not match.",
+    });
+  }
+
   if (user.failed_login_count > 0 || user.locked_until) {
     await db<UserRow>("users")
       .where({ id: user.id })
@@ -592,6 +607,24 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
         type: "auth_error",
         code: "invalid_refresh_token",
         message: "Please sign in again.",
+      });
+    }
+
+    // A suspended or deleted account can't extend its session - within one
+    // refresh cycle its access token stops working everywhere (which
+    // includes accepting bookings). Same rule as `login`.
+    if (user.status === "suspended" || user.status === "deleted") {
+      await db<SessionRow>("sessions")
+        .where({ id: byCurrentHash.id })
+        .update({ revoked_at: new Date(), revoked_reason: `account_${user.status}` });
+      throw new ApiError({
+        status: user.status === "suspended" ? 403 : 401,
+        type: "auth_error",
+        code: user.status === "suspended" ? "account_suspended" : "invalid_refresh_token",
+        message:
+          user.status === "suspended"
+            ? "This account is suspended. Contact CRAL support."
+            : "Please sign in again.",
       });
     }
 
@@ -650,6 +683,9 @@ export async function listSessions(userId: string, currentSessionId: string) {
     id: s.id,
     device: s.device_label ?? s.device_id,
     approximate_location: null,
+    // Raw UA so the client can render the design's "CHROME MOBILE" line;
+    // parsing it into a friendly label is a display concern.
+    user_agent: s.user_agent ?? null,
     last_seen_at: s.last_seen_at.toISOString(),
     is_current: s.id === currentSessionId,
   }));
@@ -670,18 +706,231 @@ export async function revokeSession(userId: string, sessionId: string): Promise<
   }
 }
 
+/**
+ * "Sign out everywhere" — revokes every active session for the caller
+ * except the one making the request. Returns how many were signed out so
+ * the UI can confirm ("Signed out on 2 other devices").
+ */
+export async function revokeAllOtherSessions(
+  userId: string,
+  currentSessionId: string,
+  ctx: RequestContext,
+): Promise<{ revoked: number }> {
+  const revoked = await db.transaction(async (trx) => {
+    const n = await trx<SessionRow>("sessions")
+      .where({ user_id: userId, revoked_at: null })
+      .andWhereNot({ id: currentSessionId })
+      .update({ revoked_at: new Date(), revoked_reason: "signed_out_everywhere" });
+
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "user.sessions_revoked_all",
+      entityType: "user",
+      entityId: userId,
+      after: { revoked: n },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+
+    return n;
+  });
+
+  return { revoked };
+}
+
+// ---------------------------------------------------------------------
+// Self-service account deletion (owner's call, 2026-09-03)
+//
+// Requesting deletion flips the account to `pending_deletion` and sets a
+// 30-day timer (reusing the Phase-0 `erasure_cooling_off_until` column).
+// Every other session is revoked, so the account "seems deleted"
+// everywhere — but the merchant can still sign in and hit "Keep my
+// account" until the timer runs out. The daily sweep then scrubs PII and
+// blocks sign-in for good, keeping bookings/payouts/audit rows so a hirer
+// still sees where they booked.
+// ---------------------------------------------------------------------
+
+const DELETION_GRACE_DAYS = 30;
+
+export async function requestAccountDeletion(
+  userId: string,
+  currentSessionId: string,
+  ctx: RequestContext,
+): Promise<{ status: string; deletion_scheduled_at: string }> {
+  const user = await requireUser(userId);
+
+  if (user.status === "deleted") {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "account_deleted",
+      message: "This account has already been deleted.",
+    });
+  }
+
+  // Idempotent — asking twice keeps the original schedule.
+  if (user.status === "pending_deletion" && user.erasure_cooling_off_until) {
+    return {
+      status: "pending_deletion",
+      deletion_scheduled_at: user.erasure_cooling_off_until.toISOString(),
+    };
+  }
+
+  const scheduledAt = new Date(Date.now() + DELETION_GRACE_DAYS * 24 * 60 * 60 * 1000);
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      status: "pending_deletion",
+      status_changed_at: new Date(),
+      erasure_requested: true,
+      erasure_cooling_off_until: scheduledAt,
+    });
+    await trx<SessionRow>("sessions")
+      .where({ user_id: user.id, revoked_at: null })
+      .andWhereNot({ id: currentSessionId })
+      .update({ revoked_at: new Date(), revoked_reason: "account_deletion_requested" });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "user.deletion_requested",
+      entityType: "user",
+      entityId: user.id,
+      after: { deletion_scheduled_at: scheduledAt.toISOString() },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  const when = scheduledAt.toISOString().slice(0, 10);
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Your CRAL account is scheduled for deletion",
+    html: emailLayout({
+      preheader: `Scheduled for ${when}. Sign in and choose "Keep my account" to stop it.`,
+      bodyHtml: [
+        emailHeading("Account scheduled for deletion"),
+        emailParagraph(
+          `Your account and listings will be permanently deleted on ${when}. Bookings already running still finish and still pay out.`,
+        ),
+        emailParagraph(
+          'Changed your mind? Sign in any time before then and choose "Keep my account".',
+        ),
+        emailMuted("If you didn't ask for this, sign in now and cancel it, then change your password."),
+      ].join(""),
+    }),
+    text: `Your CRAL account is scheduled for deletion on ${when}. Sign in before then and choose "Keep my account" to stop it.`,
+  });
+
+  return { status: "pending_deletion", deletion_scheduled_at: scheduledAt.toISOString() };
+}
+
+export async function cancelAccountDeletion(
+  userId: string,
+  ctx: RequestContext,
+): Promise<{ status: string }> {
+  const user = await requireUser(userId);
+  if (user.status !== "pending_deletion") {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "no_pending_deletion",
+      message: "This account isn't scheduled for deletion.",
+    });
+  }
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      status: "active",
+      status_changed_at: new Date(),
+      erasure_requested: false,
+      erasure_cooling_off_until: null,
+    });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "user.deletion_cancelled",
+      entityType: "user",
+      entityId: user.id,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  return { status: "active" };
+}
+
+/**
+ * Run daily (folded into runDailyReminderSweep). Purges accounts whose
+ * 30-day grace period has elapsed: scrub the PII on the user row and mark
+ * it `deleted`, revoke every session, drop credentials/recovery codes.
+ * Merchants, vehicles, bookings, payouts and audit_log are deliberately
+ * left intact.
+ */
+export async function runAccountDeletionSweep(): Promise<{ purged: number }> {
+  const due = await db<UserRow>("users")
+    .where({ status: "pending_deletion" })
+    .andWhere("erasure_cooling_off_until", "<=", new Date());
+
+  let purged = 0;
+  for (const user of due) {
+    await db.transaction(async (trx) => {
+      await trx<UserRow>("users").where({ id: user.id }).update({
+        status: "deleted",
+        status_changed_at: new Date(),
+        erasure_requested: false,
+        erasure_cooling_off_until: null,
+        email: `deleted-${user.id}@cral.invalid`,
+        phone: null,
+        phone_verified: false,
+        full_name: null,
+        // Unusable hash — no valid password can produce it.
+        password_hash: "deleted",
+        two_factor_enabled: false,
+        two_factor_phone: null,
+        two_factor_enrolled_at: null,
+        pin_hash: null,
+      });
+      await trx<SessionRow>("sessions")
+        .where({ user_id: user.id, revoked_at: null })
+        .update({ revoked_at: new Date(), revoked_reason: "account_deleted" });
+      await trx("recovery_codes").where({ user_id: user.id }).del();
+      await trx("password_reset_tokens").where({ user_id: user.id }).del();
+      await writeAuditEntry(trx, {
+        actorId: null,
+        actorType: "system",
+        action: "user.deleted",
+        entityType: "user",
+        entityId: user.id,
+        after: { reason: "grace_period_elapsed" },
+      });
+    });
+    purged++;
+  }
+
+  return { purged };
+}
+
 // ---------------------------------------------------------------------
 // §7 Opt-in SMS two-factor
 // ---------------------------------------------------------------------
 
+export type TwoFactorChannel = "sms" | "email";
+
 /**
- * Texts a fresh six-digit code and records the challenge it belongs to.
+ * Sends a fresh six-digit code and records the challenge it belongs to.
  * Any earlier unspent challenge for the same user is retired first, so a
  * second sign-in attempt can't be completed with a stale code.
+ *
+ * `channel` is normally "sms" (the enrolled number). "email" is the
+ * fallback when the text isn't arriving - the code goes to the account
+ * email instead. There are no recovery codes; email, then support, is the
+ * whole fallback chain.
  */
 async function issueTwoFactorChallenge(
   user: UserRow,
   deviceId: string,
+  channel: TwoFactorChannel = "sms",
 ): Promise<TwoFactorChallengeRow> {
   await db<TwoFactorChallengeRow>("two_factor_challenges")
     .where({ user_id: user.id, consumed_at: null })
@@ -700,49 +949,30 @@ async function issueTwoFactorChallenge(
 
   if (!challenge) throw new Error("Failed to create two-factor challenge");
 
-  await smsAdapter.send({
-    to: user.two_factor_phone as string,
-    body: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
-  });
+  if (channel === "email") {
+    await emailAdapter.send({
+      to: user.email,
+      subject: "Your CRAL sign-in code",
+      html: emailLayout({
+        preheader: `${code} - your CRAL sign-in code`,
+        bodyHtml: [
+          emailHeading("Your sign-in code"),
+          emailParagraph(
+            `Enter <strong>${code}</strong> to finish signing in. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+          ),
+          emailMuted("If you didn't try to sign in, change your password and contact support."),
+        ].join(""),
+      }),
+      text: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+    });
+  } else {
+    await smsAdapter.send({
+      to: user.two_factor_phone as string,
+      body: `${code} is your CRAL sign-in code. It expires in ${TWO_FACTOR_TTL_MINUTES} minutes.`,
+    });
+  }
 
   return challenge;
-}
-
-function generateRecoveryCode(): string {
-  // Two short groups, unambiguous alphabet — these get written down.
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  const pick = (n: number) =>
-    Array.from({ length: n }, () => alphabet[randomInt(0, alphabet.length)]).join("");
-  return `${pick(4)}-${pick(4)}`;
-}
-
-async function issueRecoveryCodes(userId: string, trx: Knex.Transaction): Promise<string[]> {
-  await trx("recovery_codes").where({ user_id: userId }).del();
-  const codes = Array.from({ length: RECOVERY_CODE_COUNT }, generateRecoveryCode);
-  await trx("recovery_codes").insert(
-    codes.map((code) => ({
-      id: generateId("recoveryCode"),
-      user_id: userId,
-      code_hash: hashCode(code),
-    })),
-  );
-  return codes;
-}
-
-/** Spends a recovery code if it matches an unconsumed one. */
-async function consumeRecoveryCode(userId: string, presented: string): Promise<boolean> {
-  const row = await db<RecoveryCodeRow>("recovery_codes")
-    .where({
-      user_id: userId,
-      code_hash: hashCode(presented.trim().toUpperCase()),
-      consumed_at: null,
-    })
-    .first();
-  if (!row) return false;
-  await db<RecoveryCodeRow>("recovery_codes")
-    .where({ id: row.id })
-    .update({ consumed_at: new Date() });
-  return true;
 }
 
 async function requireUser(userId: string): Promise<UserRow> {
@@ -793,8 +1023,9 @@ export async function enroll2fa(userId: string, rawPhone: string) {
 }
 
 /**
- * Step 2 of enrolment: the code from the text. Switches 2FA on and issues
- * the ten recovery codes — the only time they are ever shown.
+ * Step 2 of enrolment: the code from the text. Switches 2FA on. (Kept for
+ * a future "use a different number" need; the Settings UI uses the
+ * one-tap `enable2fa` instead. There are no recovery codes.)
  */
 export async function verify2fa(userId: string, code: string, ctx: RequestContext) {
   const user = await requireUser(userId);
@@ -844,12 +1075,11 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
     });
   }
 
-  const recoveryCodes = await db.transaction(async (trx) => {
+  await db.transaction(async (trx) => {
     await trx<OtpCodeRow>("otp_codes").where({ id: row.id }).update({ consumed_at: new Date() });
     await trx<UserRow>("users")
       .where({ id: user.id })
       .update({ two_factor_enabled: true, two_factor_enrolled_at: new Date() });
-    const codes = await issueRecoveryCodes(user.id, trx);
     await writeAuditEntry(trx, {
       actorId: user.id,
       actorType: "user",
@@ -860,7 +1090,6 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    return codes;
   });
 
   const notice =
@@ -881,12 +1110,81 @@ export async function verify2fa(userId: string, code: string, ctx: RequestContex
     text: notice,
   });
 
-  return { recovery_codes: recoveryCodes };
+  return { enabled: true };
 }
 
 /**
- * The post-password step at sign-in. Accepts the texted code or any unspent
- * recovery code, and only then creates the session.
+ * The one-tap switch (Settings → Security). The account phone has already
+ * been proven at onboarding, so there is no handset step - enabling just
+ * points the second factor at `users.phone`.
+ *
+ * There are no recovery codes (owner's call, 2026-09-04). If a text isn't
+ * arriving, the sign-in screen can send the code by email instead; past
+ * that, support. `enroll2fa` + `verify2fa` stay for a future "use a
+ * different number" need, but the UI no longer walks that path.
+ */
+export async function enable2fa(userId: string, ctx: RequestContext) {
+  const user = await requireUser(userId);
+
+  if (user.two_factor_enabled) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "two_factor_already_enabled",
+      message: "Two-factor authentication is already on for this account.",
+    });
+  }
+
+  if (!user.phone || !user.phone_verified) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "phone_not_verified",
+      message: "Verify your phone number first - see the My profile tab.",
+    });
+  }
+
+  await db.transaction(async (trx) => {
+    await trx<UserRow>("users").where({ id: user.id }).update({
+      two_factor_phone: user.phone,
+      two_factor_enabled: true,
+      two_factor_enrolled_at: new Date(),
+    });
+    await writeAuditEntry(trx, {
+      actorId: user.id,
+      actorType: "user",
+      action: "auth.two_factor.enabled",
+      entityType: "user",
+      entityId: user.id,
+      after: { two_factor_enabled: true },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+  });
+
+  await emailAdapter.send({
+    to: user.email,
+    subject: "Two-factor authentication is on",
+    html: emailLayout({
+      preheader: "Two-factor authentication is now on for your account",
+      bodyHtml: [
+        emailHeading("Two-factor authentication is on"),
+        emailParagraph(
+          "From now on, signing in needs your password and a code texted to your phone.",
+        ),
+        emailMuted("If this wasn't you, contact support immediately."),
+      ].join(""),
+    }),
+    text: "Two-factor authentication was switched on for your CRAL account. If this wasn't you, contact support immediately.",
+  });
+
+  return { enabled: true };
+}
+
+/**
+ * The post-password step at sign-in. Accepts the six-digit code (texted, or
+ * emailed via the fallback) and only then creates the session. There are
+ * no recovery codes.
  */
 export async function completeTwoFactorChallenge(
   challengeId: string,
@@ -914,9 +1212,8 @@ export async function completeTwoFactorChallenge(
 
   const code = presented.trim();
   const matchesTexted = /^[0-9]{6}$/.test(code) && hashCode(code) === challenge.code_hash;
-  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, code);
 
-  if (!matchesTexted && !usedRecoveryCode) {
+  if (!matchesTexted) {
     await db<TwoFactorChallengeRow>("two_factor_challenges")
       .where({ id: challenge.id })
       .update({ attempts: challenge.attempts + 1 });
@@ -933,37 +1230,44 @@ export async function completeTwoFactorChallenge(
     .where({ id: challenge.id })
     .update({ consumed_at: new Date() });
 
-  if (usedRecoveryCode) {
-    const remaining = await db<RecoveryCodeRow>("recovery_codes")
-      .where({ user_id: user.id, consumed_at: null })
-      .count({ n: "*" })
-      .first();
-    const remainingCount = Number(remaining?.n ?? 0);
-    const notice = `A recovery code was used to sign in to your CRAL account. ${remainingCount} remain.`;
-    await emailAdapter.send({
-      to: user.email,
-      subject: "A recovery code was used",
-      html: emailLayout({
-        preheader: notice,
-        bodyHtml: [
-          emailHeading("A recovery code was used"),
-          emailParagraph("One of your two-factor recovery codes was just used to sign in."),
-          emailNotice(
-            `${remainingCount} recovery ${remainingCount === 1 ? "code" : "codes"} remain.`,
-          ),
-          emailMuted("If this wasn't you, change your password and contact support immediately."),
-        ].join(""),
-      }),
-      text: notice,
-    });
-  }
-
   const { session, refreshToken } = await createSession(user.id, challenge.device_id, ctx);
   return {
     ...issueTokenPair(user, session, refreshToken),
     user: serializeUser(user),
     next: null,
-    used_recovery_code: usedRecoveryCode,
+  };
+}
+
+/**
+ * Sign-in fallback: re-send the pending challenge's code, by SMS again or
+ * by email. Unauthenticated - the caller has passed a password but holds
+ * no token; the challenge id is the only thing identifying them.
+ */
+export async function resendTwoFactorChallenge(
+  challengeId: string,
+  channel: TwoFactorChannel,
+) {
+  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+    .where({ id: challengeId, consumed_at: null })
+    .first();
+  if (!challenge || challenge.expires_at < new Date()) {
+    throw new ApiError({
+      status: 400,
+      type: "conflict",
+      code: "two_factor_challenge_expired",
+      message: "That sign-in attempt has expired. Start again.",
+    });
+  }
+  const user = await requireUser(challenge.user_id);
+  const fresh = await issueTwoFactorChallenge(user, challenge.device_id, channel);
+  return {
+    challenge_id: fresh.id,
+    channel,
+    masked_destination:
+      channel === "email"
+        ? maskIdentifier(user.email)
+        : maskIdentifier(user.two_factor_phone ?? user.phone ?? ""),
+    expires_in: TWO_FACTOR_TTL_MINUTES * 60,
   };
 }
 
@@ -975,7 +1279,7 @@ export async function completeTwoFactorChallenge(
 export async function disable2fa(
   userId: string,
   password: string,
-  code: string,
+  code: string | undefined,
   ctx: RequestContext,
 ) {
   const user = await requireUser(userId);
@@ -1002,32 +1306,35 @@ export async function disable2fa(
     });
   }
 
-  const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
-    .where({ user_id: user.id, consumed_at: null })
-    .orderBy("created_at", "desc")
-    .first();
+  // The code is optional (the switch off asks for the password only -
+  // texting yourself a code to stop texting yourself codes is circular
+  // friction, and the caller is already in an authenticated session). When
+  // a texted code *is* supplied it's still honoured/consumed.
+  const trimmed = (code ?? "").trim();
+  if (trimmed) {
+    const challenge = await db<TwoFactorChallengeRow>("two_factor_challenges")
+      .where({ user_id: user.id, consumed_at: null })
+      .orderBy("created_at", "desc")
+      .first();
 
-  const trimmed = code.trim();
-  const matchesTexted =
-    !!challenge &&
-    challenge.expires_at > new Date() &&
-    /^[0-9]{6}$/.test(trimmed) &&
-    hashCode(trimmed) === challenge.code_hash;
-  const usedRecoveryCode = matchesTexted ? false : await consumeRecoveryCode(user.id, trimmed);
+    const matchesTexted =
+      !!challenge &&
+      challenge.expires_at > new Date() &&
+      /^[0-9]{6}$/.test(trimmed) &&
+      hashCode(trimmed) === challenge.code_hash;
 
-  if (!matchesTexted && !usedRecoveryCode) {
-    throw new ApiError({
-      status: 401,
-      type: "auth_error",
-      code: "two_factor_invalid",
-      message: "That code isn't right.",
-      field: "code",
-    });
-  }
+    if (!matchesTexted) {
+      throw new ApiError({
+        status: 401,
+        type: "auth_error",
+        code: "two_factor_invalid",
+        message: "That code isn't right.",
+        field: "code",
+      });
+    }
 
-  if (challenge) {
     await db<TwoFactorChallengeRow>("two_factor_challenges")
-      .where({ id: challenge.id })
+      .where({ id: challenge!.id })
       .update({ consumed_at: new Date() });
   }
 
@@ -1035,7 +1342,6 @@ export async function disable2fa(
     await trx<UserRow>("users")
       .where({ id: user.id })
       .update({ two_factor_enabled: false, two_factor_phone: null, two_factor_enrolled_at: null });
-    await trx("recovery_codes").where({ user_id: user.id }).del();
     await writeAuditEntry(trx, {
       actorId: user.id,
       actorType: "user",
@@ -1066,7 +1372,7 @@ export async function disable2fa(
   });
 }
 
-/** Raises a fresh challenge for an already-signed-in merchant (used by disable). */
+/** Raises a fresh challenge for an already-signed-in merchant. */
 export async function sendTwoFactorChallenge(userId: string) {
   const user = await requireUser(userId);
   if (!user.two_factor_enabled || !user.two_factor_phone) {
@@ -1088,18 +1394,11 @@ export async function sendTwoFactorChallenge(userId: string) {
 /** What the settings screen reads to draw the 2FA card. */
 export async function getTwoFactorState(userId: string) {
   const user = await requireUser(userId);
-  const remaining = user.two_factor_enabled
-    ? await db<RecoveryCodeRow>("recovery_codes")
-        .where({ user_id: userId, consumed_at: null })
-        .count({ n: "*" })
-        .first()
-    : null;
   return {
     enabled: user.two_factor_enabled,
     method: user.two_factor_enabled ? ("sms" as const) : null,
     masked_destination: user.two_factor_phone ? maskIdentifier(user.two_factor_phone) : null,
     enrolled_at: user.two_factor_enrolled_at?.toISOString() ?? null,
-    recovery_codes_remaining: remaining ? Number(remaining.n) : null,
   };
 }
 

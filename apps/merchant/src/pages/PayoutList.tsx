@@ -56,7 +56,7 @@ function Tile({ tile }: { tile: PayoutTile }): JSX.Element {
         <span style={{ ...P.poTileKicker, color: skin.kFg }}>{TILE_LABEL[tile.key]}</span>
       </div>
       <div style={{ ...P.poTileValue, color: "#0B0F1A" }}>
-        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {amount === "—" ? "0" : amount}
+        <span style={{ ...P.poTileUnit, color: skin.unitFg }}>KES</span> {amount === " - " ? "0" : amount}
       </div>
       <div style={{ ...P.poTileSub, color: skin.subFg }}>{tile.note}</div>
     </div>
@@ -116,8 +116,7 @@ function EmptyState({ onSeed, seeding }: { onSeed: () => void; seeding: boolean 
       <div style={P.emptyIcon}>◎</div>
       <div style={P.emptyTitle}>No payouts yet</div>
       <p style={P.emptyBody}>
-        A payout run is cut once a hire is finished and the hirer's deposit has been released. Nothing has reached that
-        point yet.
+        A payout run is cut once a hire is finished and cleared. Nothing has reached that point yet.
       </p>
       {import.meta.env.DEV && (
         <button type="button" onClick={onSeed} disabled={seeding} style={P.actionBtn}>

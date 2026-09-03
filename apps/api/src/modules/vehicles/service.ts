@@ -170,6 +170,7 @@ async function serializeDetail(merchant: MerchantRow, vehicle: VehicleRow) {
     colour: vehicle.colour,
     minimum_hire_days: vehicle.minimum_hire_days,
     chauffeured: vehicle.chauffeured,
+    rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
     verification_badge_expires_at: vehicle.verification_badge_expires_at
       ? vehicle.verification_badge_expires_at.toISOString()
       : null,
@@ -288,6 +289,7 @@ export async function createVehicle(userId: string, input: CreateVehicleInput, c
         county: input.county,
         pickup_address: input.pickup_address,
         daily_rate_amount: dailyRateCents(input.daily_rate) ?? 0,
+        rate_mode: input.rate_mode ?? "list",
         minimum_hire_days: input.minimum_hire_days ?? 1,
         chauffeured: input.chauffeured ?? true,
         status: "draft",
@@ -396,6 +398,7 @@ export async function updatePriceAvailability(
 
   const update: Record<string, unknown> = {};
   if (input.daily_rate !== undefined) update.daily_rate_amount = dailyRateCents(input.daily_rate);
+  if (input.rate_mode !== undefined) update.rate_mode = input.rate_mode;
   if (input.minimum_hire_days !== undefined) update.minimum_hire_days = input.minimum_hire_days;
   if (input.county !== undefined) update.county = input.county;
   if (input.pickup_address !== undefined) update.pickup_address = input.pickup_address;

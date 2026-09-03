@@ -5,7 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
  * `main.tsx` so non-React code can reach it without importing the app
  * entry point (which would be a cycle).
  *
- * `lib/auth.ts` clears it on every session change — cached query data is
+ * `lib/auth.ts` clears it on every session change - cached query data is
  * per-user and must not survive a sign-out or outlive one account into the
  * next one. See `setSession`.
  */

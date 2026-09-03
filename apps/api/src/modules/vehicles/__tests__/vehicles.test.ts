@@ -169,6 +169,24 @@ describe("vehicles — price & availability", () => {
     expect(audit).toBeTruthy();
     expect(audit.actor_id).toBe(userId);
   });
+
+  it("remembers rate_mode without changing what daily_rate stores", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KRM 100M", {
+      daily_rate: "8889",
+      rate_mode: "net",
+    });
+    expect(created.body.rate_mode).toBe("net");
+    // daily_rate is still the gross figure the client sent.
+    expect(created.body.daily_rate).toEqual({ amount: 888900, currency: "KES" });
+
+    const patchRes = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}`)
+      .set(auth(accessToken))
+      .send({ daily_rate: "10000", rate_mode: "list" });
+    expect(patchRes.body.rate_mode).toBe("list");
+    expect(patchRes.body.daily_rate).toEqual({ amount: 1000000, currency: "KES" });
+  });
 });
 
 describe("vehicles — pause / resume", () => {

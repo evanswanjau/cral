@@ -85,7 +85,14 @@ export const TwoFactorChallengeSchema = z.object({
   code: z.string().min(6).max(64),
 });
 
+export const TwoFactorResendSchema = z.object({
+  challenge_id: z.string().min(1),
+  channel: z.enum(["sms", "email"]).optional(),
+});
+
 export const Disable2faSchema = z.object({
   password: z.string(),
-  code: z.string().min(6).max(64),
+  // Optional — the Settings switch-off asks for the password only. A
+  // texted or recovery code is still honoured when supplied.
+  code: z.string().min(6).max(64).optional(),
 });
