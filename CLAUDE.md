@@ -775,6 +775,52 @@ code is `apps/api/src/modules/dashboard/` and
   (chauffeured)" / "Self-drive"), mirroring the Price & availability modal.
   `vehicles.chauffeured` already existed; the wizard just sets it now.
 
+**Security patch (2026-09-03 — PR "security patch").** First group of fixes
+from the full-stack review in
+[`docs/plans/merchant-review-2026-09-03.md`](./docs/plans/merchant-review-2026-09-03.md);
+that file carries the remaining findings and the suggested order. Tests are
+in `apps/api/src/__tests__/security.test.ts`, one block per finding.
+
+- **`GET /audit-log` is gone.** It was Phase-0 scaffolding on the health
+  router with no `authenticate()` — an anonymous, cursor-walkable dump of
+  every state change on the platform (actor ids, IPs, before/after JSONB).
+  An audit reader for humans belongs in the Phase-3 admin surface behind an
+  `aud: "ops"` token. **Don't re-add a reader anywhere public.**
+- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind Railway is the
+  edge's address for every visitor, so every IP-keyed `rateLimit` bucket was
+  one platform-wide bucket — five OTP requests an hour for all users
+  combined. Deliberately `1`, not `true`: trusting the whole
+  `X-Forwarded-For` chain lets a caller pick its own bucket. If a second
+  proxy is ever put in front, this number changes with it.
+- **Idempotency keys are scoped per user** (migration `20260905090000`, PK
+  is now `(user_id, key, route)`). The namespace used to be global, so two
+  merchants generating the same key on the same route collided and the
+  second was served the first's stored response body. `authenticate()` runs
+  before `requireIdempotencyKey()` on all seven mounts — keep it that way.
+- **Uploads have one shared policy**: `apps/api/src/lib/uploads.ts`. JPEG,
+  PNG, WebP and PDF only, enforced twice — `fileFilter` on the declared type
+  and `assertDeclaredTypeMatchesBytes` on the actual leading bytes, because
+  a `Content-Type` header is a claim, not evidence. All three multipart
+  routes (onboarding docs, vehicle docs, handover photos) go through
+  `createUpload()`; **don't hand-roll a fourth `multer({...})`.**
+  `GET /merchant/onboarding/documents/:id` used to echo the client's stored
+  mimetype back with `inline` and no `nosniff`, so an `evil.html` uploaded
+  as `text/html` executed on the API origin. It now sends `nosniff` and runs
+  the stored type through `safeContentType`/`safeDisposition`, which force
+  anything outside the allowlist (rows predating it) to download.
+- **`verifyAccessToken` pins `audience: "public"` and `algorithms:
+  ["HS256"]`.** The `aud` claim was always written and never checked, so a
+  Phase-3 `aud: "ops"` admin token would have been accepted by every
+  merchant endpoint the day that flow shipped.
+- **The dev `JWT_ACCESS_SECRET` can't reach production** — boot fails when
+  `NODE_ENV=production` and the secret is the `.env.example` placeholder or
+  under 32 characters.
+- **`helmet` is mounted** with `contentSecurityPolicy` and
+  `crossOriginEmbedderPolicy` off: the API serves JSON and the occasional
+  PDF/CSV/image to a separate origin and has no pages of its own, so those
+  two only complicate serving documents. The rest (nosniff, frameguard,
+  HSTS, no-referrer) applies.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

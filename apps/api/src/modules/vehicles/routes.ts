@@ -1,10 +1,10 @@
 import { Router, type Request } from "express";
-import multer from "multer";
 import { ApiError } from "@cral/types";
 import { authenticate } from "../../middleware/authenticate.js";
 import { requireIdempotencyKey } from "../../middleware/idempotency.js";
 import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
+import { assertDeclaredTypeMatchesBytes, createUpload } from "../../lib/uploads.js";
 import type { RequestContext } from "../merchant/service.js";
 import * as vehiclesService from "./service.js";
 import {
@@ -22,10 +22,7 @@ function ctxOf(req: Request): RequestContext {
   return { ip: req.ip ?? null, requestId: req.requestId ?? null };
 }
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // matches merchant/routes.ts's onboarding document limit
-});
+const upload = createUpload();
 
 vehiclesRouter.get(
   "/merchant/vehicles",
@@ -160,6 +157,7 @@ vehiclesRouter.post(
         field: "file",
       });
     }
+    assertDeclaredTypeMatchesBytes(req.file.buffer, req.file.mimetype);
     const result = await vehiclesService.uploadVehicleDocument(
       req.auth!.sub,
       req.params.vehicleId as string,

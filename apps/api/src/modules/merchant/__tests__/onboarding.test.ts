@@ -4,7 +4,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../../app.js";
 import { db } from "../../../db/client.js";
-import { createVerifiedTestUser } from "../../../test/helpers.js";
+import { createVerifiedTestUser, testJpeg, testPdf } from "../../../test/helpers.js";
 
 const app = createApp();
 const createdUserIds: string[] = [];
@@ -254,7 +254,7 @@ describe("merchant onboarding — document upload", () => {
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "national_id")
-      .attach("file", Buffer.from("fake id scan"), {
+      .attach("file", testJpeg("fake id scan"), {
         filename: "id.jpg",
         contentType: "image/jpeg",
       });
@@ -276,7 +276,7 @@ describe("merchant onboarding — document upload", () => {
   it("serves an uploaded document's bytes back to its owner, and 404s for anyone else", async () => {
     const owner = await newMerchant();
     const stranger = await newMerchant();
-    const bytes = Buffer.from("the actual file contents");
+    const bytes = testJpeg("the actual file contents");
 
     const upload = await request(app)
       .post("/merchant/onboarding/documents")
@@ -308,7 +308,7 @@ describe("merchant onboarding — document upload", () => {
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "logbook")
-      .attach("file", Buffer.from("fake logbook"), { filename: "logbook.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("fake logbook"), { filename: "logbook.pdf", contentType: "application/pdf" });
     expect(res.status).toBe(422);
   });
 
@@ -336,7 +336,7 @@ describe("merchant onboarding — document upload", () => {
         .set(auth(accessToken))
         .field("kind", "vehicle_photo")
         .field("vehicle_id", vehicleId)
-        .attach("file", Buffer.from(`photo-${i}`), { filename: `photo-${i}.jpg`, contentType: "image/jpeg" });
+        .attach("file", testJpeg(`photo-${i}`), { filename: `photo-${i}.jpg`, contentType: "image/jpeg" });
       expect(res.status).toBe(201);
     }
 
@@ -348,7 +348,7 @@ describe("merchant onboarding — document upload", () => {
       .set(auth(accessToken))
       .field("kind", "vehicle_photo")
       .field("vehicle_id", vehicleId)
-      .attach("file", Buffer.from("photo-4"), { filename: "photo-4.jpg", contentType: "image/jpeg" });
+      .attach("file", testJpeg("photo-4"), { filename: "photo-4.jpg", contentType: "image/jpeg" });
     expect(fourth.status).toBe(422);
   });
 
@@ -358,13 +358,13 @@ describe("merchant onboarding — document upload", () => {
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "kra_pin")
-      .attach("file", Buffer.from("v1"), { filename: "v1.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("v1"), { filename: "v1.pdf", contentType: "application/pdf" });
 
     const second = await request(app)
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "kra_pin")
-      .attach("file", Buffer.from("v2"), { filename: "v2.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("v2"), { filename: "v2.pdf", contentType: "application/pdf" });
 
     expect(second.status).toBe(201);
     const stillThere = await db("documents").where({ id: first.body.document_id }).first();
@@ -417,7 +417,7 @@ describe("merchant onboarding — submit", () => {
         .post("/merchant/onboarding/documents")
         .set(auth(accessToken))
         .field("kind", kind)
-        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
     for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
       await request(app)
@@ -425,7 +425,7 @@ describe("merchant onboarding — submit", () => {
         .set(auth(accessToken))
         .field("kind", kind)
         .field("vehicle_id", vehicleId)
-        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
 
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
@@ -512,7 +512,7 @@ describe("merchant onboarding — submit", () => {
         .post("/merchant/onboarding/documents")
         .set(auth(accessToken))
         .field("kind", kind)
-        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
     for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
       await request(app)
@@ -520,7 +520,7 @@ describe("merchant onboarding — submit", () => {
         .set(auth(accessToken))
         .field("kind", kind)
         .field("vehicle_id", vehicleId)
-        .attach("file", Buffer.from("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await request(app)

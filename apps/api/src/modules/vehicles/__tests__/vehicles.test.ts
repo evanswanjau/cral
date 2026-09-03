@@ -2,7 +2,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../../app.js";
 import { db } from "../../../db/client.js";
-import { createVerifiedTestUser } from "../../../test/helpers.js";
+import { createVerifiedTestUser, testJpeg, testPdf } from "../../../test/helpers.js";
 
 const app = createApp();
 const createdUserIds: string[] = [];
@@ -50,7 +50,7 @@ async function makeSubmittable(accessToken: string, vehicleId: string) {
       .post(`/merchant/vehicles/${vehicleId}/documents`)
       .set(auth(accessToken))
       .field("kind", kind)
-      .attach("file", Buffer.from(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+      .attach("file", testPdf(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
   }
   for (let i = 0; i < 3; i++) {
     await request(app)
@@ -58,7 +58,7 @@ async function makeSubmittable(accessToken: string, vehicleId: string) {
       .set(auth(accessToken))
       .field("kind", "vehicle_photo")
       .field("vehicle_id", vehicleId)
-      .attach("file", Buffer.from(`fake photo ${i}`), { filename: `photo${i}.jpg`, contentType: "image/jpeg" });
+      .attach("file", testJpeg(`fake photo ${i}`), { filename: `photo${i}.jpg`, contentType: "image/jpeg" });
   }
 }
 
@@ -284,7 +284,7 @@ describe("vehicles — submit", () => {
         .post(`/merchant/vehicles/${created.body.id}/documents`)
         .set(auth(accessToken))
         .field("kind", kind)
-        .attach("file", Buffer.from(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .attach("file", testPdf(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
 
     const noPhotos = await request(app).post(`/merchant/vehicles/${created.body.id}/submit`).set(auth(accessToken));
@@ -434,7 +434,7 @@ describe("vehicles — document upload", () => {
       .set(auth(accessToken))
       .field("kind", "comprehensive_insurance")
       .field("expires_at", "2027-03-16")
-      .attach("file", Buffer.from("fake cert"), { filename: "cert.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("fake cert"), { filename: "cert.pdf", contentType: "application/pdf" });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("review");
@@ -453,7 +453,7 @@ describe("vehicles — document upload", () => {
       .set(auth(accessToken))
       .field("kind", "comprehensive_insurance")
       .field("expires_at", "2028-01-01")
-      .attach("file", Buffer.from("fake cert"), { filename: "cert.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("fake cert"), { filename: "cert.pdf", contentType: "application/pdf" });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("pending");
@@ -469,7 +469,7 @@ describe("vehicles — document upload", () => {
       .post(`/merchant/vehicles/${created.body.id}/documents`)
       .set(auth(accessToken))
       .field("kind", "logbook")
-      .attach("file", Buffer.from("fake logbook"), { filename: "logbook.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("fake logbook"), { filename: "logbook.pdf", contentType: "application/pdf" });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("live");
@@ -484,7 +484,7 @@ describe("vehicles — document upload", () => {
       .set(auth(accessToken))
       .field("kind", "comprehensive_insurance")
       .field("expires_at", "2020-06-01")
-      .attach("file", Buffer.from("stale cert"), { filename: "cert.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("stale cert"), { filename: "cert.pdf", contentType: "application/pdf" });
 
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("expiry_in_past");
@@ -499,7 +499,7 @@ describe("vehicles — document upload", () => {
       .set(auth(accessToken))
       .field("kind", "vehicle_photo")
       .field("vehicle_id", created.body.id)
-      .attach("file", Buffer.from("fake photo"), { filename: "front.jpg", contentType: "image/jpeg" });
+      .attach("file", testJpeg("fake photo"), { filename: "front.jpg", contentType: "image/jpeg" });
 
     const detail = await request(app).get(`/merchant/vehicles/${created.body.id}`).set(auth(accessToken));
     expect(detail.body.photos).toHaveLength(1);
@@ -516,12 +516,12 @@ describe("vehicles — merchant approval", () => {
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "national_id")
-      .attach("file", Buffer.from("fake id"), { filename: "id.jpg", contentType: "image/jpeg" });
+      .attach("file", testJpeg("fake id"), { filename: "id.jpg", contentType: "image/jpeg" });
     await request(app)
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "kra_pin")
-      .attach("file", Buffer.from("fake kra"), { filename: "kra.pdf", contentType: "application/pdf" });
+      .attach("file", testPdf("fake kra"), { filename: "kra.pdf", contentType: "application/pdf" });
 
     const beforeApproval = await request(app).get(`/merchant/vehicles/${created.body.id}`).set(auth(accessToken));
     expect(beforeApproval.body.merchant_approved).toBe(false);

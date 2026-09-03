@@ -1,5 +1,6 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
 import { pinoHttp } from "pino-http";
 import { requestId } from "./middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
@@ -27,6 +28,28 @@ export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
+
+  // One proxy hop — the platform edge (Railway/Render both put exactly one
+  // in front of the app). Without this `req.ip` is the edge's address,
+  // identical for every visitor, which silently turns every IP-keyed
+  // rate-limit bucket into a single platform-wide one: five OTP requests an
+  // hour for all users combined, ten sign-ups an hour, and no per-IP abuse
+  // control at all. Deliberately `1` and not `true` — trusting the whole
+  // X-Forwarded-For chain lets a caller spoof its own bucket by prepending
+  // an address.
+  app.set("trust proxy", 1);
+
+  app.use(
+    helmet({
+      // The API serves JSON and the occasional PDF/CSV/image to a separate
+      // origin; it has no pages of its own to frame or script. A restrictive
+      // CSP plus COEP would only complicate serving those documents, so take
+      // helmet's defaults (nosniff, no-referrer, frameguard, HSTS) and turn
+      // off the two that assume an HTML app.
+      contentSecurityPolicy: false,
+      crossOriginEmbedderPolicy: false,
+    }),
+  );
   app.use(requestId());
   app.use(
     cors({

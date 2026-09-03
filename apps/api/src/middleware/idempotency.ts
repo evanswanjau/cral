@@ -19,6 +19,11 @@ function hashBody(body: unknown): string {
  * once it has produced a response, so the middleware can persist it for
  * future replays. Until that happens the row exists with a null status,
  * which lets a concurrent replay fail fast instead of racing the handler.
+ *
+ * Keys are scoped to the authenticated caller (migration
+ * `20260905090000`). The namespace used to be global across merchants, so
+ * two callers generating the same key on the same route collided and the
+ * second was served the first's response body — see that migration.
  */
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -48,8 +53,13 @@ export function requireIdempotencyKey() {
 
     const route = `${req.method} ${req.baseUrl}${req.route?.path ?? req.path}`;
     const requestHash = hashBody(req.body);
+    // Every route this is mounted on sits behind `authenticate()`, so `sub`
+    // is present in practice. The sentinel keeps the column NOT NULL (and
+    // usable in the primary key) if it is ever mounted on an open route.
+    const userId = req.auth?.sub ?? "anonymous";
+    const scope = { user_id: userId, key, route };
 
-    const existing = await db("idempotency_keys").where({ key, route }).first();
+    const existing = await db("idempotency_keys").where(scope).first();
 
     if (existing) {
       if (existing.request_hash !== requestHash) {
@@ -80,8 +90,7 @@ export function requireIdempotencyKey() {
 
     const expiresAt = new Date(Date.now() + REPLAY_WINDOW_HOURS * 60 * 60 * 1000);
     await db("idempotency_keys").insert({
-      key,
-      route,
+      ...scope,
       request_hash: requestHash,
       response_status: null,
       response_body: null,
@@ -91,7 +100,7 @@ export function requireIdempotencyKey() {
     req.idempotency = {
       async complete(status: number, body: unknown) {
         await db("idempotency_keys")
-          .where({ key, route })
+          .where(scope)
           .update({ response_status: status, response_body: JSON.stringify(body) });
       },
     };
