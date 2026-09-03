@@ -821,6 +821,35 @@ in `apps/api/src/__tests__/security.test.ts`, one block per finding.
   two only complicate serving documents. The rest (nosniff, frameguard,
   HSTS, no-referrer) applies.
 
+**Idempotency correctness (2026-09-03 — PR "idempotency correctness").**
+Group 2 of the same review. Tests in
+`apps/api/src/middleware/__tests__/idempotency.test.ts`.
+
+- **Only a *successful* request stores a response.** The row is still
+  claimed before the handler runs (so a concurrent replay fails fast), but
+  `attachHandle`'s `res.on("finish")` releases it if `complete()` was never
+  called. Previously a handler that threw left a null-status row forever and
+  every later retry of that key got `409 idempotency_in_progress` — one
+  transient database error wedged that action permanently. **Don't "fix" a
+  future bug by storing error responses**: replaying someone's 500 back at
+  them for 24h is not idempotency.
+- **A claim has a 60s lease.** If the process dies mid-handler, `finish`
+  never fires, so the lease is the only thing that frees the key. Takeover
+  is one atomic conditional `update`, not delete-then-insert, so two racing
+  retries can't both win it.
+- **The 24h window is now actually enforced on read.** `expires_at` was
+  written and indexed and never checked, so keys replayed forever. The
+  lookup filters on it, and the insert is an `onConflict().merge()` because
+  an expired row is still physically present and would collide.
+- **The different-body check runs *ahead* of the in-flight and lease
+  checks** — deliberately. Reusing one key for two different bodies is a
+  client bug worth reporting as `idempotency_conflict` whether or not the
+  earlier attempt finished.
+- **`purgeExpiredIdempotencyKeys` runs in `runDailyReminderSweep`.** Nothing
+  collected that table before; it grew for the life of the deployment. The
+  sweep now does five things, and `npm run reminders:sweep -w apps/api`
+  reports all of them rather than just the email count.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

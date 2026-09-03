@@ -11,7 +11,10 @@ block per finding, and CLAUDE.md carries the decisions. Those seven
 sections are left in place below as the record of what was wrong and why
 the fix looks the way it does; each is marked **FIXED**.
 
-Groups 2-6 (#5-#11, #15-#20) are still open.
+Group 2 - **idempotency correctness** (#5, #6) - is also done, same
+branch, tests in `apps/api/src/middleware/__tests__/idempotency.test.ts`.
+
+Groups 3-6 (#7-#11, #15-#20) are still open.
 
 ## What's already green
 
@@ -130,7 +133,7 @@ PDF or image as `attachment`.
 
 ## P1 - correctness and reliability
 
-### 5. A failed handler poisons its Idempotency-Key permanently
+### 5. A failed handler poisons its Idempotency-Key permanently - FIXED
 
 `requireIdempotencyKey` inserts the row with `response_status: null`
 *before* the handler runs, and only `req.idempotency.complete()` on the
@@ -144,7 +147,7 @@ retry that action.
 around the handler), and treat a null-status row older than a short lease
 (say 60s) as abandoned rather than in-progress.
 
-### 6. The 24h replay window isn't real, and nothing purges the table
+### 6. The 24h replay window isn't real, and nothing purges the table - FIXED
 
 `expires_at` is written and indexed, and then **never read**. The lookup is
 `where({ key, route })` with no expiry predicate, and no job purges old
@@ -365,7 +368,7 @@ Each group is independently shippable.
 
 1. ~~**Security patch** (#1, #2, #3, #4, #12, #13, #14)~~ - **done**, branch
    `feature/security-patch`.
-2. **Idempotency correctness** (#5, #6) - one PR with tests, since both
+2. ~~**Idempotency correctness** (#5, #6)~~ - **done**, same branch. Both
    touch the same middleware.
 3. **Reliability** (#7, #8, #9, #10, #11) - the error-shape, shutdown and
    boundary fixes.

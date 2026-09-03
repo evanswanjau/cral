@@ -1172,6 +1172,7 @@ export async function runDailyReminderSweep(): Promise<{
   expiryNotices: number;
   purged: number;
   accountsDeleted: number;
+  idempotencyKeysPurged: number;
 }> {
   const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
   let sent = 0;
@@ -1196,5 +1197,10 @@ export async function runDailyReminderSweep(): Promise<{
   const { runAccountDeletionSweep } = await import("../auth/service.js");
   const { purged: accountsDeleted } = await runAccountDeletionSweep();
 
-  return { sent, expiryNotices, purged, accountsDeleted };
+  // Replayed responses past their 24h window. Nothing collected this table
+  // before, so it grew for the life of the deployment.
+  const { purgeExpiredIdempotencyKeys } = await import("../../middleware/idempotency.js");
+  const idempotencyKeysPurged = await purgeExpiredIdempotencyKeys();
+
+  return { sent, expiryNotices, purged, accountsDeleted, idempotencyKeysPurged };
 }
