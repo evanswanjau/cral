@@ -17,7 +17,8 @@
     "reminders:sweep": "tsx src/scripts/run-reminder-sweep.ts",
     "seed:vehicles": "tsx src/scripts/seed-vehicles.ts",
     "approve:merchant": "tsx src/scripts/approve-merchant.ts",
-    "review:profile-change": "tsx src/scripts/review-profile-change.ts"
+    "review:profile-change": "tsx src/scripts/review-profile-change.ts",
+    "reset:demo": "tsx src/scripts/reset-demo-data.ts"
   },
   "dependencies": {
     "@cral/types": "*",

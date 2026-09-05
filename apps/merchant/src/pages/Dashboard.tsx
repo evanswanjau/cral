@@ -443,9 +443,15 @@ export function Dashboard(): JSX.Element {
         <Tile
           kicker="ON HIRE NOW"
           value={String(tiles.on_hire.count)}
-          delta={`of ${tiles.on_hire.live_vehicle_count} live`}
+          // "1 · of 0 live vehicles" contradicts itself on screen. A merchant
+          // can have a hire running against a listing that is not live (an
+          // admin can pause one mid-hire), so say what is true instead of
+          // dividing by a fleet that isn't there.
+          delta={tiles.on_hire.live_vehicle_count > 0 ? `of ${tiles.on_hire.live_vehicle_count} live` : "No live listings"}
           deltaColor="#333B4A"
-          note={tiles.on_hire.live_vehicle_count === 1 ? "vehicle" : "vehicles"}
+          note={
+            tiles.on_hire.live_vehicle_count > 0 ? (tiles.on_hire.live_vehicle_count === 1 ? "vehicle" : "vehicles") : ""
+          }
         />
         <Tile
           kicker="BOOKINGS THIS WEEK"

@@ -22,8 +22,13 @@ import { cutPayoutRun, nextMonday } from "./service.js";
  * bookings seeder's.
  *
  * The M-Pesa codes are the design file's own, so a seeded screen matches the
- * mockups; the dates are relative to today so the eight-week chart always
- * has something in it.
+ * mockups; the dates are relative to today. They are spread across calendar
+ * *months* rather than a few weeks because the dashboard's "What you kept"
+ * chart buckets by month over six of them - an earlier set clustered inside
+ * five weeks, which landed in two months and left that chart showing its
+ * "not enough history" copy on a freshly seeded account. One month in the
+ * window is deliberately left empty, so the chart's zero-fill gets exercised
+ * too.
  */
 
 const HIRERS = [
@@ -42,16 +47,19 @@ interface RunFixture {
 }
 
 const RUNS: RunFixture[] = [
-  { weeksAgo: 5, code: "SJ1D40MB7X", hires: [{ hirer: HIRERS[2], durationDays: 3 }] },
+  { weeksAgo: 20, code: "SJ0B71LR5D", hires: [{ hirer: HIRERS[1], durationDays: 2 }] },
+  // ~13 weeks back skips a calendar month, leaving one empty bar in the
+  // dashboard's six-month chart.
+  { weeksAgo: 13, code: "SJ1D40MB7X", hires: [{ hirer: HIRERS[2], durationDays: 3 }] },
   {
-    weeksAgo: 3,
+    weeksAgo: 9,
     code: "SJ2H88TP4C",
     hires: [
       { hirer: HIRERS[0], durationDays: 4 },
       { hirer: HIRERS[1], durationDays: 2 },
     ],
   },
-  { weeksAgo: 2, code: "SJ4K19XQ2M", hires: [{ hirer: HIRERS[3], durationDays: 5 }] },
+  { weeksAgo: 4, code: "SJ4K19XQ2M", hires: [{ hirer: HIRERS[3], durationDays: 5 }] },
   // Cut but not sent — this is the run the "Next payout" tile counts.
   { weeksAgo: 0, code: null, hires: [{ hirer: HIRERS[0], durationDays: 3 }, { hirer: HIRERS[2], durationDays: 2 }] },
 ];
