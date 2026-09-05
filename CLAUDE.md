@@ -775,6 +775,119 @@ code is `apps/api/src/modules/dashboard/` and
   (chauffeured)" / "Self-drive"), mirroring the Price & availability modal.
   `vehicles.chauffeured` already existed; the wizard just sets it now.
 
+**Security patch (2026-09-03 — PR "security patch").** First group of fixes
+from the full-stack review in
+[`docs/plans/merchant-review-2026-09-03.md`](./docs/plans/merchant-review-2026-09-03.md);
+that file carries the remaining findings and the suggested order. Tests are
+in `apps/api/src/__tests__/security.test.ts`, one block per finding.
+
+- **`GET /audit-log` is gone.** It was Phase-0 scaffolding on the health
+  router with no `authenticate()` — an anonymous, cursor-walkable dump of
+  every state change on the platform (actor ids, IPs, before/after JSONB).
+  An audit reader for humans belongs in the Phase-3 admin surface behind an
+  `aud: "ops"` token. **Don't re-add a reader anywhere public.**
+- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind Railway is the
+  edge's address for every visitor, so every IP-keyed `rateLimit` bucket was
+  one platform-wide bucket — five OTP requests an hour for all users
+  combined. Deliberately `1`, not `true`: trusting the whole
+  `X-Forwarded-For` chain lets a caller pick its own bucket. If a second
+  proxy is ever put in front, this number changes with it.
+- **Idempotency keys are scoped per user** (migration `20260905090000`, PK
+  is now `(user_id, key, route)`). The namespace used to be global, so two
+  merchants generating the same key on the same route collided and the
+  second was served the first's stored response body. `authenticate()` runs
+  before `requireIdempotencyKey()` on all seven mounts — keep it that way.
+- **Uploads have one shared policy**: `apps/api/src/lib/uploads.ts`. JPEG,
+  PNG, WebP and PDF only, enforced twice — `fileFilter` on the declared type
+  and `assertDeclaredTypeMatchesBytes` on the actual leading bytes, because
+  a `Content-Type` header is a claim, not evidence. All three multipart
+  routes (onboarding docs, vehicle docs, handover photos) go through
+  `createUpload()`; **don't hand-roll a fourth `multer({...})`.**
+  `GET /merchant/onboarding/documents/:id` used to echo the client's stored
+  mimetype back with `inline` and no `nosniff`, so an `evil.html` uploaded
+  as `text/html` executed on the API origin. It now sends `nosniff` and runs
+  the stored type through `safeContentType`/`safeDisposition`, which force
+  anything outside the allowlist (rows predating it) to download.
+- **`verifyAccessToken` pins `audience: "public"` and `algorithms:
+  ["HS256"]`.** The `aud` claim was always written and never checked, so a
+  Phase-3 `aud: "ops"` admin token would have been accepted by every
+  merchant endpoint the day that flow shipped.
+- **The dev `JWT_ACCESS_SECRET` can't reach production** — boot fails when
+  `NODE_ENV=production` and the secret is the `.env.example` placeholder or
+  under 32 characters.
+- **`helmet` is mounted** with `contentSecurityPolicy` and
+  `crossOriginEmbedderPolicy` off: the API serves JSON and the occasional
+  PDF/CSV/image to a separate origin and has no pages of its own, so those
+  two only complicate serving documents. The rest (nosniff, frameguard,
+  HSTS, no-referrer) applies.
+
+**Idempotency correctness (2026-09-03 — PR "idempotency correctness").**
+Group 2 of the same review. Tests in
+`apps/api/src/middleware/__tests__/idempotency.test.ts`.
+
+- **Only a *successful* request stores a response.** The row is still
+  claimed before the handler runs (so a concurrent replay fails fast), but
+  `attachHandle`'s `res.on("finish")` releases it if `complete()` was never
+  called. Previously a handler that threw left a null-status row forever and
+  every later retry of that key got `409 idempotency_in_progress` — one
+  transient database error wedged that action permanently. **Don't "fix" a
+  future bug by storing error responses**: replaying someone's 500 back at
+  them for 24h is not idempotency.
+- **A claim has a 60s lease.** If the process dies mid-handler, `finish`
+  never fires, so the lease is the only thing that frees the key. Takeover
+  is one atomic conditional `update`, not delete-then-insert, so two racing
+  retries can't both win it.
+- **The 24h window is now actually enforced on read.** `expires_at` was
+  written and indexed and never checked, so keys replayed forever. The
+  lookup filters on it, and the insert is an `onConflict().merge()` because
+  an expired row is still physically present and would collide.
+- **The different-body check runs *ahead* of the in-flight and lease
+  checks** — deliberately. Reusing one key for two different bodies is a
+  client bug worth reporting as `idempotency_conflict` whether or not the
+  earlier attempt finished.
+- **`purgeExpiredIdempotencyKeys` runs in `runDailyReminderSweep`.** Nothing
+  collected that table before; it grew for the life of the deployment. The
+  sweep now does five things, and `npm run reminders:sweep -w apps/api`
+  reports all of them rather than just the email count.
+
+**Reliability (2026-09-03 — PR "reliability").** Group 3 of the same
+review. Tests in `apps/api/src/__tests__/reliability.test.ts`.
+
+- **`authenticate()` checks the session, not just the signature.** A
+  revoked session used to keep working until its access token expired — up
+  to fifteen minutes after `logout`, `revoke-all`, a per-session `DELETE`
+  or close-account. This is **a primary-key lookup per authenticated
+  request, deliberately rather than a Redis denylist**: twelve places
+  revoke a session, and a denylist that misses one is a silent hole. If it
+  ever shows up in profiling, cache *positively* (session id → live, short
+  TTL); don't reintroduce a denylist. Account **suspension** is unchanged —
+  still enforced at the next refresh, by design.
+- **A fabricated `sid` no longer authenticates.** Test helpers must create
+  a real `sessions` row (`createVerifiedTestUser` does).
+- **`MulterError` has its own branch in `error-handler.ts`** —
+  `LIMIT_FILE_SIZE` → `413 file_too_large` naming the real limit. It used
+  to miss every branch and surface as a 500 "Something went wrong on our
+  end", which was the wrong status and a lie about whose end.
+- **`audit_log` is now genuinely append-only** (migration
+  `20260905090100`): a `BEFORE UPDATE OR DELETE` trigger, because the
+  original `REVOKE ... FROM PUBLIC` was a no-op — the API connects as the
+  role that *owns* the table, and owners bypass it. A `DELETE FROM
+  audit_log` from the app's own connection used to succeed. Triggers apply
+  to the owner too. **Nothing in this codebase may update or delete an
+  audit row**; if a test needs to clean up, leave the rows.
+- **The API drains on SIGTERM/SIGINT** — stop accepting connections, finish
+  open requests, close the three BullMQ workers (each drains its active
+  job), then the Knex pool and Redis, with a 15s force-exit backstop.
+- **The merchant app has error boundaries** (`components/ErrorBoundary.tsx`)
+  at two levels: one inside `AppLayout`'s shell, keyed on the pathname so a
+  broken page keeps the nav and clears on navigation, and one around the
+  whole app in `main.tsx` for what breaks outside the shell. Before this,
+  any render-time throw blanked the app to a white page.
+- **`queryClient` no longer retries 4xx.** The default retried *any* failure
+  three times, so a 404 or 422 took three round-trips to show an error that
+  was never going to change. 401 is excluded too — `lib/api.ts` already
+  refreshes and retries once itself.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
+import { MulterError } from "multer";
 import { ApiError, type ErrorEnvelope } from "@cral/types";
+import { MAX_UPLOAD_BYTES } from "../lib/uploads.js";
 
 /**
  * Turns any thrown error into the single error envelope shape from spec §2.
@@ -37,6 +39,27 @@ export function errorHandler() {
         },
       };
       res.status(422).json(body);
+      return;
+    }
+
+    // Multer throws its own error class, which used to miss both branches
+    // above and land in the 500 below — so a merchant who attached a photo
+    // straight off a phone camera was told "Something went wrong on our
+    // end", which is both the wrong status and a lie about whose end.
+    if (err instanceof MulterError) {
+      const isTooLarge = err.code === "LIMIT_FILE_SIZE";
+      const body: ErrorEnvelope = {
+        error: {
+          type: "validation_error",
+          code: isTooLarge ? "file_too_large" : "invalid_upload",
+          message: isTooLarge
+            ? `That file is larger than ${Math.round(MAX_UPLOAD_BYTES / (1024 * 1024))}MB. Try a smaller photo or scan.`
+            : "That upload couldn't be read. Attach a single file and try again.",
+          field: err.field ?? "file",
+          request_id: requestId,
+        },
+      };
+      res.status(isTooLarge ? 413 : 400).json(body);
       return;
     }
 

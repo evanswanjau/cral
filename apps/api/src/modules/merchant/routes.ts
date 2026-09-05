@@ -1,10 +1,15 @@
 import { Router, type Request } from "express";
-import multer from "multer";
 import { ApiError } from "@cral/types";
 import { authenticate } from "../../middleware/authenticate.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
+import {
+  assertDeclaredTypeMatchesBytes,
+  createUpload,
+  safeContentType,
+  safeDisposition,
+} from "../../lib/uploads.js";
 import type { RequestContext } from "./service.js";
 import * as merchantService from "./service.js";
 import {
@@ -22,10 +27,7 @@ function ctxOf(req: Request): RequestContext {
   return { ip: req.ip ?? null, requestId: req.requestId ?? null };
 }
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // matches Documents.tsx's MAX_DOC_BYTES
-});
+const upload = createUpload();
 
 // --- §9 Merchant onboarding --------------------------------------------
 
@@ -98,6 +100,9 @@ merchantRouter.post(
         field: "file",
       });
     }
+    // The allowlist in `fileFilter` only saw the declared type; this is
+    // where the bytes get to disagree with it.
+    assertDeclaredTypeMatchesBytes(req.file.buffer, req.file.mimetype);
     const result = await merchantService.uploadDocument(
       req.auth!.sub,
       {
@@ -127,11 +132,19 @@ merchantRouter.get(
       req.auth!.sub,
       req.params.documentId as string,
     );
-    res.setHeader("Content-Type", doc.contentType);
+    // The stored type is only ever echoed back through the allowlist, and
+    // nosniff stops the browser second-guessing it. Rows written before the
+    // upload allowlist existed can carry anything at all, so they come back
+    // as a download rather than something the browser will render.
+    res.setHeader("Content-Type", safeContentType(doc.contentType));
+    res.setHeader("X-Content-Type-Options", "nosniff");
     // Per-user content behind a bearer token — never let a shared cache
     // hold it, but let the browser reuse it for the session.
     res.setHeader("Cache-Control", "private, max-age=300");
-    res.setHeader("Content-Disposition", `inline; filename="${encodeURIComponent(doc.originalName)}"`);
+    res.setHeader(
+      "Content-Disposition",
+      `${safeDisposition(doc.contentType)}; filename="${encodeURIComponent(doc.originalName)}"`,
+    );
     res.status(200).send(doc.body);
   }),
 );

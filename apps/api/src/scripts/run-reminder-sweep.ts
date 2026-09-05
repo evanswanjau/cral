@@ -11,9 +11,22 @@ import { db } from "../db/client.js";
  * and a merchant_onboarding_reminders row lands.
  */
 async function main(): Promise<void> {
-  const { sent } = await runDailyReminderSweep();
+  // The sweep has grown well past reminders — it also generates expiry
+  // notices, purges notifications past 90 days, finishes scheduled account
+  // deletions and collects expired idempotency keys. Report all of it, or
+  // running this by hand tells you almost nothing about what it just did.
+  const result = await runDailyReminderSweep();
   // eslint-disable-next-line no-console
-  console.log(`Reminder sweep complete — ${sent} email(s) sent.`);
+  console.log(
+    [
+      "Daily sweep complete:",
+      `  reminder emails sent        ${result.sent}`,
+      `  insurance expiry notices    ${result.expiryNotices}`,
+      `  notifications purged        ${result.purged}`,
+      `  accounts deleted            ${result.accountsDeleted}`,
+      `  idempotency keys purged     ${result.idempotencyKeysPurged}`,
+    ].join("\n"),
+  );
   await db.destroy();
 }
 

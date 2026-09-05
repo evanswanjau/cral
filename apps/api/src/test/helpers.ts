@@ -1,5 +1,6 @@
 import { ulid } from "ulid";
 import { db } from "../db/client.js";
+import type { AllowedUploadMimeType } from "../lib/uploads.js";
 import { generateId } from "../lib/ids.js";
 import { hashPassword } from "../lib/password.js";
 import { signAccessToken } from "../lib/jwt.js";
@@ -47,3 +48,33 @@ export async function createVerifiedTestUser(): Promise<{
   const accessToken = signAccessToken({ sub: user.id, sid: session.id, roles: user.roles });
   return { userId: user.id, email, accessToken };
 }
+
+/**
+ * Minimal but genuine file bytes for upload tests.
+ *
+ * These used to be `Buffer.from("fake logbook")` labelled
+ * `application/pdf`. Since the 2026-09-03 security patch the upload routes
+ * check the leading bytes against the declared type
+ * (`lib/uploads.ts#assertDeclaredTypeMatchesBytes`), so a test payload has
+ * to actually be the thing it says it is — which is the point: a
+ * `Content-Type` header is a claim, not evidence.
+ *
+ * `label` is appended after the signature so each fixture is still
+ * distinguishable in an assertion, the way the old string payloads were.
+ */
+const FILE_SIGNATURES: Record<AllowedUploadMimeType, number[]> = {
+  "application/pdf": [0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x34], // %PDF-1.4
+  "image/jpeg": [0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46],
+  "image/png": [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a],
+  "image/webp": [
+    0x52, 0x49, 0x46, 0x46, 0x00, 0x00, 0x00, 0x00, 0x57, 0x45, 0x42, 0x50,
+  ],
+};
+
+export function testFile(mimetype: AllowedUploadMimeType, label = ""): Buffer {
+  return Buffer.concat([Buffer.from(FILE_SIGNATURES[mimetype]), Buffer.from(label, "utf8")]);
+}
+
+/** Shorthand for the two types the upload tests actually use. */
+export const testPdf = (label = ""): Buffer => testFile("application/pdf", label);
+export const testJpeg = (label = ""): Buffer => testFile("image/jpeg", label);

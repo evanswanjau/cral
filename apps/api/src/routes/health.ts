@@ -1,8 +1,6 @@
 import { Router } from "express";
-import type { PaginatedResult } from "@cral/types";
 import { db } from "../db/client.js";
 import { redisConnection } from "../jobs/queue.js";
-import { applyCursor, toPaginatedResult } from "../lib/pagination.js";
 
 export const healthRouter = Router();
 
@@ -33,23 +31,16 @@ healthRouter.get("/readyz", async (_req, res) => {
   res.status(allOk ? 200 : 503).json({ status: allOk ? "ok" : "degraded", checks });
 });
 
-/**
- * Proves the whole Phase 0 pipeline end to end against real conventions:
- * cursor pagination, the shared envelope shape, the audit_log table. Reads
- * the audit log itself (there's nothing else to read yet) — pass an
- * Idempotency-Key POST later once a phase actually writes to it.
+/*
+ * There was a `GET /audit-log` here — Phase-0 scaffolding that read the
+ * audit table back to prove cursor pagination, the shared envelope and the
+ * table itself all worked end to end. It was mounted on the health router
+ * with no `authenticate()`, so by the time the merchant portal was carrying
+ * real accounts it was an anonymous, cursor-walkable dump of every state
+ * change on the platform: actor ids, IPs, and the before/after JSONB.
+ *
+ * Removed 2026-09-03. What it was proving is now covered properly by the
+ * module test suites. An audit reader for humans belongs in the Phase-3
+ * admin surface, behind an `aud: "ops"` token — not here, and never
+ * unauthenticated.
  */
-healthRouter.get("/audit-log", async (req, res) => {
-  const limit = Math.min(Number(req.query.limit ?? 25), 100);
-  const cursor = typeof req.query.cursor === "string" ? req.query.cursor : undefined;
-
-  const rows = await applyCursor(db("audit_log").select("*"), {
-    sortColumn: "created_at",
-    direction: "desc",
-    limit,
-    ...(cursor ? { cursor } : {}),
-  });
-
-  const result: PaginatedResult<(typeof rows)[number]> = toPaginatedResult(rows, limit, "created_at");
-  res.status(200).json(result);
-});
