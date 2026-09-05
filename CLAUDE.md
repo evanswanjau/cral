@@ -334,6 +334,23 @@ is `openapi/merchant-bookings.yaml`, code is
   as a fabricated trust badge, which is precisely the kind of thing this
   product's whole premise says never to do. Add the field only once
   something real backs it.
+- **Ratings are real and aggregated** (owner's call, 2026-09-05 — round
+  5). `rateHirer` used to only append a `booking_events` row with the
+  stars in a label string; there is now a `ratings` table (migration
+  `20260906090000`, `rev_` PK, `ratee_type` = `hirer` | `merchant`,
+  `stars` 1–5 CHECK, unique `(booking_id, rater_id, ratee_type)`).
+  `lib/ratings.ts#ratingSummaries` batches the `AVG`/`COUNT` so a list
+  endpoint stays one query. `BookingSummary.hirer_rating`
+  (`{ average, count } | null` — **null, never all-zero**, until someone
+  rates) shows next to the hirer's name in the list, the booking
+  masthead and the hirer card; `HirerHistory` gained `average_rating`
+  (real now) + `rating_count`. `GET /merchant/profile` gained
+  `merchant_rating`, same shape — but **nothing writes `ratee_type =
+  "merchant"` yet** (no customer portal), so the merchant only ever sees
+  their own "Not rated yet" chip in `ProfileMenu`. The table + the
+  `merchant` half exist so the customer portal is a service change, not a
+  migration. Shared `components/portal/RatingBadge.tsx` renders it
+  (glyph + number, never colour alone).
 - **Idempotency-Key is required on every booking POST that moves money**
   (confirm, decline, cancel, complete-handover, file-report) per spec §2
   — including `decline` and `reports`, which were missed in the first

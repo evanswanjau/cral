@@ -9,11 +9,19 @@ export interface Money {
   currency: string;
 }
 
+export interface RatingSummary {
+  average: number;
+  count: number;
+}
+
 export interface BookingSummary {
   id: string;
   ref: string;
   status: BookingStatus;
   hirer_name: string;
+  /** The hirer's aggregate score across every merchant who's rated them.
+   *  `null` (not 0) until at least one rating exists. */
+  hirer_rating: RatingSummary | null;
   hirer_is_corporate: boolean;
   vehicle_registration: string;
   vehicle_make: string;
@@ -196,6 +204,7 @@ export interface HirerHistory {
   member_since: string;
   trip_count: number;
   average_rating: number | null;
+  rating_count: number;
   completed_count: number;
   late_return_count: number;
   cancellation_count: number;

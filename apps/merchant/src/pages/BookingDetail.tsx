@@ -3,6 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { P } from "../components/portal/styles.js";
 import { BOOKING_STATUS, TONE, money } from "../components/portal/status.js";
+import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { Modal } from "../components/portal/Modal.js";
 import { useToast } from "../components/portal/Toast.js";
 import { ApiClientError } from "../lib/api.js";
@@ -633,7 +634,12 @@ function HirerHistoryModal({ bookingId, onClose }: { bookingId: string; onClose:
                   ["Trips on CRAL", String(data.trip_count)],
                   ["Completed", String(data.completed_count)],
                   ["Cancelled", String(data.cancellation_count)],
-                  ["Average rating", data.average_rating ? `${data.average_rating.toFixed(1)} / 5` : "Not yet rated"],
+                  [
+                    "Average rating",
+                    data.average_rating
+                      ? `${data.average_rating.toFixed(1)} / 5 · ${data.rating_count} rating${data.rating_count === 1 ? "" : "s"}`
+                      : "Not yet rated",
+                  ],
                   ["Licence valid to", data.licence_valid_to ? fmtDate(data.licence_valid_to) : "Not on file"],
                 ].map(([k, v]) => (
                   <div key={k} style={P.priceRow}>
@@ -690,7 +696,10 @@ export function BookingDetail(): JSX.Element {
                 </span>
               )}
             </div>
-            <h1 style={P.mastH1}>{b.hirer_name}</h1>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+              <h1 style={P.mastH1}>{b.hirer_name}</h1>
+              {b.hirer_rating && <RatingBadge rating={b.hirer_rating} style={{ fontSize: 13 }} />}
+            </div>
             <div style={P.mastSub}>{b.vehicle_registration} · {b.vehicle_make} {b.vehicle_model} · {fmtDate(b.pickup_at)} → {fmtDate(b.dropoff_at)} · {days} days</div>
           </div>
           <div style={{ textAlign: "right" }}>
@@ -807,13 +816,14 @@ export function BookingDetail(): JSX.Element {
             <div style={{ padding: 18, display: "flex", alignItems: "center", gap: 12 }}>
               <span style={P.payoutAvatar}>{b.hirer_name.slice(0, 2).toUpperCase()}</span>
               <div>
-                <div style={{ font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>{b.hirer_name}</div>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8, flexWrap: "wrap" }}>
+                  <span style={{ font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>{b.hirer_name}</span>
+                  {b.hirer_rating && <RatingBadge rating={b.hirer_rating} />}
+                </div>
                 <div style={P.rowMeta}>
                   {b.hirer_is_corporate ? "Corporate account" : "Individual"}
                   {hirerHistory &&
-                    ` · ${hirerHistory.trip_count} trip${hirerHistory.trip_count === 1 ? "" : "s"} on CRAL${
-                      hirerHistory.average_rating ? ` · ${hirerHistory.average_rating.toFixed(1)}★` : ""
-                    }`}
+                    ` · ${hirerHistory.trip_count} trip${hirerHistory.trip_count === 1 ? "" : "s"} on CRAL`}
                 </div>
               </div>
             </div>

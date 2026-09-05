@@ -501,6 +501,38 @@ describe("bookings — rating", () => {
       .send({ stars: 4 });
     expect(second.status).toBe(409);
     expect(second.body.error.code).toBe("already_rated");
+
+    // The rating is now a real aggregate on the hirer, not just a label.
+    const history = await request(app).get(`/merchant/bookings/${booking.id}/hirer-history`).set(auth(accessToken));
+    expect(history.body.average_rating).toBe(5);
+    expect(history.body.rating_count).toBe(1);
+  });
+
+  it("aggregates across two merchants' ratings and surfaces it on the booking", async () => {
+    const hirer = await newHirer("Twice Rated");
+
+    async function rate(stars: number, plate: string) {
+      const { accessToken, userId } = await newMerchant();
+      const vehicle = await newVehicle(accessToken, plate);
+      const merchant = await db("merchants").where({ user_id: userId }).first();
+      const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, {
+        status: "completed",
+        pickup_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+      });
+      await db("bookings").where({ id: booking.id }).update({ rating_open_until: new Date(Date.now() + 13 * 24 * 60 * 60 * 1000) });
+      await request(app).post(`/merchant/bookings/${booking.id}/rating`).set(auth(accessToken)).send({ stars });
+      return { accessToken, bookingId: booking.id };
+    }
+
+    await rate(4, "KRT 200B");
+    const { accessToken, bookingId } = await rate(2, "KRT 300C");
+
+    const detail = await request(app).get(`/merchant/bookings/${bookingId}`).set(auth(accessToken));
+    expect(detail.body.hirer_rating).toEqual({ average: 3, count: 2 });
+
+    const list = await request(app).get("/merchant/bookings").set(auth(accessToken));
+    const row = list.body.data.find((b: { id: string }) => b.id === bookingId);
+    expect(row.hirer_rating).toEqual({ average: 3, count: 2 });
   });
 });
 

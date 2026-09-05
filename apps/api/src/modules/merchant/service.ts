@@ -7,6 +7,7 @@ import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js"
 import { isUniqueViolation, rethrowRegistrationConflict } from "../../lib/pg-errors.js";
 import { assertNotPast } from "../../lib/dates.js";
 import { normalizePhone } from "../../lib/identifier.js";
+import { ratingSummary } from "../../lib/ratings.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
   emailButton,
@@ -423,6 +424,12 @@ export async function getProfile(userId: string) {
     // through review (see requestProfileChange).
     profile_locked: merchant.onboarding_submitted,
     pending_change: pending ? serializeChangeRequest(pending) : null,
+    // The merchant's own aggregate score. `null` until a hirer rates them
+    // - and nothing writes merchant ratings yet (no customer portal), so
+    // in practice this is always null for now. The shape is here so the
+    // "not rated yet" chip has a real source and the customer portal is a
+    // service change, not a migration.
+    merchant_rating: await ratingSummary(userId, "merchant"),
   };
 }
 

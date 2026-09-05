@@ -6,11 +6,13 @@ export function AppHeader({
   company,
   email,
   approved,
+  rating,
 }: {
   name: string;
   company: string | null;
   email: string;
   approved: boolean;
+  rating: { average: number; count: number } | null;
 }): JSX.Element {
   return (
     <div style={P.topBar}>
@@ -26,7 +28,7 @@ export function AppHeader({
             Help
           </a>
           <span style={P.topBarRuleThin} />
-          <ProfileMenu name={name} company={company} email={email} approved={approved} />
+          <ProfileMenu name={name} company={company} email={email} approved={approved} rating={rating} />
         </div>
       </div>
     </div>

@@ -249,6 +249,16 @@ components:
         pending_change:
           nullable: true
           allOf: [{ $ref: "#/components/schemas/ProfileChangeRequest" }]
+        merchant_rating:
+          nullable: true
+          description: >
+            The merchant's own aggregate score. `null` (not 0) until a
+            hirer rates them - and nothing writes merchant ratings yet (no
+            customer portal), so today this is always null. The Security /
+            profile chip renders "Not rated yet" off it.
+          properties:
+            average: { type: number }
+            count: { type: integer }
         # Read-only account-level documents (Business documents card).
         documents:
           type: array

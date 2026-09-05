@@ -626,6 +626,12 @@ components:
         status: { $ref: "#/components/schemas/BookingStatus" }
         hirer_name: { type: string }
         hirer_is_corporate: { type: boolean }
+        hirer_rating:
+          allOf: [{ $ref: "#/components/schemas/RatingSummary" }]
+          nullable: true
+          description: >
+            The hirer's aggregate score across every merchant who has
+            rated them. `null` (not 0) until at least one rating exists.
         vehicle_registration: { type: string }
         vehicle_make: { type: string }
         vehicle_model: { type: string }
@@ -751,11 +757,22 @@ components:
         name: { type: string }
         member_since: { type: string, format: date }
         trip_count: { type: integer }
-        average_rating: { type: number, nullable: true }
+        average_rating:
+          type: number
+          nullable: true
+          description: Mean of every merchant rating for this hirer, one decimal place; `null` if unrated
+        rating_count: { type: integer, description: How many ratings `average_rating` is over (0 if unrated) }
         completed_count: { type: integer }
         late_return_count: { type: integer }
         cancellation_count: { type: integer }
         licence_valid_to: { type: string, format: date, nullable: true }
+
+    RatingSummary:
+      type: object
+      description: An aggregate rating. Never returned as all-zero - the containing field is `null` when there are no ratings.
+      properties:
+        average: { type: number, description: Mean stars, one decimal place }
+        count: { type: integer, description: Number of ratings }
 
     BookingEvent:
       type: object
