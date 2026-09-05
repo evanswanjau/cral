@@ -13,6 +13,7 @@ import { toE164 } from "../lib/device.js";
 import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
 import {
+  isPlaceholderRegistration,
   useDeleteVehicle,
   useDeleteVehicleDocument,
   useDeleteVehiclePhoto,
@@ -23,6 +24,7 @@ import {
   useResumeVehicle,
   useSubmitVehicle,
   useUpdatePriceAvailability,
+  useUpdateVehicleDetails,
   useUploadVehicleDocument,
   useUploadVehiclePhoto,
   useVehicleDetail,
@@ -30,8 +32,16 @@ import {
   type VehicleDocInfo,
   type VehicleStatus,
 } from "../lib/vehicles-api.js";
+import { VehicleDetailsFields, type VehicleDetailsValue } from "../components/vehicle/VehicleDetailsFields.js";
 
-type ModalKind = "price" | "message" | "verify" | "delete" | null;
+type ModalKind = "price" | "details" | "message" | "verify" | "delete" | null;
+
+/** Identity/spec fields can still be changed while the listing is the
+ *  merchant's to shape - a fresh draft, or one a reviewer sent back.
+ *  Mirrors `EDITABLE_DETAIL_STATUSES` in the API. */
+function canEditDetails(status: VehicleStatus): boolean {
+  return status === "draft" || status === "action" || status === "rejected";
+}
 type DocKind = keyof typeof DOC_LABELS;
 type OwnerDocKind = keyof typeof OWNER_DOC_LABELS;
 
@@ -335,6 +345,73 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   );
 }
 
+function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void }): JSX.Element {
+  const flash = useToast();
+  const update = useUpdateVehicleDetails(v.id);
+  const [value, setValue] = useState<VehicleDetailsValue>({
+    type: v.type as VehicleDetailsValue["type"],
+    make: v.make,
+    model: v.model,
+    year: v.year,
+    registration: isPlaceholderRegistration(v.registration) ? "" : v.registration,
+    transmission: (v.transmission as VehicleDetailsValue["transmission"]) || "Automatic",
+    fuel: (v.fuel as VehicleDetailsValue["fuel"]) || "Petrol",
+    colour: v.colour ?? "",
+  });
+  const [showErrors, setShowErrors] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const filled = value.make.trim() && value.model.trim() && value.year.trim() && value.registration.trim();
+
+  return (
+    <Modal
+      title="Vehicle details"
+      sub="Taken from the logbook. You can change these while the listing is a draft or back with you for changes."
+      onClose={onClose}
+      ctaLabel={update.isPending ? "Saving…" : "Save changes"}
+      ctaDisabled={update.isPending}
+      onConfirm={() => {
+        if (!filled) {
+          setShowErrors(true);
+          return;
+        }
+        setError(null);
+        update.mutate(
+          {
+            type: value.type,
+            make: value.make.trim(),
+            model: value.model.trim(),
+            year: value.year.trim(),
+            registration: value.registration.trim(),
+            transmission: value.transmission,
+            fuel: value.fuel,
+            ...(value.colour.trim() ? { colour: value.colour.trim() } : {}),
+          },
+          {
+            onSuccess: () => {
+              onClose();
+              flash("Vehicle details updated.");
+            },
+            onError: (err) =>
+              setError(err instanceof ApiClientError ? err.message : "Couldn't save those details. Try again."),
+          },
+        );
+      }}
+    >
+      <div style={{ display: "grid", gap: 16 }}>
+        {error && (
+          <div style={{ padding: "10px 12px", background: "#FDE7EA", border: "1px solid #F7BDC5", borderRadius: 8, color: "#A50E22", font: "600 13px/1.4 'Instrument Sans',sans-serif" }}>
+            {error}
+          </div>
+        )}
+        <div style={O.formFields}>
+          <VehicleDetailsFields value={value} onChange={setValue} showErrors={showErrors} />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function MessageModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void }): JSX.Element {
   const flash = useToast();
   const send = useMessageReviewer(v.id);
@@ -488,7 +565,7 @@ export function VehicleDetail(): JSX.Element {
   const navigate = useNavigate();
   const flash = useToast();
   const { data: v, isPending } = useVehicleDetail(vehicleId);
-  usePageTitle(v ? `${v.registration || `${v.make} ${v.model}`}` : "Vehicle");
+  usePageTitle(v ? (isPlaceholderRegistration(v.registration) ? `${v.make} ${v.model}`.trim() || "New vehicle" : v.registration) : "Vehicle");
   const [modal, setModal] = useState<ModalKind>(null);
   const pause = usePauseVehicle(vehicleId ?? "");
   const resume = useResumeVehicle(vehicleId ?? "");
@@ -522,6 +599,7 @@ export function VehicleDetail(): JSX.Element {
   const canManagePhotos = v.status === "draft";
 
   const submitBlockers: string[] = [];
+  if (isPlaceholderRegistration(v.registration)) submitBlockers.push("this vehicle's registration");
   if (!v.daily_rate) submitBlockers.push("a daily rate");
   if (v.doc_count < 3 || v.doc_has_issue) submitBlockers.push("all three documents");
   if (photoCount < 3) submitBlockers.push("at least three photos");
@@ -579,7 +657,9 @@ export function VehicleDetail(): JSX.Element {
         <div style={P.mastTop}>
           <div>
             <div style={P.mastTagRow}>
-              <span style={P.mastPlate}>{v.registration}</span>
+              <span style={{ ...P.mastPlate, ...(isPlaceholderRegistration(v.registration) ? { color: "#A7AEBB" } : {}) }}>
+                {isPlaceholderRegistration(v.registration) ? "NO PLATE YET" : v.registration}
+              </span>
               <span style={{ ...P.mastStatus, background: meta.tint, border: `1px solid ${meta.border}`, color: meta.text }}>
                 <span style={{ ...P.mastStatusDot, background: meta.core }} />
                 {meta.label}
@@ -654,7 +734,7 @@ export function VehicleDetail(): JSX.Element {
             onClick={() =>
               duplicate.mutate(undefined, {
                 onSuccess: (copy) => {
-                  flash("Draft created - each vehicle needs its own logbook and insurance.", "#6FC8F0");
+                  flash("Draft copied. Set its registration and details, then add its own documents.", "#6FC8F0");
                   navigate(`/vehicles/${copy.id}`);
                 },
               })
@@ -795,7 +875,13 @@ export function VehicleDetail(): JSX.Element {
           <div style={P.card}>
             <div style={P.cardHead}>
               <span style={P.cardTitle}>Vehicle details</span>
-              <span style={{ font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" }}>Taken from the logbook</span>
+              {canEditDetails(v.status) ? (
+                <button type="button" style={P.priceEditBtn} onClick={() => setModal("details")}>
+                  Edit
+                </button>
+              ) : (
+                <span style={{ font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" }}>Taken from the logbook</span>
+              )}
             </div>
             <div style={P.specGrid}>
               {[
@@ -950,6 +1036,7 @@ export function VehicleDetail(): JSX.Element {
       </div>
 
       {modal === "price" && <PriceModal v={v} onClose={() => setModal(null)} />}
+      {modal === "details" && <DetailsModal v={v} onClose={() => setModal(null)} />}
       {modal === "message" && <MessageModal v={v} onClose={() => setModal(null)} />}
       {modal === "verify" && <VerifyModal v={v} onClose={() => setModal(null)} />}
       {modal === "delete" && (

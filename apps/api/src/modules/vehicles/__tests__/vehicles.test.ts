@@ -261,6 +261,90 @@ describe("vehicles — duplicate", () => {
   });
 });
 
+describe("vehicles — edit details", () => {
+  it("updates the logbook fields on a draft", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KPA 100A");
+
+    const res = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({
+        type: "suv",
+        make: "Nissan",
+        model: "X-Trail",
+        year: "2021",
+        registration: "KPA 200B",
+        transmission: "Manual",
+        fuel: "Diesel",
+        colour: "Gunmetal",
+      });
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      type: "suv",
+      make: "Nissan",
+      model: "X-Trail",
+      year: "2021",
+      registration: "KPA 200B",
+      transmission: "Manual",
+      fuel: "Diesel",
+      colour: "Gunmetal",
+    });
+    expect(res.body.events.some((e: { label: string }) => e.label === "Details updated")).toBe(true);
+  });
+
+  it("rejects an edit once the listing is live", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KPA 300C");
+    await db("vehicles").where({ id: created.body.id }).update({ status: "live" });
+
+    const res = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ type: "sedan", make: "Toyota", model: "Axio", year: "2019", registration: "KPA 300C", transmission: "Automatic", fuel: "Petrol" });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("vehicle_locked");
+  });
+
+  it("409s when the new plate is already listed", async () => {
+    const { accessToken } = await newMerchant();
+    const a = await createVehicle(accessToken, "KPA 400D");
+    const b = await createVehicle(accessToken, "KPA 410E");
+
+    const res = await request(app)
+      .patch(`/merchant/vehicles/${b.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ type: "sedan", make: "Toyota", model: "Axio", year: "2019", registration: "kpa-400d", transmission: "Automatic", fuel: "Petrol" });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("registration_taken");
+    expect(a.body.registration).toBe("KPA 400D");
+  });
+
+  it("blocks submit on a duplicate's placeholder plate until a real one is set", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KPA 500F");
+    const dup = await request(app).post(`/merchant/vehicles/${created.body.id}/duplicate`).set(auth(accessToken));
+    expect(dup.body.registration).toMatch(/^NEW /);
+
+    await makeSubmittable(accessToken, dup.body.id);
+    await request(app).patch(`/merchant/vehicles/${dup.body.id}`).set(auth(accessToken)).send({ daily_rate: "4500" });
+
+    const blocked = await request(app).post(`/merchant/vehicles/${dup.body.id}/submit`).set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.code).toBe("registration_required");
+
+    await request(app)
+      .patch(`/merchant/vehicles/${dup.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ type: "sedan", make: "Toyota", model: "Axio", year: "2019", registration: "KPA 600G", transmission: "Automatic", fuel: "Petrol" });
+
+    const ok = await request(app).post(`/merchant/vehicles/${dup.body.id}/submit`).set(auth(accessToken));
+    expect(ok.status).toBe(200);
+    expect(ok.body.status).toBe("pending");
+    expect(ok.body.registration).toBe("KPA 600G");
+  });
+});
+
 describe("vehicles — submit", () => {
   it("refuses to submit until the daily rate, all three documents, and three photos are present", async () => {
     const { accessToken } = await newMerchant();
