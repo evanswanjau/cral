@@ -26,15 +26,24 @@ both.
    `apps/admin` — build command `npm run build -w apps/<name>`, publish
    directory `apps/<name>/dist`, with `VITE_API_URL` pointed at the
    deployed API's URL.
-4. **CORS** — `apps/api` currently has no CORS middleware because there's
-   nothing cross-origin to allow yet in local dev (Vite dev servers proxy or
-   just hit `localhost:4000` directly). Add `cors` scoped to the three
-   deployed app origins before the first real deploy.
+4. **CORS** — wired. `apps/api` mounts `cors` scoped to `CORS_ORIGINS` (a
+   comma-separated list), defaulting to the three local Vite ports. Set it
+   to the deployed app origins; a wrong value here is the failure that looks
+   like "the portal loads but every request fails".
 5. **Secrets** — `JWT_ACCESS_SECRET` and `SMTP_PASSWORD` are the live ones
    today; store them in the platform's secret manager, never in a file the
    repo tracks. `.env` holds them locally and is gitignored.
    `npm run smtp:check -w apps/api` proves the mail credentials from
    whatever environment you run it in.
+   **The API refuses to boot** when `NODE_ENV=production` and
+   `JWT_ACCESS_SECRET` is still the `.env.example` placeholder or is under
+   32 characters. Generate one with `openssl rand -base64 48`.
+6. **Proxy hops** — `app.set("trust proxy", 1)` assumes exactly one proxy
+   between the internet and the app, which is what Railway and Render each
+   put there. If anything else is added in front (a CDN, a second load
+   balancer), raise that number to match, or `req.ip` goes back to being the
+   same address for every visitor and every IP-keyed rate-limit bucket
+   silently becomes one global bucket.
 6. **CI gate** — `.github/workflows/ci.yml` already runs lint/typecheck/test
    against real Postgres+Redis service containers; wire a deploy step (or
    the platform's own git-push-to-deploy) only once staging is intentionally

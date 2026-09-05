@@ -17,7 +17,8 @@
     "reminders:sweep": "tsx src/scripts/run-reminder-sweep.ts",
     "seed:vehicles": "tsx src/scripts/seed-vehicles.ts",
     "approve:merchant": "tsx src/scripts/approve-merchant.ts",
-    "review:profile-change": "tsx src/scripts/review-profile-change.ts"
+    "review:profile-change": "tsx src/scripts/review-profile-change.ts",
+    "reset:demo": "tsx src/scripts/reset-demo-data.ts"
   },
   "dependencies": {
     "@cral/types": "*",
@@ -26,6 +27,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.21.1",
+    "helmet": "^8.3.0",
     "ioredis": "^5.4.1",
     "jsonwebtoken": "^9.0.2",
     "knex": "^3.1.0",

@@ -7,6 +7,7 @@ import { AppHeader } from "../components/portal/AppHeader.js";
 import { SideNav } from "../components/portal/SideNav.js";
 import { MerchantStatusCard } from "../components/portal/MerchantStatusCard.js";
 import { ToastProvider } from "../components/portal/Toast.js";
+import { ErrorBoundary } from "../components/ErrorBoundary.js";
 import { P } from "../components/portal/styles.js";
 import { useVehicleList } from "../lib/vehicles-api.js";
 import { useBookingList } from "../lib/bookings-api.js";
@@ -25,7 +26,8 @@ export function AppLayout(): ReactNode {
   // The design hangs the merchant-status card under the nav, and only on
   // the dashboard. It reads the dashboard query the page has already
   // fetched, so this costs no second request.
-  const onDashboard = useLocation().pathname === "/";
+  const { pathname } = useLocation();
+  const onDashboard = pathname === "/";
   const { data: profile } = useProfile();
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
@@ -49,7 +51,12 @@ export function AppLayout(): ReactNode {
               footer={onDashboard ? <MerchantStatusCard /> : null}
             />
             <div style={P.main}>
-              <Outlet />
+              {/* Scoped to the page, not the shell - a screen that throws
+                  leaves the nav standing so the merchant can go somewhere
+                  else. Keyed on the path so navigating away clears it. */}
+              <ErrorBoundary resetKey={pathname} compact>
+                <Outlet />
+              </ErrorBoundary>
             </div>
           </div>
         </div>
