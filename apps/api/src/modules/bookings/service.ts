@@ -172,7 +172,6 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
     gross: kes(booking.gross_amount),
     commission: kes(booking.commission_amount),
     merchant_net: kes(booking.merchant_net_amount),
-    deposit: kes(booking.deposit_amount),
     cancellation_fee: money(booking.cancellation_fee_amount, booking.cancellation_fee_currency),
     refund: money(booking.refund_amount, booking.refund_currency),
     pickup_location: booking.pickup_location,
@@ -182,7 +181,6 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
     payout_detail: booking.payout_detail,
     payout_account_name: booking.payout_account_name,
     has_pickup_condition_photos: booking.has_pickup_condition_photos,
-    deposit_release_at: booking.deposit_release_at ? booking.deposit_release_at.toISOString() : null,
     rating_open_until: booking.rating_open_until ? booking.rating_open_until.toISOString() : null,
     events: events.map(serializeEvent),
   };
@@ -744,7 +742,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
       body:
         handover.kind === "pickup"
           ? "Checked over together at pick-up."
-          : "Checked over on return. Deposit clears in 24 hours unless a report is filed.",
+          : "Checked over on return. You have 14 days to report an issue with this hire.",
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -766,7 +764,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
           merchantId: merchant.id,
           category: "return",
           title: `${bookingRow.ref} · vehicle returned and checked`,
-          body: "The return handover is done. The deposit clears in 24 hours unless you file a report.",
+          body: "The return handover is done. You can still report an issue with this hire for 14 days.",
           ref: bookingRow.ref,
           subjectType: "booking",
           subjectId: booking.id,
@@ -783,7 +781,9 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
 }
 
 // ---------------------------------------------------------------------
-// Reports (deposit-backed claim, or a no-money conduct report)
+// Reports (a money claim, capped and settled entirely server-side, or a
+// no-money conduct report). The merchant states what an issue cost to put
+// right; none of the deposit mechanics below are exposed to them.
 // ---------------------------------------------------------------------
 
 function serializeReport(r: BookingReportRow) {
@@ -834,7 +834,7 @@ export async function createBookingReport(userId: string, bookingId: string, inp
   let escalatedDisputeId: string | null = null;
   if (input.kind === "claim") {
     if (!claimableNow(booking)) {
-      conflict("deposit_not_held", "The deposit for this booking is no longer held, so a claim can't move money now.");
+      conflict("claim_window_closed", "The window to file a cost claim for this hire has closed. You can still file a conduct report.");
     }
     const requested = input.amount!;
     const cap = booking.deposit_amount;
@@ -865,10 +865,10 @@ export async function createBookingReport(userId: string, bookingId: string, inp
       await appendBookingEvent(trx, {
         bookingId: booking.id,
         merchantId: merchant.id,
-        kind: "deposit_hold_extended",
+        kind: "claim_under_review",
         tone: "amber",
-        label: "Deposit hold extended to 48 hours",
-        body: "A claim was filed, so CRAL is holding the deposit longer while it's reviewed.",
+        label: "Claim under review",
+        body: "CRAL is reviewing your claim. This usually takes up to 48 hours.",
         actorType: "system",
       });
     }
@@ -878,7 +878,7 @@ export async function createBookingReport(userId: string, bookingId: string, inp
       merchantId: merchant.id,
       kind: input.kind === "claim" ? "claim_filed" : "conduct_reported",
       tone: "amber",
-      label: input.kind === "claim" ? "Claim filed against the deposit" : "Conduct reported",
+      label: input.kind === "claim" ? "Claim filed" : "Conduct reported",
       body: input.description,
       actorType: "merchant",
     });

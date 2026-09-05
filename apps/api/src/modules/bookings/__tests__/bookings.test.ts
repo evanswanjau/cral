@@ -158,6 +158,9 @@ describe("bookings — confirm / decline", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("confirmed");
     expect(res.body.events[0]).toMatchObject({ label: "You accepted the booking" });
+    // The hirer deposit is internal-only — it must never reach a merchant payload.
+    expect(res.body).not.toHaveProperty("deposit");
+    expect(res.body).not.toHaveProperty("deposit_release_at");
   });
 
   it("refuses to confirm twice", async () => {
@@ -345,8 +348,11 @@ describe("bookings — handover", () => {
 
     expect(returnCompleted.status).toBe(200);
     expect(returnCompleted.body.booking.status).toBe("completed");
-    expect(returnCompleted.body.booking.deposit_release_at).toBeTruthy();
     expect(returnCompleted.body.booking.rating_open_until).toBeTruthy();
+    // The deposit-hold clock still runs, it is just never exposed to the merchant.
+    expect(returnCompleted.body.booking.deposit_release_at).toBeUndefined();
+    const returnedRow = await db("bookings").where({ id: booking.id }).first();
+    expect(returnedRow.deposit_release_at).toBeTruthy();
 
     emailSpy.mockRestore();
   });

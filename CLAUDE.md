@@ -671,6 +671,19 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   figure and the cap copy. The API still caps a claim at the deposit and
   escalates the overflow to a dispute — that logic is now entirely
   server-side and invisible to the merchant.
+  - **Round 5 (2026-09-05) finished the removal.** `deposit` and
+    `deposit_release_at` are gone from the merchant booking serializers
+    (`serializeDetail`), the contract's `BookingDetail`, and
+    `bookings-api.ts` — not just unrendered but off the wire. Booking
+    timeline/notification copy that said "the deposit clears in 24 hours"
+    now says "you have 14 days to report an issue"; the report modal asks
+    "Are you claiming the cost of repair or loss?" / "What did it cost to
+    put right?" instead of "money back from the hirer". The
+    `deposit_not_held` claim-window error is renamed `claim_window_closed`.
+    Rationale: a merchant who senses a pot of the hirer's money held
+    behind a booking is nudged to over-claim. Columns
+    (`bookings.deposit_amount` etc.), `computeBookingPricing`'s 15%, the
+    claim cap and the dispute escalation are untouched — all server-side.
 - **Adding a vehicle offers a price-entry switch** — "Set the list price"
   (a hirer's price, unchanged) or "Set what I keep" (take-home; the form
   grosses it up by `COMMISSION_RATE` for the stored/list price).

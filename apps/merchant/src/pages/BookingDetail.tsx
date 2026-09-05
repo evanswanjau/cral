@@ -464,15 +464,15 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
 
-  // The merchant states the real cost. The API decides what is actually
-  // recoverable and settles it - none of that reaches this screen.
+  // The merchant states what the issue cost to put right. What CRAL can
+  // actually settle, and how, is decided server-side and never surfaces here.
   const amountNum = (parseInt(amount.replace(/\D/g, ""), 10) || 0) * 100;
   const photosBlocked = category === "damage" && !b.has_pickup_condition_photos;
 
   return (
     <Modal
       title="Report an issue"
-      sub="CRAL reviews claims like this and settles what the hirer owes."
+      sub="CRAL reviews reports like this and follows up with the hirer."
       onClose={onClose}
       ctaLabel={create.isPending ? "Filing…" : "File report"}
       ctaDisabled={create.isPending || !description.trim() || (kind === "claim" && !amount) || photosBlocked}
@@ -497,11 +497,11 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
       <div style={{ display: "grid", gap: 16 }}>
         <div style={P.toggleRow}>
           <div>
-            <div style={P.toggleRowTitle}>Does this need money back from the hirer?</div>
+            <div style={P.toggleRowTitle}>Are you claiming the cost of repair or loss?</div>
             <div style={P.toggleRowSub}>
               {kind === "claim"
-                ? "CRAL reviews the amount and recovers what it can."
-                : "No money - this just goes on their record."}
+                ? "CRAL reviews it and follows up with the hirer."
+                : "No claim - this just goes on their record."}
             </div>
           </div>
           <button
@@ -524,7 +524,7 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
 
         {kind === "claim" && (
           <div>
-            <label style={P.fieldLabel}>Amount claimed (KES)</label>
+            <label style={P.fieldLabel}>What did it cost to put right? (KES)</label>
             <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} placeholder="0" />
           </div>
         )}

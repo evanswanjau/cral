@@ -41,7 +41,6 @@ export interface BookingEvent {
 export interface BookingDetail extends BookingSummary {
   gross: Money;
   commission: Money;
-  deposit: Money;
   cancellation_fee: Money | null;
   refund: Money | null;
   pickup_location: string;
@@ -51,7 +50,6 @@ export interface BookingDetail extends BookingSummary {
   payout_detail: string;
   payout_account_name: string;
   has_pickup_condition_photos: boolean;
-  deposit_release_at: string | null;
   rating_open_until: string | null;
   events: BookingEvent[];
 }

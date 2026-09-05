@@ -4,7 +4,7 @@ info:
   version: "1.0.0"
   description: >
     Merchant-side bookings: the request/accept/decline lifecycle, the
-    pickup/return handover, deposit-backed reports, and post-hire ratings.
+    pickup/return handover, post-hire issue reports, and post-hire ratings.
     Frozen from the platform API spec §14–16, §19–20 for the bookings
     slice the owner asked for ahead of the delivery plan's Phase 4–6
     sequencing (see CLAUDE.md's "Recorded product decisions"). Merchant
@@ -21,19 +21,19 @@ info:
     QR step and the second confirmation slot in later without a schema
     change — see the `handover` tag description.
 
-    Two figures here are deliberately downstream of the merchant-portal
-    design screens, not the spec, because the spec leaves them
-    unspecified or in conflict with the design: the deposit is 15% of
-    booking gross (spec's own quote endpoint says 1.5× the daily rate —
-    flagged, not reconciled), and the 25% late-cancellation fee has no
-    source in the spec at all (spec §28 lists the cancellation/refund
-    ladder as an acknowledged, never-specified gap).
+    The 25% late-cancellation fee has no source in the spec at all
+    (spec §28 lists the cancellation/refund ladder as an acknowledged,
+    never-specified gap).
 
-    The deposit hold is two clocks, not a conflict — the design's own
-    return-modal copy has both: 24h is the normal release
-    (`Booking.deposit_release_at`, set when the return handover
-    completes), and filing a claim extends it to 48h from the return
-    while CRAL reviews it. `createBookingReport` performs the extension.
+    The hirer deposit is entirely internal to this API and is NOT part
+    of the merchant-facing shape — the merchant must never perceive a
+    pot of the hirer's money sitting behind a booking (it drives them to
+    over-claim). It still exists server-side: it is computed at 15% of
+    booking gross, it is the cap on what a cost claim can settle
+    directly, and its hold clock (24h from return, extended to 48h while
+    a claim is reviewed) gates whether a claim can still be filed. None
+    of `deposit`, `deposit_release_at` or the cap ever appears in a
+    response or in copy.
   license:
     name: Proprietary — Cruz Ride Auto Limited
 servers:
@@ -53,10 +53,13 @@ tags:
       proof set for this phase (see the top-level description).
   - name: reports
     description: >
-      Post-hire reports against a booking's held deposit — a money claim
-      capped at the deposit, or a no-money conduct report that still
-      reaches the hirer's history. Escalates to a Dispute beyond the cap
-      (spec §28's unresourced "insurance claim handoff" gap).
+      Post-hire issue reports — a cost claim (the merchant states what
+      an issue cost to put right; CRAL follows up with the hirer), or a
+      no-money conduct report that still reaches the hirer's history. A
+      claim is capped and settled entirely server-side and escalates to
+      a Dispute beyond what CRAL can settle directly (spec §28's
+      unresourced "insurance claim handoff" gap) — none of that cap
+      mechanism is exposed to the merchant.
   - name: hirer
     description: The in-app hirer-history drawer (no downloadable file)
   - name: rating
@@ -416,7 +419,7 @@ paths:
       operationId: completeHandover
       description: >
         Pickup moves the booking to `active` and starts the hire clock.
-        Return moves it to `completed`, starts the 24-hour deposit-hold
+        Return moves it to `completed`, starts the internal cost-claim
         window, and opens the rating window. `active` is only ever
         entered through a completed pickup handover — there is no other
         path (spec §27).
@@ -430,7 +433,7 @@ paths:
               schema: { $ref: "#/components/schemas/Handover" }
 
   # ---------------------------------------------------------------------
-  # §19 Reports (deposit-backed claim, or a no-money conduct report)
+  # §19 Reports (a cost claim, settled server-side, or a no-money conduct report)
   # ---------------------------------------------------------------------
   /merchant/bookings/{bookingId}/reports:
     parameters:
@@ -457,16 +460,15 @@ paths:
       tags: [reports]
       summary: File a claim or a conduct report
       operationId: createBookingReport
-      description: >
         Filable while `on_hire` and for 14 days after `completed`. A
-        `claim` can only move money while the deposit is still held
-        (within 24h of return, or 48h once a claim has already extended
-        the hold — see the top-level description); a `conduct` report
-        never moves money and is always filable within the 14-day window.
-        A `claim` amount is capped at the deposit held — anything above
-        the cap sets `escalated_dispute_id` on the response instead of
-        raising the claimed amount. Filing a `claim` also extends
-        `Booking.deposit_release_at` to 48h from the return.
+        `conduct` report never involves money and is always filable
+        within the 14-day window. A `claim` states what an issue cost to
+        put right; it can only be filed for a limited window after
+        return (409 `claim_window_closed` after that — a `conduct`
+        report is still allowed). What CRAL can settle directly is capped
+        and decided server-side: past the cap, `escalated_dispute_id` is
+        set on the response and the rest becomes a Dispute. The cap, and
+        the deposit it derives from, are never returned or shown.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -736,7 +738,10 @@ components:
             escalated_dispute_id:
               type: string
               nullable: true
-              description: Set when a claim amount exceeded the deposit held
+              description: >
+                Set when a claim exceeded what CRAL can settle directly
+                and the remainder became a Dispute. The threshold itself
+                is server-side and not returned.
             filed_at: { type: string, format: date-time }
 
     HirerHistory:
@@ -780,7 +785,6 @@ components:
             gross: { $ref: "#/components/schemas/Money" }
             commission: { $ref: "#/components/schemas/Money" }
             merchant_net: { $ref: "#/components/schemas/Money" }
-            deposit: { $ref: "#/components/schemas/Money" }
             cancellation_fee:
               allOf: [{ $ref: "#/components/schemas/Money" }]
               type: object
@@ -796,11 +800,6 @@ components:
             payout_detail: { type: string }
             payout_account_name: { type: string }
             has_pickup_condition_photos: { type: boolean }
-            deposit_release_at:
-              type: string
-              format: date-time
-              nullable: true
-              description: 24h after `return` handover completes, unless a claim is open
             rating_open_until: { type: string, format: date-time, nullable: true }
             events:
               type: array
