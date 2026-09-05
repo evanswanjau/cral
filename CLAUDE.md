@@ -302,12 +302,20 @@ order, but there's no customer portal or Daraja integration yet). Contract
 is `openapi/merchant-bookings.yaml`, code is
 `apps/api/src/modules/bookings/` and `apps/merchant/src/pages/Booking*`.
 
-- **The pickup/return code is a separate secret from the booking ref.**
+- **The pickup code is a separate secret from the booking ref.**
   `CB-2841` is the public plated reference both sides read aloud (visible
-  to the merchant on their own screen); the handover code is a distinct
+  to the merchant on their own screen); the pickup code is a distinct
   one-time code the hirer reads to the merchant to prove presence. Using
   digits from the public ref (an earlier idea) would prove nothing, since
   the merchant already has it.
+- **The return leg has no code** (owner's call, 2026-09-05). The code
+  authenticates the person collecting the car; on return the merchant is
+  taking their own vehicle back and runs the check, so there's nobody to
+  authenticate. `createHandover` with `kind: "return"` opens the session
+  at `otp_verified` with `required` = `["condition", "confirm"]`, no code
+  generated and no email sent; `verifyHandoverOtp` on a return session
+  returns 409 `otp_not_required`. The frontend drives the modal off
+  `handover.required` rather than assuming a code step.
 - **The deposit hold is two clocks, not a bug.** 24h is the normal
   release after return; filing a claim extends it to 48h from the actual
   return moment (`bookings.returned_at`) while CRAL reviews it. Both
@@ -327,7 +335,8 @@ is `openapi/merchant-bookings.yaml`, code is
   The spec has the customer's app show a QR code (proximity) plus an
   emailed/texted OTP (identity), both sides confirming a joint condition
   report. No customer app exists yet, so the QR step is skipped and
-  confirmation is single-sided — `Handover.required` and `.state` are
+  confirmation is single-sided; the OTP runs on the pickup leg only (see
+  the return-leg note above) — `Handover.required` and `.state` are
   shaped so the real protocol slots in later without a schema change.
 - **No hirer ID-verification pipeline exists.** `HirerHistory` has no
   `id_verified` field on purpose — an earlier pass hardcoded it to `true`

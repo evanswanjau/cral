@@ -15,11 +15,16 @@ info:
     merchant app protocol (QR scan proves proximity, an SMS/email OTP
     proves identity, both sides confirm a joint condition report). No
     customer portal exists yet, so this phase runs a reduced version of
-    the same state machine: the QR-proximity step is skipped, the OTP is
-    still real and still emailed to the hirer (Resend), and confirmation
-    is single-sided. `Handover.state` and `required` are shaped so the
-    QR step and the second confirmation slot in later without a schema
-    change — see the `handover` tag description.
+    the same state machine: the QR-proximity step is skipped and
+    confirmation is single-sided. The OTP is real and emailed to the
+    hirer (Resend) on the **pickup** leg only — its job is to prove the
+    person collecting the car is the hirer. The **return** leg has
+    nobody to authenticate (the merchant is receiving their own vehicle
+    and runs the check), so it carries no `otp` in `required`, generates
+    no code and sends no email (owner's call, 2026-09-05).
+    `Handover.state` and `required` are shaped so the QR step and the
+    second confirmation slot in later without a schema change — see the
+    `handover` tag description.
 
     The 25% late-cancellation fee has no source in the spec at all
     (spec §28 lists the cancellation/refund ladder as an acknowledged,
@@ -241,9 +246,11 @@ paths:
       operationId: createHandover
       description: >
         Refused unless the booking is `confirmed` (pickup) or `active`
-        (return). This phase skips straight to `otp_sent` — the QR-
-        proximity step needs a customer app that does not exist yet — and
-        emails the one-time code to the hirer directly.
+        (return). The QR-proximity step needs a customer app that does
+        not exist yet, so it is skipped. A **pickup** session opens at
+        `otp_sent` and emails the one-time code to the hirer. A
+        **return** session opens at `otp_verified` with `required` =
+        `["condition", "confirm"]` — no code, no email.
       requestBody:
         required: true
         content:
@@ -327,8 +334,10 @@ paths:
       summary: Verify the code the hirer read out
       operationId: verifyHandoverOtp
       description: >
-        5 attempts (spec §15's handover rules), then the session must be
-        reopened. Moves the session to `otp_verified`.
+        Pickup sessions only — a return session has no code step and
+        returns 409 `otp_not_required`. 5 attempts (spec §15's handover
+        rules), then the session must be reopened. Moves the session to
+        `otp_verified`.
       requestBody:
         required: true
         content:
@@ -350,7 +359,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
-          description: "`session_expired`, or attempts are exhausted"
+          description: "`session_expired`, attempts exhausted, or `otp_not_required` (return leg)"
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -682,13 +691,16 @@ components:
         required:
           type: array
           description: >
-            Steps this session enforces, in order. `qr_scan` and the
+            Steps this session enforces, in order. Pickup is
+            `["otp", "condition", "confirm"]`; return is
+            `["condition", "confirm"]` — no code step. `qr_scan` and the
             hirer-side confirmation are omitted this phase — see the
             top-level description.
           items: { type: string, enum: [otp, condition, confirm] }
         masked_destination:
           type: string
-          description: "e.g. f***@example.com — where the code was sent"
+          nullable: true
+          description: "e.g. f***@example.com — where the code was sent; null on the return leg"
         expires_at: { type: string, format: date-time }
         condition: { $ref: "#/components/schemas/ConditionReportInput" }
 

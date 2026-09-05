@@ -279,6 +279,11 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
   }, []);
 
   const verified = handover && handover.state !== "otp_sent" && handover.state !== "created";
+  // The return leg carries no "otp" in `required` - nobody to authenticate
+  // when the merchant takes their own vehicle back - so it skips the code
+  // step and opens straight at the condition check.
+  const needsCode = handover ? handover.required.includes("otp") : kind === "pickup";
+  const showCodeStep = !!handover && needsCode && !verified;
   const canSkipPhotos = kind === "pickup"; // a return with no pickup photos already can't file a damage claim regardless
 
   function handleVerify() {
@@ -334,11 +339,13 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
           <div>
             <div style={P.modalTitle}>{kind === "pickup" ? "Start the hire" : "Confirm the return"}</div>
             <div style={P.modalSub}>
-              {!verified
-                ? handover?.masked_destination
-                  ? `Ask the hirer for the code sent to ${handover.masked_destination}.`
-                  : "Opening the handover session…"
-                : "Check the vehicle over, then finish to release the next step."}
+              {!handover
+                ? "Opening the handover session…"
+                : showCodeStep
+                  ? handover.masked_destination
+                    ? `Ask the hirer for the code sent to ${handover.masked_destination}.`
+                    : "Ask the hirer for the code sent to them."
+                  : "Check the vehicle over, then finish to release the next step."}
             </div>
           </div>
           <button type="button" onClick={onClose} style={P.modalClose}>×</button>
@@ -351,7 +358,9 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
             </div>
           )}
 
-          {!verified ? (
+          {!handover ? (
+            <div style={P.helperText}>Opening the handover session…</div>
+          ) : showCodeStep ? (
             <div style={{ display: "grid", gap: 14 }}>
               <div>
                 <label style={P.fieldLabel}>Code from the hirer</label>
@@ -430,11 +439,11 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
           <button type="button" onClick={onClose} style={P.modalCancel}>Cancel</button>
           <button
             type="button"
-            disabled={!verified ? verifyOtp.isPending || !code.trim() : finishing}
-            onClick={!verified ? handleVerify : handleFinish}
-            style={{ ...P.modalCta, background: "#0F23A8", opacity: (!verified ? verifyOtp.isPending || !code.trim() : finishing) ? 0.6 : 1 }}
+            disabled={!handover || (showCodeStep ? verifyOtp.isPending || !code.trim() : finishing)}
+            onClick={showCodeStep ? handleVerify : handleFinish}
+            style={{ ...P.modalCta, background: "#0F23A8", opacity: !handover || (showCodeStep ? verifyOtp.isPending || !code.trim() : finishing) ? 0.6 : 1 }}
           >
-            {!verified ? (verifyOtp.isPending ? "Checking…" : "Verify code") : finishing ? "Finishing…" : kind === "pickup" ? "Confirm handover" : "Confirm returned"}
+            {showCodeStep ? (verifyOtp.isPending ? "Checking…" : "Verify code") : finishing ? "Finishing…" : kind === "pickup" ? "Confirm handover" : "Confirm returned"}
           </button>
         </div>
       </div>

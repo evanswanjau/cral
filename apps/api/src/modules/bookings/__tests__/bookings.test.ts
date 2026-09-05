@@ -330,16 +330,31 @@ describe("bookings — handover", () => {
     expect(completed.body.booking.status).toBe("active");
     expect(completed.body.booking.has_pickup_condition_photos).toBe(true);
 
-    // --- return ---
+    // --- return: no code step - nobody to authenticate, so it opens
+    //     straight at the condition check with no email ---
+    emailSpy.mockClear();
     const openReturn = await request(app)
       .post(`/merchant/bookings/${booking.id}/handovers`)
       .set(auth(accessToken))
       .send({ kind: "return" });
     expect(openReturn.status).toBe(201);
+    expect(openReturn.body.state).toBe("otp_verified");
+    expect(openReturn.body.required).toEqual(["condition", "confirm"]);
+    expect(openReturn.body.masked_destination).toBeNull();
+    expect(emailSpy).not.toHaveBeenCalled();
     const returnHandoverId = openReturn.body.id;
-    const returnCode = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
 
-    await request(app).post(`/merchant/handovers/${returnHandoverId}/otp/verify`).set(auth(accessToken)).send({ code: returnCode });
+    const noCode = await request(app)
+      .post(`/merchant/handovers/${returnHandoverId}/otp/verify`)
+      .set(auth(accessToken))
+      .send({ code: "123456" });
+    expect(noCode.status).toBe(409);
+    expect(noCode.body.error.code).toBe("otp_not_required");
+
+    await request(app)
+      .post(`/merchant/handovers/${returnHandoverId}/condition`)
+      .set(auth(accessToken))
+      .send({ odometer_km: 42500, fuel_level: "full" });
     await request(app).post(`/merchant/handovers/${returnHandoverId}/confirm`).set(auth(accessToken));
     const returnCompleted = await request(app)
       .post(`/merchant/handovers/${returnHandoverId}/complete`)
