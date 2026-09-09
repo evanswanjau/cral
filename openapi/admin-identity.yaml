@@ -1,0 +1,301 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Admin (Ops) Identity API
+  version: "1.0.0"
+  description: >
+    Authentication for the admin (Ops) console — spec §8's separate
+    `aud: "ops"` audience. Frozen before the code, per the contract-first
+    ritual, and reconciled from `identity.yaml` §8 into a standalone file
+    because the admin identity store is deliberately separate from the
+    public one (`admin_users` / `admin_sessions`, not `users` / `sessions`).
+
+    Shape of a sign-in:
+
+      1. POST /admin/auth/login — email + password. A correct password
+         returns NO tokens, only a `challenge_token`. There is no "remember
+         this device" shortcut: the second factor is mandatory on every
+         login.
+      2. POST /admin/auth/2fa — the six-digit code, texted to the admin's
+         phone via the TextSMS adapter (consistent with the 2026-08-24
+         "SMS is only ever a 2FA challenge" decision). Only now does a
+         session — and a token pair — exist.
+
+    Session rules (spec §8), enforced by `admin_sessions`:
+
+      - 10-minute access token (`ADMIN_ACCESS_TOKEN_TTL_MINUTES`).
+      - 8-hour absolute cap: `expires_at` is set once at 2FA success and
+        never extended, so a session dies 8 hours after sign-in no matter
+        how active.
+      - 20-minute idle window: `last_seen_at` is bumped on every
+        authenticated request; a refresh after 20 minutes of silence is
+        rejected with `idle_timeout_2fa_required` and the session is
+        revoked. Re-authenticating today is a full login — the "re-prompt
+        for the second factor only" refinement is deferred, and a full
+        login is stricter, not looser.
+
+    Every `/admin/*` route (here and in later slices) is gated by
+    `requireAdmin()`, which checks the ops token, a live `admin_sessions`
+    row (signature alone is never enough — same rule as the 2026-09-03
+    reliability patch), the idle/absolute clocks, and — where a route asks
+    — the admin's `role` and an assigned queue. `admin_super` clears every
+    role and queue check.
+
+    Bootstrapping: there is no admin to invite the first admin (team
+    management is a later slice), so `npm run admin:create -w apps/api`
+    inserts one directly, the same footing as `approve:merchant`.
+
+    Deviation from §8, recorded: the frozen login body is `{ email,
+    password }`; this adds an OPTIONAL `device_id` so `admin_sessions` has
+    a stable per-device key. When omitted the server mints one.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: admin-auth
+    description: Ops console login (mandatory 2FA), refresh, identity, logout, own activity
+
+paths:
+  /admin/auth/login:
+    post:
+      tags: [admin-auth]
+      summary: Email + password. Returns a 2FA challenge, never tokens.
+      operationId: adminLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+                device_id:
+                  type: string
+                  description: Optional. A stable per-device id; the server mints one if absent.
+      responses:
+        "200":
+          description: Password accepted — satisfy the second factor to get a session.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge_token, next, masked_destination, expires_in]
+                properties:
+                  challenge_token:
+                    type: string
+                    description: Opaque; the only handle on the pending login. Only its hash is stored.
+                  next: { type: string, enum: ["2fa"] }
+                  masked_destination: { type: string, example: "+2547••••••061" }
+                  expires_in: { type: integer, description: Seconds until the code dies }
+        "401":
+          description: invalid_admin_credentials
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "403":
+          description: admin_account_disabled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/auth/2fa:
+    post:
+      tags: [admin-auth]
+      summary: The texted six-digit code. Creates the session and issues tokens.
+      operationId: adminVerifyTwoFactor
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_token, code]
+              properties:
+                challenge_token: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "200":
+          description: Ops-audience token pair (10-minute access token)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "400":
+          description: admin_challenge_expired — expired, consumed, or too many attempts
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "401":
+          description: admin_two_factor_invalid
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/auth/refresh:
+    post:
+      tags: [admin-auth]
+      summary: Rotate the refresh token, within the 8-hour cap and 20-minute idle window.
+      operationId: adminRefresh
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: A fresh ops-audience token pair
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "401":
+          description: >
+            idle_timeout_2fa_required (20-minute idle window elapsed) |
+            admin_session_expired (8-hour absolute cap, or the session was
+            revoked) | invalid_refresh_token (unknown token, or a replay of
+            an already-rotated one — which also revokes the session)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/auth/me:
+    get:
+      tags: [admin-auth]
+      summary: Reviewer identity, role and assigned queues
+      operationId: getAdminMe
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The signed-in admin
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminMe" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/auth/logout:
+    post:
+      tags: [admin-auth]
+      summary: Revoke this session immediately and write an audit row
+      operationId: adminLogout
+      security: [{ bearerAuth: [] }]
+      responses:
+        "204": { description: Revoked }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /admin/auth/audit:
+    get:
+      tags: [admin-auth]
+      summary: This admin's own recent actions (cursor-paged, newest first)
+      operationId: getAdminOwnAudit
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: A page of this admin's audit-log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditLogEntry" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Unauthorized:
+      description: Missing, malformed, wrong-audience, expired or revoked token
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+    RateLimited:
+      description: Too many requests
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type:
+              type: string
+              enum: [validation_error, auth_error, not_found, conflict, rate_limited, server_error]
+            code: { type: string, example: idle_timeout_2fa_required }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string, format: uri }
+            request_id: { type: string, example: req_01J9F2K7QW3M }
+
+    TokenPair:
+      type: object
+      required: [access_token, refresh_token, expires_in]
+      properties:
+        access_token: { type: string, description: "Ops-audience JWT, 10 minutes" }
+        refresh_token: { type: string, description: "Rotates on every use; bounded by the 8-hour session cap" }
+        expires_in: { type: integer, example: 600 }
+
+    AdminMe:
+      type: object
+      required: [id, email, full_name, role, assigned_queues]
+      properties:
+        id: { type: string, example: adm_01J8QM... }
+        email: { type: string, format: email }
+        full_name: { type: string }
+        role:
+          type: string
+          enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+        assigned_queues:
+          type: array
+          items: { type: string, example: vehicles }
+          description: >
+            Queue slugs this admin may work. `admin_super` ignores this and
+            sees everything.
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        action: { type: string, example: admin.login }
+        entity_type: { type: string, example: admin_user }
+        entity_id: { type: string }
+        request_id: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }

@@ -76,6 +76,8 @@ export interface VehicleRow {
   reviewer_note: string | null;
   reviewer_note_meta: string | null;
   reviewer_note_resolved: boolean;
+  /** The admin (admin_users.id) this review case is assigned to, or null (PR 2). */
+  review_assignee: string | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -105,6 +107,10 @@ export interface DocumentRow {
   content_type: string;
   review_state: DocumentReviewState;
   expires_at: string | null;
+  /** Set by an admin's Accept/Reject (PR 2). The note is what a rejection quotes to the merchant. */
+  review_note: string | null;
+  reviewed_by: string | null;
+  reviewed_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

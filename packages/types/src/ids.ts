@@ -54,6 +54,13 @@ export const ID_PREFIXES = {
   // submission - an admin approves it and the account goes back to review.
   // Internal entity, no prefix named in the spec's own identifier list.
   profileChangeRequest: "pcr",
+  // Admin (Ops) console — spec §8's separate audience. Its own identity
+  // store, kept apart from `users`/`sessions` so a compromise of the public
+  // auth path can't reach Ops. Internal entities, no prefix in the spec's
+  // own identifier list.
+  adminUser: "adm",
+  adminSession: "ads",
+  adminLoginChallenge: "alc",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

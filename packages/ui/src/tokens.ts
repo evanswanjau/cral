@@ -45,7 +45,15 @@ export const color = {
     900: "#0B0F1A",
   },
 
-  /** The admin (ops) console is dark by default — "compliance works long shifts". */
+  /**
+   * A dark ops palette from the brand doc ("compliance works long
+   * shifts"). NOT in use: every screen in the admin console design canvas
+   * is drawn light (#FAFBFC / white), so `apps/admin` ships light and this
+   * block is unconsumed. Kept in case a dark console is ever revisited —
+   * see docs/plans/admin-merchants-vehicle-review.md finding §1 and
+   * CLAUDE.md's admin-foundation notes. A dark console would be a
+   * from-scratch redraw of every screen, not a palette swap.
+   */
   ops: {
     base: "#0B0F1A",
     panel: "#131A28",
