@@ -1,3 +1,40 @@
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Base rules matching the Ops console design bundle. The console is drawn
+ * LIGHT (#FAFBFC) — see docs/plans/admin-merchants-vehicle-review.md
+ * finding §1 for why the brand doc's dark `ops` palette isn't used.
+ * Radii are the canvas's own 4/8/12, like the merchant portal.
+ */
+:root {
+  --r-sm: 4px;
+  --r: 8px;
+  --r-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #fafbfc;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: #0f23a8;
+  box-shadow: 0 0 0 3px rgba(15, 35, 168, 0.12);
+}
+
+input::placeholder {
+  color: #a7aebb;
+}

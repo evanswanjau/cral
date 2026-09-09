@@ -1,0 +1,352 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Admin Merchants Lens API
+  version: "1.0.0"
+  description: >
+    The admin (Ops) console's Merchants lens — "everyone who has put a
+    vehicle in front of us" (design: "Cruz Admin Vehicles.dc.html"
+    `isMerchants` / `isMerchant`). Ops audience only, behind
+    `requireAdmin({ role: "admin_reviewer", queue: "merchants" })`, which
+    `admin_super` bypasses.
+
+    This is a directory over the same vehicle-review data the queue works,
+    not a second review queue. Account approval is a separate slice, and
+    the design says so: "Approving a vehicle does not verify the business
+    - those are two separate decisions." So there is no decision endpoint
+    here; `GET /admin/merchants/{id}` links out to the vehicle case screen
+    (`review_next`, and each fleet row).
+
+    A merchant appears once it has at least one vehicle in a post-draft
+    status (`pending`/`review`/`action`/`live`/`rejected`). The list is
+    sorted most-waiting-first (waiting = `pending` + `review`), tie-broken
+    by merchant id, and paged by a keyset cursor of `(waiting, id)` — not
+    an offset. `waiting` / `fleet` / `live` on every row are whole-set
+    counts for that merchant, never page-bound.
+
+    `badge` is `verified` when `merchants.approved_at` is set (nothing sets
+    it yet — account approval is its own slice) and `new_merchant`
+    otherwise. The merchant file's `note` is the not-verified line, or —
+    once approved — a rejection-history line, or null.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+  - url: https://api.staging.cral.co.ke/v1
+  - url: https://api.sandbox.cral.co.ke/v1
+
+tags:
+  - name: admin-merchants
+    description: The Merchants directory and per-merchant file
+
+paths:
+  /admin/merchants:
+    get:
+      tags: [admin-merchants]
+      summary: Merchants who have submitted a vehicle, most-waiting-first
+      operationId: adminListMerchants
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: A page of the directory
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/MerchantRow" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer, description: Whole-set count of merchants who have submitted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}:
+    get:
+      tags: [admin-merchants]
+      summary: The merchant file — stats, note, their whole submitted fleet
+      operationId: adminGetMerchantFile
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The file
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantFile" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: merchant_not_found
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  /admin/merchants/{merchantId}/documents/{documentId}:
+    get:
+      tags: [admin-merchants]
+      summary: A business document's bytes (nosniff, allowlisted content-type)
+      operationId: adminGetMerchantDocument
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The file, content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+        "404": { description: document_not_found | document_bytes_missing, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}/checklist:
+    post:
+      tags: [admin-merchants]
+      summary: Set one verification-checklist answer (idempotent upsert, no key)
+      operationId: adminSetMerchantChecklistItem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, result]
+              properties:
+                item_id: { type: string }
+                result: { type: string, enum: [pending, pass, flag] }
+                note: { type: string }
+      responses:
+        "200": { description: The updated file, content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
+        "422": { description: unknown_checklist_item, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}/documents/{kind}/decision:
+    post:
+      tags: [admin-merchants]
+      summary: Accept or reject one business document (Idempotency-Key required)
+      operationId: adminDecideBusinessDocument
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [national_id, kra_pin, certificate_of_incorporation, company_kra_pin, cr12] }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [accept, reject] }
+                note: { type: string, description: Required on `reject` — quoted to the merchant. }
+      responses:
+        "200": { description: The updated file, content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
+        "422": { description: reason_required | not_a_reviewable_document, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: document_not_uploaded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}/approve:
+    post:
+      tags: [admin-merchants]
+      summary: >
+        Verify the business - sets `merchants.approved_at`, notifies the
+        merchant, and clears the account-document half of every future
+        car's approve gate. Requires the business documents `ok` and the
+        merchant checklist's blockers passed.
+      operationId: adminApproveMerchant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The updated file (now `approved`), content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
+        "422": { description: documents_not_all_accepted | checklist_blockers_outstanding, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}/reopen:
+    post:
+      tags: [admin-merchants]
+      summary: Reverse a business approval - clears `approved_at`
+      operationId: adminReopenMerchantReview
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The updated file (now not `approved`), content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized:
+      description: Missing / wrong-audience / expired / revoked ops token
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: insufficient_scope — the role/queue doesn't cover the Merchants lens
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string, example: merchant_not_found }
+            message: { type: string }
+            request_id: { type: string }
+
+    Money:
+      type: object
+      properties:
+        amount: { type: integer }
+        currency: { type: string, example: KES }
+
+    MerchantRow:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        approved: { type: boolean }
+        badge: { type: string, enum: [verified, new_merchant] }
+        contact: { type: string, example: "Mwangi Karanja · +254733376061" }
+        joined: { type: string, format: date-time }
+        towns: { type: array, items: { type: string }, description: Distinct counties across the merchant's fleet }
+        fleet: { type: integer, description: Whole-set submitted-vehicle count }
+        live: { type: integer }
+        waiting: { type: integer, description: "`pending` + `review`" }
+
+    FleetRow:
+      type: object
+      properties:
+        id: { type: string }
+        registration: { type: string }
+        title: { type: string }
+        spec: { type: string, example: "suv · 2019 · Nairobi" }
+        status: { type: string, enum: [pending, review, action, live, rejected] }
+        bucket: { type: string }
+        docs_accepted: { type: integer, description: Of the three per-vehicle documents }
+        docs_total: { type: integer, example: 3 }
+        docs_has_issue: { type: boolean }
+        daily_rate: { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        submitted_at: { type: string, format: date-time }
+
+    MerchantFile:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        initials: { type: string }
+        approved: { type: boolean }
+        badge: { type: string, enum: [verified, new_merchant] }
+        owner_type: { type: string }
+        contact: { type: string }
+        joined: { type: string, format: date-time }
+        towns: { type: array, items: { type: string } }
+        note:
+          type: string
+          nullable: true
+          description: >
+            Not-verified line when `approved` is false; a rejection-history
+            line when approved and there are prior rejections; else null.
+        stats:
+          type: object
+          properties:
+            submitted: { type: integer }
+            live: { type: integer }
+            waiting: { type: integer }
+            rejected: { type: integer }
+        review_next:
+          type: object
+          nullable: true
+          description: The oldest still-open case — the "Review <plate>" button target.
+          properties:
+            id: { type: string }
+            registration: { type: string }
+        fleet: { type: array, items: { $ref: "#/components/schemas/FleetRow" } }
+        fleet_summary: { type: string }
+        can_approve:
+          type: boolean
+          description: >
+            True when every required business document is `ok` and the
+            verification checklist has no outstanding blockers. The
+            "Approve business" button's enabled state.
+        approve_blockers:
+          type: object
+          description: Why `can_approve` is false — surfaced as the button's disabled reason.
+          properties:
+            documents: { type: array, items: { type: string }, description: Outstanding business-document kinds }
+            checklist: { type: integer, description: Count of unresolved `block`-severity checklist items }
+        outstanding_documents:
+          type: array
+          items: { type: string }
+          description: Business-document kinds not yet accepted (same list as `approve_blockers.documents`).
+        business_documents:
+          type: array
+          description: >
+            The merchant's account documents (person's + company's), the
+            read-only-once-approved half of every car's approve gate.
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [national_id, kra_pin, certificate_of_incorporation, company_kra_pin, cr12] }
+              label: { type: string }
+              state: { type: string, enum: [ok, pending, expiring, rejected] }
+              document_id: { type: string, nullable: true }
+              review_note: { type: string, nullable: true }
+              original_name: { type: string, nullable: true }
+        checklist: { $ref: "#/components/schemas/ChecklistBlock" }
+
+    ChecklistBlock:
+      type: object
+      description: >
+        A working review checklist — item definitions from
+        `platform_settings`, answers from `merchant_review_checks`. `block`
+        items gate approval; `flag`s and unresolved blockers compose the
+        pre-filled request-changes / reject note.
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              group: { type: string }
+              severity: { type: string, enum: [block, flag] }
+              label: { type: string }
+              help: { type: string }
+              result: { type: string, enum: [pending, pass, flag] }
+              note: { type: string, nullable: true }
+        checked: { type: integer }
+        total: { type: integer }
+        flagged: { type: integer }
+        blockers_outstanding: { type: integer, description: "`block` items not yet `pass` — these disable Approve." }
+        suggested_note:
+          type: object
+          description: What the request-changes / reject modal opens pre-filled with.
+          properties:
+            changes: { type: string }
+            reject: { type: string }

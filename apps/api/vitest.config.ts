@@ -11,6 +11,10 @@ export default defineConfig({
       NODE_ENV: "test",
       EMAIL_ADAPTER: "console",
       SMS_ADAPTER: "console",
+      // The admin (Ops) audience signs with its own key. Pin a real one for
+      // the test run so admin-auth tests don't depend on a local .env
+      // carrying JWT_ADMIN_SECRET.
+      JWT_ADMIN_SECRET: "test_only_admin_secret_at_least_32_chars_xx",
       // .env has a second, later STORAGE_ADAPTER=b2 line for future use
       // (no such adapter is implemented yet — see adapters/storage/index.ts),
       // which dotenv's last-key-wins parsing picks up. Pin to "local" here
@@ -23,5 +27,13 @@ export default defineConfig({
     // Argon2id hashing is deliberately slow; sequential auth-flow tests
     // that hash/verify a password several times need real headroom.
     testTimeout: 30000,
+    // Cap the worker pool. Every worker opens its own Knex pool (max 10),
+    // and Postgres tops out at 100 connections — one worker per CPU core
+    // (Vitest's default) plus the growing file count started tipping heavy
+    // suites into sporadic connection/timeout failures under load. Four
+    // forks keeps total connections well under the cap and the run stable;
+    // the suite is I/O-bound on Postgres, not CPU-bound, so this is barely
+    // slower.
+    poolOptions: { forks: { minForks: 1, maxForks: 4 } },
   },
 });

@@ -6,6 +6,9 @@ import { requestId } from "./middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.js";
 import { authRouter } from "./modules/auth/routes.js";
+import { adminAuthRouter } from "./modules/admin-auth/routes.js";
+import { adminVehiclesRouter } from "./modules/admin-vehicles/routes.js";
+import { adminMerchantsRouter } from "./modules/admin-merchants/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { bookingsRouter } from "./modules/bookings/routes.js";
@@ -74,6 +77,9 @@ export function createApp(): Express {
 
   app.use(healthRouter);
   app.use(authRouter);
+  app.use(adminAuthRouter);
+  app.use(adminVehiclesRouter);
+  app.use(adminMerchantsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
   app.use(bookingsRouter);

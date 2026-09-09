@@ -888,6 +888,270 @@ review. Tests in `apps/api/src/__tests__/reliability.test.ts`.
   was never going to change. 401 is excluded too — `lib/api.ts` already
   refreshes and retries once itself.
 
+**Phase 3 (admin/Ops) has started — the owner released `apps/admin` from
+its "shells only" hold on 2026-09-07.** First priority inside Phase 3 is
+the **Merchants + vehicle-review** slice; plan is
+[`docs/plans/admin-merchants-vehicle-review.md`](./docs/plans/admin-merchants-vehicle-review.md),
+built as three PRs (foundation → vehicle review → merchants lens). Broader
+Phase-3 scoping is [`docs/plans/admin-phase-3.md`](./docs/plans/admin-phase-3.md).
+Merchant is no longer the *sole* priority, but nothing about the merchant
+portal's conventions changes.
+
+**PR 1 — admin foundation (2026-09-07, "admin foundation").** Auth, the
+ops-audience token, RBAC, and the `apps/admin` shell. No review features
+yet.
+
+- **The admin identity store is separate tables, not `users`/`sessions`.**
+  `admin_users` / `admin_sessions` / `admin_login_challenges` (migration
+  `20260907090000`). Spec §8 gives the console a separate cookie domain,
+  mandatory 2FA, a 10-minute access token, an 8-hour absolute session cap
+  and a 20-minute idle timeout — none of which the public path has — so a
+  compromise of the public login flow can't reach Ops and
+  `authenticate()` never branches on audience. `users.roles` stays the
+  flat merchant/customer `text[]`. Role enum is its own closed set:
+  `admin_reviewer` / `admin_finance` / `admin_support` / `admin_super`
+  (design labels them Compliance reviewer / Finance / Support / Owner).
+- **`aud: "ops"` tokens sign with `JWT_ADMIN_SECRET`, a *different* key
+  from `JWT_ACCESS_SECRET`** (`lib/jwt.ts#signAdminAccessToken` /
+  `#verifyAdminAccessToken`, both pinned to `aud` + HS256). A leak of one
+  audience's key must not mint tokens for the other. Same production boot
+  guards as the public secret (placeholder + <32 chars rejected). Pinned
+  for the test run in `vitest.config.ts`.
+- **`middleware/require-admin.ts` gates every `/admin/*` route** — ops
+  token **plus a live `admin_sessions` row** (signature alone is never
+  enough, same rule as the reliability patch), plus the idle/absolute
+  clocks, plus `role`/`queue` where asked. `admin_super` clears every
+  role and queue check. Bumps `admin_sessions.last_seen_at` on each hit;
+  the 20-minute idle window is measured against it. Mount it **before**
+  `requireIdempotencyKey()` on any route that has both.
+- **2FA is SMS** via the existing TextSMS adapter — consistent with the
+  2026-08-24 decision. `admin_login` → `{ challenge_token, next: "2fa" }`
+  and nothing else; the session is created only by `/admin/auth/2fa`. The
+  challenge is addressed by an opaque `challenge_token` (only its hash is
+  stored), never by row id. **Idle-timeout recovery is a full login
+  today** — the spec's "re-prompt for the second factor only" path is
+  deferred; a full login is stricter, not looser.
+- **The console is drawn LIGHT.** `packages/ui/src/tokens.ts` carries an
+  `ops` dark palette with a "compliance works long shifts" note, but all
+  twelve admin canvas screens are `#FAFBFC`/white and nothing consumes
+  that palette. The canvas owns screen decisions (a page background is
+  one); `tokens.ts`'s `ops` block now carries a note pointing here. If a
+  dark console is ever wanted it's a from-scratch redraw, not a swap.
+- **`apps/admin` follows the merchant portal's conventions verbatim** —
+  self-hosted `@fontsource` fonts (no CDN `<link>`), canvas values inlined
+  into `components/console/styles.ts` (cross-checked against `tokens.ts`;
+  where they differ — radii 4/8/12, ink `#1A1F2B` — the canvas wins, same
+  call the merchant portal made), `--r-sm/--r/--r-lg` custom props,
+  `ErrorBoundary` at two levels, `usePageTitle` (suffix "CRAL Ops"). The
+  session pair lives in `sessionStorage` (shared Ops machines; the server
+  caps at 8h anyway), no "keep me signed in".
+- **The masthead notification bell is inert and badge-less.** It points at
+  a separate *staff-facing* notification stream (SLA breach, dispute
+  filed, invoice overdue) that has no generators yet — a different system
+  from the merchant `notifications` table. A count of nothing is worse
+  than an absent one.
+- **The Ops login screen is not from a canvas file** — the admin bundle
+  has no login design. It's built in the console's own visual language
+  (4px `#0F23A8` strip, `ADMIN CONSOLE` pill + one 14° skewed rule,
+  Archivo `wdth 106`) and flagged as such.
+- **First admin via `npm run admin:create -w apps/api -- <email> <phone>
+  <role> "<Name>" [queue,queue]`** — same footing as `approve:merchant`
+  and `review:profile-change`. There's no admin to invite the first one
+  (team management is a later slice). A strong password is generated and
+  printed once. `admin_super` ignores the queue list.
+- **Nothing sets `admin_users.status = "disabled"` yet** (no team
+  management), same footing as `merchants.approved_at`. `/admin/auth/*`
+  contract is `openapi/admin-identity.yaml`; tests in
+  `modules/admin-auth/__tests__/`.
+
+**PR 2 — admin vehicle review (2026-09-08, "admin vehicle review").** The
+review queue, the per-vehicle case screen, and the decisions. Contract
+`openapi/admin-vehicles.yaml`; module `apps/api/src/modules/admin-vehicles/`;
+screens `apps/admin/src/pages/vehicles/{Queue,Case}.tsx`. Migration
+`20260907100000_admin_vehicle_review`.
+
+- **Design's 5 review states ↔ backend's 7.** `vehicles.status`
+  `pending → needs_review` ("Needs review"), `review → with_you`
+  ("With you"), `action → changes_sent` ("Changes sent"), `live`,
+  `rejected`. `draft`/`paused` never enter the queue. The API returns raw
+  `status` + a `bucket` slug; the admin client
+  (`apps/admin/src/components/console/status.ts`) maps to the design's
+  `S`/`DS`/`TONE` labels — the same five brand status tints the merchant
+  portal uses.
+- **`documents.review_state` already existed** (`ok`/`pending`/`expiring`/
+  `rejected`, from `20260826160000`) and the merchant portal already
+  renders `ok` as "ACCEPTED" — nothing had ever *set* it. Admin Accept
+  sets `ok`; Reject sets `rejected` + `review_note`/`reviewed_by`/
+  `reviewed_at` (all new columns). So finding §4's "documents read
+  PENDING REVIEW forever" is fixed just by writing the column.
+- **The case's document checklist is `platform_settings`'
+  `vehicle_review.required_document_kinds`** — the three per-vehicle docs
+  (`logbook`, `comprehensive_insurance`, `tracker_certificate`) **plus**
+  the merchant's own two (`national_id`, `kra_pin`). Accepting an account
+  doc carries across every case for that merchant (the row has
+  `vehicle_id = null`). `driving_licence` is omitted — never collected.
+  The **queue row's DOCS chip counts only the three per-vehicle docs**
+  (`n/3`); the case checklist and the approve gate are all five.
+- **`platform_settings`** (new key/value table, migration
+  `20260907100000`, typed reader `lib/platform-settings.ts`) holds the
+  review SLA (`sla_days`, default 2 — drives the queue's overdue banner
+  and the case age pill), the enabled automatic checks, and the required
+  document set. Seeded with current behaviour; no UI and no endpoints yet
+  — Settings → Review rules edits these in a later slice (finding §2/§3).
+- **Automatic checks are advisory only** — `lib/vehicle-checks.ts`,
+  outcomes `pass`/`look`/`fail`, none blocking. **"Logbook name match" is
+  NOT a check** (no OCR in this product); the case shows the account name
+  as context for a human to compare. Same rule as the fabricated
+  `id_verified` badge.
+- **One `decideVehicleListing`-shaped path per decision.**
+  `POST /admin/vehicles/{id}/{assign,documents/{kind}/decision,decision}`.
+  The two decision POSTs require `Idempotency-Key` (`requireAdmin` runs
+  before `requireIdempotencyKey`, so keys are per-admin — the middleware
+  now falls back to `req.admin?.id`). Each decision writes `vehicles`,
+  `vehicle_events` (`actor_type: "reviewer"`), an `audit_log` row
+  (`actor_type: "admin"`) **and** `notify(trx, {category:"review"})` the
+  merchant, all in one transaction; delivery enqueued post-commit. This
+  module is the **real generator** for the document-accepted/rejected and
+  listing-approved/rejected notifications the merchant portal already
+  renders. A document *accept* is silent (no notification); a reject and
+  every listing decision notify.
+- **Approve requires every required doc `ok`** → else 422
+  `documents_not_all_accepted` naming the outstanding kinds. Approve sets
+  `status = live`, generates `listing_ref` via `nextListingRef` if null,
+  clears `reviewer_note`. Request-changes → `action` + `reviewer_note`
+  (the merchant's Vehicles screen already shows it) + `reviewer_note_
+  resolved = false`. Reject → `rejected` + note. The
+  merchant↔admin loop closes because `uploadVehicleDocument` already
+  bumps `action`/`rejected`/`review` back to `review` on re-upload.
+- **`vehicles.review_assignee`** (→ `admin_users`, `ON DELETE SET NULL`)
+  is "Assign to me" / "With you". "Decided today" is a `count` over
+  `audit_log` for this admin since the Nairobi day start
+  (`lib/dates.ts#nairobiDayStartUtc`, new shared helper — dashboard and
+  payouts keep their own copies).
+- **`npm run seed:review-fleet -w apps/api`** stands up a throwaway
+  merchant with four submitted vehicles (pending/review/action) so the
+  queue has something real to work against. Non-destructive (fresh
+  merchant each run), dev-only. Doc bytes aren't stored, so "Open scan"
+  shows the graceful "file no longer stored" state.
+- **The nav footer cards** (YOUR QUEUE / DECIDED TODAY) hang under
+  `SideNav` only on `/vehicles*`, via a new optional `footer` prop —
+  same pattern as the merchant portal's `MerchantStatusCard`. They read
+  the same queue query the page does.
+- **Deferred to PR 3 / later:** the Merchants lens (still a placeholder),
+  and everything the design's finding list already flags — Settings UI
+  over `platform_settings`, the staff notification bell, `driving_licence`.
+
+**PR 3 — admin Merchants lens (2026-09-08, "admin merchants lens").** The
+Merchants directory and the per-merchant file. Contract
+`openapi/admin-merchants.yaml`; module `apps/api/src/modules/admin-merchants/`;
+screens `apps/admin/src/pages/{Merchants,MerchantFile}.tsx`. No migration.
+
+- **A directory over the vehicle-review data, not a second queue.** The
+  design's own copy: *"Approving a vehicle does not verify the business -
+  those are two separate decisions."* There is no decision endpoint here;
+  `GET /admin/merchants/{id}` links out to the vehicle case
+  (`review_next` = the oldest still-open case, each fleet row).
+  Account approval stays its own slice.
+- **`GET /admin/merchants`** — merchants with ≥1 post-draft vehicle,
+  sorted most-waiting-first (waiting = `pending` + `review`), tie-broken
+  by id, **keyset cursor `(waiting, id)`** — no offset. The full set is
+  loaded and sorted in the service (bounded and small, the same shape as
+  the design's client). `waiting`/`fleet`/`live` per row are **whole-set**
+  counts, not page-bound. `total` is the whole-set merchant count.
+- **`badge`** is `verified` when `merchants.approved_at` is set (nothing
+  sets it), else `new_merchant`. The file's `note` is the not-verified
+  line, or a rejection-history line once approved, or null.
+- **"Message merchant" is a disabled button** with a "Ships with
+  Communications" tooltip — no fake send.
+- `lib/merchant-display.ts` (`merchantDisplayName`, `initials`) is now
+  shared by the vehicle-review and merchants-lens modules.
+- **Cross-links added:** the queue row's merchant name → `/merchants/:id`;
+  the case screen's "The merchant" card gained an **Open file** button →
+  `/merchants/:id`; each merchant-file fleet row → `/vehicles/:id`.
+- Tests in `modules/admin-merchants/__tests__/` insert vehicles directly
+  (no full merchant-portal upload dance) — lighter, and PR 2's lesson
+  about heavy parallel setups.
+
+**Two gates + working checklists (2026-09-09, "review checklist + two
+gates").** Owner's call after PR 3 feedback. Plan and the full checklist
+menu: [`docs/plans/admin-review-checklist.md`](./docs/plans/admin-review-checklist.md).
+Migration `20260909090000`.
+
+- **The side nav lists only *built* screens** (Vehicles, Merchants). Each
+  `SideNav` item has a `built` flag; the rest of the design's nav
+  (Dashboard, Bookings, Payouts, …) flips on with its slice. `/` now
+  redirects to `/vehicles`; the unbuilt routes still resolve to a
+  placeholder so a direct URL / profile-menu link doesn't 404. The
+  **YOUR QUEUE / DECIDED TODAY nav-footer cards are removed** (the
+  `mine` / `decided_today` fields stay in the queue response for a future
+  Dashboard).
+- **Approving the merchant and approving a car are two gates.** The
+  vehicle approve gate no longer touches the merchant's own documents:
+  `vehicle_review.required_document_kinds` shrank to the three per-vehicle
+  docs; a new `merchant_approval.required_document_kinds` holds the
+  account/business set (`national_id` + `kra_pin`, plus for a company
+  `certificate_of_incorporation` + `company_kra_pin` + `cr12`). Reviewed
+  on the **merchant file** — `POST /admin/merchants/{id}/documents/{kind}/
+  decision`, then `POST /admin/merchants/{id}/approve` (needs the docs
+  `ok` + the merchant checklist's blockers passed), which sets
+  `merchants.approved_at`, notifies the merchant, lights up the
+  `✓ VERIFIED` chip. `POST .../{id}/reopen` reverses it.
+- **A car can't go live for an unverified merchant.** `decideListing`
+  → `approve` is a three-gate check now: `merchant_not_approved` (422) →
+  `documents_not_all_accepted` (the three car docs) → `checklist_blockers_
+  outstanding`. The vehicle case shows the account docs read-only:
+  "Verified with the account" when approved, or a link to the merchant
+  file when not.
+- **`lib/review-checklist.ts`** — the working checklist, one per
+  vehicle case and one per merchant approval. Item defs live in
+  `platform_settings` (`vehicle_review.checklist` / `merchant_approval.
+  checklist`, editable from Settings later); a reviewer's answers in
+  `vehicle_review_checks` / `merchant_review_checks` (`(entity_id,
+  item_id)` PK, `result` pending|pass|flag). `applies_when` (`company` /
+  `chauffeured` / `rate_over:<cents>`) filters items per case. A `block`
+  item must `pass` before Approve; `flag`s and unresolved blockers build
+  `checklist.suggested_note.{changes,reject}` — the request-changes /
+  reject modal opens pre-filled from it, replacing the fixed
+  `REASON_TEMPLATES` (kept as quick-adds). The decision's `audit_log`
+  `after` carries the checklist snapshot. `POST /admin/{vehicles,
+  merchants}/{id}/checklist { item_id, result, note? }` sets one answer
+  (idempotent upsert, no key). Shared UI: `components/console/
+  ChecklistPanel.tsx`.
+
+**Checklist-under-documents + no automatic-checks panel (2026-09-09,
+same PR, owner's call after review).** Vehicle case only — the merchant
+file keeps its flat `ChecklistPanel`.
+- **Each vehicle checklist item carries a `document`** (`logbook` /
+  `comprehensive_insurance` / `tracker_certificate` / `photos`) in its
+  `platform_settings` def. The case renders the checklist as an
+  **accordion under each document row** (`ChecklistRow`, exported from
+  `ChecklistPanel.tsx`), plus a "PHOTO CHECKS" block under the Photos
+  panel. `serializeCase` returns a per-document `documents[].checklist`
+  slice and a top-level `photos_checklist`, alongside the whole
+  `checklist` (still the source for the approve gate + `suggested_note`).
+- **Passing every `block` item under a real car document auto-accepts
+  that document** — `setChecklistItem` → `maybeAutoAcceptDocument` sets
+  `documents.review_state = 'ok'` (+ event, + `audit_log` with
+  `after.via = "checklist"`), a silent accept (no merchant notification,
+  same as a manual accept). A `rejected` line is left alone. The manual
+  Accept / Reject buttons stay.
+- **Three items dropped** from `vehicle_review.checklist`: `ins_psv`,
+  `driver_ins`, `xdoc_plate`. One added: `ins_current` (`block`, under
+  insurance — "cover is in force, expiry in the future", the manual
+  replacement for the hidden `insurance_expiry` auto-check).
+- **The "Automatic checks" panel is gone from the case screen.**
+  `lib/vehicle-checks.ts` still runs and `checks` still ships in the
+  payload (contract unchanged) — just not surfaced. `CHECK_GLYPH` in
+  `console/status.ts` is now unused but kept.
+- Migration `20260909090000` was **edited in place** (never committed /
+  released) rather than stacked.
+- **`vitest.config.ts` caps the worker pool at 4 forks** — each worker
+  opens its own Knex pool (max 10) and Postgres tops out at 100
+  connections; one-worker-per-core plus the growing file count was
+  tipping heavy suites into sporadic connection/timeout failures. Four
+  forks keeps it well under the cap; the suite is Postgres-bound not
+  CPU-bound, so it's also *faster* (~130s vs ~580s).
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
@@ -898,8 +1162,9 @@ review. Tests in `apps/api/src/__tests__/reliability.test.ts`.
   sequencing and the "sequencing traps" section) unless explicitly asked.
 - Don't wire a real SMS/email/storage provider without being asked — the
   console/local adapters are intentional for now.
-- Don't build or wire screens in `apps/customer` / `apps/admin` right now —
-  merchant only, until the owner says otherwise.
+- Don't build or wire screens in `apps/customer` right now — it's a
+  Phase-0 shell. `apps/admin` is now in active Phase-3 development (see the
+  admin-foundation decisions above); `apps/customer` stays frozen.
 - Don't guess colors/fonts from a screenshot of the design canvas when
   `packages/ui/src/tokens.ts` or the brand PDF has the real value — that
   mismatch has already caused a rebuild once.

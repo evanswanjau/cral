@@ -72,10 +72,12 @@ export function requireIdempotencyKey() {
 
     const route = `${req.method} ${req.baseUrl}${req.route?.path ?? req.path}`;
     const requestHash = hashBody(req.body);
-    // Every route this is mounted on sits behind `authenticate()`, so `sub`
-    // is present in practice. The sentinel keeps the column NOT NULL (and
-    // usable in the primary key) if it is ever mounted on an open route.
-    const userId = req.auth?.sub ?? "anonymous";
+    // Every route this is mounted on sits behind `authenticate()` (public
+    // audience) or `requireAdmin()` (ops audience), so one of these is
+    // present in practice. Keys are scoped per actor so two callers can't
+    // collide on the same key + route. The sentinel keeps the column NOT
+    // NULL if it is ever mounted on an open route.
+    const userId = req.auth?.sub ?? req.admin?.id ?? "anonymous";
     const scope = { user_id: userId, key, route };
 
     const now = new Date();

@@ -3,7 +3,7 @@ import { db } from "../db/client.js";
 import type { AllowedUploadMimeType } from "../lib/uploads.js";
 import { generateId } from "../lib/ids.js";
 import { hashPassword } from "../lib/password.js";
-import { signAccessToken } from "../lib/jwt.js";
+import { signAccessToken, signAdminAccessToken, type AdminRole } from "../lib/jwt.js";
 
 /**
  * Inserts a fully-verified merchant user directly (skipping the
@@ -47,6 +47,49 @@ export async function createVerifiedTestUser(): Promise<{
 
   const accessToken = signAccessToken({ sub: user.id, sid: session.id, roles: user.roles });
   return { userId: user.id, email, accessToken };
+}
+
+/**
+ * Inserts an admin (Ops) user + a live `admin_sessions` row and returns a
+ * ready-to-use ops-audience token, skipping the login → SMS-2FA dance.
+ * `require-admin.ts` checks the session row exists and isn't idle-expired,
+ * so a fabricated token alone won't do.
+ */
+export async function createTestAdmin(
+  role: AdminRole = "admin_super",
+  queues: string[] = [],
+): Promise<{ adminId: string; email: string; token: string }> {
+  const suffix = ulid().slice(-10).toLowerCase();
+  const email = `ops-test-${suffix}@example.test`;
+  const digits = suffix.replace(/[^0-9]/g, "4").slice(0, 8);
+
+  const [admin] = await db("admin_users")
+    .insert({
+      id: generateId("adminUser"),
+      email,
+      password_hash: await hashPassword("unused in these tests"),
+      phone: `+2547${digits}`,
+      full_name: "Test Reviewer",
+      role,
+      assigned_queues: queues,
+    })
+    .returning("*");
+  if (!admin) throw new Error("Failed to create test admin");
+
+  const [session] = await db("admin_sessions")
+    .insert({
+      id: generateId("adminSession"),
+      admin_user_id: admin.id,
+      device_id: "test-device",
+      token_hash: `unused-${ulid()}`,
+      expires_at: new Date(Date.now() + 8 * 60 * 60 * 1000),
+      last_seen_at: new Date(),
+    })
+    .returning("*");
+  if (!session) throw new Error("Failed to create test admin session");
+
+  const token = signAdminAccessToken({ sub: admin.id, sid: session.id, role });
+  return { adminId: admin.id, email, token };
 }
 
 /**

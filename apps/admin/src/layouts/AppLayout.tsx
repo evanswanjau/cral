@@ -1,55 +1,57 @@
 import type { ReactNode } from "react";
-import { NavLink, Outlet } from "react-router-dom";
-import { useIsAuthenticated } from "../lib/auth.js";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { getAdminMe } from "../lib/auth-api.js";
+import { setSession } from "../lib/auth.js";
+import { ApiClientError } from "../lib/api.js";
+import { Masthead } from "../components/console/Masthead.js";
+import { SideNav } from "../components/console/SideNav.js";
+import { ErrorBoundary } from "../components/ErrorBoundary.js";
+import { C } from "../components/console/styles.js";
 
-// Admin (Ops) console nav per spec §1/§23: Queues · Vehicles · Merchants ·
-// Disputes · Invoices · Payments · Bulk comms · Settings · Audit log.
-const NAV_ITEMS = [
-  { to: "/", label: "Queues" },
-  { to: "/vehicles", label: "Vehicles" },
-  { to: "/merchants", label: "Merchants" },
-  { to: "/disputes", label: "Disputes" },
-  { to: "/invoices", label: "Invoices" },
-  { to: "/payments", label: "Payments" },
-  { to: "/comms", label: "Bulk comms" },
-  { to: "/settings", label: "Settings" },
-  { to: "/audit-log", label: "Audit log" },
-];
-
-// Dark surface, built for long compliance shifts (spec §1) — the console is
-// deliberately styled apart from the two light customer-facing portals.
 export function AppLayout(): ReactNode {
-  const isAuthenticated = useIsAuthenticated();
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+
+  const { data: me, isLoading, error } = useQuery({
+    queryKey: ["admin", "me"],
+    queryFn: getAdminMe,
+    retry: false,
+  });
+
+  // A hard 401 here means the refresh in lib/api.ts already gave up and
+  // cleared the session — send the reviewer to sign in rather than showing
+  // a broken frame.
+  if (error instanceof ApiClientError && error.status === 401) {
+    setSession(null);
+    navigate("/sign-in", { replace: true });
+    return null;
+  }
+
+  if (isLoading || !me) {
+    return (
+      <div style={{ ...C.page, alignItems: "center", justifyContent: "center" }}>
+        <span style={{ font: "500 12px/1 'IBM Plex Mono',monospace", letterSpacing: ".08em", color: "#838C9B" }}>
+          LOADING THE CONSOLE…
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-        <span className="font-semibold">Cruz Ride Auto — Ops</span>
-        <span className="text-sm text-slate-400">
-          {isAuthenticated ? "Signed in" : "Not signed in"}
-        </span>
-      </header>
-      <div className="flex">
-        <nav className="w-48 shrink-0 border-r border-slate-800 p-4">
-          <ul className="flex flex-col gap-1 text-sm">
-            {NAV_ITEMS.map((item) => (
-              <li key={item.to}>
-                <NavLink
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `block rounded px-2 py-1.5 ${isActive ? "bg-slate-800 font-medium text-white" : "text-slate-400 hover:bg-slate-900"}`
-                  }
-                  end={item.to === "/"}
-                >
-                  {item.label}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
-        </nav>
-        <main className="flex-1 p-6">
-          <Outlet />
-        </main>
+    <div style={C.page}>
+      <Masthead name={me.full_name} email={me.email} role={me.role} />
+      <div style={C.body}>
+        <div style={C.bodyInner}>
+          <SideNav role={me.role} />
+          <div style={C.main}>
+            {/* Scoped to the page: a screen that throws leaves the nav
+                standing. Keyed on the path so navigating away clears it. */}
+            <ErrorBoundary resetKey={pathname} compact>
+              <Outlet />
+            </ErrorBoundary>
+          </div>
+        </div>
       </div>
     </div>
   );

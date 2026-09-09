@@ -1,0 +1,513 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Admin Vehicle Review API
+  version: "1.0.0"
+  description: >
+    The admin (Ops) console's vehicle-review surface — the queue, the
+    per-vehicle case, and the decisions. Ops audience only: every path is
+    behind `requireAdmin({ role: "admin_reviewer", queue: "vehicles" })`,
+    which `admin_super` bypasses.
+
+    Design authority is "Cruz Admin Vehicles.dc.html". Reconciliations from
+    that design, recorded in docs/plans/admin-merchants-vehicle-review.md:
+
+      - The design's five review states map to the backend's
+        `vehicles.status`: pending→"new"/Needs review, review→"inreview"/
+        With you, action→"sent"/Changes sent, live, rejected. `draft` and
+        `paused` never enter the queue. The API returns the raw
+        `vehicles.status` plus a `bucket` slug; the client maps to the
+        design's labels.
+      - The case's document checklist is every kind in the
+        `platform_settings` `vehicle_review.required_document_kinds` row —
+        the three per-vehicle docs (logbook, comprehensive_insurance,
+        tracker_certificate) plus the merchant's own two (national_id,
+        kra_pin). Accepting an account doc carries across every case for
+        that merchant. `driving_licence` is omitted (never collected).
+        The queue row's DOCS chip counts only the three per-vehicle docs.
+      - `documents.review_state` already existed (`ok`/`pending`/
+        `expiring`/`rejected`); Accept sets `ok`, Reject sets `rejected`
+        plus `review_note`/`reviewed_by`/`reviewed_at`. The merchant
+        portal already renders `ok` as "ACCEPTED".
+      - Automatic checks are advisory only (`pass`/`look`/`fail`, never
+        blocking). "Logbook name match" is NOT a check — no OCR exists —
+        so the case shows the account name as context for a human.
+      - Approve requires every required document `ok`; the overflow of a
+        deposit-capped claim etc. is not in scope here.
+
+    Idempotency — the two decision POSTs (`/documents/{kind}/decision`,
+    `/decision`) require an `Idempotency-Key` and replay safely: a
+    double-click must not double-apply, and a rejection must not
+    double-notify the merchant. `requireAdmin` runs before
+    `requireIdempotencyKey`, so keys are scoped to the acting admin.
+
+    Merchant-facing effects — a listing decision, and a document
+    *rejection*, write a `review`-category notification to the merchant
+    inside the decision's transaction; delivery is enqueued post-commit.
+    An accept is silent. This module is the real generator for the
+    document-accepted/rejected and listing-approved/rejected notifications
+    the merchant portal already renders.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+  - url: https://api.staging.cral.co.ke/v1
+  - url: https://api.sandbox.cral.co.ke/v1
+
+tags:
+  - name: admin-vehicles
+    description: Vehicle-review queue, case, and decisions
+
+paths:
+  /admin/vehicles:
+    get:
+      tags: [admin-vehicles]
+      summary: The review queue, oldest-promise-first, with whole-set counts
+      operationId: adminListVehicleQueue
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: bucket
+          in: query
+          schema:
+            type: string
+            enum: [needs_review, with_you, changes_sent, approved, rejected, all]
+        - name: mine
+          in: query
+          description: Restrict to cases assigned to the calling reviewer.
+          schema: { type: boolean }
+        - name: cursor
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: A page of the queue plus counts and the reviewer's own tallies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/QueueRow" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    description: Whole-set count per bucket, plus `all`.
+                    additionalProperties: { type: integer }
+                  sla_days: { type: integer, example: 2 }
+                  mine:
+                    type: object
+                    properties:
+                      assigned_open: { type: integer }
+                      breached: { type: integer }
+                  decided_today:
+                    type: object
+                    properties:
+                      approved: { type: integer }
+                      changes: { type: integer }
+                      rejected: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/vehicles/{vehicleId}:
+    get:
+      tags: [admin-vehicles]
+      summary: The full review case
+      operationId: adminGetVehicleCase
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: vehicleId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewCase" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/vehicles/{vehicleId}/documents/{documentId}:
+    get:
+      tags: [admin-vehicles]
+      summary: A document's bytes (inline for images/PDF, download otherwise)
+      operationId: adminGetVehicleDocument
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: vehicleId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: "The file. `Content-Type` is run through the upload allowlist; `X-Content-Type-Options: nosniff`."
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/vehicles/{vehicleId}/assign:
+    post:
+      tags: [admin-vehicles]
+      summary: Assign the case to the calling reviewer (pending → review)
+      operationId: adminAssignVehicleCase
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: vehicleId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The updated case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewCase" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /admin/vehicles/{vehicleId}/documents/{kind}/decision:
+    post:
+      tags: [admin-vehicles]
+      summary: Accept or reject one document line
+      operationId: adminDecideVehicleDocument
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: vehicleId, in: path, required: true, schema: { type: string } }
+        - name: kind
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [logbook, comprehensive_insurance, tracker_certificate, national_id, kra_pin]
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [accept, reject] }
+                note:
+                  type: string
+                  description: Required when `decision` is `reject` — quoted to the merchant verbatim.
+      responses:
+        "200":
+          description: The updated case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewCase" }
+        "400":
+          description: idempotency_key_required | idempotency_conflict
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: reason_required | not_a_reviewable_document
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404":
+          description: review_case_not_found | document_not_uploaded
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/vehicles/{vehicleId}/checklist:
+    post:
+      tags: [admin-vehicles]
+      summary: >
+        Set one review-checklist answer (idempotent upsert, no key). When
+        this makes every `block` item under a real car document `pass`,
+        that document is set `ok` in the same call (a silent accept).
+      operationId: adminSetVehicleChecklistItem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: vehicleId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, result]
+              properties:
+                item_id: { type: string }
+                result: { type: string, enum: [pending, pass, flag] }
+                note: { type: string, description: "The reviewer's own words, folded into the suggested note." }
+      responses:
+        "200":
+          description: The updated case
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewCase" }
+        "422":
+          description: unknown_checklist_item
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/vehicles/{vehicleId}/decision:
+    post:
+      tags: [admin-vehicles]
+      summary: Approve & publish, request changes, or reject the whole listing
+      operationId: adminDecideVehicleListing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: vehicleId, in: path, required: true, schema: { type: string } }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, request_changes, reject] }
+                note:
+                  type: string
+                  description: >
+                    Required for `request_changes` and `reject` (quoted to
+                    the merchant). Optional for `approve`.
+      responses:
+        "200":
+          description: The updated case (status now live / action / rejected)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReviewCase" }
+        "422":
+          description: >
+            merchant_not_approved (approve, business not verified) |
+            documents_not_all_accepted (approve, a car doc still not `ok`) |
+            checklist_blockers_outstanding (approve, a `block` item not `pass`) |
+            reason_required (request_changes / reject without a note)
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "400":
+          description: idempotency_key_required | idempotency_conflict
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized:
+      description: Missing / wrong-audience / expired / revoked ops token
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: insufficient_scope — the role/queue doesn't cover vehicle review
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    NotFound:
+      description: review_case_not_found
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string, example: documents_not_all_accepted }
+            message: { type: string }
+            field: { type: string }
+            request_id: { type: string }
+
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, example: KES }
+
+    QueueRow:
+      type: object
+      properties:
+        id: { type: string }
+        registration: { type: string }
+        title: { type: string }
+        type: { type: string }
+        year: { type: string }
+        county: { type: string, nullable: true }
+        merchant_id: { type: string }
+        merchant_name: { type: string }
+        status: { type: string, enum: [pending, review, action, live, rejected] }
+        bucket: { type: string, enum: [needs_review, with_you, changes_sent, approved, rejected] }
+        docs_accepted: { type: integer, description: Of the three per-vehicle documents }
+        docs_total: { type: integer, example: 3 }
+        docs_has_issue: { type: boolean }
+        waiting_hours: { type: integer }
+        overdue: { type: boolean }
+        assignee_initials: { type: string, nullable: true }
+        assigned_to_me: { type: boolean }
+        submitted_at: { type: string, format: date-time }
+
+    DocumentLine:
+      type: object
+      properties:
+        kind: { type: string }
+        scope: { type: string, enum: [vehicle, account] }
+        label: { type: string }
+        state: { type: string, enum: [ok, pending, expiring, rejected, missing] }
+        document_id: { type: string, nullable: true }
+        review_note: { type: string, nullable: true }
+        original_name: { type: string, nullable: true }
+        expires_at: { type: string, nullable: true }
+        checklist:
+          allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+          description: >
+            This document's slice of the review checklist, shown as an
+            accordion under the row. When every `block` item here is
+            `pass` the document is set `ok` automatically.
+
+    CheckLine:
+      type: object
+      description: >
+        Advisory automatic checks. Still computed and returned, but the
+        case screen no longer surfaces them - the reviewer confirms the
+        same things (e.g. insurance not expired) on the document checklist.
+      properties:
+        id: { type: string, enum: [plate_format, duplicate_plate, insurance_expiry] }
+        outcome: { type: string, enum: [pass, look, fail] }
+        label: { type: string }
+        detail: { type: string }
+
+    ChecklistBlock:
+      type: object
+      description: >
+        The working checklist. Item defs come from
+        `platform_settings.vehicle_review.checklist` (or
+        `merchant_approval.checklist`), filtered by `applies_when`; the
+        reviewer's answers merge in from `*_review_checks`.
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              group: { type: string }
+              document:
+                type: string
+                nullable: true
+                description: >
+                  The document this item hangs under
+                  (`logbook` / `comprehensive_insurance` /
+                  `tracker_certificate` / `photos`), or null.
+              severity: { type: string, enum: [block, flag] }
+              label: { type: string }
+              help: { type: string }
+              result: { type: string, enum: [pending, pass, flag] }
+              note: { type: string, nullable: true }
+        checked: { type: integer }
+        total: { type: integer }
+        flagged: { type: integer }
+        blockers_outstanding: { type: integer, description: "`block` items not yet `pass` — these disable Approve." }
+        suggested_note:
+          type: object
+          description: What the request-changes / reject modal opens pre-filled with.
+          properties:
+            changes: { type: string }
+            reject: { type: string }
+
+    CaseEvent:
+      type: object
+      properties:
+        label: { type: string }
+        body: { type: string, nullable: true }
+        tone: { type: string, enum: [grey, blue, green, amber, red] }
+        actor_name: { type: string, nullable: true }
+        occurred_at: { type: string, format: date-time }
+
+    ReviewCase:
+      type: object
+      properties:
+        id: { type: string }
+        registration: { type: string }
+        listing_ref: { type: string, nullable: true }
+        title: { type: string }
+        type: { type: string }
+        year: { type: string }
+        seats: { type: integer }
+        transmission: { type: string }
+        fuel: { type: string }
+        colour: { type: string, nullable: true }
+        county: { type: string, nullable: true }
+        pickup_address: { type: string, nullable: true }
+        status: { type: string, enum: [pending, review, action, live, rejected] }
+        bucket: { type: string }
+        minimum_hire_days: { type: integer }
+        chauffeured: { type: boolean }
+        daily_rate: { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        submitted_at: { type: string, format: date-time }
+        waiting_hours: { type: integer }
+        sla_days: { type: integer }
+        overdue: { type: boolean }
+        reviewer_note: { type: string, nullable: true }
+        reviewer_note_resolved: { type: boolean }
+        assigned_to_me: { type: boolean }
+        can_approve: { type: boolean, description: "car docs `ok` AND checklist blockers clear AND `merchant_approved`" }
+        approve_blockers:
+          type: object
+          properties:
+            documents: { type: integer }
+            checklist: { type: integer }
+            merchant_not_approved: { type: boolean }
+        outstanding_documents: { type: array, items: { type: string }, description: The three per-vehicle docs still not `ok`. }
+        merchant_approved: { type: boolean, description: "`merchants.approved_at` is set (gate 1)." }
+        documents: { type: array, items: { $ref: "#/components/schemas/DocumentLine" }, description: The three per-vehicle docs only. }
+        account_documents:
+          type: array
+          description: >
+            The merchant's own documents, read-only context. `state` reads
+            "ok" and `verified_with_account` is true once the business is
+            approved; otherwise the real review state and a link to the
+            merchant file.
+          items:
+            type: object
+            properties:
+              kind: { type: string }
+              label: { type: string }
+              state: { type: string, enum: [ok, pending, expiring, rejected, missing] }
+              verified_with_account: { type: boolean }
+        checklist:
+          allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+          description: >
+            The whole checklist across every document - drives the approve
+            gate (`checklist_blockers_outstanding`) and the pre-filled
+            request-changes / reject note. Per-document slices also appear
+            on each `documents[].checklist`.
+        photos_checklist:
+          allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+          description: The `photos` items - no document row, so no auto-accept.
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              document_id: { type: string }
+              original_name: { type: string }
+        checks: { type: array, items: { $ref: "#/components/schemas/CheckLine" } }
+        events: { type: array, items: { $ref: "#/components/schemas/CaseEvent" } }
+        merchant:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            initials: { type: string }
+            owner_type: { type: string }
+            contact_phone: { type: string, nullable: true }
+            approved: { type: boolean, description: merchants.approved_at is set — nothing sets it yet }
+            member_since: { type: string, format: date-time }
+            live_vehicles: { type: integer }
+            prior_rejections: { type: integer }
