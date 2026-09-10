@@ -382,6 +382,44 @@ export async function verifyOtp(input: VerifyOtpInput, ctx: RequestContext) {
         message: "We couldn't find an account for that number or email.",
       });
     }
+
+    // A texted code is primary authentication here, so the same gates as
+    // password `login` apply before any session exists — otherwise this
+    // branch is a way around account suspension and opt-in 2FA. A
+    // suspended account can't sign in by any path; a deleted one behaves
+    // as if it never existed; `pending_deletion` still signs in (that's
+    // how "Keep my account" is reached inside the 30 days).
+    if (user.status === "suspended") {
+      throw new ApiError({
+        status: 403,
+        type: "auth_error",
+        code: "account_suspended",
+        message: "This account is suspended. Contact CRAL support.",
+      });
+    }
+    if (user.status === "deleted") {
+      throw new ApiError({
+        status: 401,
+        type: "auth_error",
+        code: "invalid_credentials",
+        message: "We couldn't find an account for that number or email.",
+      });
+    }
+
+    // An enrolled second factor is still owed. No session and no tokens
+    // exist until POST /auth/2fa/challenge succeeds — the texted login
+    // code proved the account phone, the challenge proves the separate
+    // `two_factor_phone`. Same shape `login` returns.
+    if (user.two_factor_enabled && user.two_factor_phone) {
+      const challenge = await issueTwoFactorChallenge(user, input.deviceId ?? "otp-login");
+      return {
+        next: "2fa" as const,
+        challenge_id: challenge.id,
+        masked_destination: maskIdentifier(user.two_factor_phone),
+        expires_in: TWO_FACTOR_TTL_MINUTES * 60,
+      };
+    }
+
     const { session, refreshToken } = await createSession(
       user.id,
       input.deviceId ?? "otp-login",
