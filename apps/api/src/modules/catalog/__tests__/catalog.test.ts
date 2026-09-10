@@ -43,6 +43,13 @@ function plate(): string {
   return `K${L()}${L()} ${D()}${D()}${D()}${L()}`;
 }
 
+let phoneSeed = 700_000_00;
+/** A distinct E.164 KE mobile per call - `users.phone` is globally unique. */
+function uniquePhone(): string {
+  phoneSeed += 1;
+  return `+2547${String(phoneSeed).slice(-8)}`;
+}
+
 interface VehicleSpec {
   status?: string;
   county?: string;
@@ -71,7 +78,7 @@ async function makeMerchant(
       password_hash: "x",
       roles: ["merchant"],
       email_verified: true,
-      phone: opts.phone ?? `+2547${suffix.replace(/[^0-9]/g, "7").slice(0, 8)}`,
+      phone: opts.phone ?? uniquePhone(),
       terms_accepted_version: "2026-08-24",
       terms_accepted_at: new Date(),
     })
