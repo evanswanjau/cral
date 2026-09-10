@@ -1,3 +1,66 @@
+@import "./fonts.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * The public site and auth screens are reproduced with the design
+ * canvas's own inline styles rather than Tailwind utilities, so the
+ * rendering matches the canvas exactly. Tailwind stays available for
+ * anything without a canvas counterpart.
+ */
+:root {
+  --r-sm: 4px;
+  --r: 8px;
+  --r-lg: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+}
+
+body {
+  background: #fafbfc;
+  color: #1a1f2b;
+  font-family: "Instrument Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+input::placeholder {
+  color: #a7aebb;
+}
+
+/* Hero "live" status dot. */
+@keyframes cruzPulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.82);
+  }
+}
+
+/* Horizontal rails: scrollable, no visible scrollbar chrome. */
+.cral-rail {
+  scrollbar-width: none;
+  scroll-behavior: smooth;
+}
+.cral-rail::-webkit-scrollbar {
+  display: none;
+}

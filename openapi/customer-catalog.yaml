@@ -1,0 +1,349 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Customer Catalog API
+  version: "1.0.0"
+  description: >
+    The public, unauthenticated read surface a renter browses before they
+    have an account: search, a car's detail page, and the curated
+    collection rails on the home page. Design authority is the "Cruz Ride
+    Auto - Website" canvas ("home", "browse" and "detail" screens).
+
+    **The two gates, in one place.** A vehicle is only ever public when
+    `vehicles.status = 'live'` AND its merchant's `merchants.approved_at`
+    is set. Approving a car and approving the business are two separate
+    decisions (see the admin review slice); a car cannot reach a renter
+    until both have happened. Every endpoint here derives from one
+    `baseCatalogQuery()` that applies both - a second copy of that
+    predicate is how a paused listing or an unverified merchant's car
+    ends up on the public site, the same way a second copy of
+    `cutPayoutRun`'s rules is how a merchant gets paid twice.
+
+    **PII projection is an allowlist, not a redaction.** The query selects
+    named columns; it never does `merchants.*` or `vehicles.*`. A renter
+    browsing sees the car, its price, its county and the owner's display
+    name and join month. They never see the owner's phone, email, national
+    ID, KRA PIN, payout details, uploaded documents or any reviewer note -
+    those columns are not selected, so a serializer bug cannot leak them.
+    `pickup_address` (the exact collection point) is deliberately withheld
+    until a booking is confirmed; only `county` is public.
+
+    **Numbers, not prose.** Money is the `{ amount, currency }` integer
+    pair (spec §2); formatting, the "KES 4,200 / day" and "3 cars listed"
+    strings, and the search-result count sentence are all the client's
+    job.
+
+    **What is a proxy today, and will firm up.** "Recommended" sort and
+    the `popular` / `weekend` collections are ranked newest-first for now -
+    the design's real signal is completed hires, which needs booking
+    volume that does not exist yet. Ratings and trip counts the design
+    shows on a card are not in this response at all: there is no ratings
+    data, and a fabricated number is the mistake that got the hardcoded
+    `id_verified` badge removed. They arrive with the reviews feature.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: catalog
+    description: Public vehicle discovery - no authentication
+
+paths:
+  /catalog/vehicles:
+    get:
+      tags: [catalog]
+      summary: Search live listings
+      operationId: searchCatalog
+      security: []
+      description: >
+        Cursor-paginated (spec §2 - no offset paging). All filters are
+        optional and AND together. `from`/`to` must be given as a pair;
+        when present, a vehicle with a `confirmed` or `active` booking
+        overlapping that window is excluded.
+      parameters:
+        - name: county
+          in: query
+          schema: { type: string, maxLength: 60 }
+          description: Case-insensitive exact match on the vehicle's county.
+        - name: from
+          in: query
+          schema: { type: string, format: date }
+          description: Hire start (Nairobi calendar day). Requires `to`.
+        - name: to
+          in: query
+          schema: { type: string, format: date }
+          description: Hire end (Nairobi calendar day). Requires `from`.
+        - name: category
+          in: query
+          schema:
+            type: string
+            enum: [sedan, suv, van, truck, machinery]
+        - name: max_price
+          in: query
+          schema: { type: integer, minimum: 0 }
+          description: Ceiling on the daily rate, in integer cents (KES).
+        - name: seats_min
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 40 }
+        - name: transmission
+          in: query
+          schema: { type: string, enum: [automatic, manual] }
+        - name: chauffeured
+          in: query
+          schema: { type: boolean }
+          description: >
+            `true` returns only chauffeured (with-driver) listings, `false`
+            only self-drive. Omit for both.
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [recommended, price_asc, price_desc, newest]
+            default: recommended
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 48, default: 24 }
+      responses:
+        "200":
+          description: A page of matching listings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/CatalogVehicleSummary" }
+                  next_cursor:
+                    type: string
+                    nullable: true
+                  has_more: { type: boolean }
+        "422":
+          description: A malformed filter (e.g. `from` without `to`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /catalog/vehicles/{id}:
+    get:
+      tags: [catalog]
+      summary: One live listing's detail
+      operationId: getCatalogVehicle
+      security: []
+      description: >
+        404 `vehicle_not_found` for any id that is not currently a live
+        listing on an approved merchant - a paused, rejected or
+        in-review car is indistinguishable from one that never existed, so
+        the endpoint does not leak listing state.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The listing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogVehicleDetail" }
+        "404":
+          description: Not a live, publicly visible listing.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /catalog/vehicles/{id}/photos/{photoId}:
+    get:
+      tags: [catalog]
+      summary: Stream one of a listing's photos
+      operationId: getCatalogVehiclePhoto
+      security: []
+      description: >
+        The bytes of a `vehicle_photo` document belonging to this listing.
+        Scoped by the vehicle id in the path, so the same two gates apply -
+        a photo of a non-public listing 404s. `photos[].url` on the detail
+        response points here. Served with `X-Content-Type-Options: nosniff`
+        and a content type forced through the upload allowlist.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: photoId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Image bytes.
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        "404":
+          description: No such photo on a publicly visible listing, or the bytes are gone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /catalog/collections:
+    get:
+      tags: [catalog]
+      summary: The home page's curated rails
+      operationId: getCatalogCollections
+      security: []
+      description: >
+        The eight rails from the "home" screen, each with its kicker /
+        title / sub copy and up to eight listings. Membership rules are
+        server-side (see the description at the top of this file for which
+        are proxies today). A rail with no matching live listings is still
+        returned, with an empty `vehicles` array.
+      responses:
+        "200":
+          description: All rails, in display order.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [collections]
+                properties:
+                  collections:
+                    type: array
+                    items: { $ref: "#/components/schemas/CatalogCollection" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Integer cents. Never a float, never a formatted string.
+        currency:
+          type: string
+          example: KES
+
+    CatalogOwner:
+      type: object
+      required: [display_name, since, listed_count]
+      properties:
+        display_name:
+          type: string
+          description: >
+            The company name for a company, otherwise the owner's first
+            name only. Never a surname, never contact details.
+        since:
+          type: string
+          format: date-time
+          description: When the merchant account was created (the design's "MAR 2025").
+        listed_count:
+          type: integer
+          description: How many live listings this owner currently has.
+
+    CatalogVehicleSummary:
+      type: object
+      required:
+        [
+          id,
+          listing_ref,
+          make,
+          model,
+          year,
+          category,
+          registration,
+          transmission,
+          fuel,
+          seats,
+          chauffeured,
+          county,
+          daily_rate,
+          verified,
+          primary_photo_url,
+          owner,
+          created_at,
+        ]
+      properties:
+        id: { type: string, example: veh_01J... }
+        listing_ref: { type: string, nullable: true, example: H260831001 }
+        make: { type: string }
+        model: { type: string }
+        year: { type: string }
+        category:
+          type: string
+          enum: [sedan, suv, van, truck, machinery]
+        registration:
+          type: string
+          description: >
+            The plate, shown on the card in the design ("papers still
+            read"). Public-observable on the car itself; included
+            deliberately, not an oversight.
+        transmission: { type: string, enum: [automatic, manual] }
+        fuel: { type: string }
+        colour: { type: string, nullable: true }
+        seats: { type: integer }
+        chauffeured: { type: boolean }
+        county: { type: string, nullable: true }
+        daily_rate: { $ref: "#/components/schemas/Money" }
+        verified:
+          type: boolean
+          description: >
+            `vehicles.verification_badge = 'active'`. A trust signal on the
+            listing, never skewed, always paired with a word in the UI.
+        primary_photo_url:
+          type: string
+          nullable: true
+          description: Relative path to the first photo, or null if none uploaded.
+        owner: { $ref: "#/components/schemas/CatalogOwner" }
+        created_at: { type: string, format: date-time }
+
+    CatalogVehicleDetail:
+      allOf:
+        - $ref: "#/components/schemas/CatalogVehicleSummary"
+        - type: object
+          required: [minimum_hire_days, photo_urls]
+          properties:
+            minimum_hire_days: { type: integer }
+            photo_urls:
+              type: array
+              items: { type: string }
+              description: All photos, in upload order. `primary_photo_url` is the first.
+
+    CatalogCollection:
+      type: object
+      required: [key, kicker, title, sub, vehicles]
+      properties:
+        key:
+          type: string
+          enum:
+            [popular, roadtrip, weekend, budget, family, executive, airport, upcountry]
+        kicker: { type: string, example: MOST BOOKED }
+        title: { type: string }
+        sub: { type: string }
+        vehicles:
+          type: array
+          items: { $ref: "#/components/schemas/CatalogVehicleSummary" }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
