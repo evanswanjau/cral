@@ -15,11 +15,16 @@ import type { BookingRow } from "../../bookings/db-types.js";
 
 const userIds: string[] = [];
 const bookingIds: string[] = [];
+const merchantIds: string[] = [];
 
 afterAll(async () => {
   if (bookingIds.length) {
     await db("payment_requests").whereIn("booking_id", bookingIds).delete();
     await db("bookings").whereIn("id", bookingIds).delete();
+  }
+  if (merchantIds.length) {
+    await db("vehicles").whereIn("merchant_id", merchantIds).delete();
+    await db("merchants").whereIn("id", merchantIds).delete();
   }
   if (userIds.length) {
     await db("sessions").whereIn("user_id", userIds).delete();
@@ -28,14 +33,64 @@ afterAll(async () => {
   await db.destroy();
 });
 
+/**
+ * `bookings.merchant_id` and `.vehicle_id` are real foreign keys, so a
+ * booking fixture needs rows behind them - a generated id alone trips the
+ * constraint.
+ */
+async function merchantWithVehicle(): Promise<{ merchantId: string; vehicleId: string }> {
+  const owner = await createVerifiedTestUser();
+  userIds.push(owner.userId);
+
+  const merchantId = generateId("merchant");
+  await db("merchants").insert({
+    id: merchantId,
+    user_id: owner.userId,
+    owner_type: "individual",
+    first_name: "Test",
+    surname: "Merchant",
+    payout_method: "mpesa",
+    payout_same: true,
+    onboarding_step: 5,
+    onboarding_max_step: 5,
+    onboarding_screen: "done",
+    onboarding_submitted: true,
+    approved_at: new Date(),
+  });
+  merchantIds.push(merchantId);
+
+  const vehicleId = generateId("vehicle");
+  await db("vehicles").insert({
+    id: vehicleId,
+    merchant_id: merchantId,
+    type: "sedan",
+    make: "Toyota",
+    model: "Axio",
+    year: "2019",
+    registration: `KP${merchantId.slice(-5).toUpperCase()}`,
+    transmission: "Automatic",
+    fuel: "Petrol",
+    seats: 5,
+    county: "Nairobi",
+    daily_rate_amount: 500_000,
+    daily_rate_currency: "KES",
+    minimum_hire_days: 1,
+    chauffeured: false,
+    status: "live",
+  });
+
+  return { merchantId, vehicleId };
+}
+
 async function bookingFor(hirerId: string, overrides: Partial<BookingRow> = {}) {
   const id = generateId("booking");
+  const { merchantId, vehicleId } = await merchantWithVehicle();
   const [row] = await db<BookingRow>("bookings")
     .insert({
       id,
       ref: `CB-TEST-${id.slice(-6)}`,
-      merchant_id: generateId("merchant"),
-      vehicle_id: generateId("vehicle"),
+      merchant_id: merchantId,
+      vehicle_id: vehicleId,
       hirer_id: hirerId,
       status: "confirmed",
       pickup_at: new Date(),
