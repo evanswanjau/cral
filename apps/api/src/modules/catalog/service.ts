@@ -81,8 +81,15 @@ const CATALOG_COLUMNS = [
   "m.created_at as m_created_at",
 ] as const;
 
-/** vehicles JOIN merchants, both gates applied. The only entry point. */
-function baseCatalogQuery(): Knex.QueryBuilder {
+/**
+ * vehicles JOIN merchants, both gates applied. The only entry point.
+ *
+ * Exported because `modules/customer-bookings` must answer the same
+ * question - "can a renter act on this car?" - and a second copy of the
+ * predicate is how a paused listing or an unapproved merchant's car
+ * becomes bookable while being invisible in search, or the reverse.
+ */
+export function baseCatalogQuery(): Knex.QueryBuilder {
   return db<CatalogRow>("vehicles as v")
     .join("merchants as m", "m.id", "v.merchant_id")
     .where("v.status", "live")
