@@ -3,6 +3,8 @@ import { ApiError, kes, type Money } from "@cral/types";
 import { db } from "../../db/client.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
+import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
+import { ratingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
 
 /**
@@ -52,6 +54,7 @@ interface CatalogRow {
   m_trading_name: string | null;
   m_first_name: string | null;
   m_created_at: Date;
+  m_user_id: string;
 }
 
 const CATALOG_COLUMNS = [
@@ -79,6 +82,7 @@ const CATALOG_COLUMNS = [
   "m.trading_name as m_trading_name",
   "m.first_name as m_first_name",
   "m.created_at as m_created_at",
+  "m.user_id as m_user_id",
 ] as const;
 
 /**
@@ -269,6 +273,31 @@ export async function listCatalog(query: CatalogSearchQuery) {
 // Detail
 // ---------------------------------------------------------------------
 
+/**
+ * "What CRAL checked on this car" - a document cleared or not, never the
+ * document itself. `logbook_name_match` is deliberately not a check here
+ * (no OCR in this product, per the admin review module's own rule) - this
+ * only reports what a human reviewer actually decided.
+ */
+const DOC_LABELS: Record<(typeof VEHICLE_DOC_KINDS)[number], string> = {
+  logbook: "Logbook",
+  comprehensive_insurance: "Comprehensive insurance",
+  tracker_certificate: "Tracker certificate",
+};
+
+async function documentsClearedFor(vehicleId: string) {
+  const rows = await db("documents")
+    .where({ vehicle_id: vehicleId })
+    .whereIn("kind", VEHICLE_DOC_KINDS)
+    .select("kind", "review_state");
+  const byKind = new Map(rows.map((r) => [r.kind as string, r.review_state as string]));
+  return VEHICLE_DOC_KINDS.map((kind) => ({
+    kind,
+    label: DOC_LABELS[kind],
+    cleared: byKind.get(kind) === "ok",
+  }));
+}
+
 export async function getCatalogVehicle(id: string) {
   const row = (await baseCatalogQuery().where("v.id", id).select(...CATALOG_COLUMNS).first()) as
     | CatalogRow
@@ -282,12 +311,21 @@ export async function getCatalogVehicle(id: string) {
     });
   }
 
-  const aux = await loadAux([row]);
+  const [aux, documentsCleared, ownerRating] = await Promise.all([
+    loadAux([row]),
+    documentsClearedFor(row.id),
+    // Nothing writes a hirer->merchant rating yet (no completed customer
+    // hires exist) - this returns null honestly rather than fabricate a
+    // score, exactly the fix that removed the hardcoded id_verified badge.
+    ratingSummary(row.m_user_id, "merchant"),
+  ]);
   const photoIds = aux.photos.get(row.id) ?? [];
   return {
     ...serializeSummary(row, aux),
     minimum_hire_days: row.minimum_hire_days,
     photo_urls: photoIds.map((pid) => photoPath(row.id, pid)),
+    documents_cleared: documentsCleared,
+    owner_rating: ownerRating,
   };
 }
 

@@ -398,3 +398,42 @@ describe("photos", () => {
     expect(blocked.status).toBe(404);
   });
 });
+
+describe("what CRAL checked, and the owner's rating", () => {
+  it("reports each per-vehicle document as cleared only once a reviewer accepts it", async () => {
+    const m = await makeMerchant({ approved: true });
+    const id = await addVehicle(m.merchantId);
+
+    const before = await request(app).get(`/catalog/vehicles/${id}`);
+    expect(before.body.documents_cleared).toEqual([
+      { kind: "logbook", label: "Logbook", cleared: false },
+      { kind: "comprehensive_insurance", label: "Comprehensive insurance", cleared: false },
+      { kind: "tracker_certificate", label: "Tracker certificate", cleared: false },
+    ]);
+
+    await db("documents").insert({
+      id: generateId("document"),
+      merchant_id: m.merchantId,
+      vehicle_id: id,
+      kind: "logbook",
+      storage_key: "test/logbook",
+      original_name: "logbook.pdf",
+      size_bytes: 10,
+      content_type: "application/pdf",
+      review_state: "ok",
+    });
+
+    const after = await request(app).get(`/catalog/vehicles/${id}`);
+    expect(after.body.documents_cleared.find((d: { kind: string }) => d.kind === "logbook").cleared).toBe(
+      true,
+    );
+  });
+
+  it("returns null owner_rating honestly - nothing writes a hirer's rating of a merchant yet", async () => {
+    const m = await makeMerchant({ approved: true });
+    const id = await addVehicle(m.merchantId);
+
+    const res = await request(app).get(`/catalog/vehicles/${id}`);
+    expect(res.body.owner_rating).toBeNull();
+  });
+});
