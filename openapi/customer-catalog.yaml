@@ -310,13 +310,39 @@ components:
       allOf:
         - $ref: "#/components/schemas/CatalogVehicleSummary"
         - type: object
-          required: [minimum_hire_days, photo_urls]
+          required: [minimum_hire_days, photo_urls, documents_cleared, owner_rating]
           properties:
             minimum_hire_days: { type: integer }
             photo_urls:
               type: array
               items: { type: string }
               description: All photos, in upload order. `primary_photo_url` is the first.
+            documents_cleared:
+              type: array
+              description: >
+                "What CRAL checked on this car" - whether a human reviewer
+                accepted each per-vehicle document. Never the document
+                itself, and never a semantic claim ("ownership verified")
+                beyond what was actually reviewed - there is no OCR in
+                this product, so a name-match check is never reported.
+              items:
+                type: object
+                required: [kind, label, cleared]
+                properties:
+                  kind: { type: string, enum: [logbook, comprehensive_insurance, tracker_certificate] }
+                  label: { type: string }
+                  cleared: { type: boolean }
+            owner_rating:
+              nullable: true
+              description: >
+                The owner's average rating from completed hires. `null`,
+                honestly, until a hirer has ever rated a merchant - nothing
+                writes that direction yet (see `ratings` table).
+              type: object
+              required: [average, count]
+              properties:
+                average: { type: number }
+                count: { type: integer }
 
     CatalogCollection:
       type: object

@@ -40,9 +40,23 @@ export interface CatalogVehicleSummary {
   created_at: string;
 }
 
+export interface DocumentCleared {
+  kind: "logbook" | "comprehensive_insurance" | "tracker_certificate";
+  label: string;
+  cleared: boolean;
+}
+
+export interface RatingSummary {
+  average: number;
+  count: number;
+}
+
 export interface CatalogVehicleDetail extends CatalogVehicleSummary {
   minimum_hire_days: number;
   photo_urls: string[];
+  documents_cleared: DocumentCleared[];
+  /** null until a hirer has ever rated this owner - nothing fabricated. */
+  owner_rating: RatingSummary | null;
 }
 
 export interface CatalogCollection {
