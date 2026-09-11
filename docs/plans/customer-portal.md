@@ -1,305 +1,310 @@
-# Customer portal - fully integrated
+# Customer portal - full scope to done
 
-**Owner's call, 2026-09-10.** `apps/customer` is released from its Phase-0
-freeze and built as a **real vertical slice**, not a UI shell: a booking
-made by a renter is a real `bookings` row that the merchant sees in their
-existing Bookings screen and Ops sees in a new admin lens.
+**Status as of 2026-09-11.** `apps/customer` is off its Phase-0 hold and
+building as a real vertical slice: a booking a renter makes is a real
+`bookings` row the merchant sees in their existing Bookings screen and Ops
+sees in an admin lens. Design authority is the "Cruz Ride Auto - Website"
+canvas bundle, plus `Cruz Customer Portal.dc.html` for the post-booking
+screens (not yet pulled).
 
-Design source is the "Cruz Ride Auto - Website" canvas bundle. Pull the
-canonical `.dc.html` from the canvas via the Chrome MCP ritual in
-CLAUDE.md (`ListFiles` -> `GetFile`) rather than reverse-engineering the
-export; the export was unpacked only to confirm the screen inventory.
+## 1. Where we are against the design
 
-## Decisions taken
+### Screens
 
-| Question | Call |
+| Design screen | State |
 | --- | --- |
-| Integration depth | **Full vertical.** Real bookings, visible to merchant and admin. |
-| Customer auth | **Email + password**, same as merchant. The design's phone-OTP tab is dropped. |
-| `verifyOtp` login hole | **Patched first**, as its own change, before anything else. |
-| Renter documents | **ID + driving licence required.** Uploaded before a booking request; Ops-accepted before pickup keys. |
-| Document storage | **Extend `documents`** with a nullable `user_id`. One review vocabulary, one decision path. |
-| Payment | **No payment concept yet.** Money is settled offline. M-Pesa screens are dropped from the flow. |
-| SEO | **Build-time prerender + JSON-LD + sitemap.** No meta-framework. |
+| `home` | **Done.** Hero, search bar, facts strip, 8 live collection rails, category tiles, deposit band, roadmap, CTAs, footer. Real data from `GET /catalog/collections`. |
+| `browse` | Placeholder. Needs the filter rail (city, dates, price ceiling, body, seats, gearbox, owner type, "only show" toggles), Cards/List view switch, sort, result count, empty state. |
+| `detail` | Placeholder. Needs gallery, spec grid, "What CRAL checked on this car", owner card, reviews, quote panel, "Request these dates". |
+| `booking` | Not built. Five stages - review, waiting, accepted, check-your-phone, confirmed. |
+| `auth` | Old Phase-0 stubs, not the design. Needs the two-tab screen, the "HOLDING FOR YOU" car panel, and the driving-licence upload step. |
+| `list` (list your car) | Placeholder. Earnings calculator, three steps, "have these ready", then a hand-off to the merchant app. |
+| 7 marketing pages | Placeholders (`how-it-works`, `how-we-protect-you`, `corporate`, `about`, `help`, `contact`, `legal`). |
+| Customer Portal (trips, account, documents) | Separate canvas file, not pulled, not built. |
 
-## What the existing schema already gives us
+### Backend
 
-Verified against the code, and it is more than expected:
+| Capability | State |
+| --- | --- |
+| Catalog search / detail / photos / collections | **Done**, 10 tests, two-gate filter + PII allowlist |
+| Payments: STK initiate + callback | **Scaffold.** Real: adapter interface, OAuth token exchange, `payment_requests` table, idempotent callback handling. **Not confirmed:** Co-op's STK path, request field names, callback shape - gated behind `COOPBANK_STK_PATH_CONFIRMED`. |
+| `POST /bookings` (a renter creating one) | **Missing.** `POST /bookings/:id/pay` exists but nothing can create the booking it pays for. This is the single biggest hole. |
+| Customer trips: list, detail, cancel | Missing |
+| Renter's handover code | Missing (the `handovers` row already stores the hashed OTP) |
+| Renter ID + driving licence documents | Missing - `documents.merchant_id` is `NOT NULL`, `driving_licence` is not a `DocumentKind` |
+| Renter notifications | Missing - `notifications.merchant_id` is `NOT NULL` |
+| Ratings / reviews | Table exists only on the unmerged `feature/portal-round-5-ratings` branch |
+| Delivery / collection fees | Not modelled anywhere |
+| Request expiry ("lapses in 4 hours") | `response_due_at` is written and checked lazily at confirm; **nothing expires a request in the background** |
+| Admin renters queue | Missing |
+| Admin bookings lens | Missing |
+| Hirer-documents gate on pickup handover | Missing |
+| SEO: prerender, JSON-LD, sitemap | Missing |
+| Deploy: apex vhost, DNS, CORS | Missing |
 
-- **`bookings` is already shaped for the customer side** -
-  `hirer_id -> users`, `status` defaults to `requested`, `response_due_at`
-  (the design's "the clock is on the owner now"), `note_from_hirer`,
-  gross / commission / merchant_net / deposit money pairs,
-  `rating_open_until`. A customer-created `requested` row appears in the
-  merchant Bookings screen **with no change to that screen**.
-- **`handovers`** already carries `otp_code_hash`, `otp_attempts`,
-  `masked_destination` - the renter's side of the pickup code needs a read
-  endpoint, not a schema change.
-- **`getHirerHistory`** deliberately omits an `id_verified` field with a
-  comment saying no pipeline exists. This slice **builds that pipeline**,
-  so the field can finally be added and be true.
+### Things the design requires that no plan has covered yet
 
-## Blockers and honesty risks - read this first
+1. **Handover location with a fee.** The booking review step offers
+   "Collect from the owner in {area}", "Delivery to my address for
+   KES 1,000", "JKIA arrivals for KES 1,500", "Wilson Airport for
+   KES 1,200". There is no column for this and it is not in
+   `computeBookingPricing`. It changes the total the renter pays and what
+   the merchant is owed.
+2. **Payment happens after acceptance, not at request.** The design is
+   explicit: "Send request, pay nothing yet" -> owner accepts -> "Now the
+   M-Pesa prompt". `POST /bookings/:id/pay` currently has **no status
+   guard** - it would happily prompt for a `requested` or `declined`
+   booking.
+3. **A four-hour response window that actually lapses.** "REQUEST LAPSES
+   IN {countdown}". Needs a sweep that flips overdue `requested` bookings
+   to `expired`, notifies both sides, and frees the dates.
+4. **Two requests for the same dates are allowed.** "Requesting two cars
+   for the same dates is allowed; you only ever pay for the one you
+   confirm." So the availability check must not block on the renter's own
+   pending requests - only on `confirmed`/`active` ones.
+5. **"What CRAL checked on this car"** on the public detail page - a ✓ per
+   document kind. The catalog returns no document information today. It
+   must say *that* the set cleared, never expose the documents.
+6. **Reviews from completed hires only**, shown on the detail page.
+7. **Hire-as-business + driver selection** for a merchant account hiring
+   someone else's car.
 
-### 1. The deposit is now a promise nothing keeps
+## 2. Decisions needed before the affected PRs
 
-This is the most serious consequence of "no payment concept yet".
+These are genuine forks, not things to pick a default for.
 
-- The public design's core trust line is **"Nobody holds your deposit but
-  us."** With no rail, CRAL holds nothing.
-- `bookings.deposit_amount` is still computed and stored, and the
-  **merchant's claim flow is built on it** - a claim is capped at the
-  deposit and the overflow escalates to a dispute. That would be claiming
-  against money that does not exist.
-- `cutPayoutRun` pays merchants for completed bookings. With nothing
-  collected, a payout run schedules payment of money never received.
+### D1 - Deposit custody, now that a rail is being built
 
-**Resolved (owner, 2026-09-10): the deposit copy changes to what is
-true.** Across the customer portal - the home page, `/how-we-protect-you`,
-the car detail page and the booking review - the deposit is described as
-**agreed between the hirer and the owner and settled directly at
-handover**, not held by CRAL. "Nobody holds your deposit but us" and any
-equivalent line is removed. What CRAL still does and can still say: read
-the renter's ID and licence once, show the owner a verified name, run the
-booking record, keep every receipt in one place. `bookings.deposit_amount`
-stays computed and stored as the agreed figure both sides see; nothing in
-this slice claims CRAL custody of it. When a real rail lands, the copy and
-the custody move together.
+The 2026-09-10 decision ("the deposit is agreed with the owner, not held
+by us") was made **because there was no payment rail**. The Co-op STK
+scaffold changes that: one prompt can cover hire + deposit, which is what
+the design says ("One prompt covers the hire and the refundable deposit.
+The deposit is held by CRAL and returned the evening you bring the car
+back"), and what the merchant-side claim flow was always built for.
 
-### 2. `notifications.merchant_id` is `NOT NULL`
+Holding the deposit means CRAL must also be able to **return** it -
+Co-op's STK is collection only. A refund path (B2C, or a manual
+operations process) is a separate capability. Options:
 
-The notifications table is merchant-scoped, so **a renter cannot receive
-an in-app notification at all**. "Your request was accepted" needs either
-the same nullable-`merchant_id` + `user_id` treatment as `documents`, or
-renter-facing messages go by email only. Recommendation: mirror the
-`documents` change so there is one notification system, not two.
+- **(a) Collect hire + deposit, hold the deposit, refund via an
+  operations process.** Matches the design and the existing claim flow.
+  Needs a documented refund runbook and, eventually, a disbursement rail.
+- **(b) Collect the hire only; the deposit stays owner-settled.** Keeps
+  the current honest copy. The merchant claim flow then has nothing
+  behind it and must be neutered.
+- **(c) Collect hire + deposit but hold the deposit as credit** on the
+  renter's account rather than refunding cash.
 
-### 3. Real bookings will exercise untested merchant paths
+Everything in the booking flow, the home/protection copy, and the claim
+path depends on this. **It blocks PR C4 and PR C7.**
 
-The merchant Bookings screen has only ever run against `dev-seed`, whose
-fixtures are curated. Real data hits cases the seed never produces: a
-first-time hirer with zero completed hires, a hirer with no rating
-history, a request that expires unanswered. Worth a deliberate pass over
-`serializeBooking` / `getHirerHistory` with empty-state data.
+### D2 - Co-op STK wire format
 
-### 4. Notification cost becomes real
+`COOPBANK_STK_PATH_CONFIRMED` is off and the adapter refuses to fire. Two
+things need a human with portal access: the STK resource path and request
+field names, and the callback payload shape. Also their portal's Callback
+URL is still the placeholder `http://url-to-webapp`. **Blocks PR C6.**
 
-`category: booking` notifications currently have no generator. Once
-renters create requests, every one texts and emails a merchant subject to
-their preferences. That is real TextSMS and Resend spend, per booking.
+### D3 - Callback authentication
 
-### 5. The public catalog must not leak merchant PII
+The callback endpoint currently trusts its own obscurity. Confirm whether
+Co-op signs callbacks, offers a shared secret, or publishes an IP range,
+and add the check. **Do not point real money at this before it's done.**
 
-`vehicles` becomes publicly readable for the first time. The catalog
-serializer needs a strict allowlist projection - no owner phone, KRA PIN,
-payout details, document rows or `reviewer_note`. Treat this as the
-security-critical file in the slice.
+### D4 - Delivery fees
 
-## Backend work
+Are the design's figures (1,000 / 1,500 / 1,200) platform-set, or does
+each merchant set their own delivery options and prices? Platform-set is
+one `platform_settings` key; per-merchant is a table plus merchant-portal
+UI. **Blocks PR C4.**
 
-### Migration A - renter documents
+### D5 - Reviews
 
-- `documents.merchant_id` -> nullable; add nullable `user_id` (FK
-  `users`, `ON DELETE CASCADE`); `CHECK` that exactly one of the two is
-  set; index `user_id`.
-- `DocumentKind` gains **`driving_licence`** (previously omitted as
-  "never collected").
-- `DocumentRow.merchant_id` becomes `string | null`. **This is the one
-  change that touches merchant and admin code** - the compiler flags every
-  read site. All of them already filter `where merchant_id = ...`, so
-  behaviour is unchanged; the churn is mechanical and compiler-caught.
+`feature/portal-round-5-ratings` is unmerged. Merge it first, or defer
+the detail page's review block and ship the rest.
 
-### Migration B - renter notifications
+## 3. The plan
 
-Same treatment for `notifications.merchant_id` (nullable + `user_id` +
-CHECK), so `notify(trx, {...})` can address a renter.
+Numbered `C*` so they don't collide with the earlier numbering. Each is
+one PR. Contract-first: the `openapi/` file is written and frozen before
+the code that implements it.
 
-### `openapi/customer-catalog.yaml` (public, unauthenticated)
+### C1 - Rebase and land what exists
 
-- `GET /catalog/vehicles` - cursor-paginated search. Filters: city/county,
-  dates, max price, category, seats, transmission, owner type, verified,
-  delivery, sort.
-- `GET /catalog/vehicles/{id}` - detail.
-- `GET /catalog/collections` - the eight curated rails (popular,
-  roadtrip, weekend, budget, family, executive, airport, upcountry),
-  rules defined server-side.
-- **The two-gate filter lives in exactly one place**: `vehicles.status =
-  'live'` **and** `merchants.approved_at IS NOT NULL`. A second copy of
-  that predicate is how a paused or unapproved car ends up public. Same
-  rule as `cutPayoutRun` and `payoutPosition`.
-- Availability excludes vehicles with an overlapping `confirmed`/`active`
-  booking.
-- Public rate limiting; no auth; strict PII projection (risk 5 above).
+`feature/payments-coopbank` carries the payment scaffold. Confirm the
+catalog + home work is in `develop` (PR #15 merged), rebase payments onto
+it, get the full suite green, merge. No new behaviour.
 
-### `openapi/customer-bookings.yaml`
+### C2 - `POST /bookings`: a renter can request a car
 
-- `POST /bookings` - **`Idempotency-Key` required**. A double-submit
-  creating two requests is exactly what the middleware is for, money or
-  not.
-  - **The server computes the quote.** Gross from
-    `daily_rate_amount x days`, commission at `COMMISSION_RATE`, deposit
-    at `DEPOSIT_RATE` (0.15 of gross). The client never computes money -
-    the design's `rate x 1.5` deposit rule is wrong and is discarded.
-  - Gates: both renter documents uploaded; vehicle live + merchant
-    approved; dates available.
-  - Writes the booking, an `audit_log` row and
-    `notify(trx, {category:'booking'})` to the merchant **in one
-    transaction**; delivery enqueued post-commit. This is the **real
-    generator** for the booking notification the merchant portal already
-    renders and has never received.
-- `GET /bookings` (my trips, cursor), `GET /bookings/{id}`.
-- `POST /bookings/{id}/cancel` - `Idempotency-Key`.
-- `GET /bookings/{id}/handover` - the renter's pickup/return code, which
-  they read aloud to the merchant. Distinct from the public booking ref.
-- `POST /bookings/{id}/rating` - off the existing `rating_open_until`.
+**The keystone.** Contract `openapi/customer-bookings.yaml`.
 
-### `openapi/customer-account.yaml`
+- `POST /bookings` - `Idempotency-Key` required. Body: vehicle id, dates,
+  handover choice, note, hire-as (personal/business), driver.
+  - **The server computes the quote.** `computeBookingPricing` from the
+    vehicle's own `daily_rate_amount`. The client never computes money.
+  - Gates: vehicle live + merchant approved (reuse `baseCatalogQuery`'s
+    predicate - one copy); dates free of `confirmed`/`active` bookings
+    (a renter's own pending requests do **not** block, per the design);
+    minimum hire days; renter documents uploaded (see C5).
+  - Writes `bookings` + `audit_log` + `notify(trx, {category:"booking"})`
+    to the merchant in one transaction, delivery enqueued post-commit.
+    **This is the real generator** for the booking notification the
+    merchant portal has always rendered and never received.
+  - Sets `response_due_at` to +4 hours.
+- `GET /bookings`, `GET /bookings/{id}`, `POST /bookings/{id}/cancel`.
+- `GET /bookings/{id}/handover` - the renter's pickup/return code.
+- **Request-expiry sweep** in `runDailyReminderSweep`'s family (needs to
+  run more often than daily - a dedicated short-interval job): overdue
+  `requested` -> `expired`, notify both sides, free the dates.
+- Migration: `bookings` gains the handover-location choice and its fee
+  (pending D4).
+- A deliberate pass over `serializeBooking` / `getHirerHistory` with
+  real first-time-hirer data - the merchant screen has only ever seen
+  curated `dev-seed` fixtures.
 
-- `POST /me/documents` (multipart) - **through `createUpload()` in
-  `lib/uploads.ts`**; do not hand-roll a fourth `multer({...})`.
-- `GET /me/documents`, `GET /me/documents/{id}` - with `nosniff` and
-  `safeContentType` / `safeDisposition`, same as the onboarding route.
-- Renter verification state surfaced on `/me` and
-  `/auth/registration-state`.
+### C3 - Browse and car detail
 
-### Admin
+- `/browse` - filters in the querystring, Cards/List switch, sort,
+  result count, empty state, paging off the existing cursor.
+- `/cars/:id` - gallery, spec grid, owner card, quote panel, "Request
+  these dates" -> `/book/:id`.
+- Catalog additions: a `documents_cleared` summary for "What CRAL checked
+  on this car" (booleans per kind, never the documents), and review
+  data if D5 says so.
 
-- `openapi/admin-renters.yaml` - a **real queue** (unlike the Merchants
-  directory), because Ops must accept or reject:
-  `GET /admin/renters`, `GET /admin/renters/{id}`,
-  `POST /admin/renters/{id}/documents/{kind}/decision`
-  (`requireAdmin` **before** `requireIdempotencyKey`; writes `documents`,
-  `audit_log` and a renter notification in one transaction).
-- `openapi/admin-bookings.yaml` - a **read-only directory**, following
-  the Merchants-lens precedent ("approving a vehicle does not verify the
-  business - those are two separate decisions"). No intervention
-  endpoints; cancel / refund / dispute belong to Phase 6.
-- `platform_settings` gains `renter_approval.required_document_kinds`
-  (`national_id` + `driving_licence`) and an SLA, alongside the existing
-  `vehicle_review` / `merchant_approval` blocks.
-- `SideNav` gains **Renters** and **Bookings** with `built: true`.
+### C4 - The booking flow, stages 1-2
 
-### Handover gate
+`/book/:id`, auth-gated (`/sign-in?next=/book/:id`).
 
-`completeHandover` for `kind: 'pickup'` requires the hirer's
-`national_id` **and** `driving_licence` at `review_state = 'ok'`, else 422
-`hirer_documents_not_accepted`. The merchant's booking detail shows the
-hirer's verification state up front so they are not surprised at the car,
-and `getHirerHistory` finally gains a **real** `id_verified`.
+- **Review** - identity card, licence-pending warning, who-is-this-for,
+  driver select, handover location + fee, note, money breakdown.
+  "Send request, pay nothing yet."
+- **Waiting** - "The clock is on the owner now", live countdown off
+  `response_due_at`, SMS notice, keep-browsing copy.
+- Depends on D1 (what the money breakdown says) and D4 (delivery fees).
 
-## Frontend - `apps/customer`
+### C5 - Renter identity: auth to the design + documents
 
-Conventions are the merchant portal's, verbatim: self-hosted
-`@fontsource` fonts via a copied `fonts.css` (Archivo **wdth+wght**
-variable cut, `font-variation-settings:'wdth' 110` / 106 on sub-heads),
-tokens from `packages/ui/src/tokens.ts`, canvas screens reproduced with
-their own inline styles, `usePageTitle` on every page, two-level
-`ErrorBoundary`, `queryClient` that does not retry 4xx, **no em dashes**.
-Add the three `@fontsource*` packages and `@phosphor-icons/react` to
-`apps/customer/package.json` only.
+- Rebuild the four auth screens to the canvas: two tabs, the "HOLDING FOR
+  YOU" car panel when arriving from a booking, `?next=` resume. Email +
+  password (the phone-OTP tab stays cut per the 2026-08-24 decision).
+- **Migration A**: `documents.merchant_id` nullable + `user_id` +
+  `CHECK` exactly one; `DocumentKind` gains `driving_licence`.
+  `DocumentRow.merchant_id` becomes `string | null` - **the only change
+  in this whole plan that touches merchant and admin code**; mechanical
+  and compiler-caught.
+- `POST /me/documents` via `createUpload()` (do not hand-roll a fourth
+  multer), `GET /me/documents`, `GET /me/documents/{id}` with `nosniff`
+  and `safeContentType`.
+- Upload required before a booking request; Ops acceptance required
+  before pickup keys (the design's own rule).
 
-### Routes
+### C6 - Payment, stages 3-5
 
-Public: `/`, `/how-it-works`, `/how-we-protect-you` (subject to the
-deposit-copy decision), `/corporate`, `/about`, `/help`, `/contact`,
-`/legal`, `/list-your-car`, `/browse` (filters in the querystring),
-`/cars/:id`.
+- Confirm D2/D3, flip `COOPBANK_STK_PATH_CONFIRMED`, point their portal
+  at the real callback URL.
+- **Add the missing status guard**: `POST /bookings/:id/pay` must require
+  `confirmed`, and reject an already-paid booking.
+- Client stages: "Now the M-Pesa prompt" (method, phone, total, the
+  never-share-your-PIN warning), "Check your phone" with poll + resend,
+  "Paid and confirmed".
+- `GET /bookings/{id}/payment` for the client to poll while the callback
+  lands.
+- Reconciliation: a sweep that ages out `pending` payment requests past
+  `expires_at`, and a "payment succeeded but callback never arrived"
+  path.
 
-Auth: `/sign-in`, `/create-account`, `/forgot-password`,
-`/reset-password` - email + password, `?next=` resume.
+### C7 - Deposit handling
 
-Gated: `/book/:id` (review -> confirm request, no payment step),
-`/trips`, `/trips/:id` (with the handover code), `/documents`,
-`/account`.
+Per D1. If (a): the prompt covers hire + deposit, `bookings.deposit_*`
+becomes genuinely held, the refund runbook is written, the merchant claim
+flow is switched back on, and the home/protection copy returns to the
+design's wording. If (b): the claim flow is neutered and the copy stays
+as it is now.
 
-**`/trips` and `/documents` are now required**, which reverses the earlier
-"this design file only" call - a real booking has to be visible to the
-renter who made it. Their screens live in `Cruz Customer Portal.dc.html`,
-so that canvas file needs pulling as part of PR 6.
+### C8 - Trips and account (the Customer Portal canvas)
 
-### SEO
+Pull `Cruz Customer Portal.dc.html`. Trips list, trip detail with the
+handover code, documents, account settings. **Migration B**
+(`notifications.merchant_id` nullable + `user_id`) so a renter can be
+notified at all.
 
-- Build-time prerender of the static marketing routes to real HTML via a
-  small post-`vite build` script using `react-dom/server` (already
-  available; not a meta-framework, no new runtime).
-- Per-route `title` / description / canonical / OG through a small head
-  context that the prerenderer collects.
-- JSON-LD: `Organization`, `BreadcrumbList`, `FAQPage` on `/help`,
-  `Vehicle`/`Product` on car pages. **`AggregateRating` only where real
-  ratings exist** - emitting it over seeded data is structured-data spam
-  and the same fabrication mistake.
-- `robots.txt`; `sitemap.xml` generated from live listings (served by the
-  API, mapped at the edge - see deployment).
+### C9 - Marketing pages + SEO
 
-## Deployment
+- The seven pages, from the canvas.
+- Build-time prerender of the static routes via `react-dom/server` (not a
+  meta-framework, no new runtime), per-route title/meta/canonical/OG,
+  JSON-LD (`Organization`, `BreadcrumbList`, `FAQPage` on help,
+  `Vehicle` on car pages - **`AggregateRating` only where real ratings
+  exist**), `robots.txt`, `sitemap.xml` from live listings.
 
-- New `cral.co.ke` apex vhost alongside the existing merchant / admin /
-  api hosts. **Careful with DNS**: that apex carries the Resend TXT/MX
-  records for `noreply@cral.co.ke`.
-- **`CORS_ORIGINS` must include the customer origin.** `apps/api`'s
-  built-in default already lists `http://localhost:5173`, but the moment
-  `CORS_ORIGINS` is set explicitly it *replaces* the default - a local
-  `.env` carrying `CORS_ORIGINS=http://localhost:5174,http://localhost:5175`
-  (merchant + admin only) makes every customer-app fetch fail CORS with
-  no `Access-Control-Allow-Origin`. Hit this in local dev on 2026-09-10;
-  fixed by adding `:5173` to `.env`. Production/staging `CORS_ORIGINS`
-  needs the real customer host added the same way.
-- nginx rewrite for `/sitemap.xml` -> the API route.
-- `~/redeploy.sh` gains the customer build.
+### C10 - List your car
 
-## PR breakdown
+Earnings calculator, the three steps, "have these ready", then hand off
+to the merchant app. Cross-origin, so it is a fresh sign-in on the
+merchant side - the copy must not imply one session.
 
-1. **`verifyOtp` security patch** - status + 2FA checks on the OTP login
-   branch, so a texted code cannot bypass account suspension or opt-in
-   2FA. Standalone, ships first, independent of everything else. Tests:
-   `apps/api/src/modules/auth/__tests__/otp-login-gates.test.ts` (its own
-   file rather than `security.test.ts`, which is scoped to the 2026-09-03
-   review). **[shipped - PR #14, base `develop`; full `apps/api` suite +
-   workspace typecheck/lint green]**
-2. **Public catalog API** - `openapi/customer-catalog.yaml` frozen first,
-   then the read endpoints (`GET /catalog/vehicles`,
-   `/catalog/vehicles/{id}`, `/catalog/vehicles/{id}/photos/{photoId}`,
-   `/catalog/collections`) with the two-gate filter in one place and the
-   PII allowlist projection. **No migration** - the catalog reads only
-   existing columns, so this PR is a pure addition and touches no merchant
-   or admin code. Migrations A and B move to the PRs that first need them
-   (4 and 6), where the compiler fallout is reviewed next to the code
-   that depends on it. **[built - branch `feature/customer-catalog`;
-   module `apps/api/src/modules/catalog/`; 10 tests green, full `apps/api`
-   suite 207 green, workspace typecheck/lint green]**
-3. **Customer app foundation + marketing** - fonts, tokens, shell,
-   routes, prerender pipeline, the static pages. Deposit-copy decision
-   lands here. **[home page built - branch `feature/customer-home`:
-   foundation (fonts/tokens/query-client/use-page-title/ErrorBoundary
-   ported from merchant), `SiteShell` (masthead + footer), `Home` wired
-   to `GET /catalog/collections`, `ComingSoon` placeholder for the
-   unbuilt routes. Deposit copy corrected. Verified end-to-end in the
-   browser against a seeded fleet. Remaining: `/browse`, `/cars/:id`,
-   the seven marketing pages, the prerender step.]**
-4. **Auth + renter documents** - email/password screens, plus **Migration
-   A** (renter documents: `documents.merchant_id` nullable + `user_id` +
-   CHECK, `DocumentKind` gains `driving_licence`, `DocumentRow` type +
-   compiler fallout across merchant/admin), document upload, verification
-   state.
-5. **Browse + detail** - wired to the real catalog.
-6. **Booking + trips** - `POST /bookings` end to end, plus **Migration B**
-   (renter notifications: `notifications.merchant_id` nullable + `user_id`
-   + CHECK), the merchant notification generator, `/trips` and the
-   handover code. Pull `Cruz Customer Portal.dc.html`.
-7. **Admin renters queue + bookings directory** - Ops review path, the
-   handover gate, real `id_verified`.
-8. **Docs** - CLAUDE.md updated (freeze released, phone-OTP dropped for
-   customer, deposit position, renter pipeline, notification scoping),
-   memory note.
+### C11 - Admin: renters queue + bookings lens
 
-## Verification
+- `POST /admin/renters/{id}/documents/{kind}/decision` + the queue
+  (`requireAdmin` before `requireIdempotencyKey`; documents +
+  `audit_log` + renter notification in one transaction).
+- Bookings directory, read-only - the Merchants-lens precedent. Cancel,
+  refund and dispute belong to Phase 6.
+- The pickup-handover gate: hirer's `national_id` **and**
+  `driving_licence` at `review_state = 'ok'`, else 422. `getHirerHistory`
+  finally gains a real `id_verified`.
 
-- `npm run build` / `typecheck` / `lint` green across all workspaces after
-  every PR (CI is billing-locked - local is the gate).
-- `apps/api` test suites green, plus new suites per module.
-- Merchant and admin smoke after PR 2 specifically - that is the migration
-  that touches their code.
-- End-to-end: renter signs up -> uploads ID + DL -> Ops accepts -> renter
-  books -> **merchant sees the request** -> confirms -> handover blocked
-  until documents accepted -> completes -> **admin sees the booking**.
-- Archivo width-axis check (`wdth 100` vs `110` measured).
+### C12 - Deploy
+
+- `cral.co.ke` apex vhost serving `apps/customer/dist`; customer build
+  added to `~/redeploy.sh`.
+- DNS A record on the apex - **careful, it carries the Resend TXT/MX
+  records; add alongside, never replace**.
+- `CORS_ORIGINS` += the customer host. An explicit `CORS_ORIGINS`
+  *replaces* the built-in default, so omitting the customer origin fails
+  every fetch with no `Access-Control-Allow-Origin`. Hit this in local
+  dev on 2026-09-10.
+- The callback URL must be publicly reachable before payments can
+  complete.
+
+## 4. Suggested order
+
+C1 -> C2 -> C3 -> C5 -> C4 -> C6/C7 -> C8 -> C11 -> C9 -> C10 -> C12.
+
+C2 first because everything downstream needs a booking to exist. C5 moves
+ahead of C4 because the booking review step renders the renter's identity
+and licence state. C6 and C7 land together once D1/D2/D3 are answered.
+C12 can happen earlier for a marketing-only launch if that is wanted -
+the home page and the seven pages do not need any of the booking work.
+
+## 5. Cross-cutting rules (unchanged)
+
+- Money: server-computed, integer cents, `{amount, currency}`. The client
+  never computes a total.
+- One copy of every rule: the two-gate catalog predicate, the pricing
+  function, the payout position. A second copy is how two screens
+  disagree.
+- `Idempotency-Key` on every POST that moves money or commits a booking.
+- Audit rows in the same transaction as the change they describe.
+- No em dashes in customer-facing copy; `usePageTitle` on every page;
+  two-level `ErrorBoundary`; `queryClient` does not retry 4xx.
+- Brand: self-hosted fonts, Archivo wdth+wght, tokens from
+  `packages/ui/src/tokens.ts`, canvas screens reproduced with their own
+  inline styles. Status colour never alone - always glyph + word.
+- Nothing fabricated. No rating, badge, count or verification state that
+  isn't backed by real data.
+
+## 6. Verification gate (every PR)
+
+`npm run build`, `npm run typecheck`, `npm run lint` across the
+workspace, plus the `apps/api` suite. CI is billing-locked, so local is
+the gate. After C5 specifically, smoke merchant and admin - that is the
+migration that touches their code.
+
+End-to-end proof when the plan is done: renter signs up -> uploads ID and
+licence -> Ops accepts -> browses -> requests a car -> **merchant sees the
+request** -> accepts -> renter pays by M-Pesa -> handover blocked until
+documents are accepted -> hire completes -> **admin sees the booking** ->
+payout run includes it.
