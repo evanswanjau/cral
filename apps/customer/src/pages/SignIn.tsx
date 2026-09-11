@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@cral/ui";
 import { AuthShell } from "../components/AuthShell.js";
 import { FormField } from "../components/FormField.js";
@@ -15,6 +15,12 @@ interface FormValues {
 
 export function SignIn(): JSX.Element {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  // Only ever an in-app path - never follow an absolute or protocol-
+  // relative "next" value, or a signed-in visitor could be bounced off
+  // this app entirely by a crafted link.
+  const rawNext = params.get("next");
+  const next = rawNext && rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "/";
   const [serverError, setServerError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const {
@@ -29,7 +35,7 @@ export function SignIn(): JSX.Element {
     try {
       const result = await login(values.identifier, values.password, deviceId());
       setSession(result);
-      navigate("/");
+      navigate(next);
     } catch (err) {
       if (err instanceof ApiClientError) {
         if (err.code === "account_locked") {

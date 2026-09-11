@@ -19,8 +19,12 @@ export class ApiClientError extends Error {
 interface RequestOptions {
   method?: "GET" | "POST" | "DELETE" | "PATCH" | "PUT";
   body?: unknown;
+  /** Multipart body - mutually exclusive with `body`. Skips the JSON Content-Type header so the browser sets its own multipart boundary. */
+  formData?: FormData;
   /** Attach the access token, and transparently refresh-and-retry once on a 401. Default true. */
   auth?: boolean;
+  /** Extra headers merged in on top of Content-Type/Authorization - e.g. Idempotency-Key. */
+  headers?: Record<string, string>;
 }
 
 let refreshInFlight: Promise<boolean> | null = null;
@@ -54,9 +58,11 @@ async function tryRefresh(): Promise<boolean> {
 }
 
 async function request<T>(path: string, options: RequestOptions, isRetry = false): Promise<T> {
-  const { method = "GET", body, auth = true } = options;
-  const headers: Record<string, string> = {};
-  if (body !== undefined) headers["Content-Type"] = "application/json";
+  const { method = "GET", body, formData, auth = true } = options;
+  const headers: Record<string, string> = { ...options.headers };
+  // formData: no Content-Type here - the browser sets its own multipart
+  // boundary, which it can only do if this fetch doesn't specify one.
+  if (formData === undefined && body !== undefined) headers["Content-Type"] = "application/json";
   if (auth) {
     const token = getAccessToken();
     if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -65,7 +71,11 @@ async function request<T>(path: string, options: RequestOptions, isRetry = false
   const res = await fetch(`${API_BASE_URL}${path}`, {
     method,
     headers,
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    ...(formData !== undefined
+      ? { body: formData }
+      : body !== undefined
+        ? { body: JSON.stringify(body) }
+        : {}),
   });
 
   if (res.status === 401 && auth && !isRetry) {
