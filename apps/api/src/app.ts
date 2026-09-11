@@ -13,6 +13,7 @@ import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { catalogRouter } from "./modules/catalog/routes.js";
 import { customerAccountRouter } from "./modules/customer-account/routes.js";
+import { customerBookingsRouter } from "./modules/customer-bookings/routes.js";
 import { bookingsRouter } from "./modules/bookings/routes.js";
 import { payoutsRouter } from "./modules/payouts/routes.js";
 import { notificationsRouter } from "./modules/notifications/routes.js";
@@ -86,6 +87,7 @@ export function createApp(): Express {
   app.use(vehiclesRouter);
   app.use(catalogRouter);
   app.use(customerAccountRouter);
+  app.use(customerBookingsRouter);
   app.use(bookingsRouter);
   app.use(payoutsRouter);
   app.use(notificationsRouter);

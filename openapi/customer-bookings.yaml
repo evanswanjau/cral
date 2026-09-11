@@ -1,0 +1,316 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Customer Bookings API
+  version: "1.0.0"
+  description: >
+    A renter requesting a car, and the trips that result. Design authority
+    is the "Cruz Ride Auto - Website" canvas ("detail" and "booking"
+    screens).
+
+    **This is the endpoint the whole customer side hangs off.** Before it,
+    `bookings` rows could only be created by the merchant dev-seed, so the
+    merchant Bookings screen had never seen a real request and the
+    `category: "booking"` notification had no generator. A booking created
+    here is an ordinary `bookings` row - it appears in the merchant's
+    existing queue with no change to that screen.
+
+    **Nothing is charged here.** The design is explicit: "Send request, pay
+    nothing yet". A request is created `requested`; the merchant accepts or
+    declines; payment (`POST /bookings/{id}/pay`) only makes sense once the
+    booking is `confirmed`. A request that goes unanswered past its
+    response window is swept to `expired` by the existing
+    `jobs/booking-expiry` worker.
+
+    **The server computes every figure.** Gross, commission, merchant-net
+    and deposit all come from `computeBookingPricing` against the vehicle's
+    own stored `daily_rate_amount`. The client sends dates and a vehicle
+    id; it never sends money, and it never recomputes a total for display
+    that the server did not produce (spec §2).
+
+    **The two gates apply here too.** A car can only be requested while it
+    is a live listing on an approved merchant - the same predicate the
+    public catalog uses, read from the same place. A paused or unapproved
+    car 404s exactly as it does in the catalog.
+
+    **Availability ignores the renter's own pending requests.** The design
+    allows it explicitly: "Requesting two cars for the same dates is
+    allowed; you only ever pay for the one you confirm." Only `confirmed`
+    and `active` bookings hold dates.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+
+tags:
+  - name: bookings
+    description: A renter's own bookings
+
+paths:
+  /bookings:
+    post:
+      tags: [bookings]
+      summary: Request a car for a set of dates
+      operationId: createBooking
+      description: >
+        Creates a `requested` booking and notifies the merchant. Requires
+        an `Idempotency-Key` - a double-submitted request must not become
+        two bookings on the owner's queue.
+
+        The renter must have both identity documents on file (uploaded;
+        Ops acceptance is only required before the keys change hands, per
+        the design's own "You can send this request and pay, but
+        {owner} cannot hand over the keys until CRAL has read it").
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [vehicle_id, pickup_at, dropoff_at]
+              properties:
+                vehicle_id: { type: string, example: veh_01J... }
+                pickup_at:
+                  type: string
+                  format: date-time
+                  description: RFC 3339 UTC. Nairobi is display-only (spec §2).
+                dropoff_at: { type: string, format: date-time }
+                note_from_hirer:
+                  type: string
+                  maxLength: 1000
+                  nullable: true
+                  description: The design's "Anything {owner} should know".
+      responses:
+        "201":
+          description: The request was created and the owner notified.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "404":
+          description: >
+            `vehicle_not_found` - not a live listing on an approved
+            merchant. Deliberately indistinguishable from a car that
+            never existed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "409":
+          description: >
+            `dates_unavailable` - a confirmed or active hire overlaps the
+            requested window.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: >
+            `invalid_dates` (dropoff not after pickup, or pickup in the
+            past), `below_minimum_hire` (shorter than the listing's
+            `minimum_hire_days`), or `documents_required` (identity
+            documents not yet uploaded - the body names the outstanding
+            kinds).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+    get:
+      tags: [bookings]
+      summary: My trips
+      operationId: listMyBookings
+      description: Cursor-paginated, newest first (spec §2 - no offset paging).
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [all, upcoming, on_hire, completed, cancelled]
+            default: all
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: A page of the caller's bookings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more, counts]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/BookingSummary" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    description: Whole-set counts per filter, not page-bound.
+                    additionalProperties: { type: integer }
+
+  /bookings/{id}:
+    get:
+      tags: [bookings]
+      summary: One of my bookings
+      operationId: getMyBooking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "404":
+          description: Not a booking on the caller's account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /bookings/{id}/cancel:
+    post:
+      tags: [bookings]
+      summary: Cancel my booking
+      operationId: cancelMyBooking
+      description: >
+        A `requested` booking can be withdrawn freely. A `confirmed` one
+        can be cancelled up to the pickup moment; after that it is the
+        merchant's cancellation path, not the renter's. Requires an
+        `Idempotency-Key` because a confirmed cancellation can move money
+        once a payment rail is live.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: >
+            `booking_not_cancellable` - already finished, already
+            cancelled, or past pickup.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents. }
+        currency: { type: string, example: KES }
+
+    BookingVehicle:
+      type: object
+      description: >
+        The same public projection the catalog uses - no owner contact
+        details, no documents. The exact pickup address becomes available
+        to the renter only once the booking is confirmed.
+      required: [id, make, model, year, category, registration, county]
+      properties:
+        id: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: string }
+        category: { type: string, enum: [sedan, suv, van, truck, machinery] }
+        registration: { type: string }
+        county: { type: string, nullable: true }
+        seats: { type: integer }
+        transmission: { type: string }
+        chauffeured: { type: boolean }
+        primary_photo_url: { type: string, nullable: true }
+        owner_display_name: { type: string }
+
+    BookingSummary:
+      type: object
+      required: [id, ref, status, pickup_at, dropoff_at, days, gross, vehicle, created_at]
+      properties:
+        id: { type: string, example: bkg_01J... }
+        ref:
+          type: string
+          description: The plated reference both sides read aloud, e.g. "CB-2841".
+        status:
+          type: string
+          enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+        pickup_at: { type: string, format: date-time }
+        dropoff_at: { type: string, format: date-time }
+        days: { type: integer }
+        gross: { $ref: "#/components/schemas/Money" }
+        vehicle: { $ref: "#/components/schemas/BookingVehicle" }
+        created_at: { type: string, format: date-time }
+
+    BookingDetail:
+      allOf:
+        - $ref: "#/components/schemas/BookingSummary"
+        - type: object
+          required: [deposit, pickup_location, dropoff_location]
+          properties:
+            deposit:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              description: >
+                Zero. CRAL takes no deposit for now (owner's call,
+                2026-09-11) - there is no disbursement rail, so a deposit
+                could be collected and not returned. Kept in the shape so
+                the field does not appear and disappear if that changes.
+            total_due:
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              description: >
+                What the renter is asked for once the owner accepts. CRAL
+                charges no booking fee and takes no deposit, so this is
+                exactly the hire.
+            pickup_location: { type: string }
+            dropoff_location: { type: string }
+            note_from_hirer: { type: string, nullable: true }
+            response_due_at:
+              type: string
+              format: date-time
+              nullable: true
+              description: >
+                When an unanswered request lapses. The design renders this
+                as the "REQUEST LAPSES IN" countdown; the background
+                sweep in `jobs/booking-expiry` is what actually expires it.
+            decline_reason_code: { type: string, nullable: true }
+            cancel_reason: { type: string, nullable: true }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
