@@ -274,13 +274,18 @@ components:
           required: [deposit, pickup_location, dropoff_location]
           properties:
             deposit:
-              $ref: "#/components/schemas/Money"
+              allOf: [{ $ref: "#/components/schemas/Money" }]
+              description: >
+                Zero. CRAL takes no deposit for now (owner's call,
+                2026-09-11) - there is no disbursement rail, so a deposit
+                could be collected and not returned. Kept in the shape so
+                the field does not appear and disappear if that changes.
             total_due:
               allOf: [{ $ref: "#/components/schemas/Money" }]
               description: >
-                What the renter is asked for once the owner accepts - hire
-                plus deposit. CRAL charges the renter no booking fee, so
-                this is exactly `gross + deposit`.
+                What the renter is asked for once the owner accepts. CRAL
+                charges no booking fee and takes no deposit, so this is
+                exactly the hire.
             pickup_location: { type: string }
             dropoff_location: { type: string }
             note_from_hirer: { type: string, nullable: true }

@@ -160,8 +160,12 @@ describe("requesting a car", () => {
     // Every figure comes from the server's own pricing function.
     const expected = computeBookingPricing(420_000, 3);
     expect(res.body.gross.amount).toBe(expected.gross.amount);
-    expect(res.body.deposit.amount).toBe(expected.deposit.amount);
-    expect(res.body.total_due.amount).toBe(expected.gross.amount + expected.deposit.amount);
+    // CRAL takes no deposit for now (owner's call, 2026-09-11), so the
+    // renter is asked for the hire and nothing else.
+    expect(res.body.deposit.amount).toBe(0);
+    expect(res.body.total_due.amount).toBe(expected.gross.amount);
+    const stored = await db("bookings").where({ id: res.body.id }).first("deposit_amount");
+    expect(stored.deposit_amount).toBe(0);
 
     // The merchant's queue got a real notification - the first generator
     // this category has ever had.

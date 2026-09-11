@@ -217,9 +217,12 @@ function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined) {
 function serializeDetail(b: BookingRow, vehicle: VehicleFacts | undefined) {
   return {
     ...serializeSummary(b, vehicle),
+    // Zero on a customer-created booking - CRAL takes no deposit for now
+    // (owner's call, 2026-09-11). Kept in the shape so the field does not
+    // appear and disappear if that changes.
     deposit: kes(b.deposit_amount) as Money,
-    // CRAL charges the renter no booking fee, so what they are asked for
-    // is exactly the hire plus the deposit. Composed here rather than on
+    // CRAL charges the renter no booking fee and takes no deposit, so what
+    // they are asked for is exactly the hire. Composed here rather than on
     // the client so the figure on the screen is one the server produced.
     total_due: kes(b.gross_amount + b.deposit_amount) as Money,
     pickup_location: b.pickup_location,
@@ -343,7 +346,17 @@ export async function createBooking(
         commission_currency: pricing.commission.currency,
         merchant_net_amount: pricing.merchantNet.amount,
         merchant_net_currency: pricing.merchantNet.currency,
-        deposit_amount: pricing.deposit.amount,
+        // CRAL takes no deposit for now (owner's call, 2026-09-11). There
+        // is no disbursement rail, so a deposit could be collected and not
+        // returned - and a stored figure nobody holds is exactly the kind
+        // of fiction the hardcoded `id_verified` badge was removed for.
+        //
+        // CONSEQUENCE, flagged: the merchant claim flow caps a claim at
+        // `deposit_amount`, so on a customer-created booking every claim
+        // exceeds the cap and escalates straight to a dispute. That is
+        // truthful (there is no deposit to claim against) but it means the
+        // claim path is effectively dispute-only until a deposit exists.
+        deposit_amount: 0,
         deposit_currency: pricing.deposit.currency,
         // Snapshot of where the merchant is paid, taken now so a later
         // payout-settings change can't rewrite an existing booking.
@@ -377,7 +390,7 @@ export async function createBooking(
         pickup_at: pickupAt.toISOString(),
         dropoff_at: dropoffAt.toISOString(),
         gross_amount: pricing.gross.amount,
-        deposit_amount: pricing.deposit.amount,
+        deposit_amount: 0,
       },
       ip: ctx.ip,
       requestId: ctx.requestId,
