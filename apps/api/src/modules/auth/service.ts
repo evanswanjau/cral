@@ -18,6 +18,7 @@ import {
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { writeAuditEntry } from "../../lib/audit.js";
+import { getRenterVerification } from "../customer-account/service.js";
 import type {
   OtpCodeRow,
   PasswordResetTokenRow,
@@ -295,6 +296,8 @@ export async function getRegistrationState(userId: string) {
     // listing can go live, which is where the deferred number gets chased.
     merchant_profile_required: isMerchant,
     merchant_profile_present: false,
+    // A renter needs their ID + driving licence accepted before booking.
+    renter_verification: await getRenterVerification(userId),
   };
 }
 
@@ -1711,6 +1714,10 @@ export async function getMe(userId: string) {
     ...serializeUser(user),
     active_merchant_id: null, // merchants land in Phase 2
     unread_notification_count: 0, // notifications land later
+    // Renter ID + driving-licence verification (customer-portal slice).
+    // `verified` gates `POST /bookings`; the customer app's "finish setting
+    // up" banner reads `outstanding`.
+    renter_verification: await getRenterVerification(userId),
   };
 }
 

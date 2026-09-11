@@ -92,13 +92,19 @@ export type DocumentKind =
   | "comprehensive_insurance"
   | "tracker_certificate"
   | "vehicle_photo"
-  | "handover_photo";
+  | "handover_photo"
+  // Renter documents (customer-portal slice). A row with one of these
+  // kinds has `user_id` set and `merchant_id` null.
+  | "driving_licence";
 
 export type DocumentReviewState = "ok" | "pending" | "expiring" | "rejected";
 
 export interface DocumentRow {
   id: string;
-  merchant_id: string;
+  /** Set for merchant/vehicle documents; null for renter documents (see `user_id`). */
+  merchant_id: string | null;
+  /** Set for renter documents; null for merchant/vehicle documents. Exactly one of the two is set. */
+  user_id: string | null;
   vehicle_id: string | null;
   kind: DocumentKind;
   storage_key: string;
