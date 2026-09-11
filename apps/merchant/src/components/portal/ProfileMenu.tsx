@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { logout } from "../../lib/auth-api.js";
 import { setSession } from "../../lib/auth.js";
+import { RatingBadge } from "./RatingBadge.js";
 
 /**
  * Literal values from the design bundle's "Cruz Profile Menu.dc.html" - the
@@ -60,12 +61,16 @@ export function ProfileMenu({
   company,
   email,
   approved,
+  rating,
 }: {
   name: string;
   company: string | null;
   email: string;
   /** merchants.approved_at - drives the company chip. Nothing sets it yet (no admin portal). */
   approved: boolean;
+  /** The merchant's own aggregate score. `null` until a hirer rates them
+   *  - nothing does yet (no customer portal), so this shows "Not rated yet". */
+  rating: { average: number; count: number } | null;
 }): JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
@@ -126,6 +131,9 @@ export function ProfileMenu({
               <div style={{ minWidth: 0 }}>
                 <div style={M.headName}>{name || email}</div>
                 <div style={M.headEmail}>{email}</div>
+                <div style={{ marginTop: 4 }}>
+                  <RatingBadge rating={rating} />
+                </div>
               </div>
             </div>
             {company && (

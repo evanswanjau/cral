@@ -182,6 +182,20 @@ export async function seedDevBookings(userId: string) {
     }
     if (fixture.status === "completed") {
       await appendEvent(booking.id, merchant.id, { kind: "vehicle_returned", tone: "green", label: "Vehicle returned", body: "Checked over on return · no claim raised.", actor_type: "merchant" });
+      // A real rating so the hirer's badge shows something to demo against.
+      await db("ratings")
+        .insert({
+          id: generateId("review"),
+          booking_id: booking.id,
+          rater_id: userId,
+          ratee_id: hirerId,
+          ratee_type: "hirer",
+          stars: 5,
+          comment: "On time, tank full, no marks.",
+        })
+        .onConflict(["booking_id", "rater_id", "ratee_type"])
+        .ignore();
+      await appendEvent(booking.id, merchant.id, { kind: "rated", tone: "grey", label: "You rated the hirer 5/5", body: null, actor_type: "merchant" });
     }
     if (fixture.status === "cancelled") {
       await appendEvent(booking.id, merchant.id, { kind: "cancelled", tone: "red", label: "Cancelled late by the hirer", body: "Cancelled after pick-up time, so the 25% late fee applies.", actor_type: "hirer" });

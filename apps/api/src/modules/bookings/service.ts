@@ -13,6 +13,7 @@ import { computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
+import { ratingSummaries, ratingSummary, type RatingSummary } from "../../lib/ratings.js";
 import type { VehicleRow } from "../merchant/db-types.js";
 import type {
   BookingEventRow,
@@ -126,12 +127,20 @@ interface HirerInfo {
   email: string;
 }
 
-function serializeSummary(booking: BookingRow, vehicle: VehicleRow, hirer: HirerInfo) {
+function serializeSummary(
+  booking: BookingRow,
+  vehicle: VehicleRow,
+  hirer: HirerInfo,
+  hirerRating: RatingSummary | null = null,
+) {
   return {
     id: booking.id,
     ref: booking.ref,
     status: booking.status,
     hirer_name: hirer.full_name,
+    // The hirer's aggregate score from every merchant who's rated them.
+    // `null` (not 0) until someone has - shown next to their name.
+    hirer_rating: hirerRating,
     // No corporate-hirer concept modeled yet (users table has no company
     // flag for the customer role) — the design's "CORP" badge on Safiri
     // Tours Ltd has nothing to key off in this phase. Always false.
@@ -163,12 +172,13 @@ function serializeEvent(e: BookingEventRow) {
 }
 
 async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: HirerInfo) {
-  const events = await db<BookingEventRow>("booking_events")
-    .where({ booking_id: booking.id })
-    .orderBy("occurred_at", "desc");
+  const [events, hirerRating] = await Promise.all([
+    db<BookingEventRow>("booking_events").where({ booking_id: booking.id }).orderBy("occurred_at", "desc"),
+    ratingSummary(booking.hirer_id, "hirer"),
+  ]);
 
   return {
-    ...serializeSummary(booking, vehicle, hirer),
+    ...serializeSummary(booking, vehicle, hirer, hirerRating),
     gross: kes(booking.gross_amount),
     commission: kes(booking.commission_amount),
     merchant_net: kes(booking.merchant_net_amount),
@@ -257,13 +267,19 @@ export async function listBookings(userId: string, query: ListBookingsQuery) {
   ]);
   const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
   const hirerById = new Map(hirers.map((h) => [h.id, h]));
+  const ratingByHirer = await ratingSummaries(hirerIds, "hirer");
 
   return {
     data: paged.data.map((b) =>
-      serializeSummary(b, vehicleById.get(b.vehicle_id)!, {
-        full_name: hirerById.get(b.hirer_id)?.full_name ?? "Hirer",
-        email: hirerById.get(b.hirer_id)?.email ?? "",
-      }),
+      serializeSummary(
+        b,
+        vehicleById.get(b.vehicle_id)!,
+        {
+          full_name: hirerById.get(b.hirer_id)?.full_name ?? "Hirer",
+          email: hirerById.get(b.hirer_id)?.email ?? "",
+        },
+        ratingByHirer.get(b.hirer_id) ?? null,
+      ),
     ),
     next_cursor: paged.next_cursor,
     has_more: paged.has_more,
@@ -904,9 +920,10 @@ export async function createBookingReport(userId: string, bookingId: string, inp
 
 export async function getHirerHistory(userId: string, bookingId: string) {
   const { booking } = await requireOwnBooking(userId, bookingId);
-  const [user, allBookings] = await Promise.all([
+  const [user, allBookings, rating] = await Promise.all([
     db("users").where({ id: booking.hirer_id }).first(),
     db<BookingRow>("bookings").where({ hirer_id: booking.hirer_id }),
+    ratingSummary(booking.hirer_id, "hirer"),
   ]);
 
   const completed = allBookings.filter((b) => b.status === "completed");
@@ -921,7 +938,8 @@ export async function getHirerHistory(userId: string, bookingId: string) {
     // entirely rather than lie with it until it's actually implemented.
     member_since: (user?.created_at ?? booking.created_at).toISOString().slice(0, 10),
     trip_count: allBookings.length,
-    average_rating: null, // no rating-of-hirers-by-other-merchants aggregation built yet
+    average_rating: rating?.average ?? null,
+    rating_count: rating?.count ?? 0,
     completed_count: completed.length,
     late_return_count: 0, // not tracked yet — no column distinguishes an on-time vs late return
     cancellation_count: cancelled.length,
@@ -946,6 +964,15 @@ export async function rateHirer(userId: string, bookingId: string, input: RateHi
   const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
 
   await db.transaction(async (trx) => {
+    await trx("ratings").insert({
+      id: generateId("review"),
+      booking_id: booking.id,
+      rater_id: userId,
+      ratee_id: booking.hirer_id,
+      ratee_type: "hirer",
+      stars: input.stars,
+      comment: input.comment ?? null,
+    });
     await appendBookingEvent(trx, {
       bookingId: booking.id,
       merchantId: merchant.id,

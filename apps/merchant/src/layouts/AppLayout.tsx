@@ -41,6 +41,7 @@ export function AppLayout(): ReactNode {
           company={company}
           email={me?.email ?? ""}
           approved={Boolean(profile?.approved_at)}
+          rating={profile?.merchant_rating ?? null}
         />
         <div style={P.body}>
           <div style={P.bodyInner}>

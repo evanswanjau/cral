@@ -83,6 +83,9 @@ export interface MerchantProfile {
   /** True once onboarding is submitted - edits then go through change-request review. */
   profile_locked: boolean;
   pending_change: ProfileChangeRequest | null;
+  /** The merchant's own aggregate score. `null` until a hirer rates them,
+   *  and nothing does yet (no customer portal) - so today this is null. */
+  merchant_rating: { average: number; count: number } | null;
   payout: PayoutSettings;
   documents: ProfileDocument[];
 }
