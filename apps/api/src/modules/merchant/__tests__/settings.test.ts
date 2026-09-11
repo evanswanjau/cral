@@ -66,6 +66,9 @@ describe("Settings → Business — GET/PATCH /merchant/profile", () => {
     });
     expect(before.body.member_since).toBeTruthy();
     expect(Array.isArray(before.body.documents)).toBe(true);
+    // Nothing rates a merchant yet (no customer portal), so this is null,
+    // not an all-zero object.
+    expect(before.body.merchant_rating).toBeNull();
 
     const patched = await request(app)
       .patch("/merchant/profile")

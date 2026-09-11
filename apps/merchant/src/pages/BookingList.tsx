@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
 import { BOOKING_FILTER_ORDER, BOOKING_STATUS, bookingFilterLabel, money } from "../components/portal/status.js";
+import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { useToast } from "../components/portal/Toast.js";
 import { useBookingList, useSeedDevBookings, type BookingFilter, type BookingSummary } from "../lib/bookings-api.js";
 
@@ -127,6 +128,7 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
           {b.hirer_is_corporate && (
             <span style={{ ...P.verifiedTag, background: "#EDEFFC", border: "1px solid #DCE1FA", color: "#0F23A8" }}>CORP</span>
           )}
+          {b.hirer_rating && <RatingBadge rating={b.hirer_rating} />}
         </div>
         <div style={P.rowMeta}>{b.vehicle_make} {b.vehicle_model} · {dateRange}</div>
       </div>
