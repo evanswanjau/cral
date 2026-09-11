@@ -43,6 +43,8 @@ export interface BookingRow {
   deposit_release_at: Date | null;
   deposit_released: boolean;
   rating_open_until: Date | null;
+  /** The `payment_requests` row that last succeeded for this booking, if any (2026-09-11 payments slice). */
+  payment_request_id: string | null;
   created_at: Date;
   updated_at: Date;
 }

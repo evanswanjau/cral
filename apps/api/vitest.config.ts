@@ -11,6 +11,8 @@ export default defineConfig({
       NODE_ENV: "test",
       EMAIL_ADAPTER: "console",
       SMS_ADAPTER: "console",
+      // Same reasoning — a test run must never fire a real STK push.
+      PAYMENT_ADAPTER: "console",
       // The admin (Ops) audience signs with its own key. Pin a real one for
       // the test run so admin-auth tests don't depend on a local .env
       // carrying JWT_ADMIN_SECRET.
