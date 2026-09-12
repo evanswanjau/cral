@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { usePageTitle } from "../lib/use-page-title.js";
+import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
 import { useIsAuthenticated } from "../lib/auth.js";
 
@@ -33,7 +33,42 @@ export function CarDetail(): JSX.Element {
     retry: false,
   });
 
-  usePageTitle(car ? `${car.make} ${car.model} ${car.year}` : "Car");
+  const carName = car ? `${car.make} ${car.model} ${car.year}` : null;
+  useSeo({
+    title: carName,
+    description: car
+      ? `${carName} in ${car.county ?? "Kenya"} - ${formatMoney(car.daily_rate)} / day. Documents read, no booking fee.`
+      : undefined,
+    path: id ? `/cars/${id}` : undefined,
+    // AggregateRating only when a real rating exists (car.owner_rating) -
+    // emitting it over nothing is structured-data spam, the same
+    // fabrication the id_verified badge was removed for.
+    jsonLd: car
+      ? {
+          "@context": "https://schema.org",
+          "@type": "Vehicle",
+          name: carName,
+          brand: car.make,
+          model: car.model,
+          vehicleModelDate: car.year,
+          offers: {
+            "@type": "Offer",
+            price: (car.daily_rate.amount / 100).toString(),
+            priceCurrency: car.daily_rate.currency,
+            availability: "https://schema.org/InStock",
+          },
+          ...(car.owner_rating
+            ? {
+                aggregateRating: {
+                  "@type": "AggregateRating",
+                  ratingValue: car.owner_rating.average,
+                  reviewCount: car.owner_rating.count,
+                },
+              }
+            : {}),
+        }
+      : undefined,
+  });
 
   if (isLoading) {
     return (

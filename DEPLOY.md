@@ -29,7 +29,18 @@ both.
 4. **CORS** — wired. `apps/api` mounts `cors` scoped to `CORS_ORIGINS` (a
    comma-separated list), defaulting to the three local Vite ports. Set it
    to the deployed app origins; a wrong value here is the failure that looks
-   like "the portal loads but every request fails".
+   like "the portal loads but every request fails". **Setting `CORS_ORIGINS`
+   at all replaces the built-in default outright** — a value that omits the
+   customer origin fails every customer-app fetch with no
+   `Access-Control-Allow-Origin` header. Hit this in local dev on
+   2026-09-10; the fix there was adding `:5173` to `.env`.
+4a. **`/sitemap.xml`** — `apps/customer/public/robots.txt` points crawlers
+   at `https://cral.co.ke/sitemap.xml`, but that route lives on `apps/api`
+   (`GET /sitemap.xml`, real URLs from the live catalog, not a static
+   file). The customer static site needs an edge rewrite so a request for
+   `/sitemap.xml` on the customer origin reaches the API instead of 404ing
+   on the static build. Set `CUSTOMER_SITE_URL` if staging's customer host
+   isn't the production one — every URL in the sitemap is built from it.
 5. **Secrets** — `JWT_ACCESS_SECRET` and `SMTP_PASSWORD` are the live ones
    today; store them in the platform's secret manager, never in a file the
    repo tracks. `.env` holds them locally and is gitignored.

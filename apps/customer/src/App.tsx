@@ -7,6 +7,13 @@ import { Booking } from "./pages/Booking.js";
 import { Documents } from "./pages/Documents.js";
 import { Trips } from "./pages/Trips.js";
 import { TripDetail } from "./pages/TripDetail.js";
+import { HowItWorks } from "./pages/HowItWorks.js";
+import { HowWeProtectYou } from "./pages/HowWeProtectYou.js";
+import { Corporate } from "./pages/Corporate.js";
+import { About } from "./pages/About.js";
+import { Help } from "./pages/Help.js";
+import { Contact } from "./pages/Contact.js";
+import { Legal } from "./pages/Legal.js";
 import { ComingSoon } from "./pages/ComingSoon.js";
 import { RequireAuth } from "./components/RequireAuth.js";
 import { SignIn } from "./pages/SignIn.js";
@@ -19,11 +26,12 @@ import { Sessions } from "./pages/Sessions.js";
  * Route map. Everything sits under `SiteShell` (masthead + footer) -
  * including the auth-gated pages, so a signed-out visitor redirected to
  * `/sign-in?next=...` and a signed-in one on `/trips` see the same frame.
- * `RequireAuth` now preserves the path it interrupted.
+ * `RequireAuth` preserves the path it interrupted.
  *
- * The seven marketing pages still resolve to a `ComingSoon` placeholder -
- * the home page links to them, so they must not hard-404. Each gets its
- * real screen in a later PR. `/trips/:id` has no handover-code step yet
+ * The seven marketing pages are real now (C9) - see each page's own
+ * comment on where its copy came from (not a canvas file; none was
+ * reachable this session). `/list-your-car` is still `ComingSoon` - that
+ * is its own phase (C10). `/trips/:id` has no handover-code step yet
  * (Cruz Customer Portal.dc.html, not pulled) - see docs/plans C8.
  */
 const router = createBrowserRouter([
@@ -33,13 +41,13 @@ const router = createBrowserRouter([
       { path: "/", element: <Home /> },
       { path: "/browse", element: <Browse /> },
       { path: "/cars/:id", element: <CarDetail /> },
-      { path: "/how-it-works", element: <ComingSoon title="How it works" /> },
-      { path: "/how-we-protect-you", element: <ComingSoon title="How we protect you" /> },
-      { path: "/corporate", element: <ComingSoon title="Corporate hire" /> },
-      { path: "/about", element: <ComingSoon title="About CRAL" /> },
-      { path: "/help", element: <ComingSoon title="Questions and answers" /> },
-      { path: "/contact", element: <ComingSoon title="Contact us" /> },
-      { path: "/legal", element: <ComingSoon title="Terms and privacy" /> },
+      { path: "/how-it-works", element: <HowItWorks /> },
+      { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
+      { path: "/corporate", element: <Corporate /> },
+      { path: "/about", element: <About /> },
+      { path: "/help", element: <Help /> },
+      { path: "/contact", element: <Contact /> },
+      { path: "/legal", element: <Legal /> },
       { path: "/list-your-car", element: <ComingSoon title="List your car" /> },
 
       { path: "/sign-in", element: <SignIn /> },
