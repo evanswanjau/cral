@@ -5,6 +5,7 @@ import { pinoHttp } from "pino-http";
 import { requestId } from "./middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.js";
+import { sitemapRouter } from "./routes/sitemap.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { adminAuthRouter } from "./modules/admin-auth/routes.js";
 import { adminVehiclesRouter } from "./modules/admin-vehicles/routes.js";
@@ -80,6 +81,7 @@ export function createApp(): Express {
   app.use(express.json({ limit: "5mb" }));
 
   app.use(healthRouter);
+  app.use(sitemapRouter);
   app.use(authRouter);
   app.use(adminAuthRouter);
   app.use(adminVehiclesRouter);

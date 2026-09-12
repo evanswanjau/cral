@@ -1,7 +1,7 @@
 import { useRef, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { usePageTitle } from "../lib/use-page-title.js";
+import { useSeo } from "../lib/use-seo.js";
 import { getCollections, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 
@@ -223,7 +223,22 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
 }
 
 export function Home(): JSX.Element {
-  usePageTitle(null);
+  useSeo({
+    title: null,
+    description:
+      "Hire a car in Kenya with no booking fee. Every listing's documents are read by a person, every renter's ID and licence checked once.",
+    path: "/",
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      name: "Cruz Ride Auto Limited",
+      alternateName: "CRAL",
+      url: "https://cral.co.ke",
+      email: "hello@cral.co.ke",
+      telephone: "+254735656066",
+      address: { "@type": "PostalAddress", addressLocality: "Nairobi", addressCountry: "KE" },
+    },
+  });
   const navigate = useNavigate();
   const { data, isLoading, isError } = useQuery({
     queryKey: ["catalog", "collections"],

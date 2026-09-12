@@ -232,12 +232,34 @@ notified at all.
 
 ### C9 - Marketing pages + SEO
 
-- The seven pages, from the canvas.
-- Build-time prerender of the static routes via `react-dom/server` (not a
-  meta-framework, no new runtime), per-route title/meta/canonical/OG,
-  JSON-LD (`Organization`, `BreadcrumbList`, `FAQPage` on help,
-  `Vehicle` on car pages - **`AggregateRating` only where real ratings
-  exist**), `robots.txt`, `sitemap.xml` from live listings.
+- The seven pages. **Not pulled from a canvas file** - the design bundle's
+  `isPages` block is an empty shell with no per-page copy, and the actual
+  source (`Cruz Public Site Pages.dc.html`, named in the bundle's own
+  manifest) wasn't reachable this session (no open canvas tab / project
+  link). Written instead in the confirmed real token system and Home's
+  established visual idiom - see `components/site/marketing.tsx`'s own
+  comment. **Swap for the canonical canvas copy once that file is
+  pulled.** `/legal` in particular is a holding page, not a real Terms of
+  Service / Privacy Policy - fabricating legal text would be worse than
+  the hardcoded `id_verified` badge; it needs actual drafting before
+  launch.
+- Per-route title/meta description/canonical/OG via `lib/use-seo.ts`, and
+  JSON-LD - `Organization` (home, about), `FAQPage` (help, all 7
+  questions), `Vehicle` (car detail, **`AggregateRating` only when
+  `owner_rating` is non-null** - nothing writes a hirer-rates-merchant row
+  yet, so this renders on real data or not at all).
+- `robots.txt` (static, in `apps/customer/public/`) pointing at
+  `https://cral.co.ke/sitemap.xml`; `GET /sitemap.xml` is a **real API
+  route** (`apps/api/src/routes/sitemap.ts`), not a static file - the
+  static marketing paths plus every currently live, publicly-visible
+  vehicle, read through the same `baseCatalogQuery()` the catalog itself
+  uses. Needs an edge rewrite in production so `/sitemap.xml` on the
+  customer origin reaches the API - see DEPLOY.md.
+- **Build-time HTML prerendering is still open**, deliberately deferred
+  rather than half-built. What's done (title/meta/OG/JSON-LD, set
+  client-side) covers what crawlers and link-preview scrapers actually
+  read for a JS-executing crawler; a real prerender step is a separate,
+  larger piece of infra.
 
 ### C10 - List your car
 

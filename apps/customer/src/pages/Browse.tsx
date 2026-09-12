@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { usePageTitle } from "../lib/use-page-title.js";
+import { useSeo } from "../lib/use-seo.js";
 import { searchCatalog, type CatalogSearchParams } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import { VEHICLE_CATEGORIES, type VehicleCategory } from "../lib/vehicle-categories.js";
@@ -41,7 +41,11 @@ const chipStyle = (on: boolean) =>
   }) as const;
 
 export function Browse(): JSX.Element {
-  usePageTitle("Find a car");
+  useSeo({
+    title: "Find a car",
+    description: "Search live, reviewed cars for hire across Kenya - no booking fee, documents read before every listing goes live.",
+    path: "/browse",
+  });
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
 
