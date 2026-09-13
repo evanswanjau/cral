@@ -14,7 +14,7 @@ import { About } from "./pages/About.js";
 import { Help } from "./pages/Help.js";
 import { Contact } from "./pages/Contact.js";
 import { Legal } from "./pages/Legal.js";
-import { ComingSoon } from "./pages/ComingSoon.js";
+import { ListYourCar } from "./pages/ListYourCar.js";
 import { RequireAuth } from "./components/RequireAuth.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -30,9 +30,10 @@ import { Sessions } from "./pages/Sessions.js";
  *
  * The seven marketing pages are real now (C9) - see each page's own
  * comment on where its copy came from (not a canvas file; none was
- * reachable this session). `/list-your-car` is still `ComingSoon` - that
- * is its own phase (C10). `/trips/:id` has no handover-code step yet
- * (Cruz Customer Portal.dc.html, not pulled) - see docs/plans C8.
+ * reachable this session). `/list-your-car` (C10) is real too, same
+ * footing - an explainer + hand-off to the merchant app, where listing a
+ * car has always actually lived. `/trips/:id` has no handover-code step
+ * yet (Cruz Customer Portal.dc.html, not pulled) - see docs/plans C8.
  */
 const router = createBrowserRouter([
   {
@@ -48,7 +49,7 @@ const router = createBrowserRouter([
       { path: "/help", element: <Help /> },
       { path: "/contact", element: <Contact /> },
       { path: "/legal", element: <Legal /> },
-      { path: "/list-your-car", element: <ComingSoon title="List your car" /> },
+      { path: "/list-your-car", element: <ListYourCar /> },
 
       { path: "/sign-in", element: <SignIn /> },
       { path: "/create-account", element: <CreateAccount /> },
