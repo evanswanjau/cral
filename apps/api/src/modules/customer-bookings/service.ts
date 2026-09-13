@@ -9,7 +9,7 @@ import { notify } from "../../lib/notifications.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { baseCatalogQuery } from "../catalog/service.js";
 import { getRenterVerification } from "../customer-account/service.js";
-import type { BookingRow, BookingStatus } from "../bookings/db-types.js";
+import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
 import type { CancelBookingInput, CreateBookingInput, ListMyBookingsQuery } from "./schemas.js";
 
 /**
@@ -214,7 +214,35 @@ function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined) {
   };
 }
 
-function serializeDetail(b: BookingRow, vehicle: VehicleFacts | undefined) {
+/**
+ * The renter's own view of a handover in progress or done - never the OTP
+ * itself (only its hash exists server-side; the real code only ever went
+ * out by email, see bookings/service.ts#createHandover). This is "is there
+ * a code on its way / has pickup or return happened", the state Trip
+ * detail (C8) renders - not a second copy of the merchant's handover UI.
+ */
+function serializeHandoverForHirer(h: HandoverRow) {
+  return {
+    kind: h.kind,
+    state: h.state,
+    masked_destination: h.masked_destination,
+    otp_expires_at: h.otp_expires_at ? h.otp_expires_at.toISOString() : null,
+    completed_at: h.completed_at ? h.completed_at.toISOString() : null,
+  };
+}
+
+async function handoversForHirer(bookingId: string) {
+  const rows = await db<HandoverRow>("handovers")
+    .where({ booking_id: bookingId })
+    .orderBy("created_at", "desc");
+  return rows.map(serializeHandoverForHirer);
+}
+
+function serializeDetail(
+  b: BookingRow,
+  vehicle: VehicleFacts | undefined,
+  handovers: ReturnType<typeof serializeHandoverForHirer>[],
+) {
   return {
     ...serializeSummary(b, vehicle),
     // Zero on a customer-created booking - CRAL takes no deposit for now
@@ -231,12 +259,16 @@ function serializeDetail(b: BookingRow, vehicle: VehicleFacts | undefined) {
     response_due_at: b.response_due_at ? b.response_due_at.toISOString() : null,
     decline_reason_code: b.decline_reason_code,
     cancel_reason: b.cancel_reason,
+    handovers,
   };
 }
 
 async function detailOf(b: BookingRow) {
-  const facts = await vehicleFactsFor([b.vehicle_id]);
-  return serializeDetail(b, facts.get(b.vehicle_id));
+  const [facts, handovers] = await Promise.all([
+    vehicleFactsFor([b.vehicle_id]),
+    handoversForHirer(b.id),
+  ]);
+  return serializeDetail(b, facts.get(b.vehicle_id), handovers);
 }
 
 // ---------------------------------------------------------------------

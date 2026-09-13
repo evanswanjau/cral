@@ -8,12 +8,30 @@ convention reference so it doesn't need re-explaining every session.
 
 ## Current phase
 
-**Phase 1 — Identity, merchant portal only.** The owner corrected course
-after Phase 1 initially got built against `apps/customer`: **merchant is
-the sole priority until told otherwise.** `apps/customer` and `apps/admin`
-are Phase-0 shells only — don't add screens or wire them to the API unless
-explicitly asked, even if a later phase's spec section would normally cover
-all three portals.
+**All three portals are now in active development** — this correction
+happened in stages and each is recorded where its own detail lives, so
+don't take this section's age as license to re-freeze a portal the notes
+below say is open.
+
+- **Merchant** was the sole priority through most of Phase 1 (the owner's
+  original course-correction, after Phase 1 initially got built against
+  `apps/customer`) and is essentially feature-complete for its own scope —
+  see "Recorded product decisions" below for the full build history
+  (Bookings, Payouts, Notifications, Settings, Dashboard, and the security/
+  reliability passes).
+- **Customer** came off its Phase-0 hold on 2026-09-11 and is a real
+  vertical slice today (catalog, booking requests, payments scaffold,
+  trips, renter notifications, the seven marketing pages, "list your car").
+  Full status, the remaining gaps and the decisions behind them are in
+  [`docs/plans/customer-portal.md`](./docs/plans/customer-portal.md) — that
+  file, not this section, is the source of truth for what's shipped there.
+- **Admin (Ops)** came off its hold on 2026-09-07 — see the "PR 1/2/3"
+  entries below and
+  [`docs/plans/admin-phase-3.md`](./docs/plans/admin-phase-3.md).
+
+None of this changes the underlying discipline: contract-first, one
+`openapi/` file per domain, don't build ahead of a phase's own plan
+document without it being an explicit, recorded decision.
 
 ## Stack
 
@@ -1169,6 +1187,49 @@ file keeps its flat `ChecklistPanel`.
   forks keeps it well under the cap; the suite is Postgres-bound not
   CPU-bound, so it's also *faster* (~130s vs ~580s).
 
+**`apps/customer` came off its Phase-0 hold on 2026-09-11** and is a real
+vertical slice, built as a `C*`-numbered series of PRs (its own numbering,
+independent of the admin PR numbers above) — full plan, decisions and
+current gaps in
+[`docs/plans/customer-portal.md`](./docs/plans/customer-portal.md). That
+file is the source of truth for this portal's status; the highlights below
+exist so a search of this file finds them.
+
+- **A booking a renter makes is a real `bookings` row** the merchant sees
+  in their existing Bookings screen — no separate customer-side table.
+  `POST /bookings` computes the price server-side, same as every other
+  money path in this codebase.
+- **There is no payment rail yet.** The Co-op Bank M-Pesa STK scaffold is
+  real (OAuth token exchange, `payment_requests` table, idempotent
+  callback handling) but gated behind `COOPBANK_STK_PATH_CONFIRMED=false`
+  pending their API-console sample. A booking today goes
+  request → owner accepts → settled directly with the owner, same as the
+  merchant portal's Bookings screen was always built for.
+- **Migration B** (`notifications.merchant_id` nullable + `user_id`,
+  `20260914090000`) is what let a renter be notified at all — `notify()`
+  takes exactly one of `merchantId` / `userId`. Confirming, declining or
+  merchant-cancelling a booking, and a pickup/return code going out, all
+  write the hirer their own in-app row now (`GET /me/notifications`,
+  `openapi/customer-notifications.yaml`) — previously only two of those
+  four events even emailed the hirer, and none wrote to an in-app feed.
+  Same footing as Migration A (`documents.merchant_id` nullable +
+  `user_id`, for renter ID/licence uploads).
+- **The pickup/return code is never shown in the customer app either** —
+  same rule as the merchant side (CLAUDE.md's Bookings entry, below): only
+  a hash exists server-side, the real code only ever goes out by email.
+  Trip detail shows the handover's *state* ("sent to your email" / "done"),
+  not the code.
+- **Several screens are deliberately not pulled from a canvas file** — the
+  seven marketing pages (C9), "list your car" (C10), and C8's renter
+  notifications/masthead account nav all say so in their own file's
+  comment: no design-canvas tab was reachable in the session that built
+  them, so they're built from `packages/ui/src/tokens.ts` and the visual
+  idiom `Home.tsx` established, flagged for a swap once the real canvas
+  (`Cruz Ride Auto - Website`, or `Cruz Customer Portal.dc.html` for
+  trips/account) is pulled. Don't mistake "not pulled" for "not real" —
+  the underlying functionality is real; only the exact visual fidelity is
+  provisional.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
@@ -1179,9 +1240,11 @@ file keeps its flat `ChecklistPanel`.
   sequencing and the "sequencing traps" section) unless explicitly asked.
 - Don't wire a real SMS/email/storage provider without being asked — the
   console/local adapters are intentional for now.
-- Don't build or wire screens in `apps/customer` right now — it's a
-  Phase-0 shell. `apps/admin` is now in active Phase-3 development (see the
-  admin-foundation decisions above); `apps/customer` stays frozen.
+- Don't build a screen in any of the three portals against a screenshot of
+  its design canvas, or from memory of "how the others look" — pull the
+  real canvas source per the section above, or, when no canvas is
+  reachable this session, say so and build from confirmed tokens instead
+  (the pattern C9/C10/C8 all followed - see "Recorded product decisions").
 - Don't guess colors/fonts from a screenshot of the design canvas when
   `packages/ui/src/tokens.ts` or the brand PDF has the real value — that
   mismatch has already caused a rebuild once.

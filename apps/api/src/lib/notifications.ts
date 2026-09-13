@@ -150,14 +150,13 @@ export function categoryBypassesQuietHours(category: NotificationCategory): bool
 // notify()
 // ---------------------------------------------------------------------
 
-export interface NotifyInput {
-  merchantId: string;
+interface NotifyBase {
   category: NotificationCategory;
   title: string;
   body: string;
   /** The plated reference shown on the row, e.g. "CB-2841". */
   ref?: string | null;
-  /** Deep-link target for the row's CTA. Omit both for a merchant-level notice. */
+  /** Deep-link target for the row's CTA. Omit both for an account-level notice. */
   subjectType?: NotificationSubjectType | null;
   subjectId?: string | null;
   /** When the event happened. Defaults to now. */
@@ -165,14 +164,27 @@ export interface NotifyInput {
 }
 
 /**
+ * Exactly one owner - a merchant's own feed row, or a renter's (Migration
+ * B, docs/plans/customer-portal.md C8: "so a renter can be notified at
+ * all"). Passing both or neither is a caller bug, not a 500 to discover in
+ * production - `notify()` throws rather than letting the DB's own CHECK
+ * constraint be the first thing to notice.
+ */
+export type NotifyInput = NotifyBase & ({ merchantId: string; userId?: never } | { userId: string; merchantId?: never });
+
+/**
  * Inserts one `notifications` row on `trx` and returns its id. `kind` is
  * derived from `category`; never pass it in.
  */
 export async function notify(trx: Knex.Transaction | Knex, input: NotifyInput): Promise<string> {
+  if (!input.merchantId && !input.userId) {
+    throw new Error("notify() requires exactly one of merchantId / userId");
+  }
   const id = generateId("notification");
   await trx<NotificationRow>("notifications").insert({
     id,
-    merchant_id: input.merchantId,
+    merchant_id: input.merchantId ?? null,
+    user_id: input.userId ?? null,
     category: input.category,
     kind: kindForCategory(input.category),
     title: input.title,

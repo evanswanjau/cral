@@ -39,6 +39,28 @@ export interface BookingSummary {
   created_at: string;
 }
 
+export type HandoverKind = "pickup" | "return";
+export type HandoverState =
+  | "otp_sent"
+  | "otp_verified"
+  | "condition_logged"
+  | "confirmed"
+  | "completed"
+  | "expired"
+  | "failed";
+
+/**
+ * The renter's own view of a handover - never the code itself, only its
+ * state (see openapi/customer-bookings.yaml's own note). Newest first.
+ */
+export interface HandoverStatus {
+  kind: HandoverKind;
+  state: HandoverState;
+  masked_destination: string | null;
+  otp_expires_at: string | null;
+  completed_at: string | null;
+}
+
 export interface BookingDetail extends BookingSummary {
   deposit: Money;
   total_due: Money;
@@ -48,6 +70,7 @@ export interface BookingDetail extends BookingSummary {
   response_due_at: string | null;
   decline_reason_code: string | null;
   cancel_reason: string | null;
+  handovers: HandoverStatus[];
 }
 
 export interface BookingsPage {

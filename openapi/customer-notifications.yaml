@@ -1,0 +1,217 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Customer Notifications API
+  version: "1.0.0"
+  description: >
+    A renter's own in-app notification feed — Migration B of
+    docs/plans/customer-portal.md's C8 ("so a renter can be notified at
+    all"). The `notifications` table already existed for the merchant
+    portal (openapi/merchant-notifications.yaml); this contract is the
+    renter-scoped mirror of it, not a second table.
+
+    Deliberately smaller than the merchant contract in one way: there is
+    no preferences endpoint here. A renter's channel is always in-app plus
+    email — there's no Settings screen yet to make that a choice, and SMS
+    stays reserved for 2FA per the 2026-08-24 decision. The email itself is
+    sent inline at the event's own call site (see bookings/service.ts),
+    not through the merchant feed's BullMQ preference/quiet-hours pipeline
+    — a renter has no merchant row for that pipeline to key off.
+
+    Every path acts on notifications the authenticated user owns
+    (`notifications.user_id`), which is disjoint from a merchant's own feed
+    (`notifications.merchant_id`) — a renter and a merchant never see each
+    other's rows even if the same person happens to hold both accounts.
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: notifications
+    description: The renter's own feed — list, counts, mark-read
+
+paths:
+  /me/notifications:
+    get:
+      tags: [notifications]
+      summary: List the caller's own notifications, newest first
+      operationId: listMyNotifications
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: filter
+          in: query
+          description: >
+            `all` and `unread` cut across every kind; the rest narrow to
+            one feed `kind` group. In practice a renter's rows are almost
+            always `hire` (booking/return events) - the other groups exist
+            because this reuses the merchant feed's same `notifications`
+            table and vocabulary.
+          schema:
+            type: string
+            enum: [all, unread, bookings, money, documents, ratings]
+            default: all
+      responses:
+        "200":
+          description: Page of notifications for the authenticated renter
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/Notification" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts: { $ref: "#/components/schemas/NotificationCounts" }
+                  unread:
+                    type: integer
+                    description: Total unread — the feed nav's badge value
+                  urgent:
+                    allOf:
+                      - $ref: "#/components/schemas/Notification"
+                    nullable: true
+                    description: >
+                      The merchant feed's "urgent booking request" banner
+                      has no renter equivalent yet — always null here.
+                      Kept in the shape for parity with the merchant
+                      contract rather than a differently-shaped response.
+
+  /me/notifications/read-all:
+    post:
+      tags: [notifications]
+      summary: Mark every unread notification read
+      operationId: markAllMyNotificationsRead
+      responses:
+        "200":
+          description: Done
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  marked: { type: integer, description: How many rows were flipped }
+                  unread: { type: integer, description: Always 0 }
+
+  /me/notifications/{notificationId}/read:
+    parameters:
+      - name: notificationId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      tags: [notifications]
+      summary: Mark one notification read
+      operationId: markMyNotificationRead
+      description: >
+        Idempotent — re-marking an already-read row is a no-op 200. A row
+        that isn't on this user's own feed is a 404, same as the merchant
+        contract's version of this call.
+      responses:
+        "200":
+          description: Read
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unread: { type: integer, description: Total unread after the change }
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+components:
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
+
+    NotificationKind:
+      type: string
+      description: The feed's four icon/filter groups — shared with the merchant contract.
+      enum: [hire, money, doc, rate]
+
+    NotificationCategory:
+      type: string
+      description: >
+        Shared with the merchant contract's vocabulary. A renter's rows are
+        `booking` (request accepted/declined/expired, merchant-cancelled)
+        or `return` (a pickup/return code was emailed, or a trip completed)
+        - the money/doc/rate categories exist for the merchant side of the
+        same table and won't appear here today.
+      enum: [booking, payout, review, expiry, return, rating]
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, example: ntf_01J8QM4T7Z9K2X0Q7VYB6C3H5D }
+        category: { $ref: "#/components/schemas/NotificationCategory" }
+        kind: { $ref: "#/components/schemas/NotificationKind" }
+        group:
+          type: string
+          description: The kind's display group — "Bookings" / "Money" / "Documents" / "Ratings"
+        icon:
+          type: string
+          description: The kind's chip glyph — "H" / "KES" / "D" / "★"
+        title: { type: string }
+        body: { type: string }
+        ref:
+          type: string
+          nullable: true
+          description: The plated booking reference shown on the row, e.g. "CB-2841".
+        subject_type:
+          type: string
+          nullable: true
+          enum: [booking, vehicle, payout_run, merchant]
+        subject_id:
+          type: string
+          nullable: true
+          description: Together with subject_type, the deep-link target. Both null → no CTA.
+        occurred_at: { type: string, format: date-time }
+        read: { type: boolean }
+        cta:
+          type: string
+          description: CTA label — present only when the row deep-links.
+        cta_href:
+          type: string
+          description: >
+            Client-relative path for the CTA. A renter's row links into
+            the customer portal's own routes (e.g. "/trips/bkg_…"), not the
+            merchant portal's "/bookings/bkg_…" for the same booking - the
+            two apps are separate origins with separate route maps.
+
+    NotificationCounts:
+      type: object
+      description: One count per filter, for the pill badges.
+      properties:
+        all: { type: integer }
+        unread: { type: integer }
+        bookings: { type: integer }
+        money: { type: integer }
+        documents: { type: integer }
+        ratings: { type: integer }

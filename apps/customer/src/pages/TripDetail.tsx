@@ -2,16 +2,70 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
-import { cancelMyBooking, getMyBooking } from "../lib/bookings-api.js";
+import { cancelMyBooking, getMyBooking, type HandoverStatus } from "../lib/bookings-api.js";
 import { formatMoney } from "../lib/catalog-api.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
- * `/trips/:id`. Renders exactly what `GET /bookings/{id}` returns - no
- * handover code (that screen belongs to the Customer Portal canvas, C8,
- * not pulled yet) and no deposit line (there is none, owner's call
- * 2026-09-11).
+ * `/trips/:id`. Renders exactly what `GET /bookings/{id}` returns - a
+ * handover status section (C8), never the code itself (only its hash
+ * exists server-side; the real code only ever goes out by email - see
+ * `HandoverCard`'s own comment) - and no deposit line (there is none,
+ * owner's call 2026-09-11).
  */
+
+const HANDOVER_STATE_COPY: Record<HandoverStatus["state"], string> = {
+  otp_sent: "sent to your email",
+  otp_verified: "code confirmed",
+  condition_logged: "condition logged",
+  confirmed: "confirmed",
+  completed: "done",
+  expired: "expired - ask the owner to send a new one",
+  failed: "too many wrong attempts - ask the owner to send a new one",
+};
+
+function HandoverCard({ handovers }: { handovers: HandoverStatus[] }): JSX.Element | null {
+  if (handovers.length === 0) return null;
+  // Newest first, per booking - at most one pickup and one return in this
+  // reduced handover protocol (see CLAUDE.md's own note on that).
+  const latestByKind = new Map<HandoverStatus["kind"], HandoverStatus>();
+  for (const h of handovers) if (!latestByKind.has(h.kind)) latestByKind.set(h.kind, h);
+
+  return (
+    <div
+      style={{
+        background: "#FFFFFF",
+        border: "1px solid #E4E7EC",
+        borderRadius: 12,
+        padding: "clamp(18px,2.4vw,24px)",
+        marginBottom: 16,
+        display: "grid",
+        gap: 10,
+      }}
+    >
+      <div style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
+        Handover
+      </div>
+      {(["pickup", "return"] as const).map((kind) => {
+        const h = latestByKind.get(kind);
+        if (!h) return null;
+        const isOpen = h.state === "otp_sent";
+        return (
+          <div key={kind} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+            <span style={{ font: "400 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              {kind === "pickup" ? "Pickup code" : "Return code"}
+            </span>
+            <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", textAlign: "right" }}>
+              {isOpen && h.masked_destination
+                ? `Sent to ${h.masked_destination} - read it to the merchant`
+                : HANDOVER_STATE_COPY[h.state]}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 export function TripDetail(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -110,6 +164,8 @@ export function TripDetail(): JSX.Element {
           <Row bold label="Total" value={formatMoney(booking.total_due)} />
         </div>
       </div>
+
+      <HandoverCard handovers={booking.handovers} />
 
       {booking.status === "declined" && booking.decline_reason_code && (
         <div style={{ ...card, marginBottom: 16 }}>

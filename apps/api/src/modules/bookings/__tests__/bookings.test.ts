@@ -8,6 +8,7 @@ import { emailAdapter } from "../../../lib/adapters.js";
 import { createVerifiedTestUser } from "../../../test/helpers.js";
 import { generateId } from "../../../lib/ids.js";
 import { hashPassword } from "../../../lib/password.js";
+import { signAccessToken } from "../../../lib/jwt.js";
 import { computeBookingPricing } from "../../../lib/booking-pricing.js";
 import { expireStaleBookingRequests } from "../service.js";
 
@@ -92,6 +93,27 @@ async function newHirer(name = "Test Hirer", opts: { verifiedDocs?: boolean } = 
     }
   }
   return user;
+}
+
+/**
+ * A real `sessions` row + a signed access token for an existing user id -
+ * `newHirer` only inserts the `users` row, since most tests here act on
+ * the hirer from the merchant side and never need the hirer to make an
+ * authenticated call themselves. The renter-notifications tests below do.
+ */
+async function hirerToken(userId: string): Promise<string> {
+  const [session] = await db("sessions")
+    .insert({
+      id: generateId("session"),
+      user_id: userId,
+      device_id: "test-device",
+      token_hash: `unused-${ulid()}`,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      last_seen_at: new Date(),
+    })
+    .returning("*");
+  if (!session) throw new Error("Failed to create test session");
+  return signAccessToken({ sub: userId, sid: session.id, roles: ["customer"] });
 }
 
 async function newVehicle(accessToken: string, registration: string) {
@@ -291,6 +313,72 @@ describe("bookings — cancel", () => {
     const expectedFee = Math.round(booking.gross_amount * 0.25);
     expect(res.body.cancellation_fee).toEqual({ amount: expectedFee, currency: "KES" });
     expect(res.body.refund).toEqual({ amount: booking.gross_amount - expectedFee, currency: "KES" });
+  });
+});
+
+describe("bookings — renter notifications (Migration B)", () => {
+  it("confirming, declining and cancelling all write a row to the hirer's own feed", async () => {
+    const { accessToken, userId } = await newMerchant();
+    const vehicle = await newVehicle(accessToken, "KDA 106A");
+    const hirer = await newHirer();
+    const hirerAccessToken = await hirerToken(hirer.id);
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+
+    // Confirm
+    const confirmBooking = await insertBooking(merchant.id, vehicle.id, hirer.id);
+    const confirmRes = await request(app)
+      .post(`/merchant/bookings/${confirmBooking.id}/confirm`)
+      .set(auth(accessToken))
+      .set(idem());
+    expect(confirmRes.status).toBe(200);
+
+    const feed = await request(app).get("/me/notifications").set(auth(hirerAccessToken));
+    expect(feed.status).toBe(200);
+    const confirmedRow = feed.body.data.find((n: { subject_id: string }) => n.subject_id === confirmBooking.id);
+    expect(confirmedRow).toMatchObject({
+      title: `${confirmBooking.ref} confirmed`,
+      cta_href: `/trips/${confirmBooking.id}`,
+    });
+
+    // A merchant's own feed never sees the hirer's row, and vice versa.
+    const merchantFeed = await request(app).get("/merchant/notifications").set(auth(accessToken));
+    expect(
+      merchantFeed.body.data.find((n: { subject_id: string }) => n.subject_id === confirmBooking.id),
+    ).toBeUndefined();
+
+    // Decline
+    const declineBooking = await insertBooking(merchant.id, vehicle.id, hirer.id);
+    await request(app)
+      .post(`/merchant/bookings/${declineBooking.id}/decline`)
+      .set(auth(accessToken))
+      .set(idem())
+      .send({ reason_code: "not_free" });
+    const feed2 = await request(app).get("/me/notifications").set(auth(hirerAccessToken));
+    expect(
+      feed2.body.data.find((n: { subject_id: string }) => n.subject_id === declineBooking.id),
+    ).toMatchObject({ title: `${declineBooking.ref} declined` });
+
+    // Cancel
+    const cancelBooking = await insertBooking(merchant.id, vehicle.id, hirer.id, {
+      status: "confirmed",
+      pickup_at: new Date(Date.now() + 48 * 60 * 60 * 1000),
+    });
+    await request(app)
+      .post(`/merchant/bookings/${cancelBooking.id}/cancel`)
+      .set(auth(accessToken))
+      .set(idem())
+      .send({ reason: "Vehicle unavailable" });
+    const feed3 = await request(app).get("/me/notifications").set(auth(hirerAccessToken));
+    expect(
+      feed3.body.data.find((n: { subject_id: string }) => n.subject_id === cancelBooking.id),
+    ).toMatchObject({ title: `${cancelBooking.ref} cancelled by the owner` });
+
+    // Unread count and mark-read both scope to the hirer's own rows.
+    expect(feed3.body.unread).toBeGreaterThanOrEqual(3);
+    const markRead = await request(app)
+      .post(`/me/notifications/${feed3.body.data[0].id}/read`)
+      .set(auth(hirerAccessToken));
+    expect(markRead.status).toBe(200);
   });
 });
 

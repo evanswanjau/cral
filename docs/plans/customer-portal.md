@@ -223,12 +223,47 @@ flow is switched back on, and the home/protection copy returns to the
 design's wording. If (b): the claim flow is neutered and the copy stays
 as it is now.
 
-### C8 - Trips and account (the Customer Portal canvas)
+### C8 - Trips and account (the Customer Portal canvas) **[shipped]**
 
-Pull `Cruz Customer Portal.dc.html`. Trips list, trip detail with the
-handover code, documents, account settings. **Migration B**
-(`notifications.merchant_id` nullable + `user_id`) so a renter can be
-notified at all.
+Trips list and trip detail already existed (built alongside C2); this slice
+is Migration B and everything it unblocks. **Not pulled from
+`Cruz Customer Portal.dc.html`** - no canvas tab was reachable this
+session, same footing as C9/C10 - built from confirmed tokens and the
+established visual idiom, flagged for a swap once that file is pulled.
+
+- **Migration B**: `notifications.merchant_id` nullable + `user_id`
+  (`20260914090000_notifications_add_user_id.ts`), same CHECK-one-owner
+  shape as Migration A did for `documents`. `notify()` now takes exactly
+  one of `merchantId` / `userId`.
+- **A renter's own feed is real**: `GET /me/notifications`,
+  `POST /me/notifications/read-all`, `POST /me/notifications/{id}/read`
+  (`openapi/customer-notifications.yaml`) - the renter-scoped mirror of
+  the merchant contract, minus a preferences endpoint (no renter Settings
+  screen yet, so channel is always in-app + email). `ctaFor()` branches on
+  `user_id` to link `/trips/:id` rather than the merchant portal's
+  `/bookings/:id` for the same booking.
+- **Real generators, closing a gap that predates this slice**: confirming,
+  declining or merchant-cancelling a booking, and a pickup/return code
+  going out, all now write the hirer their own in-app row - previously
+  only `confirmBooking` and `createHandover` emailed the hirer at all, and
+  *nothing* wrote to an in-app feed for them. Email for these events is
+  sent inline at the call site (`bookings/service.ts`), not through
+  `notification-delivery.ts`'s merchant-scoped preference/quiet-hours
+  pipeline - a renter has no merchant row for that pipeline to key off.
+- **Trip detail shows handover status, never the code** - `GET
+  /bookings/{id}` gained a `handovers` array (kind, state,
+  `masked_destination`, timestamps). The renter's real pickup/return code
+  only ever exists as a hash server-side and only ever went out by email
+  (unchanged); this is "is a code on its way / has pickup or return
+  happened", not a second copy of the merchant's fuller handover UI.
+- **The masthead's signed-in state is now wired up** - it previously
+  showed "Sign in" unconditionally even to a signed-in renter, which meant
+  trips, documents and account settings (all already built) had no way in
+  except typing the URL directly. Added: My trips, a notification bell
+  with a real unread badge, Account, Sign out (calls `POST /auth/logout`,
+  not just a local token clear).
+- Documents (`/documents`) and account/sessions (`/account`) already
+  existed from earlier phases and needed no changes here.
 
 ### C9 - Marketing pages + SEO
 

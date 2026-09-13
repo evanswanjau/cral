@@ -359,6 +359,20 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+    // The renter side of this event - a real in-app row for /trips, per
+    // Migration B (docs/plans/customer-portal.md C8). The email below is
+    // sent separately, post-commit; renter notifications don't go through
+    // notification-delivery.ts's merchant-scoped preference/quiet-hours
+    // pipeline, since there's no renter Settings screen to configure it.
+    await notify(trx, {
+      userId: booking.hirer_id,
+      category: "booking",
+      title: `${booking.ref} confirmed`,
+      body: `${vehicle.make} ${vehicle.model} · ${vehicle.registration}. You'll get a pickup code closer to your pickup time.`,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
     return row;
   });
 
@@ -423,8 +437,38 @@ export async function declineBooking(userId: string, bookingId: string, input: D
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+    // Previously the renter had no notice at all that their request was
+    // turned down short of polling /trips - closed as part of Migration B
+    // (docs/plans/customer-portal.md C8), the same gap confirmBooking's
+    // email already covered for an acceptance.
+    await notify(trx, {
+      userId: booking.hirer_id,
+      category: "booking",
+      title: `${booking.ref} declined`,
+      body: input.note ?? "The owner isn't able to take this one. Nothing was charged.",
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
     return row;
   });
+
+  if (hirer.email) {
+    await emailAdapter.send({
+      to: hirer.email,
+      subject: `${booking.ref} declined · ${vehicle.registration}`,
+      html: emailLayout({
+        preheader: `Your request for ${vehicle.registration} was declined`,
+        bodyHtml: [
+          emailHeading("The owner declined this request"),
+          emailParagraph(`${booking.ref} · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`),
+          input.note ? emailParagraph(input.note) : "",
+          emailMuted("Nothing was charged - CRAL never takes a booking fee."),
+        ].join(""),
+      }),
+      text: `${booking.ref} declined · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}${input.note ? `\n\n${input.note}` : ""}`,
+    });
+  }
 
   return serializeDetail(updated, vehicle, hirer);
 }
@@ -483,8 +527,33 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
+    await notify(trx, {
+      userId: booking.hirer_id,
+      category: "booking",
+      title: `${booking.ref} cancelled by the owner`,
+      body: input.reason,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
     return row;
   });
+
+  if (hirer.email) {
+    await emailAdapter.send({
+      to: hirer.email,
+      subject: `${booking.ref} cancelled · ${vehicle.registration}`,
+      html: emailLayout({
+        preheader: `Your booking for ${vehicle.registration} was cancelled by the owner`,
+        bodyHtml: [
+          emailHeading("The owner cancelled this booking"),
+          emailParagraph(`${booking.ref} · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`),
+          emailParagraph(input.reason),
+        ].join(""),
+      }),
+      text: `${booking.ref} cancelled · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}\n\n${input.reason}`,
+    });
+  }
 
   return serializeDetail(updated, vehicle, hirer);
 }
@@ -541,6 +610,18 @@ export async function createHandover(userId: string, bookingId: string, input: C
       entityId: booking.id,
       requestId: ctx.requestId,
       ip: ctx.ip,
+    });
+    // The in-app record that a code went out - never the code itself, which
+    // only ever exists as a hash server-side (see createHandover's own
+    // comment on the OTP). The email below carries the real code.
+    await notify(trx, {
+      userId: booking.hirer_id,
+      category: input.kind === "pickup" ? "booking" : "return",
+      title: input.kind === "pickup" ? `${booking.ref} · your pickup code was emailed` : `${booking.ref} · your return code was emailed`,
+      body: `Read it to the merchant at ${vehicle.registration} to start the ${input.kind === "pickup" ? "hire" : "return"}.`,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
     });
     return row;
   });
@@ -800,7 +881,9 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
     });
 
     // Only the return leg is worth a notification — a merchant runs the
-    // pick-up handover themselves, so it isn't news to them.
+    // pick-up handover themselves, so it isn't news to them. Same reasoning
+    // applies to the renter: they were standing there for both legs, so
+    // only the return (which closes the trip) gets an in-app row.
     if (handover.kind !== "pickup") {
       notificationIds.push(
         await notify(trx, {
@@ -813,6 +896,19 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
           subjectId: booking.id,
         }),
       );
+      // "Rate the owner" is deliberately not offered here - no customer-side
+      // rating endpoint exists yet (nothing writes ratee_type = "merchant"),
+      // and a CTA pointing at a feature that doesn't exist is exactly the
+      // kind of fabrication CLAUDE.md rules out.
+      await notify(trx, {
+        userId: booking.hirer_id,
+        category: "return",
+        title: `${bookingRow.ref} · trip complete`,
+        body: "Thanks for returning it in good order.",
+        ref: bookingRow.ref,
+        subjectType: "booking",
+        subjectId: booking.id,
+      });
     }
     return [bookingRow, handoverRow] as const;
   });
