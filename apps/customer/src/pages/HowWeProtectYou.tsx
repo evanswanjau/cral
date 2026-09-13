@@ -16,7 +16,7 @@ const PILLARS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "03",
     title: "Agreed up front, not argued over later",
-    body: "The rate and any deposit are set on the listing and agreed before you book, so there's no dispute about the number when you collect the car.",
+    body: "The rate is set on the listing and agreed before you book, and it doesn't change when you collect the car.",
   },
   {
     n: "04",
@@ -29,7 +29,7 @@ export function HowWeProtectYou(): JSX.Element {
   useSeo({
     title: "How we protect you",
     description:
-      "Every listing's documents are read by a person. Your identity is checked once. The rate and deposit are agreed with the owner, not held by CRAL.",
+      "Each car's paperwork is verified by our team to ensure your safety. Your identity is checked once. The rate is agreed with the owner and doesn't change after you book.",
     path: "/how-we-protect-you",
   });
 
@@ -37,7 +37,7 @@ export function HowWeProtectYou(): JSX.Element {
     <div>
       <PageHero
         kicker="HOW WE PROTECT YOU"
-        title="The deposit is agreed with the owner, not held by us."
+        title="Each car's paperwork is verified by our team to ensure your safety."
         sub="Kenya's oldest car-hire argument is who keeps the money after a scratch. CRAL doesn't sit in the middle of it - what CRAL does is make sure both sides are who they say they are, and that there's a record if it ever comes to that."
       />
       <Section>
@@ -76,8 +76,8 @@ export function HowWeProtectYou(): JSX.Element {
           roadworthiness check. Look the car over yourself before you sign anything.
         </Body>
         <Body>
-          There is no payment rail live on Cruz Ride Auto yet, so no deposit is collected or held
-          by CRAL today - that is set on the listing and settled directly with the owner. See{" "}
+          The rate is set on the listing and agreed before you book, and it doesn't change after
+          that. See{" "}
           <Link to="/how-it-works" style={{ color: "#0F23A8" }}>
             how it works
           </Link>{" "}

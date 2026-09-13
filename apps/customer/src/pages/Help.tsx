@@ -21,8 +21,8 @@ const FAQS: Array<{ q: string; a: string }> = [
     a: "Yes. Since nothing is charged until an owner accepts, you can send requests for a few options and only ever pay for the one you confirm.",
   },
   {
-    q: "Who holds the deposit?",
-    a: "Nobody, right now - there's no payment collected through CRAL yet. Any deposit is agreed directly with the owner and settled when you collect the car.",
+    q: "Can the rate change after I book?",
+    a: "No. The rate is agreed on the listing before you book, and it stays the same when you collect the car.",
   },
   {
     q: "What does \"verified\" mean on a listing?",

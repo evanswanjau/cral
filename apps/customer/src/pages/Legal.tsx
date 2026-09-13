@@ -31,7 +31,7 @@ export function Legal(): JSX.Element {
         <Body>
           Your account details, the identity documents you upload (read by CRAL, never shown to
           the owner directly), and your booking history. There is no payment rail live yet, so no
-          payment or deposit is collected or held by CRAL today.
+          payment is collected or held by CRAL today.
         </Body>
         <SectionTitle>The rest is coming</SectionTitle>
         <Body>
