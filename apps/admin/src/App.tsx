@@ -7,14 +7,18 @@ import { Queue } from "./pages/vehicles/Queue.js";
 import { Case } from "./pages/vehicles/Case.js";
 import { Merchants } from "./pages/Merchants.js";
 import { MerchantFile } from "./pages/MerchantFile.js";
+import { Renters } from "./pages/Renters.js";
+import { RenterFile } from "./pages/RenterFile.js";
+import { Bookings } from "./pages/Bookings.js";
+import { BookingDetail } from "./pages/BookingDetail.js";
 
 /**
- * Vehicle review and the Merchants lens are built; the rest of the
- * console's nav (Dashboard, Bookings, Payouts, Invoicing, Disputes,
- * Communications, Settings) lands as later Phase-3 slices. Those routes
- * still resolve to a placeholder — so a direct URL or a profile-menu link
- * doesn't 404 — but `SideNav` only lists what's built, and `/` lands on
- * the vehicle-review queue.
+ * Vehicle review, the Merchants lens, the Renters queue and the Bookings
+ * directory are built; the rest of the console's nav (Dashboard, Payouts,
+ * Invoicing, Disputes, Communications, Settings) lands as later Phase-3
+ * slices. Those routes still resolve to a placeholder — so a direct URL
+ * or a profile-menu link doesn't 404 — but `SideNav` only lists what's
+ * built, and `/` lands on the vehicle-review queue.
  */
 const router = createBrowserRouter([
   { path: "/sign-in", element: <SignIn /> },
@@ -31,7 +35,10 @@ const router = createBrowserRouter([
           { path: "vehicles/:vehicleId", element: <Case /> },
           { path: "merchants", element: <Merchants /> },
           { path: "merchants/:merchantId", element: <MerchantFile /> },
-          { path: "bookings", element: <Placeholder title="Bookings" /> },
+          { path: "renters", element: <Renters /> },
+          { path: "renters/:userId", element: <RenterFile /> },
+          { path: "bookings", element: <Bookings /> },
+          { path: "bookings/:id", element: <BookingDetail /> },
           { path: "payouts", element: <Placeholder title="Payouts" /> },
           { path: "invoicing", element: <Placeholder title="Invoicing" /> },
           { path: "disputes", element: <Placeholder title="Disputes" /> },

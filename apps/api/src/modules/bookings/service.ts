@@ -14,7 +14,7 @@ import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js
 import { notify } from "../../lib/notifications.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { ratingSummaries, ratingSummary, type RatingSummary } from "../../lib/ratings.js";
-import type { VehicleRow } from "../merchant/db-types.js";
+import type { DocumentRow, VehicleRow } from "../merchant/db-types.js";
 import type {
   BookingEventRow,
   BookingReportRow,
@@ -724,10 +724,35 @@ export async function confirmHandover(userId: string, handoverId: string, ctx: R
   return serializeHandover(updated);
 }
 
+/**
+ * The keys don't change hands until Ops has accepted the hirer's ID and
+ * driving licence - the design's own rule ("You can send this request and
+ * pay, but {owner} cannot hand over the keys until CRAL has read it").
+ * A request can go out, and payment can happen, with documents still
+ * `pending`; only the pickup leg of the handover is gated. `getHirerHistory`
+ * reads the same two rows for `id_verified` - keep the kinds in step.
+ */
+async function assertHirerDocumentsAccepted(hirerId: string): Promise<void> {
+  const docs = await db<DocumentRow>("documents")
+    .where({ user_id: hirerId })
+    .whereIn("kind", ["national_id", "driving_licence"]);
+  const byKind = new Map(docs.map((d) => [d.kind, d]));
+  const outstanding = (["national_id", "driving_licence"] as const).filter(
+    (kind) => byKind.get(kind)?.review_state !== "ok",
+  );
+  if (outstanding.length > 0) {
+    unprocessable(
+      "hirer_documents_not_accepted",
+      `The hirer's ${outstanding.map((k) => k.replace("_", " ")).join(" and ")} still need to clear review before the keys change hands.`,
+    );
+  }
+}
+
 export async function completeHandover(userId: string, handoverId: string, ctx: RequestContext) {
   const { merchant, booking, handover } = await requireOwnHandover(userId, handoverId);
   await requireHandoverNotExpired(handover);
   if (handover.state !== "confirmed") conflict("not_confirmed", "Confirm the handover before completing it.");
+  if (handover.kind === "pickup") await assertHirerDocumentsAccepted(booking.hirer_id);
 
   const now = new Date();
   const bookingUpdate: Partial<BookingRow> =
@@ -920,22 +945,28 @@ export async function createBookingReport(userId: string, bookingId: string, inp
 
 export async function getHirerHistory(userId: string, bookingId: string) {
   const { booking } = await requireOwnBooking(userId, bookingId);
-  const [user, allBookings, rating] = await Promise.all([
+  const [user, allBookings, rating, idDocs] = await Promise.all([
     db("users").where({ id: booking.hirer_id }).first(),
     db<BookingRow>("bookings").where({ hirer_id: booking.hirer_id }),
     ratingSummary(booking.hirer_id, "hirer"),
+    db<DocumentRow>("documents")
+      .where({ user_id: booking.hirer_id })
+      .whereIn("kind", ["national_id", "driving_licence"]),
   ]);
 
   const completed = allBookings.filter((b) => b.status === "completed");
   const cancelled = allBookings.filter((b) => b.status === "cancelled");
+  // Real now (admin-renters slice): both rows Ops-accepted, same check
+  // completeHandover's pickup gate runs. Until that slice existed there
+  // was no admin review and nothing honest to key a ✓ badge off — a
+  // hardcoded `true` here was exactly the kind of fabricated trust signal
+  // this product's whole premise says never to do.
+  const idVerified = (["national_id", "driving_licence"] as const).every(
+    (kind) => idDocs.find((d) => d.kind === kind)?.review_state === "ok",
+  );
 
   return {
     name: user?.full_name ?? "Hirer",
-    // No hirer ID-verification pipeline exists yet — no admin review, no
-    // document check, nothing to key a ✓ badge off. A hardcoded `true`
-    // here was a fabricated trust signal on a product whose whole thesis
-    // is that verification state is legible and real; omit the field
-    // entirely rather than lie with it until it's actually implemented.
     member_since: (user?.created_at ?? booking.created_at).toISOString().slice(0, 10),
     trip_count: allBookings.length,
     average_rating: rating?.average ?? null,
@@ -943,7 +974,8 @@ export async function getHirerHistory(userId: string, bookingId: string) {
     completed_count: completed.length,
     late_return_count: 0, // not tracked yet — no column distinguishes an on-time vs late return
     cancellation_count: cancelled.length,
-    licence_valid_to: null, // hirer driving-licence data isn't modeled yet (no customer-document table)
+    licence_valid_to: null, // the expiry date itself isn't collected at renter-document upload
+    id_verified: idVerified,
   };
 }
 

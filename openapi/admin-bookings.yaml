@@ -1,0 +1,152 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Bookings API
+  version: "1.0.0"
+  description: >
+    A read-only directory over customer bookings, on the same footing as
+    the Merchants lens: "approving a vehicle does not verify the business
+    - those are two separate decisions" applies here too - this module
+    makes no decisions of its own. There is no cancel, refund or dispute
+    endpoint; those belong to a later phase (Phase 6 in the delivery
+    plan). What this gives Ops today is visibility - a support
+    conversation needs to see a booking's state before anything else.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke
+    description: Production
+  - url: https://api.staging.cral.co.ke
+    description: Staging
+
+tags:
+  - name: admin-bookings
+    description: Read-only Ops visibility into customer bookings
+
+paths:
+  /admin/bookings:
+    get:
+      tags: [admin-bookings]
+      summary: All bookings, newest first
+      operationId: listAdminBookings
+      description: >
+        Cursor-paginated (spec §2). Requires the `admin_support` role and
+        the `bookings` queue (or `admin_super`) - the console nav has
+        scoped Bookings to support staff since before this module existed.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: A page of bookings.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/AdminBookingSummary" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /admin/bookings/{id}:
+    get:
+      tags: [admin-bookings]
+      summary: One booking's full detail
+      operationId: getAdminBooking
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminBookingDetail" }
+        "404":
+          description: No such booking.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer }
+        currency: { type: string }
+
+    AdminBookingSummary:
+      type: object
+      required: [id, ref, status, pickup_at, dropoff_at, gross, hirer_name, merchant_name, vehicle_label, created_at]
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        status:
+          type: string
+          enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+        pickup_at: { type: string, format: date-time }
+        dropoff_at: { type: string, format: date-time }
+        gross: { $ref: "#/components/schemas/Money" }
+        hirer_name: { type: string }
+        merchant_name: { type: string }
+        vehicle_label: { type: string, example: "Toyota Corolla Fielder 2019 (KDB 107G)" }
+        created_at: { type: string, format: date-time }
+
+    AdminBookingDetail:
+      allOf:
+        - $ref: "#/components/schemas/AdminBookingSummary"
+        - type: object
+          required: [hirer_id, hirer_id_verified, merchant_id, vehicle_id, pickup_location, dropoff_location, payment_status]
+          properties:
+            hirer_id: { type: string }
+            hirer_email: { type: string }
+            hirer_id_verified:
+              type: boolean
+              description: Both national_id and driving_licence accepted (admin-renters).
+            merchant_id: { type: string }
+            vehicle_id: { type: string }
+            pickup_location: { type: string }
+            dropoff_location: { type: string }
+            note_from_hirer: { type: string, nullable: true }
+            commission: { $ref: "#/components/schemas/Money" }
+            merchant_net: { $ref: "#/components/schemas/Money" }
+            payment_status:
+              type: string
+              enum: [none, pending, success, failed, cancelled]
+              description: >
+                "none" when no payment_requests row exists yet - there is
+                no payment rail live for most bookings today.
+            response_due_at: { type: string, format: date-time, nullable: true }
+            decline_reason_code: { type: string, nullable: true }
+            cancel_reason: { type: string, nullable: true }
+            returned_at: { type: string, format: date-time, nullable: true }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }

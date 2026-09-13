@@ -267,16 +267,36 @@ Earnings calculator, the three steps, "have these ready", then hand off
 to the merchant app. Cross-origin, so it is a fresh sign-in on the
 merchant side - the copy must not imply one session.
 
-### C11 - Admin: renters queue + bookings lens
+### C11 - Admin: renters queue + bookings lens **[shipped]**
 
-- `POST /admin/renters/{id}/documents/{kind}/decision` + the queue
-  (`requireAdmin` before `requireIdempotencyKey`; documents +
-  `audit_log` + renter notification in one transaction).
-- Bookings directory, read-only - the Merchants-lens precedent. Cancel,
-  refund and dispute belong to Phase 6.
-- The pickup-handover gate: hirer's `national_id` **and**
-  `driving_licence` at `review_state = 'ok'`, else 422. `getHirerHistory`
-  finally gains a real `id_verified`.
+- `POST /admin/renters/{userId}/documents/{kind}/decision` + the queue
+  (`GET /admin/renters`, `admin_reviewer` role + `renters` queue).
+  `requireAdmin` before `requireIdempotencyKey`. Documents + `audit_log`
+  in one transaction; **email after commit**, not an in-app notification
+  - `notifications.merchant_id` is still `NOT NULL` (Migration B, still
+    open), so email is the only real channel a renter has. A bounced
+    email must not lose the decision, same pattern as the payout-query
+    email.
+- Bookings directory, read-only (`GET /admin/bookings` +
+  `GET /admin/bookings/{id}`) - the Merchants-lens precedent, no decision
+  endpoint. Scoped to `admin_support` + the `bookings` queue - the console
+  nav had already scoped "Bookings" to support staff before this module
+  existed, kept in step rather than silently diverging to
+  `admin_reviewer`.
+- **The pickup-handover gate is live**: `completeHandover`'s pickup leg
+  now 422s `hirer_documents_not_accepted` unless the hirer's `national_id`
+  **and** `driving_licence` both read `review_state = 'ok'` - the same two
+  rows admin-renters reviews. `getHirerHistory`'s `id_verified` is real
+  now too, off the identical check (contract updated in
+  `merchant-bookings.yaml`).
+- `SideNav`: "Renters" added (`admin_reviewer`, `built: true`); "Bookings"
+  flipped from `built: false` to `true` - the nav item already existed.
+- Verified as a real admin, not just tests: signed in through 2FA,
+  accepted a renter's National ID in the browser, watched the state flip
+  to "Accepted" with no reload, confirmed the row and its `audit_log`
+  entry in Postgres, and loaded the (correctly empty) Bookings directory.
+  Full `apps/api` suite: 27 files, 247 tests, all passing. Workspace
+  typecheck + lint clean; both `apps/api` and `apps/admin` build green.
 
 ### C12 - Deploy
 
