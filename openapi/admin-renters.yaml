@@ -1,0 +1,237 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Renters API
+  version: "1.0.0"
+  description: >
+    A real review queue over renter identity documents (`documents.kind IN
+    ('national_id', 'driving_licence')`, `documents.user_id` set). Unlike
+    the Merchants lens - which is a directory over decisions made
+    elsewhere - this module *is* the decision path: `POST
+    /admin/renters/{userId}/documents/{kind}/decision` is what
+    `customer-bookings`' `documents_required` gate and `completeHandover`'s
+    pickup gate both key off.
+
+    **Gated on request, not on keys.** A renter can send a booking request
+    the moment both documents are uploaded - Ops has not necessarily
+    looked yet. Only the pickup handover blocks on both documents reading
+    `ok`; see `POST /bookings/{id}/pay` and `completeHandover` in
+    `merchant-bookings.yaml`.
+
+    **`id_verified` on the merchant's hirer-history card reads this same
+    state** (`modules/bookings/service.ts#getHirerHistory`) - a fabricated
+    `true` there was removed for exactly this reason; it is real now that
+    this queue exists.
+
+    A renter with no rating and no in-app notification channel yet (see
+    docs/plans/customer-portal.md) still gets an email on a decision - the
+    same "send after commit, never let a bounce roll back the record"
+    pattern the payout-query email uses.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke
+    description: Production
+  - url: https://api.staging.cral.co.ke
+    description: Staging
+
+tags:
+  - name: admin-renters
+    description: Ops review of renter identity documents
+
+paths:
+  /admin/renters:
+    get:
+      tags: [admin-renters]
+      summary: The renter document review queue
+      operationId: listAdminRenters
+      description: >
+        Every renter who has uploaded at least one identity document,
+        sorted most-waiting-first (a `pending` document), tie-broken by
+        user id, keyset cursor over that sort - not offset paging (spec
+        §2). Requires the `admin_reviewer` role and the `renters` queue
+        (or `admin_super`).
+      parameters:
+        - name: filter
+          in: query
+          schema:
+            type: string
+            enum: [all, pending, verified, rejected]
+            default: all
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: A page of the queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more, total]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/RenterQueueRow" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+
+  /admin/renters/{userId}:
+    get:
+      tags: [admin-renters]
+      summary: One renter's file
+      operationId: getAdminRenterFile
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The renter's documents and booking summary.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenterFile" }
+        "404":
+          description: No renter documents on file for that user.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/renters/{userId}/documents/{documentId}:
+    get:
+      tags: [admin-renters]
+      summary: Stream one of a renter's document images
+      operationId: readAdminRenterDocument
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Image or PDF bytes, served with nosniff and a forced content type.
+        "404":
+          description: Not a document on that renter's account, or the bytes are gone.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/renters/{userId}/documents/{kind}/decision:
+    post:
+      tags: [admin-renters]
+      summary: Accept or reject one of a renter's documents
+      operationId: decideAdminRenterDocument
+      description: >
+        `kind` is `national_id` or `driving_licence`. A rejection requires
+        a note - it is what the renter's email quotes. Writes the document,
+        an `audit_log` row, and emails the renter in the same request
+        (email sent after the transaction commits). Requires
+        `Idempotency-Key`.
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema: { type: string }
+        - name: kind
+          in: path
+          required: true
+          schema: { type: string, enum: [national_id, driving_licence] }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [accept, reject] }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: The renter's file, updated.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RenterFile" }
+        "404":
+          description: No such document uploaded yet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: Rejecting without a note.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    RenterQueueRow:
+      type: object
+      required: [user_id, name, email, status, uploaded_at]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        status:
+          type: string
+          enum: [pending, verified, rejected]
+          description: pending - at least one document not yet decided; rejected - at least one rejected and none pending; verified - both ok.
+        uploaded_at:
+          type: string
+          format: date-time
+          description: Most recent document upload on this renter's account.
+
+    RenterDocument:
+      type: object
+      required: [kind, state]
+      properties:
+        document_id: { type: string, nullable: true }
+        kind: { type: string, enum: [national_id, driving_licence] }
+        state:
+          type: string
+          enum: [missing, pending, ok, rejected]
+        original_name: { type: string, nullable: true }
+        review_note: { type: string, nullable: true }
+        reviewed_at: { type: string, format: date-time, nullable: true }
+
+    RenterFile:
+      type: object
+      required: [user_id, name, email, verified, documents, booking_count]
+      properties:
+        user_id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        phone: { type: string, nullable: true }
+        verified: { type: boolean }
+        documents:
+          type: array
+          items: { $ref: "#/components/schemas/RenterDocument" }
+        booking_count: { type: integer }
+        member_since: { type: string, format: date-time }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }

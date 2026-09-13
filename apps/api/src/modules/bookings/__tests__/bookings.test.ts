@@ -50,7 +50,7 @@ async function newMerchant() {
   return user;
 }
 
-async function newHirer(name = "Test Hirer") {
+async function newHirer(name = "Test Hirer", opts: { verifiedDocs?: boolean } = {}) {
   const suffix = ulid().slice(-10).toLowerCase();
   const email = `hirer-${suffix}@example.test`;
   // A fresh random draw each call, not a per-process counter — a counter
@@ -70,6 +70,27 @@ async function newHirer(name = "Test Hirer") {
     .returning("*");
   if (!user) throw new Error("Failed to create test hirer");
   createdUserIds.push(user.id);
+
+  // Documents cascade off users.id (documents.user_id ON DELETE CASCADE),
+  // so no separate cleanup is needed.
+  if (opts.verifiedDocs) {
+    for (const kind of ["national_id", "driving_licence"]) {
+      await db("documents").insert({
+        id: generateId("document"),
+        merchant_id: null,
+        user_id: user.id,
+        vehicle_id: null,
+        kind,
+        storage_key: `test/${user.id}/${kind}`,
+        original_name: `${kind}.pdf`,
+        size_bytes: 100,
+        content_type: "application/pdf",
+        review_state: "ok",
+        reviewed_by: "adm_test",
+        reviewed_at: new Date(),
+      });
+    }
+  }
   return user;
 }
 
@@ -277,7 +298,7 @@ describe("bookings — handover", () => {
   it("runs pickup then return through the full state machine", async () => {
     const { accessToken, userId } = await newMerchant();
     const vehicle = await newVehicle(accessToken, "KDA 106A");
-    const hirer = await newHirer();
+    const hirer = await newHirer("Test Hirer", { verifiedDocs: true });
     const merchant = await db("merchants").where({ user_id: userId }).first();
     const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, { status: "confirmed" });
 
@@ -348,6 +369,59 @@ describe("bookings — handover", () => {
     expect(returnCompleted.body.booking.deposit_release_at).toBeTruthy();
     expect(returnCompleted.body.booking.rating_open_until).toBeTruthy();
 
+    emailSpy.mockRestore();
+  });
+
+  it("blocks pickup completion until the hirer's ID and licence are accepted", async () => {
+    const { accessToken, userId } = await newMerchant();
+    const vehicle = await newVehicle(accessToken, "KDA 106B");
+    const hirer = await newHirer(); // no documents at all
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, { status: "confirmed" });
+
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+    const open = await request(app)
+      .post(`/merchant/bookings/${booking.id}/handovers`)
+      .set(auth(accessToken))
+      .send({ kind: "pickup" });
+    const code = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
+    await request(app).post(`/merchant/handovers/${open.body.id}/otp/verify`).set(auth(accessToken)).send({ code });
+    await request(app)
+      .post(`/merchant/handovers/${open.body.id}/condition`)
+      .set(auth(accessToken))
+      .send({ odometer_km: 1000, fuel_level: "full" });
+    await request(app).post(`/merchant/handovers/${open.body.id}/confirm`).set(auth(accessToken));
+
+    // Confirmed — but the hirer's documents are still missing.
+    const blocked = await request(app)
+      .post(`/merchant/handovers/${open.body.id}/complete`)
+      .set(auth(accessToken))
+      .set(idem());
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.code).toBe("hirer_documents_not_accepted");
+
+    // Ops accepts both documents — the same rows admin-renters reviews.
+    for (const kind of ["national_id", "driving_licence"]) {
+      await db("documents").insert({
+        id: generateId("document"),
+        merchant_id: null,
+        user_id: hirer.id,
+        vehicle_id: null,
+        kind,
+        storage_key: `test/${hirer.id}/${kind}`,
+        original_name: `${kind}.pdf`,
+        size_bytes: 100,
+        content_type: "application/pdf",
+        review_state: "ok",
+      });
+    }
+
+    const completed = await request(app)
+      .post(`/merchant/handovers/${open.body.id}/complete`)
+      .set(auth(accessToken))
+      .set(idem());
+    expect(completed.status).toBe(200);
+    expect(completed.body.booking.status).toBe("active");
     emailSpy.mockRestore();
   });
 
@@ -548,6 +622,21 @@ describe("bookings — hirer history and ownership", () => {
     expect(res.status).toBe(200);
     expect(res.body.name).toBe("History Hirer");
     expect(res.body.trip_count).toBeGreaterThanOrEqual(1);
+    // Real now (admin-renters), but this hirer has no documents on file -
+    // the honest default is false, never a fabricated true.
+    expect(res.body.id_verified).toBe(false);
+  });
+
+  it("id_verified is true once both of the hirer's documents are accepted", async () => {
+    const { accessToken, userId } = await newMerchant();
+    const vehicle = await newVehicle(accessToken, "KDA 112B");
+    const hirer = await newHirer("Verified Hirer", { verifiedDocs: true });
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, { status: "confirmed" });
+
+    const res = await request(app).get(`/merchant/bookings/${booking.id}/hirer-history`).set(auth(accessToken));
+    expect(res.status).toBe(200);
+    expect(res.body.id_verified).toBe(true);
   });
 
   it("404s reading someone else's booking", async () => {
