@@ -228,7 +228,7 @@ export function Home(): JSX.Element {
   useSeo({
     title: null,
     description:
-      "Kenya's one-stop shop for everything to do with a car. Hire one today with no booking fee - every listing's paperwork is verified by our team, and every renter's ID and licence checked once.",
+      "CRAL is Kenya's one-stop shop for all your vehicle-based needs - hire, parts and services, all in one place. Every listing's paperwork is verified by our team.",
     path: "/",
     jsonLd: {
       "@context": "https://schema.org",
@@ -322,9 +322,9 @@ export function Home(): JSX.Element {
                 maxWidth: 840,
               }}
             >
-              Everything cars in Kenya.
+              Your one-stop shop
               <br />
-              <span style={{ color: "#8C97A8" }}>We start with the keys.</span>
+              <span style={{ color: "#8C97A8" }}>for everything vehicles.</span>
             </h1>
             <p
               style={{
@@ -334,10 +334,10 @@ export function Home(): JSX.Element {
                 maxWidth: 600,
               }}
             >
-              CRAL is Kenya's one-stop shop for everything to do with a car - hiring is live
-              today, with parts and services on the way. Each car's paperwork is verified by our
-              team to ensure your safety, and you never pay a booking fee. The rate is agreed
-              before you book, and it doesn't change after that.
+              CRAL is Kenya's one-stop shop for all your vehicle-based needs - hire, parts and
+              services, all in one place. Every listing's paperwork is verified by our team to
+              ensure your safety, and the rate you're shown is the rate you pay - agreed before
+              you book, and it doesn't change after that.
             </p>
 
             <SearchBar />

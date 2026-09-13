@@ -55,9 +55,18 @@ export function createApp(): Express {
       // origin; it has no pages of its own to frame or script. A restrictive
       // CSP plus COEP would only complicate serving those documents, so take
       // helmet's defaults (nosniff, no-referrer, frameguard, HSTS) and turn
-      // off the two that assume an HTML app.
+      // off the ones that assume an HTML app or a single origin.
+      //
+      // crossOriginResourcePolicy defaults to "same-origin", which silently
+      // blocks every <img src> on cral.co.ke/merchant.cral.co.ke pointed at
+      // a vehicle/document photo on api.cral.co.ke - the browser treats an
+      // <img> tag as a no-cors cross-origin load and drops it, while typing
+      // the same URL into the address bar (a top-level navigation) is
+      // unaffected by CORP and works fine. That mismatch is exactly what
+      // made this look like a broken image instead of a policy block.
       contentSecurityPolicy: false,
       crossOriginEmbedderPolicy: false,
+      crossOriginResourcePolicy: { policy: "cross-origin" },
     }),
   );
   app.use(requestId());
