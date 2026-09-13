@@ -2,9 +2,10 @@ import { Link } from "react-router-dom";
 
 /**
  * Public footer, reproduced from the "Cruz Ride Auto - Website" canvas.
- * The deposit-custody line from the canvas ("every deposit held by us")
- * is corrected here per the recorded product decision - the deposit is
- * agreed with the owner and settled at handover, not held by CRAL.
+ * The deposit is deliberately never mentioned here (or anywhere in the
+ * public marketing/help copy) - same "never shown to the customer" rule
+ * the merchant portal follows. It still exists and is enforced
+ * server-side; the client just doesn't surface it.
  */
 
 const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
@@ -101,8 +102,9 @@ export function Footer(): JSX.Element {
                 maxWidth: 280,
               }}
             >
-              Kenya's home for everything cars. We start with hire: every car's paperwork read by a
-              person, and the licence and ID behind every booking checked once.
+              Kenya's one-stop shop for everything cars. We start with hire: each car's paperwork
+              is verified by our team to ensure your safety, and the licence and ID behind every
+              booking checked once.
             </p>
             <div style={{ font: "500 14px/1.6 'IBM Plex Mono',monospace", color: "#A7B0BE" }}>
               +254 735 656066

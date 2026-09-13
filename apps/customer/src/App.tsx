@@ -2,6 +2,8 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 import { SiteShell } from "./components/site/SiteShell.js";
 import { Home } from "./pages/Home.js";
 import { Browse } from "./pages/Browse.js";
+import { Parts } from "./pages/Parts.js";
+import { Services } from "./pages/Services.js";
 import { CarDetail } from "./pages/CarDetail.js";
 import { Booking } from "./pages/Booking.js";
 import { Documents } from "./pages/Documents.js";
@@ -41,6 +43,8 @@ const router = createBrowserRouter([
     children: [
       { path: "/", element: <Home /> },
       { path: "/browse", element: <Browse /> },
+      { path: "/parts", element: <Parts /> },
+      { path: "/services", element: <Services /> },
       { path: "/cars/:id", element: <CarDetail /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },

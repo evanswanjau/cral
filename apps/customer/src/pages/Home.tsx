@@ -7,13 +7,15 @@ import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 
 /**
  * The home page, reproduced from the "Cruz Ride Auto - Website" canvas
- * ("home" screen) with its own inline styles. Two deliberate departures
- * from the canvas copy, both per recorded product decisions:
+ * ("home" screen) with its own inline styles. Deliberate departures from
+ * the canvas copy, per recorded product decisions:
  *
- *  - Deposit custody. The canvas says CRAL holds every deposit ("Nobody
- *    holds your deposit but us"). It does not - there is no payment rail.
- *    The deposit is agreed with the owner and settled at handover, and
- *    the copy here says so.
+ *  - Deposit visibility. The deposit is never surfaced to the renter on
+ *    this page (or anywhere in the marketing/help copy) - mirrors the
+ *    merchant portal's "deposit never shown" rule. It still exists and is
+ *    enforced server-side; the client just never mentions it.
+ *  - The rate is fixed once agreed. Copy states plainly that the rate is
+ *    agreed before booking and does not change afterwards.
  *  - The M-Pesa pay step. No Daraja integration exists; the flow is
  *    request -> confirm, money settled with the owner.
  *
@@ -45,7 +47,7 @@ const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "02",
     title: "Agreed up front",
-    body: "The deposit is set on the listing and agreed before you book, so there is no argument about the number when you collect the car.",
+    body: "The rate is set on the listing and agreed before you book, and it doesn't change when you collect the car.",
   },
   {
     n: "03",
@@ -226,7 +228,7 @@ export function Home(): JSX.Element {
   useSeo({
     title: null,
     description:
-      "Hire a car in Kenya with no booking fee. Every listing's documents are read by a person, every renter's ID and licence checked once.",
+      "Kenya's one-stop shop for everything to do with a car. Hire one today with no booking fee - every listing's paperwork is verified by our team, and every renter's ID and licence checked once.",
     path: "/",
     jsonLd: {
       "@context": "https://schema.org",
@@ -332,9 +334,10 @@ export function Home(): JSX.Element {
                 maxWidth: 600,
               }}
             >
-              CRAL is building the place Kenyans go for anything to do with a car. Hiring one is
-              live today. Every car's papers are read by a person, and you never pay a booking
-              fee. The rate and deposit are the owner's, agreed before you book.
+              CRAL is Kenya's one-stop shop for everything to do with a car - hiring is live
+              today, with parts and services on the way. Each car's paperwork is verified by our
+              team to ensure your safety, and you never pay a booking fee. The rate is agreed
+              before you book, and it doesn't change after that.
             </p>
 
             <SearchBar />
@@ -492,7 +495,7 @@ export function Home(): JSX.Element {
         </div>
       </div>
 
-      {/* ---- deposit / protection band ---- */}
+      {/* ---- verification / trust band ---- */}
       <div style={{ padding: "clamp(24px,3.6vw,44px) clamp(16px,4vw,40px)" }}>
         <div
           style={{
@@ -527,7 +530,7 @@ export function Home(): JSX.Element {
               maxWidth: 660,
             }}
           >
-            The deposit is agreed with the owner, not held by us.
+            Each car's paperwork is verified by our team to ensure your safety.
           </h2>
           <p
             style={{
@@ -537,11 +540,9 @@ export function Home(): JSX.Element {
               maxWidth: 560,
             }}
           >
-            Kenya's oldest car-hire fight is who keeps the money after a scratch. CRAL does not
-            sit in the middle of the deposit - it is set on the listing, agreed before you book,
-            and settled with the owner at pickup and return. What CRAL holds is the record: the
-            read documents, the photos from both sides, and the booking, in one place either of
-            you can open.
+            Every listing is checked before it goes live, and the rate is agreed before you book
+            and never changes after that. What CRAL holds is the record: the verified documents,
+            the photos from both sides, and the booking, in one place either of you can open.
           </p>
           <div
             style={{
@@ -747,8 +748,8 @@ export function Home(): JSX.Element {
               }}
             >
               Search cars that are genuinely free on your dates, send a request, and collect once
-              the owner says yes. You settle the rate and the deposit with the owner - CRAL never
-              charges a booking fee.
+              the owner says yes. You settle the rate directly with the owner - it doesn't change
+              after you book, and CRAL never charges a booking fee.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button

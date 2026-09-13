@@ -21,7 +21,7 @@ const STEPS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "04",
     title: "Collect the car, settle up directly",
-    body: "The rate and any deposit are agreed with the owner and settled when you collect. CRAL's part is the record: your licence and ID read once, the booking and its history kept in one place either of you can open.",
+    body: "The rate is agreed with the owner before you book and doesn't change when you collect. CRAL's part is the record: your licence and ID read once, the booking and its history kept in one place either of you can open.",
   },
 ];
 
@@ -72,8 +72,8 @@ export function HowItWorks(): JSX.Element {
       <Section tint>
         <SectionTitle>What CRAL doesn't do</SectionTitle>
         <Body>
-          There's no payment collected through Cruz Ride Auto today, and no deposit held by CRAL -
-          the rate and any deposit are between you and the owner, agreed before you book. See{" "}
+          There's no payment collected through Cruz Ride Auto today - the rate is between you and
+          the owner, agreed before you book, and it doesn't change afterwards. See{" "}
           <Link to="/how-we-protect-you" style={{ color: "#0F23A8" }}>
             how we protect you
           </Link>{" "}

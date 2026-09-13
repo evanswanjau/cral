@@ -10,10 +10,8 @@ import logo from "../../assets/cral-logo.png";
 
 const NAV: Array<{ label: string; to: string }> = [
   { label: "Find a car", to: "/browse" },
-  { label: "How it works", to: "/how-it-works" },
-  { label: "How we protect you", to: "/how-we-protect-you" },
-  { label: "Corporate", to: "/corporate" },
-  { label: "Help", to: "/help" },
+  { label: "Find parts", to: "/parts" },
+  { label: "Find services", to: "/services" },
 ];
 
 export function Masthead(): JSX.Element {
