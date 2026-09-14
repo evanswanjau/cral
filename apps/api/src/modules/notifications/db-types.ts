@@ -19,7 +19,9 @@ export type NotificationSubjectType = "booking" | "vehicle" | "payout_run" | "me
 
 export interface NotificationRow {
   id: string;
-  merchant_id: string;
+  /** Exactly one of `merchant_id` / `user_id` is set - see Migration B. */
+  merchant_id: string | null;
+  user_id: string | null;
   category: NotificationCategory;
   kind: NotificationKind;
   title: string;

@@ -152,6 +152,11 @@ async function resolvePreference(
 export async function deliverNotification({ notificationId }: DeliverJobData): Promise<void> {
   const notification = await db<NotificationRow>("notifications").where({ id: notificationId }).first();
   if (!notification) return;
+  // This pipeline is merchant-only — a renter's notifications (Migration B)
+  // never reach this queue in the first place (see notify()'s own comment);
+  // this guard is only for TypeScript's benefit now that the column is
+  // nullable at the type level.
+  if (!notification.merchant_id) return;
 
   const merchant = await db("merchants").where({ id: notification.merchant_id }).first("user_id");
   if (!merchant) return;

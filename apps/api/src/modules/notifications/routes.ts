@@ -70,6 +70,42 @@ notificationsRouter.post(
 );
 
 // ---------------------------------------------------------------------
+// The renter's own feed - Migration B, docs/plans/customer-portal.md C8.
+// Same shape as the merchant feed above, scoped to the caller's own rows
+// instead of a merchant's. No preferences endpoint here - there's no
+// renter Settings screen yet to configure one.
+// ---------------------------------------------------------------------
+
+notificationsRouter.get(
+  "/me/notifications",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const query = ListNotificationsQuerySchema.parse(req.query);
+    res.status(200).json(await notificationsService.listMyNotifications(req.auth!.sub, query));
+  }),
+);
+
+notificationsRouter.post(
+  "/me/notifications/read-all",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await notificationsService.markAllMyNotificationsRead(req.auth!.sub));
+  }),
+);
+
+notificationsRouter.post(
+  "/me/notifications/:notificationId/read",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await notificationsService.markMyNotificationRead(
+      req.auth!.sub,
+      req.params.notificationId as string,
+    );
+    res.status(200).json(result);
+  }),
+);
+
+// ---------------------------------------------------------------------
 // Dev-only fixture seeding — reproduces the design's ten feed fixtures.
 // There is no customer portal or ops console generating most of these
 // events for real yet, same footing as the bookings and payouts seeders.

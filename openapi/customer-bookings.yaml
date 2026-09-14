@@ -299,6 +299,29 @@ components:
                 sweep in `jobs/booking-expiry` is what actually expires it.
             decline_reason_code: { type: string, nullable: true }
             cancel_reason: { type: string, nullable: true }
+            handovers:
+              type: array
+              description: >
+                Newest first. Never the pickup/return code itself - only a
+                hash of it exists server-side, and the real code only ever
+                goes out by email (docs/plans/customer-portal.md C8). This
+                is "is a code on its way / has pickup or return happened",
+                for Trip detail's own handover status - not the merchant
+                portal's fuller handover UI.
+              items:
+                type: object
+                required: [kind, state, masked_destination, otp_expires_at, completed_at]
+                properties:
+                  kind: { type: string, enum: [pickup, return] }
+                  state:
+                    type: string
+                    enum: [otp_sent, otp_verified, condition_logged, confirmed, completed, expired, failed]
+                  masked_destination:
+                    type: string
+                    nullable: true
+                    description: The email the code was sent to, masked (e.g. "j***@example.com").
+                  otp_expires_at: { type: string, format: date-time, nullable: true }
+                  completed_at: { type: string, format: date-time, nullable: true }
 
     ErrorEnvelope:
       type: object

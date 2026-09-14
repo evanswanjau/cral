@@ -45,14 +45,21 @@ function notFound(): never {
 // Serialization
 // ---------------------------------------------------------------------
 
-/** The row's "{{cta}} ›" link — label and a client-relative href. */
+/**
+ * The row's "{{cta}} ›" link — label and a client-relative href. A renter's
+ * row (`user_id` set) links into the customer portal's own routes
+ * (`/trips/:id`), which live at a different path than the merchant
+ * portal's `/bookings/:id` for the same booking - the two apps are
+ * separate origins with separate route maps.
+ */
 function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null {
+  const bookingHref = (id: string) => (row.user_id ? `/trips/${id}` : `/bookings/${id}`);
   if (row.category === "rating" && row.subject_type === "booking" && row.subject_id) {
-    return { cta: "Rate back", cta_href: `/bookings/${row.subject_id}` };
+    return { cta: "Rate back", cta_href: bookingHref(row.subject_id) };
   }
   switch (row.subject_type) {
     case "booking":
-      return row.subject_id ? { cta: "Open booking", cta_href: `/bookings/${row.subject_id}` } : null;
+      return row.subject_id ? { cta: "Open booking", cta_href: bookingHref(row.subject_id) } : null;
     case "vehicle":
       return row.subject_id ? { cta: "Open vehicle", cta_href: `/vehicles/${row.subject_id}` } : null;
     case "payout_run":
@@ -92,16 +99,19 @@ export function serialize(row: NotificationRow) {
 // Feed
 // ---------------------------------------------------------------------
 
-async function filterCounts(merchantId: string) {
+/** Exactly one of the two - a merchant's own feed, or a renter's. */
+type Owner = { merchant_id: string } | { user_id: string };
+
+async function filterCounts(owner: Owner) {
   const byKind = await db<NotificationRow>("notifications")
-    .where({ merchant_id: merchantId })
+    .where(owner)
     .groupBy("kind")
     .select("kind")
     .count<{ kind: NotificationKind; count: string }[]>("id as count");
   const kindCount = new Map(byKind.map((r) => [r.kind, Number(r.count)]));
 
   const unreadRow = await db<NotificationRow>("notifications")
-    .where({ merchant_id: merchantId })
+    .where(owner)
     .whereNull("read_at")
     .count<{ count: string }[]>("id as count");
   const unread = Number(unreadRow[0]?.count ?? 0);
@@ -117,10 +127,8 @@ async function filterCounts(merchantId: string) {
   };
 }
 
-export async function listNotifications(userId: string, query: ListNotificationsQuery) {
-  const merchant = await getOrCreateMerchant(userId);
-
-  let base = db<NotificationRow>("notifications").where({ merchant_id: merchant.id });
+async function listNotificationsFor(owner: Owner, query: ListNotificationsQuery) {
+  let base = db<NotificationRow>("notifications").where(owner);
   if (query.filter === "unread") base = base.whereNull("read_at");
   else if (query.filter !== "all") base = base.where("kind", FILTER_KIND[query.filter]);
 
@@ -132,11 +140,11 @@ export async function listNotifications(userId: string, query: ListNotifications
   });
   const page: PaginatedResult<NotificationRow> = toPaginatedResult(rows, query.limit, "occurred_at");
 
-  const counts = await filterCounts(merchant.id);
+  const counts = await filterCounts(owner);
 
   // The urgent banner surfaces the first unread booking request.
   const urgentRow = await db<NotificationRow>("notifications")
-    .where({ merchant_id: merchant.id, category: "booking" })
+    .where({ ...owner, category: "booking" })
     .whereNull("read_at")
     .orderBy("occurred_at", "desc")
     .orderBy("id", "desc")
@@ -152,29 +160,60 @@ export async function listNotifications(userId: string, query: ListNotifications
   };
 }
 
-export async function markNotificationRead(userId: string, notificationId: string) {
-  const merchant = await getOrCreateMerchant(userId);
+async function markNotificationReadFor(owner: Owner, notificationId: string) {
   const updated = await db<NotificationRow>("notifications")
-    .where({ id: notificationId, merchant_id: merchant.id })
+    .where({ ...owner, id: notificationId })
     .whereNull("read_at")
     .update({ read_at: new Date(), updated_at: new Date() });
   if (updated === 0) {
-    const exists = await db<NotificationRow>("notifications")
-      .where({ id: notificationId, merchant_id: merchant.id })
-      .first();
+    const exists = await db<NotificationRow>("notifications").where({ ...owner, id: notificationId }).first();
     if (!exists) notFound();
   }
-  return { unread: (await filterCounts(merchant.id)).unread };
+  return { unread: (await filterCounts(owner)).unread };
+}
+
+async function markAllNotificationsReadFor(owner: Owner) {
+  const now = new Date();
+  const updated = await db<NotificationRow>("notifications")
+    .where(owner)
+    .whereNull("read_at")
+    .update({ read_at: now, updated_at: now });
+  return { marked: updated, unread: 0 };
+}
+
+export async function listNotifications(userId: string, query: ListNotificationsQuery) {
+  const merchant = await getOrCreateMerchant(userId);
+  return listNotificationsFor({ merchant_id: merchant.id }, query);
+}
+
+export async function markNotificationRead(userId: string, notificationId: string) {
+  const merchant = await getOrCreateMerchant(userId);
+  return markNotificationReadFor({ merchant_id: merchant.id }, notificationId);
 }
 
 export async function markAllNotificationsRead(userId: string) {
   const merchant = await getOrCreateMerchant(userId);
-  const now = new Date();
-  const updated = await db<NotificationRow>("notifications")
-    .where({ merchant_id: merchant.id })
-    .whereNull("read_at")
-    .update({ read_at: now, updated_at: now });
-  return { marked: updated, unread: 0 };
+  return markAllNotificationsReadFor({ merchant_id: merchant.id });
+}
+
+// ---------------------------------------------------------------------
+// The renter's own feed - Migration B, docs/plans/customer-portal.md C8.
+// Renters have no channel preferences or quiet hours (no Settings screen
+// for it yet), so this is in-app only; email for the events that generate
+// these rows is sent inline at the call site, same pattern the merchant
+// side used before this table supported a renter owner at all.
+// ---------------------------------------------------------------------
+
+export async function listMyNotifications(userId: string, query: ListNotificationsQuery) {
+  return listNotificationsFor({ user_id: userId }, query);
+}
+
+export async function markMyNotificationRead(userId: string, notificationId: string) {
+  return markNotificationReadFor({ user_id: userId }, notificationId);
+}
+
+export async function markAllMyNotificationsRead(userId: string) {
+  return markAllNotificationsReadFor({ user_id: userId });
 }
 
 // ---------------------------------------------------------------------
