@@ -54,6 +54,10 @@ const router = createBrowserRouter([
       { path: "/contact", element: <Contact /> },
       { path: "/legal", element: <Legal /> },
       { path: "/list-your-car", element: <ListYourCar /> },
+      // Not behind RequireAuth: a signed-out visitor lands here straight
+      // from "Request these dates" and signs up inline as part of sending
+      // the request - see Booking.tsx.
+      { path: "/book/:id", element: <Booking /> },
 
       { path: "/sign-in", element: <SignIn /> },
       { path: "/create-account", element: <CreateAccount /> },
@@ -63,7 +67,6 @@ const router = createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
-          { path: "/book/:id", element: <Booking /> },
           { path: "/documents", element: <Documents /> },
           { path: "/trips", element: <Trips /> },
           { path: "/trips/:id", element: <TripDetail /> },

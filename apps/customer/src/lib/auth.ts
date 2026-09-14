@@ -10,6 +10,20 @@ import { useSyncExternalStore } from "react";
 const ACCESS_TOKEN_KEY = "cral_customer_access_token";
 const REFRESH_TOKEN_KEY = "cral_customer_refresh_token";
 
+/** Terms version accepted at sign-up - kept in one place so every sign-up surface agrees. */
+export const TERMS_VERSION = "2026-08-24";
+
+/** Stable per-browser device id, sent with every login (sign-in, or the inline booking sign-up). */
+export function deviceId(): string {
+  const KEY = "cral_customer_device_id";
+  let id = window.localStorage.getItem(KEY);
+  if (!id) {
+    id = `dev_${crypto.randomUUID()}`;
+    window.localStorage.setItem(KEY, id);
+  }
+  return id;
+}
+
 function subscribe(callback: () => void): () => void {
   window.addEventListener("storage", callback);
   return () => window.removeEventListener("storage", callback);

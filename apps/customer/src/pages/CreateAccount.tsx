@@ -5,9 +5,8 @@ import { Button } from "@cral/ui";
 import { AuthShell } from "../components/AuthShell.js";
 import { FormField } from "../components/FormField.js";
 import { register as registerAccount, verifySignupOtp } from "../lib/auth-api.js";
+import { TERMS_VERSION } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
-
-const TERMS_VERSION = "2026-08-24";
 
 interface FormValues {
   full_name: string;

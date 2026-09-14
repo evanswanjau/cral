@@ -7,17 +7,19 @@ export interface TokenPair {
 }
 
 export interface RegisterResponse {
-  user: { id: string; full_name: string; phone: string; email: string };
-  next: "verify_phone" | null;
+  user: { id: string; full_name: string | null; phone: string | null; email: string };
+  next: "verify_phone" | "verify_email" | null;
 }
 
 export function register(input: {
-  full_name: string;
-  phone: string;
   email: string;
   password: string;
   role: "customer" | "merchant";
   accepted_terms_version: string;
+  // Optional - onboarding/the account page collects these later, so
+  // sign-up itself stays email + password only (backend RegisterSchema).
+  full_name?: string;
+  phone?: string;
 }) {
   return apiPost<RegisterResponse>("/auth/register", input, { auth: false });
 }

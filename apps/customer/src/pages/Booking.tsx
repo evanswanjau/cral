@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { getCatalogVehicle, formatMoney } from "../lib/catalog-api.js";
 import { createBooking, type BookingDetail } from "../lib/bookings-api.js";
+import { register as registerAccount, login } from "../lib/auth-api.js";
+import { useIsAuthenticated, setSession, deviceId, TERMS_VERSION } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
@@ -14,6 +16,14 @@ import { ApiClientError } from "../lib/api.js";
  * "Send request, pay nothing yet" is not just copy here - POST /bookings
  * genuinely charges nothing (spec: no deposit for now, owner's call
  * 2026-09-11). The money shown is exactly what the server will store.
+ *
+ * Deliberately reachable signed-out (owner's call): there is no separate
+ * sign-in/sign-up gate before this page. A signed-out visitor sees an
+ * inline "your account" card and sending the request registers + signs
+ * them in first - the account is a side effect of the request, not a
+ * precondition for it. `email`+`password` is the whole account (spec's
+ * sign-up-stays-minimal decision); full name is collected later, same as
+ * everywhere else in the product.
  */
 
 function daysBetween(from: string, to: string): number {
@@ -45,7 +55,11 @@ export function Booking(): JSX.Element {
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
 
+  const isAuthenticated = useIsAuthenticated();
   const [note, setNote] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [accountExists, setAccountExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
   const [booking, setBooking] = useState<BookingDetail | null>(null);
@@ -79,8 +93,41 @@ export function Booking(): JSX.Element {
 
   const submit = async () => {
     setError(null);
+    setAccountExists(false);
+
+    if (!isAuthenticated) {
+      if (!email || !password) {
+        setError({ code: "account_required", message: "Enter an email and password to send this request." });
+        return;
+      }
+      if (password.length < 10) {
+        setError({ code: "account_required", message: "Password needs to be at least 10 characters." });
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
+      if (!isAuthenticated) {
+        try {
+          await registerAccount({
+            email,
+            password,
+            role: "customer",
+            accepted_terms_version: TERMS_VERSION,
+          });
+        } catch (e) {
+          if (e instanceof ApiClientError && e.code === "account_exists") {
+            setAccountExists(true);
+            setError({ code: "account_exists", message: "That email already has a CRAL account." });
+            return;
+          }
+          throw e;
+        }
+        const tokens = await login(email, password, deviceId());
+        setSession(tokens);
+      }
+
       const pickup = new Date(`${from}T10:00:00`).toISOString();
       const dropoff = new Date(`${to}T10:00:00`).toISOString();
       const result = await createBooking({
@@ -100,6 +147,8 @@ export function Booking(): JSX.Element {
       setSubmitting(false);
     }
   };
+
+  const signInNext = `/book/${id}?from=${from}&to=${to}`;
 
   const card = {
     background: "#FFFFFF",
@@ -266,6 +315,62 @@ export function Booking(): JSX.Element {
         </label>
       </div>
 
+      {!isAuthenticated && (
+        <div style={{ ...card, marginBottom: 22 }}>
+          <div style={{ font: "600 15px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 4 }}>
+            Your account
+          </div>
+          <p style={{ margin: "0 0 14px", font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+            No separate sign-up - sending this request creates your CRAL account too, so you can
+            track it and message the owner.
+          </p>
+          <div style={{ display: "grid", gap: 12 }}>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", font: "600 13px/1 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 8 }}>
+                Email
+              </span>
+              <input
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                style={{
+                  width: "100%",
+                  height: 44,
+                  padding: "0 11px",
+                  border: "1px solid #CDD2DA",
+                  borderRadius: 8,
+                  font: "400 14px/1 'Instrument Sans',sans-serif",
+                  color: "#0B0F1A",
+                }}
+              />
+            </label>
+            <label style={{ display: "block" }}>
+              <span style={{ display: "block", font: "600 13px/1 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 8 }}>
+                Choose a password
+              </span>
+              <input
+                type="password"
+                autoComplete="new-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 10 characters"
+                style={{
+                  width: "100%",
+                  height: 44,
+                  padding: "0 11px",
+                  border: "1px solid #CDD2DA",
+                  borderRadius: 8,
+                  font: "400 14px/1 'Instrument Sans',sans-serif",
+                  color: "#0B0F1A",
+                }}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div
           style={{
@@ -284,6 +389,17 @@ export function Booking(): JSX.Element {
               {" "}
               <Link to="/documents" style={{ color: "#A50E22", textDecoration: "underline" }}>
                 Add them now →
+              </Link>
+            </>
+          )}
+          {accountExists && (
+            <>
+              {" "}
+              <Link
+                to={`/sign-in?next=${encodeURIComponent(signInNext)}`}
+                style={{ color: "#A50E22", textDecoration: "underline" }}
+              >
+                Sign in instead →
               </Link>
             </>
           )}
@@ -306,7 +422,11 @@ export function Booking(): JSX.Element {
           opacity: submitting ? 0.7 : 1,
         }}
       >
-        {submitting ? "Sending…" : "Send request, pay nothing yet"}
+        {submitting
+          ? "Sending…"
+          : isAuthenticated
+            ? "Send request, pay nothing yet"
+            : "Create account & send request"}
       </button>
     </div>
   );
