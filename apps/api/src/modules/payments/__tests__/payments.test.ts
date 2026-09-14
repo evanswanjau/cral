@@ -137,7 +137,9 @@ describe("payments", () => {
       .first();
     expect(row?.amount_amount).toBe(booking.deposit_amount);
     expect(row?.booking_id).toBe(booking.id);
-    expect(row?.provider_request_id).toMatch(/^console_stk_/);
+    // Our own generated MessageReference (a raw ulid, 26 chars) - not
+    // anything the console adapter returns. See service.ts#initiatePayment.
+    expect(row?.provider_request_id).toMatch(/^[0-9A-Z]{26}$/);
   });
 
   it("another user's booking is a 404, not a 403", async () => {
@@ -171,17 +173,12 @@ describe("payments", () => {
       .first();
 
     const callbackBody = {
-      Body: {
-        stkCallback: {
-          MerchantRequestID: "test-merchant-req",
-          CheckoutRequestID: pending!.provider_request_id,
-          ResultCode: 0,
-          ResultDesc: "The service request is processed successfully.",
-          CallbackMetadata: {
-            Item: [{ Name: "MpesaReceiptNumber", Value: "TEST1234RECEIPT" }],
-          },
-        },
-      },
+      MessageReference: pending!.provider_request_id,
+      MessageDateTime: new Date().toISOString(),
+      MessageCode: "0",
+      MessageDescription: "Success. Request Accepted for Processing",
+      TelcoRef: "ws_CO_210420201610438264",
+      TransactionID: "TEST1234RECEIPT",
     };
 
     await handleCallback(callbackBody, { ip: null, requestId: null });
@@ -215,14 +212,12 @@ describe("payments", () => {
 
     await handleCallback(
       {
-        Body: {
-          stkCallback: {
-            MerchantRequestID: "test-merchant-req-2",
-            CheckoutRequestID: pending!.provider_request_id,
-            ResultCode: 1032,
-            ResultDesc: "Request cancelled by user",
-          },
-        },
+        MessageReference: pending!.provider_request_id,
+        MessageDateTime: new Date().toISOString(),
+        MessageCode: "17",
+        MessageDescription: "Request cancelled by user",
+        TelcoRef: "ws_CO_210420201610438265",
+        TransactionID: "",
       },
       { ip: null, requestId: null },
     );
