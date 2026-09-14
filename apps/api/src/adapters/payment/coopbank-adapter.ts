@@ -8,19 +8,31 @@ import type { PaymentAdapter, StkPushInput, StkPushResult } from "./types.js";
  * gateway in front of Safaricom Daraja's STK push, not a raw Daraja
  * integration.
  *
- * Two things are real and safe to rely on because WSO2's OAuth2 shape is
- * documented and standard: the token endpoint and the client-credentials
- * grant. One thing is NOT confirmed: the exact STK-push resource path and
- * request field names for Co-op's proxy. Guessing those for a call that
- * moves real money is exactly what CLAUDE.md's "don't guess — read the
- * source" rule is for, so the body below is written Daraja-shaped (the
- * only reasonable default for an API literally named SafaricomSTKPush) but
- * gated behind `COOPBANK_STK_PATH_CONFIRMED=true` — set that only once
- * someone has copied the exact path + sample payload from the portal's
- * "Try Out" / API Console tab and this file has been updated to match.
+ * **The request/response shape below is confirmed** — pulled directly
+ * from the portal's own OpenAPI document for this resource (2026-09-14),
+ * not guessed. It is deliberately NOT Daraja-shaped: no `BusinessShortCode`
+ * / `Password` / `Timestamp` — Co-op's proxy computes all of that
+ * server-side against the app's own registration. The real request is
+ * five fields: `MessageReference` (ours, ≤27 chars, echoed back verbatim
+ * in both the sync ack and the async callback — this is what correlates
+ * the callback, not anything the provider issues), `TargetMSISDN` (≤12
+ * chars — our normalised `2547XXXXXXXX` fits exactly), `CallBackUrl`,
+ * `TransactionAmount` (a STRING, ≤7 digits), `TransactionNarration`
+ * (≤30 chars). The sync response is `{MessageReference, MessageDateTime,
+ * MessageCode, MessageDescription, TelcoRef}` — `MessageCode: "0"` is
+ * success. The async callback that lands on `CallBackUrl` is the same
+ * shape plus `TransactionID` (the real M-Pesa receipt) and, on success,
+ * `TransactionAmount` / `TransactionCompletedDateTime` /
+ * `ReceiverPartyPublicName`.
  *
- * Until then this adapter throws a clear, named error rather than firing
- * an unconfirmed request at a real payment gateway.
+ * **What is still NOT confirmed: how the callback authenticates itself.**
+ * The OpenAPI document has nothing on this — no signature header, no
+ * shared secret, no published IP range. `routes.ts`'s callback endpoint
+ * still trusts nothing but its own obscurity. `COOPBANK_STK_PATH_CONFIRMED`
+ * only gates the request/response shape below being right — it is not a
+ * green light to point real money at this. That needs a separate answer
+ * (ask Co-op support / the relationship manager directly — it isn't
+ * documented) before this ever leaves sandbox.
  */
 
 interface CachedToken {
@@ -87,19 +99,9 @@ async function getAccessToken(): Promise<string> {
   return cachedToken.accessToken;
 }
 
-/** `+254712345678` -> `254712345678` (Daraja/Co-op want no leading `+`). */
+/** `+254712345678` -> `254712345678` (Co-op's `TargetMSISDN` wants no leading `+`, and is exactly 12 chars for a normalised Kenyan number). */
 function toMsisdn(e164: string): string {
   return e164.replace(/^\+/, "");
-}
-
-/** `YYYYMMDDHHmmss` in EAT (Nairobi, UTC+3) — Daraja's timestamp format. */
-function darajaTimestamp(date: Date): string {
-  const eat = new Date(date.getTime() + 3 * 60 * 60 * 1000);
-  const p = (n: number) => String(n).padStart(2, "0");
-  return (
-    `${eat.getUTCFullYear()}${p(eat.getUTCMonth() + 1)}${p(eat.getUTCDate())}` +
-    `${p(eat.getUTCHours())}${p(eat.getUTCMinutes())}${p(eat.getUTCSeconds())}`
-  );
 }
 
 export class CoopBankPaymentAdapter implements PaymentAdapter {
@@ -117,20 +119,13 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
       });
     }
 
-    const shortcode = requireEnv("COOPBANK_SHORTCODE");
-    const passkey = requireEnv("COOPBANK_PASSKEY");
     const callbackUrl = requireEnv("COOPBANK_CALLBACK_URL");
     const accessToken = await getAccessToken();
 
-    const timestamp = darajaTimestamp(new Date());
-    const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString("base64");
-    const msisdn = toMsisdn(input.phone);
-
-    // Best-guess Daraja-compatible body. CONFIRM against the portal's API
-    // console before relying on this - field names, the resource path
-    // below, and whether Co-op wants Password/Timestamp computed
-    // client-side at all (some bank gateways compute this server-side and
-    // just want BusinessShortCode + Amount + phone).
+    // The confirmed request body — see this file's top comment. No
+    // shortcode/passkey/timestamp: Co-op's proxy resolves the receiving
+    // account from the app's own registration, not from anything in this
+    // payload.
     const res = await fetch(`${apiBaseUrl()}/stkpush/safaricom/1.0.0`, {
       method: "POST",
       headers: {
@@ -138,17 +133,12 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        BusinessShortCode: shortcode,
-        Password: password,
-        Timestamp: timestamp,
-        TransactionType: "CustomerPayBillOnline",
-        Amount: Math.round(input.amountCents / 100),
-        PartyA: msisdn,
-        PartyB: shortcode,
-        PhoneNumber: msisdn,
-        CallBackURL: callbackUrl,
-        AccountReference: input.accountReference,
-        TransactionDesc: input.transactionDesc,
+        MessageReference: input.messageReference,
+        TargetMSISDN: toMsisdn(input.phone),
+        CallBackUrl: callbackUrl,
+        // TransactionAmount is a STRING per the confirmed schema (≤7 digits).
+        TransactionAmount: String(Math.round(input.amountCents / 100)),
+        TransactionNarration: input.narration.slice(0, 30),
       }),
     });
 
@@ -158,23 +148,23 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
     }
 
     let json: {
-      CheckoutRequestID?: string;
-      MerchantRequestID?: string;
-      ResponseDescription?: string;
-      ResponseCode?: string;
+      MessageReference?: string;
+      MessageCode?: string;
+      MessageDescription?: string;
+      TelcoRef?: string;
     };
     try {
       json = JSON.parse(text);
     } catch {
       throw new Error(`Co-op Bank STK response unparseable: ${text}`);
     }
-    if (json.ResponseCode !== "0" || !json.CheckoutRequestID) {
-      throw new Error(`Co-op Bank STK push rejected: ${json.ResponseDescription ?? text}`);
+    if (json.MessageCode !== "0") {
+      throw new Error(`Co-op Bank STK push rejected: ${json.MessageDescription ?? text}`);
     }
 
     return {
-      providerRequestId: json.CheckoutRequestID,
-      responseDescription: json.ResponseDescription ?? "Accepted",
+      providerRef: json.TelcoRef ?? "",
+      responseDescription: json.MessageDescription ?? "Accepted",
     };
   }
 }

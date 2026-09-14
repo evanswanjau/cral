@@ -98,18 +98,31 @@ operations process) is a separate capability. Options:
 Everything in the booking flow, the home/protection copy, and the claim
 path depends on this. **It blocks PR C4 and PR C7.**
 
-### D2 - Co-op STK wire format
+### D2 - Co-op STK wire format **[resolved 2026-09-14]**
 
-`COOPBANK_STK_PATH_CONFIRMED` is off and the adapter refuses to fire. Two
-things need a human with portal access: the STK resource path and request
-field names, and the callback payload shape. Also their portal's Callback
-URL is still the placeholder `http://url-to-webapp`. **Blocks PR C6.**
+Pulled directly from the portal's own OpenAPI document for the
+SafaricomSTKPush resource. `coopbank-adapter.ts` and
+`payments/service.ts#handleCallback` now implement the real shape - not
+Daraja-shaped. Five request fields (`MessageReference`, `TargetMSISDN`,
+`CallBackUrl`, `TransactionAmount`, `TransactionNarration`), no
+shortcode/passkey/timestamp - Co-op's proxy resolves the receiving account
+server-side against the app's own registration. `MessageReference` is
+*ours* (generated before the call, ≤27 chars - a raw `ulid()`), echoed
+back verbatim in both the sync ack and the async callback, so that's what
+correlates the callback - never a provider-issued id.
+`COOPBANK_STK_PATH_CONFIRMED` still gates it (still `false` by default);
+flipping it only asserts the shape is right, not that D3 is answered too.
+Their portal's Callback URL still needs pointing at the real
+`COOPBANK_CALLBACK_URL` before this can fire for real.
 
 ### D3 - Callback authentication
 
-The callback endpoint currently trusts its own obscurity. Confirm whether
-Co-op signs callbacks, offers a shared secret, or publishes an IP range,
-and add the check. **Do not point real money at this before it's done.**
+Still open. The confirmed OpenAPI document has nothing on this - no
+signature header, no shared secret, no published IP range documented.
+The callback endpoint currently trusts its own obscurity. Ask Co-op
+support / the relationship manager directly (it isn't in the API docs).
+**Do not point real money at this before it's done** - `COOPBANK_STK_PATH_
+CONFIRMED=true` is not sufficient on its own.
 
 ### D4 - Delivery fees
 

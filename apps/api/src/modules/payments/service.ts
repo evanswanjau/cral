@@ -1,3 +1,4 @@
+import { ulid } from "ulid";
 import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -63,12 +64,18 @@ export async function initiatePayment(
     });
   }
 
+  // Ours, generated before the call — Co-op's `MessageReference`, echoed
+  // back verbatim in both the sync ack and the async callback, so this is
+  // what the callback handler matches on (never a provider-issued id, see
+  // coopbank-adapter.ts). A raw ulid() is 26 chars, within the field's
+  // 27-char max; a prefixed id (e.g. "pay_...") would not fit.
+  const messageReference = ulid();
   const amountCents = amountFor(booking, input.purpose);
   const result = await paymentAdapter.initiateStkPush({
+    messageReference,
     phone,
     amountCents,
-    accountReference: booking.ref,
-    transactionDesc: `CRAL booking ${booking.ref}`,
+    narration: `CRAL ${booking.ref}`,
   });
 
   const row = await db.transaction(async (trx) => {
@@ -82,7 +89,7 @@ export async function initiatePayment(
         phone,
         status: "pending",
         provider: "coopbank",
-        provider_request_id: result.providerRequestId,
+        provider_request_id: messageReference,
         expires_at: new Date(Date.now() + STK_EXPIRY_MINUTES * 60 * 1000),
       })
       .returning("*");
@@ -94,7 +101,12 @@ export async function initiatePayment(
       action: "payment.initiated",
       entityType: "booking",
       entityId: booking.id,
-      after: { payment_request_id: inserted.id, purpose: input.purpose, amount_amount: amountCents },
+      after: {
+        payment_request_id: inserted.id,
+        purpose: input.purpose,
+        amount_amount: amountCents,
+        provider_ref: result.providerRef,
+      },
       ip: ctx.ip,
       requestId: ctx.requestId,
     });
@@ -105,41 +117,50 @@ export async function initiatePayment(
   return { payment_request_id: row.id, status: row.status };
 }
 
+interface CoopBankCallbackBody {
+  MessageReference?: string;
+  MessageCode?: string;
+  MessageDescription?: string;
+  TelcoRef?: string;
+  /** The real M-Pesa transaction reference — what a renter would recognise from their own M-Pesa message. */
+  TransactionID?: string;
+}
+
 /**
- * Co-op Bank's async callback. NOT CONFIRMED against their actual payload -
- * written Daraja-shaped (`Body.stkCallback.{MerchantRequestID,
- * CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata}`) as the
- * only reasonable default for a proxy named SafaricomSTKPush. Update this
- * parser alongside coopbank-adapter.ts once the real shape is confirmed.
+ * Co-op Bank's async callback — confirmed against their OpenAPI document
+ * for the STKPush resource (2026-09-14, see coopbank-adapter.ts's own
+ * comment for the full shape). `MessageReference` is what correlates this
+ * to a `payment_requests` row: it's a value WE generated and sent on the
+ * initiate call, echoed back here verbatim — not a provider-issued id.
+ * `MessageCode: "0"` is success.
+ *
+ * NOT CONFIRMED: how this callback authenticates itself (no signature,
+ * secret or IP range documented) — see routes.ts's own note. This parser
+ * being right does not make the endpoint safe to point real money at.
  *
  * Idempotent by construction: `provider_request_id` is unique, and a
  * second callback for an already-decided row is a no-op rather than a
  * double-credit.
  */
 export async function handleCallback(rawBody: unknown, ctx: RequestContext): Promise<void> {
-  const callback = (rawBody as { Body?: { stkCallback?: Record<string, unknown> } })?.Body
-    ?.stkCallback;
-  if (!callback || typeof callback.CheckoutRequestID !== "string") {
+  const body = rawBody as CoopBankCallbackBody;
+  if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
     throw new ApiError({
       status: 422,
       type: "validation_error",
       code: "unrecognised_callback_shape",
-      message: "Callback payload didn't match the expected stkCallback shape.",
+      message: "Callback payload didn't match the expected Co-op Bank STKPush shape.",
     });
   }
 
-  const checkoutRequestId = callback.CheckoutRequestID;
-  const resultCode = callback.ResultCode;
-  const resultDesc = typeof callback.ResultDesc === "string" ? callback.ResultDesc : null;
-
-  const items = (
-    callback.CallbackMetadata as { Item?: { Name: string; Value: unknown }[] } | undefined
-  )?.Item;
-  const receipt = items?.find((i) => i.Name === "MpesaReceiptNumber")?.Value;
+  const messageReference = body.MessageReference;
+  const succeeded = body.MessageCode === "0";
+  const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
+  const receipt = typeof body.TransactionID === "string" ? body.TransactionID : null;
 
   await db.transaction(async (trx) => {
     const existing = await trx<PaymentRequestRow>("payment_requests")
-      .where({ provider_request_id: checkoutRequestId })
+      .where({ provider_request_id: messageReference })
       .forUpdate()
       .first();
     if (!existing) {
@@ -149,13 +170,12 @@ export async function handleCallback(rawBody: unknown, ctx: RequestContext): Pro
     }
     if (existing.status !== "pending") return; // already decided — idempotent no-op
 
-    const succeeded = resultCode === 0 || resultCode === "0";
     await trx<PaymentRequestRow>("payment_requests")
       .where({ id: existing.id })
       .update({
         status: succeeded ? "success" : "failed",
-        provider_receipt: succeeded && typeof receipt === "string" ? receipt : null,
-        failure_reason: succeeded ? null : resultDesc,
+        provider_receipt: succeeded ? receipt : null,
+        failure_reason: succeeded ? null : description,
         raw_callback: JSON.stringify(rawBody),
       });
 
@@ -171,7 +191,7 @@ export async function handleCallback(rawBody: unknown, ctx: RequestContext): Pro
       action: succeeded ? "payment.succeeded" : "payment.failed",
       entityType: "booking",
       entityId: existing.booking_id,
-      after: { payment_request_id: existing.id, result_code: resultCode, result_desc: resultDesc },
+      after: { payment_request_id: existing.id, message_code: body.MessageCode, message_description: description },
       ip: ctx.ip,
       requestId: ctx.requestId,
     });

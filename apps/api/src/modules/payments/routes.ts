@@ -30,19 +30,23 @@ paymentsRouter.post(
 );
 
 /**
- * Co-op Bank's async result callback. Server-to-server, so no bearer
- * token — CONFIRM whether their gateway signs or otherwise authenticates
- * callbacks (a shared secret in the URL, an IP allowlist) once that's
- * known, and add the check here. Until then this endpoint trusts its own
- * obscurity, which is not a real control - do not point real money at
- * this without that follow-up.
+ * Co-op Bank's async result callback. The request/response shape it sends
+ * is confirmed against their OpenAPI document (see service.ts#handleCallback
+ * and coopbank-adapter.ts's top comment) — what is NOT confirmed is how
+ * this callback authenticates itself. Server-to-server, so no bearer
+ * token; nothing documented about a signature, a shared secret, or a
+ * published IP range either. This endpoint still trusts nothing but its
+ * own obscurity, which is not a real control — do not point real money at
+ * this without a separate answer from Co-op on that.
  */
 paymentsRouter.post(
   "/payments/coopbank/callback",
   asyncHandler(async (req, res) => {
     await service.handleCallback(req.body, ctxOf(req));
-    // Daraja-family callbacks expect a 200 with this shape regardless of
-    // outcome — a non-2xx or a different body makes the provider retry.
-    res.status(200).json({ ResultCode: 0, ResultDesc: "Accepted" });
+    // The ack Co-op expects back on this URL isn't documented either -
+    // this is a reasonable guess in their own vocabulary (MessageCode/
+    // MessageDescription, as the STKPush resource itself uses), not a
+    // confirmed contract. A non-2xx would presumably make them retry.
+    res.status(200).json({ MessageCode: "0", MessageDescription: "Accepted" });
   }),
 );
