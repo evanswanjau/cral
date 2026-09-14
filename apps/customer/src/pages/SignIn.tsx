@@ -5,7 +5,7 @@ import { Button } from "@cral/ui";
 import { AuthShell } from "../components/AuthShell.js";
 import { FormField } from "../components/FormField.js";
 import { login } from "../lib/auth-api.js";
-import { setSession } from "../lib/auth.js";
+import { setSession, deviceId } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
 
 interface FormValues {
@@ -87,14 +87,4 @@ export function SignIn(): JSX.Element {
       </div>
     </AuthShell>
   );
-}
-
-function deviceId(): string {
-  const KEY = "cral_customer_device_id";
-  let id = window.localStorage.getItem(KEY);
-  if (!id) {
-    id = `dev_${crypto.randomUUID()}`;
-    window.localStorage.setItem(KEY, id);
-  }
-  return id;
 }

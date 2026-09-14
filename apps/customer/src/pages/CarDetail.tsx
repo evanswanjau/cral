@@ -3,7 +3,6 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
-import { useIsAuthenticated } from "../lib/auth.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -22,7 +21,6 @@ const TINT = "#EEF0F3";
 export function CarDetail(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const isAuthed = useIsAuthenticated();
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
 
@@ -132,8 +130,9 @@ export function CarDetail(): JSX.Element {
 
   const requestDates = () => {
     if (!from || !to) return;
-    const next = `/book/${car.id}?from=${from}&to=${to}`;
-    navigate(isAuthed ? next : `/sign-in?next=${encodeURIComponent(next)}`);
+    // No sign-in gate here - an unauthenticated visitor signs up inline on
+    // the booking page itself as part of sending the request.
+    navigate(`/book/${car.id}?from=${from}&to=${to}`);
   };
 
   return (
