@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { COMMISSION_PERCENT, grossFromNet, netFromGross } from "@cral/types";
 import { O } from "./styles.js";
 import { FormField, TextInput } from "./primitives.js";
 
@@ -15,21 +16,13 @@ import { FormField, TextInput } from "./primitives.js";
  * `mode` is only remembered so this field opens the same way next time.
  */
 
-// CRAL's commission on completed bookings. Mirrors
-// apps/api/src/lib/booking-pricing.ts#COMMISSION_RATE.
-export const COMMISSION_PCT = 10;
+// One source for the rate and its arithmetic, shared with the API and the
+// customer app - this file used to carry its own copy.
+export const COMMISSION_PCT = COMMISSION_PERCENT;
+export { grossFromNet, netFromGross };
 
 const fmt = (n: number): string => (n > 0 ? n.toLocaleString("en-KE") : "-");
 const digits = (s: string): number => parseInt(s.replace(/\D/g, ""), 10) || 0;
-
-/** Take-home -> the list price a hirer pays. */
-export function grossFromNet(net: number): number {
-  return net > 0 ? Math.round(net / (1 - COMMISSION_PCT / 100)) : 0;
-}
-/** List price -> take-home. */
-export function netFromGross(gross: number): number {
-  return gross > 0 ? gross - Math.round((gross * COMMISSION_PCT) / 100) : 0;
-}
 
 export function RateField({
   grossValue,

@@ -1,4 +1,9 @@
-import { kes, type Money } from "@cral/types";
+import { COMMISSION_RATE, commissionOn, kes, type Money } from "@cral/types";
+
+// Re-exported so existing `booking-pricing.js` importers keep working; the
+// rate itself now lives in @cral/types because the clients need the same
+// number and had grown their own copies of it.
+export { COMMISSION_RATE };
 
 /**
  * Booking money constants. Config, not hardcoded inline at each call site
@@ -10,7 +15,6 @@ import { kes, type Money } from "@cral/types";
  * console exists yet to make these editable, so this file is deliberately
  * a plain module, not a `platform_rates` DB table nobody can reach.
  */
-export const COMMISSION_RATE = 0.1;
 export const DEPOSIT_RATE = 0.15;
 export const LATE_CANCELLATION_FEE_RATE = 0.25;
 
@@ -23,7 +27,7 @@ export interface BookingPricing {
 
 export function computeBookingPricing(dailyRateAmountCents: number, days: number): BookingPricing {
   const grossAmount = Math.round(dailyRateAmountCents * days);
-  const commissionAmount = Math.round(grossAmount * COMMISSION_RATE);
+  const commissionAmount = commissionOn(grossAmount);
   const depositAmount = Math.round(grossAmount * DEPOSIT_RATE);
   return {
     gross: kes(grossAmount),
@@ -38,7 +42,7 @@ export function computeLateCancellationFee(
   grossAmountCents: number,
 ): { fee: Money; commission: Money; merchantKeeps: Money; refund: Money } {
   const feeAmount = Math.round(grossAmountCents * LATE_CANCELLATION_FEE_RATE);
-  const commissionAmount = Math.round(feeAmount * COMMISSION_RATE);
+  const commissionAmount = commissionOn(feeAmount);
   return {
     fee: kes(feeAmount),
     commission: kes(commissionAmount),

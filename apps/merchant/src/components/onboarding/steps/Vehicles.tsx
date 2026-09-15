@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { commissionOn } from "@cral/types";
 import { O } from "../styles.js";
 import { Combobox } from "../Combobox.js";
 import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
@@ -377,9 +378,6 @@ function VehicleForm({
   );
 }
 
-/** CRAL's commission on completed bookings - merchant-facing surfaces only. */
-const COMMISSION_PCT = 10;
-
 const fmt = (n: number): string => n.toLocaleString("en-KE");
 
 /**
@@ -391,7 +389,7 @@ const fmt = (n: number): string => n.toLocaleString("en-KE");
  */
 export function Earnings({ dailyRate }: { dailyRate: string }): JSX.Element {
   const rate = Number(dailyRate) || 0;
-  const fee = Math.round((rate * COMMISSION_PCT) / 100);
+  const fee = commissionOn(rate);
   const earns = rate - fee;
 
   return (
