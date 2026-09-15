@@ -5,6 +5,7 @@ import { formatFileSize } from "../../lib/format.js";
 import { revokePhotoPreview, setPhotoPreview } from "../../lib/photo-preview-cache.js";
 import { usePhotoPreview } from "../../lib/use-photo-preview.js";
 import { deleteDocument, uploadVehiclePhoto, type DraftPhoto } from "../../lib/onboarding-draft.js";
+import { ApiClientError } from "../../lib/api.js";
 
 /**
  * One filled photo slot. Split out so each tile can resolve its own preview
@@ -53,16 +54,29 @@ const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ACCEPTED_LABEL = "JPG, PNG or WEBP";
 const CAPTIONS = ["Front three-quarter", "Interior · dashboard", "Rear or side"];
 
+/** The file that failed, plus whatever uploaded before it - never a bare "try again". */
+function uploadErrorMessage(err: unknown, file: File, savedCount: number): string {
+  const saved =
+    savedCount > 0
+      ? ` The ${savedCount === 1 ? "photo" : `${savedCount} photos`} before it uploaded fine.`
+      : "";
+  // The server's own message is the useful one: "too_many_photos" tells the
+  // merchant to remove one, where "try again" sends them round a loop that
+  // cannot succeed.
+  if (err instanceof ApiClientError) return `${file.name}: ${err.message}${saved}`;
+  return `Couldn't upload ${file.name}. Check your connection and try again.${saved}`;
+}
+
 /**
  * Real drag-and-drop / click-to-browse photo picker, capped at exactly
  * `MAX_PHOTOS`. Each accepted file uploads immediately via
  * POST /merchant/onboarding/documents (kind=vehicle_photo) - needs a real
  * server-side vehicle id, so this is disabled until the vehicle has been
- * created (see VehicleForm in steps/Vehicles.tsx). The preview image itself
- * still lives in the page-level blob-URL cache (photo-preview-cache.ts),
- * not the server - re-fetching it isn't wired up yet, so a photo whose
- * local blob is gone (e.g. after a reload) shows a generic icon and
- * filename instead of a broken thumbnail.
+ * created (see VehicleForm in steps/Vehicles.tsx).
+ *
+ * Previews come from the page-level blob-URL cache (photo-preview-cache.ts)
+ * while the file is still in hand, and are re-fetched from the server on
+ * demand afterwards, so a photo survives a reload (see usePhotoPreview).
  */
 export function PhotoUpload({
   photos,
@@ -114,18 +128,28 @@ export function PhotoUpload({
     if (toUpload.length === 0) return;
 
     setUploading(true);
+    // Accumulated outside the try: a file that uploaded before a later one
+    // failed is already stored server-side, and dropping it here is how the
+    // screen ends up showing fewer photos than the server will accept -
+    // leaving the merchant retrying into `too_many_photos` with an
+    // apparently empty grid.
+    const uploaded: DraftPhoto[] = [];
     try {
-      const uploaded: DraftPhoto[] = [];
       for (const file of toUpload) {
-        const photo = await uploadVehiclePhoto(vehicleId, file);
-        setPhotoPreview(photo.id, URL.createObjectURL(file));
-        uploaded.push(photo);
+        try {
+          const photo = await uploadVehiclePhoto(vehicleId, file);
+          setPhotoPreview(photo.id, URL.createObjectURL(file));
+          uploaded.push(photo);
+        } catch (err) {
+          setError(uploadErrorMessage(err, file, uploaded.length));
+          break;
+        }
       }
-      onChange([...photos, ...uploaded]);
-      forceUpdate((n) => n + 1);
-    } catch {
-      setError("Couldn't upload one or more photos. Try again.");
     } finally {
+      if (uploaded.length > 0) {
+        onChange([...photos, ...uploaded]);
+        forceUpdate((n) => n + 1);
+      }
       setUploading(false);
     }
   }
@@ -156,7 +180,22 @@ export function PhotoUpload({
         }}
       />
 
-      <div style={O.photoGrid}>
+      {/* Drop is handled on the grid, not the empty tile: a disabled button
+          fires no drop event, so dropping a file before the vehicle exists
+          used to do nothing at all rather than explain itself. */}
+      <div
+        style={O.photoGrid}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
+        }}
+      >
         {photos.map((photo, i) => (
           <PhotoTile
             key={photo.id}
@@ -175,16 +214,6 @@ export function PhotoUpload({
               disabled={uploading || !vehicleId}
               style={{ ...O.photoTileEmpty, ...(dragOver ? O.photoTileEmptyActive : {}) }}
               onClick={() => inputRef.current?.click()}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setDragOver(false);
-                if (e.dataTransfer.files.length > 0) void addFiles(e.dataTransfer.files);
-              }}
             >
               <span style={O.photoTileAddLabel}>{uploading ? "UPLOADING…" : "+ ADD PHOTO"}</span>
               <span style={O.photoTileCaption}>{CAPTIONS[captionIndex] ?? "Any angle"}</span>
