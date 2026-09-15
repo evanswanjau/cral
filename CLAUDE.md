@@ -6,6 +6,32 @@ sequencing is `/openapi` (frozen contracts) and the platform API spec /
 delivery plan the owner has on hand; this file is the persistent stack and
 convention reference so it doesn't need re-explaining every session.
 
+## How work is sequenced and shipped
+
+One ordered queue of PR-sized phases, and the commit/push/deploy ritual for
+each, live in
+[`docs/plans/pr-delivery-plan.md`](./docs/plans/pr-delivery-plan.md); the
+reasoning behind the ordering is in
+[`docs/plans/road-to-transactable.md`](./docs/plans/road-to-transactable.md).
+Read those before starting work - the per-slice plan docs under
+`docs/plans/` are archives of how a thing was built, not a statement of
+what is next.
+
+Three rules that keep tripping this project up:
+
+- **`main` is the branch.** `develop` is dead (zero unique commits); the
+  deploy script pulls `origin/main`, so merging is what deploys. Older plan
+  docs saying "branch off `develop`" are wrong.
+- **A plan document is not evidence.** `admin-bookings-payouts.md` was
+  written in the past tense describing a module, two screens and two test
+  suites that had never been written, and the next session believed it.
+  Check the tree, not the tense - and never write a completion report ahead
+  of the work.
+- **Local is the only gate.** CI is billing-locked, so a red check means
+  zero steps ran, not a failure. `npm run typecheck`, `npm run lint`,
+  `npm run test -w apps/api` and `npm run build` must all pass before a
+  merge.
+
 ## Current phase
 
 **All three portals are now in active development** — this correction

@@ -35,7 +35,7 @@ screens (not yet pulled).
 | Renter notifications | Missing - `notifications.merchant_id` is `NOT NULL` |
 | Ratings / reviews | Table exists only on the unmerged `feature/portal-round-5-ratings` branch |
 | Delivery / collection fees | Not modelled anywhere |
-| Request expiry ("lapses in 4 hours") | `response_due_at` is written and checked lazily at confirm; **nothing expires a request in the background** |
+| Request expiry ("lapses in 4 hours") | **Done** (this row previously said nothing expired a request in the background - that was already untrue). `expireStaleBookingRequests` flips overdue `requested` bookings to `expired` with a full refund and zero commission, re-checks the status inside the transaction so a merchant answering mid-sweep wins, is covered by tests including a two-sweep race, and runs from `jobs/booking-expiry.ts`. Note the window is **12h** (spec §14), not the design's 4h copy - a real discrepancy, still unreconciled. |
 | Admin renters queue | Missing |
 | Admin bookings lens | Missing |
 | Hirer-documents gate on pickup handover | Missing |

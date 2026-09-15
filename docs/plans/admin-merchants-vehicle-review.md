@@ -90,7 +90,8 @@ for(const [u,e] of Object.entries(man)){ if(!name[u]) continue;
 ' "$HOME/Downloads/Cruz Ride Auto - Admin Console.html" ./out
 ```
 
-Branch off `develop`.
+Branch off `main` - `develop` is dead (zero unique commits, 20+ behind) and
+the deploy script pulls `origin/main`. See docs/plans/pr-delivery-plan.md.
 
 ---
 

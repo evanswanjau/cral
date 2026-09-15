@@ -18,7 +18,8 @@ screenshot:
 node -e "const fs=require('fs'),z=require('zlib');const s=fs.readFileSync(process.argv[1],'utf8');const m=JSON.parse(s.match(/<script type=\"__bundler\/manifest\">([\s\S]*?)<\/script>/)[1]);const e=m['0379208c-a47f-43f7-ae56-d4c11302afec'];fs.writeFileSync('dashboard.dc.html',e.compressed?z.gunzipSync(Buffer.from(e.data,'base64')):Buffer.from(e.data,'base64'))" "$HOME/Downloads/Cruz Ride Auto - Merchant App.html"
 ```
 
-Branch off `develop`.
+Branch off `main` - `develop` is dead (zero unique commits, 20+ behind) and
+the deploy script pulls `origin/main`. See docs/plans/pr-delivery-plan.md.
 
 ---
 

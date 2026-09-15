@@ -1,4 +1,23 @@
-# Deploy readiness (not deployed yet)
+# Deploy readiness
+
+> **THIS FILE IS STALE - DO NOT FOLLOW IT AS-IS.** Flagged 2026-09-15.
+>
+> It was written as a pre-deployment checklist for Railway/Render. Neither
+> is used: CRAL has been deployed since 2026-09-09 to a **VPS**, with four
+> nginx vhosts (`cral.co.ke`, `merchant.`, `admin.`, `api.`), the API as a
+> native systemd unit, Postgres and Redis in the project's own Docker
+> containers, and a redeploy script that pulls `origin/main`, builds all
+> four apps, runs migrations and restarts the service.
+>
+> Rewriting this against the real host is **P0.3** in
+> [`docs/plans/pr-delivery-plan.md`](./docs/plans/pr-delivery-plan.md), and
+> is deliberately not done here: the current layout should be confirmed on
+> the box first rather than transcribed from notes. A deploy doc that
+> describes infrastructure you do not have is worse than no deploy doc.
+>
+> What remains accurate below: the workspace-build notes, the CORS
+> warnings, the secret/boot-guard rules and the proxy-hop note. What is
+> wrong: the platform, and the premise that nothing is deployed.
 
 This is a checklist, not an action — nothing here has been done. Both
 Railway and Render can host this shape (one Node service + managed Postgres

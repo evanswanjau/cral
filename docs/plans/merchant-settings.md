@@ -20,7 +20,8 @@ carrying a `✓ VERIFIED` chip and "merchant since <date>", and a
 `Alerts` is done (shipped as **Notifications**, per the 2026-09-02
 naming call). This plan covers the other four plus the shell.
 
-Branch off `develop`.
+Branch off `main` - `develop` is dead (zero unique commits, 20+ behind) and
+the deploy script pulls `origin/main`. See docs/plans/pr-delivery-plan.md.
 
 ---
 

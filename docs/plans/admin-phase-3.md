@@ -28,7 +28,8 @@ are thin without a customer side generating real data — dispute
 resolution, hirer records, ratings moderation. Whether admin genuinely
 jumps ahead of customer is the owner's call (see Open decisions).
 
-Branch work off `develop`. Freeze each `openapi/admin-*.yaml` before
+Branch work off `main` (`develop` is dead - see docs/plans/pr-delivery-plan.md).
+Freeze each `openapi/admin-*.yaml` before
 writing its service — the contract-first ritual, same as every merchant
 domain.
 
