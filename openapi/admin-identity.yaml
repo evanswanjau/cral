@@ -40,9 +40,12 @@ info:
     — the admin's `role` and an assigned queue. `admin_super` clears every
     role and queue check.
 
-    Bootstrapping: there is no admin to invite the first admin (team
-    management is a later slice), so `npm run admin:create -w apps/api`
-    inserts one directly, the same footing as `approve:merchant`.
+    Bootstrapping: there is no admin to invite the very first one, so
+    `npm run admin:create -w apps/api` inserts one directly, the same
+    footing as `approve:merchant`. Every admin after that is created by an
+    existing `admin_super` through `openapi/admin-team.yaml`'s
+    `POST /admin/team` (2026-09-15) — the CLI script only exists for that
+    first bootstrap account.
 
     Deviation from §8, recorded: the frozen login body is `{ email,
     password }`; this adds an OPTIONAL `device_id` so `admin_sessions` has

@@ -119,7 +119,11 @@ export function MerchantFile(): JSX.Element {
             </div>
           </div>
           <div style={{ display: "flex", gap: 8, flex: "none", flexWrap: "wrap" }}>
-            <button type="button" disabled title="Ships with Communications" style={S.msgBtn}>
+            <button
+              type="button"
+              onClick={() => navigate(`/communications?merchant=${m.id}&name=${encodeURIComponent(m.name)}`)}
+              style={{ ...S.msgBtn, color: "#0F23A8", cursor: "pointer" }}
+            >
               Message merchant
             </button>
             {m.approved ? (

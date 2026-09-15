@@ -1187,6 +1187,69 @@ file keeps its flat `ChecklistPanel`.
   forks keeps it well under the cap; the suite is Postgres-bound not
   CPU-bound, so it's also *faster* (~130s vs ~580s).
 
+**Admin Settings shell + Team management (2026-09-15).** `/settings` is
+now a real tabbed screen — `Cruz Admin Settings.dc.html`'s own six tabs
+(`Review rules · Money · Communication · Invoicing · Team · Audit log`,
+per `docs/plans/admin-merchants-vehicle-review.md` finding §6: Team and
+the audit reader are Settings tabs, not standalone nav items). Only
+**Team** is built; the rest render the same `Placeholder` card every other
+unbuilt console screen uses. `modules/admin-team/` —
+`GET/POST/PATCH /admin/team`, `.../deactivate`, `.../reactivate`,
+`.../reset-invite`, all `admin_super`-only — replaces the old
+`501 not_implemented` stub in `auth/routes.ts` and replaces
+`npm run admin:create` as the way to add anyone *after* the first admin
+(that script stays for the bootstrap-only first `admin_super`). A super
+admin can't edit their own role/queues or deactivate themselves. An
+earlier pass shipped Team as its own top-level nav route because the
+Settings shell didn't exist yet; folded back into a tab the same day, once
+it did.
+
+**Admin Communications — Bulk Email/SMS, Templates, Logs (2026-09-16).**
+`Cruz Admin Communications.dc.html`, pulled from the design bundle after
+the owner named the screen directly (an earlier scoping pass had missed
+it). Full design read and every resolution below:
+[`docs/plans/admin-communications.md`](./docs/plans/admin-communications.md).
+`admin_super` only — same reach as Team, real money spent on SMS, every
+merchant contactable at once.
+
+- **A bulk send does not go through `notify()` / the merchant
+  `notifications` table** — that pipeline is per-category, respects each
+  merchant's own channel preference and quiet hours, and is modelled
+  around real product events. This is a deliberate admin broadcast with
+  its own audience/channel controls, so `jobs/comms-bulk-send.ts` calls
+  the SMS/email adapters directly (the same ones `notification-
+  delivery.ts` uses), independent of a merchant's own preferences. It
+  does honour a new `merchants.sms_opt_out` column — nothing sets it yet
+  (no merchant-portal toggle exists), so every SMS-eligible merchant is
+  reachable today, same footing as `merchants.approved_at` before account
+  approval existed.
+- **"Automatic" templates are derived from the real notification
+  categories** (`lib/notifications.ts`'s `NOTIFICATION_CATEGORIES`), with
+  real usage counts and last-sent dates off the `notifications` table —
+  not the design's fabricated four-row fixture with fake numbers. Same
+  reasoning as PR 2 refusing to fabricate a logbook name-match check.
+- **Audiences resolve live**: `verified`/`pending` key off
+  `merchants.approved_at` (the same flag the `✓ VERIFIED` chip reads
+  everywhere), `companies` off `owner_type`, `expiring` off a vehicle's
+  comprehensive-insurance `expires_at` within `EXPIRING_WITHIN_DAYS` — the
+  exact window the Dashboard's expiring-document card and the expiry-
+  notification sweep already use.
+- **One BullMQ job per run** (not one per recipient) writes
+  `sent_count`/`failed_count` once at the end — no concurrent-increment
+  race to guard against.
+- **"Schedule" is omitted** — the design shows it next to Send with no
+  backing scheduler anywhere in this codebase; faking it would fabricate
+  a capability.
+- `SideNav` gained collapsible-group support (a parent label with a
+  caret, auto-opens when a child route is active) for Communications'
+  three children (Bulk Email/SMS, Templates, Logs) — the same shape the
+  design's own (not-yet-built) Finance group uses.
+- MerchantFile's "Message merchant" button is real now — disabled with a
+  "Ships with Communications" tooltip since PR 3, it deep-links into
+  compose with that merchant pre-selected (`?merchant=&name=`). There is
+  still no general merchant picker for a one-off "single" send; pasting
+  an id is the fallback.
+
 **`apps/customer` came off its Phase-0 hold on 2026-09-11** and is a real
 vertical slice, built as a `C*`-numbered series of PRs (its own numbering,
 independent of the admin PR numbers above) — full plan, decisions and

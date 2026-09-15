@@ -12,6 +12,8 @@ import { adminVehiclesRouter } from "./modules/admin-vehicles/routes.js";
 import { adminMerchantsRouter } from "./modules/admin-merchants/routes.js";
 import { adminRentersRouter } from "./modules/admin-renters/routes.js";
 import { adminBookingsRouter } from "./modules/admin-bookings/routes.js";
+import { adminTeamRouter } from "./modules/admin-team/routes.js";
+import { adminCommsRouter } from "./modules/admin-comms/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { catalogRouter } from "./modules/catalog/routes.js";
@@ -99,6 +101,8 @@ export function createApp(): Express {
   app.use(adminMerchantsRouter);
   app.use(adminRentersRouter);
   app.use(adminBookingsRouter);
+  app.use(adminTeamRouter);
+  app.use(adminCommsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
   app.use(catalogRouter);

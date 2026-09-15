@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Admin Communications API
+  version: "1.0.0"
+  description: >
+    The admin (Ops) console's Communications section — "Cruz Admin
+    Communications.dc.html" pulled from the design bundle (2026-09-16, the
+    owner named the screen directly after an earlier pass missed it). Three
+    tabs, one screen: **Bulk Email/SMS** (compose + send), **Templates**
+    (the platform's automatic message copy, read-only, plus manual ones an
+    admin writes), **Logs** (every send this tool has made).
+
+    Behind `requireAdmin({ role: "admin_super" })` — the same reach as Team
+    (money spent on SMS, every merchant contactable at once).
+
+    A bulk send does **not** go through the merchant-facing `notify()` /
+    `notifications` pipeline (`openapi/merchant-notifications.yaml`) — that
+    system is per-category, respects each merchant's own channel
+    preferences and quiet hours, and is modelled around real product events
+    (a booking, a payout). This is a deliberate admin broadcast with its
+    own audience and channel controls, sent directly through the SMS/email
+    adapters (the same ones notification delivery uses), independent of a
+    merchant's notification preferences. It does honour `merchants.
+    sms_opt_out` — nothing sets that column yet (no merchant-portal toggle
+    exists), so today it is always `false` and every SMS-eligible merchant
+    is reachable; the plumbing is there for when the toggle ships, same
+    footing as `merchants.approved_at` before account approval existed.
+
+    Cost is estimated, not billed through this API — TextSMS is billed
+    per-segment outside this platform; `KES 0.80` per segment is the design's
+    own planning figure, shown so an admin knows roughly what a send costs
+    before sending it.
+servers:
+  - url: https://api.cral.co.ke/v1
+  - url: https://api.staging.cral.co.ke/v1
+  - url: https://api.sandbox.cral.co.ke/v1
+
+tags:
+  - name: admin-comms
+    description: Bulk Email/SMS, Templates, Logs
+
+paths:
+  /admin/comms/audiences:
+    get:
+      tags: [admin-comms]
+      summary: Every audience a send can target, with a live recipient count
+      operationId: adminListCommsAudiences
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AudienceRow" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/comms/templates:
+    get:
+      tags: [admin-comms]
+      summary: Automatic (system-sent) templates plus the manual ones an admin wrote
+      operationId: adminListCommsTemplates
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/TemplateRow" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      tags: [admin-comms]
+      summary: Save a manual template
+      operationId: adminCreateCommsTemplate
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [label, channel, body]
+              properties:
+                label: { type: string, maxLength: 120 }
+                channel: { type: string, enum: [sms, email, both] }
+                subject: { type: string, maxLength: 200, description: Ignored for a channel of `sms`. }
+                body: { type: string }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TemplateRow" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/comms/send:
+    post:
+      tags: [admin-comms]
+      summary: Resolve an audience and send — recipient count is synchronous, delivery is not
+      description: >
+        Writes the `comms_runs` row and an `audit_log` entry in one
+        transaction (recipient count is known at this point), then enqueues
+        the actual sends. `sent_count` / `failed_count` / `status` on the
+        run fill in as the background job works through the recipient
+        list — poll `GET /admin/comms/runs` for progress.
+      operationId: adminSendComms
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [audience, channel, body]
+              properties:
+                audience: { type: string, enum: [all, verified, pending, companies, expiring, single] }
+                merchant_id: { type: string, description: Required when `audience` is `single`. }
+                channel: { type: string, enum: [sms, email, both] }
+                subject: { type: string, maxLength: 200 }
+                body: { type: string }
+                template_id: { type: string, description: "When set, bumps that template's use_count / last_used_at." }
+      responses:
+        "201":
+          description: The run, recipient_count final, sent/failed still filling in
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommsRun" }
+        "400":
+          description: idempotency_key_required | idempotency_conflict
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: merchant_id_required (audience is `single` with no merchant_id) | empty_audience (nothing to send to)
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/comms/runs:
+    get:
+      tags: [admin-comms]
+      summary: Every send this tool has made, newest first, plus the Logs tab's stat tiles
+      operationId: adminListCommsRuns
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/CommsRun" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  stats:
+                    type: object
+                    properties:
+                      sent_this_month: { type: integer, description: Sum of recipient_count over runs created this Nairobi month. }
+                      delivery_rate: { type: number, nullable: true, description: sent_count / recipient_count across those runs, null with no sends yet. }
+                      sms_spend_kes: { type: integer, description: Estimated - segments x KES 0.80, this Nairobi month. }
+                      opt_outs: { type: integer, description: "Whole-set count of merchants.sms_opt_out - always 0 today." }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized:
+      description: Missing / wrong-audience / expired / revoked ops token
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: insufficient_scope — admin_super only
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string, example: empty_audience }
+            message: { type: string }
+            field: { type: string }
+            request_id: { type: string }
+
+    AudienceRow:
+      type: object
+      properties:
+        key: { type: string, enum: [all, verified, pending, companies, expiring, single] }
+        label: { type: string }
+        count: { type: integer, description: SMS+email-contactable merchants in this audience. }
+        sms_opt_out_count: { type: integer }
+        note: { type: string }
+
+    TemplateRow:
+      type: object
+      properties:
+        id: { type: string, nullable: true, description: null for an automatic template - there is no row to edit. }
+        label: { type: string }
+        channel: { type: string, enum: [sms, email, both] }
+        subject: { type: string, nullable: true }
+        body: { type: string }
+        trigger: { type: string, enum: [automatic, manual] }
+        use_count: { type: integer }
+        last_used_at: { type: string, format: date-time, nullable: true }
+
+    CommsRun:
+      type: object
+      properties:
+        id: { type: string }
+        audience_key: { type: string }
+        audience_label: { type: string }
+        channel: { type: string, enum: [sms, email, both] }
+        subject: { type: string, nullable: true }
+        body: { type: string }
+        recipient_count: { type: integer }
+        sent_count: { type: integer }
+        failed_count: { type: integer }
+        status: { type: string, enum: [sending, done] }
+        sent_by_name: { type: string }
+        created_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }

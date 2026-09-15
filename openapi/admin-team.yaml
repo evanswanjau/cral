@@ -1,0 +1,218 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Admin Team Management API
+  version: "1.0.0"
+  description: >
+    The admin (Ops) console's Team screen — `admin_super` only. Every
+    endpoint here is behind `requireAdmin({ role: "admin_super" })`, which
+    nothing else bypasses (see `middleware/require-admin.ts` — normally
+    `admin_super` is the role that clears every check, but here it *is*
+    the check).
+
+    Replaces the `POST /admin/team/{id}/reset-invite` fallback that lived
+    in `auth/routes.ts` returning `501 not_implemented` before this slice
+    shipped (2026-09-15). Also replaces `npm run admin:create` as the way
+    to add anyone *after* the first admin — the CLI script stays for
+    bootstrapping the very first `admin_super` account, since there is no
+    admin yet to sign in and use this API.
+
+    Credentials are a generated password shown once in the response, never
+    an emailed invite link — same shape as `create-admin.ts`. There is no
+    "forgot password" path for Ops; `POST .../reset-invite` is how a locked-
+    out admin gets back in, via another super admin.
+
+    A super admin can't edit their own role/queues or deactivate their own
+    account through this API (`cannot_edit_own_role` / `cannot_deactivate_
+    self`) — those need another owner, the same "no self-service on your
+    own access" rule the public side applies to disabling your own 2FA.
+servers:
+  - url: https://api.cral.co.ke/v1
+  - url: https://api.staging.cral.co.ke/v1
+  - url: https://api.sandbox.cral.co.ke/v1
+
+tags:
+  - name: admin-team
+    description: Ops team management — create, edit, deactivate, reset password
+
+paths:
+  /admin/team:
+    get:
+      tags: [admin-team]
+      summary: Every admin account, newest first
+      operationId: adminListTeam
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: A page of the team
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminRow" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      tags: [admin-team]
+      summary: Create a new admin — a generated password is returned once
+      operationId: adminCreateTeamMember
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, phone, full_name, role]
+              properties:
+                email: { type: string, format: email }
+                phone: { type: string, description: E.164 or a common Kenyan shorthand (07..., 7...) }
+                full_name: { type: string }
+                role: { $ref: "#/components/schemas/AdminRole" }
+                queues:
+                  type: array
+                  items: { type: string }
+                  description: Ignored (and stored empty) when `role` is `admin_super`.
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  admin: { $ref: "#/components/schemas/AdminRow" }
+                  password: { type: string, description: Shown exactly once — not recoverable after this response. }
+        "409": { description: admin_email_taken, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "422": { description: invalid_phone, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/team/{id}:
+    patch:
+      tags: [admin-team]
+      summary: Re-assign role and/or queues
+      operationId: adminUpdateTeamMember
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { $ref: "#/components/schemas/AdminRole" }
+                queues: { type: array, items: { type: string } }
+      responses:
+        "200": { description: The updated admin, content: { application/json: { schema: { $ref: "#/components/schemas/AdminRow" } } } }
+        "422": { description: cannot_edit_own_role, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: admin_not_found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/team/{id}/deactivate:
+    post:
+      tags: [admin-team]
+      summary: Disable an admin — revokes every live session immediately
+      operationId: adminDeactivateTeamMember
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The updated admin, content: { application/json: { schema: { $ref: "#/components/schemas/AdminRow" } } } }
+        "422": { description: cannot_deactivate_self, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "404": { description: admin_not_found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/team/{id}/reactivate:
+    post:
+      tags: [admin-team]
+      summary: Re-enable a disabled admin
+      operationId: adminReactivateTeamMember
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The updated admin, content: { application/json: { schema: { $ref: "#/components/schemas/AdminRow" } } } }
+        "404": { description: admin_not_found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/team/{id}/reset-invite:
+    post:
+      tags: [admin-team]
+      summary: Regenerate the account's password — a new one-time password, every existing session revoked
+      operationId: adminResetTeamMemberPassword
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: A new password, shown once
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  password: { type: string }
+        "404": { description: admin_not_found, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  responses:
+    Unauthorized:
+      description: Missing / wrong-audience / expired / revoked ops token
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: insufficient_scope — the caller is not `admin_super`
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string, example: admin_not_found }
+            message: { type: string }
+            request_id: { type: string }
+
+    AdminRole:
+      type: string
+      enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+
+    AdminRow:
+      type: object
+      properties:
+        id: { type: string }
+        email: { type: string }
+        phone: { type: string }
+        full_name: { type: string }
+        role: { $ref: "#/components/schemas/AdminRole" }
+        assigned_queues: { type: array, items: { type: string } }
+        status: { type: string, enum: [active, disabled] }
+        last_login_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }

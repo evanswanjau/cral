@@ -61,6 +61,10 @@ export const ID_PREFIXES = {
   adminUser: "adm",
   adminSession: "ads",
   adminLoginChallenge: "alc",
+  // Admin (Ops) console — bulk Communications (compose/templates/logs).
+  // Internal entities, no prefix in the spec's own identifier list.
+  commsTemplate: "cst",
+  commsRun: "cmr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

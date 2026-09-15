@@ -1,5 +1,4 @@
 import { Router, type Request } from "express";
-import { ApiError } from "@cral/types";
 import { authenticate } from "../../middleware/authenticate.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { validateBody } from "../../lib/validate.js";
@@ -408,17 +407,4 @@ authRouter.post(
 
 authRouter.get("/auth/password/policy", (_req, res) => {
   res.status(200).json(authService.getPasswordPolicy());
-});
-
-// --- Fallback for the admin-exception endpoint (Phase 3 builds the rest of admin) ---
-
-authRouter.post("/admin/team/:id/reset-invite", authenticate(), (_req, _res, next) => {
-  next(
-    new ApiError({
-      status: 501,
-      type: "server_error",
-      code: "not_implemented",
-      message: "Admin team management ships in Phase 3.",
-    }),
-  );
 });

@@ -15,6 +15,18 @@ export function nairobiDayStartUtc(instant: Date): Date {
 }
 
 /**
+ * The UTC instant at which the current Nairobi calendar month began —
+ * "this month" style windows (e.g. Communications' "sent this month"
+ * tile). Same reasoning as `nairobiDayStartUtc`: Nairobi is display/
+ * boundary only, the stored timestamps stay UTC.
+ */
+export function nairobiMonthStartUtc(instant: Date): Date {
+  const nairobiDate = new Date(instant.getTime() + NAIROBI_OFFSET_MS);
+  const monthStart = `${nairobiDate.toISOString().slice(0, 7)}-01`;
+  return new Date(Date.parse(`${monthStart}T00:00:00.000Z`) - NAIROBI_OFFSET_MS);
+}
+
+/**
  * Rejects a bare calendar date (`YYYY-MM-DD`) that is already in the past.
  * Document expiry dates can't be backdated — a typed-in date bypasses the
  * `min` attribute on the client's date input, so the server re-checks. The

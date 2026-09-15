@@ -11,14 +11,18 @@ import { Renters } from "./pages/Renters.js";
 import { RenterFile } from "./pages/RenterFile.js";
 import { Bookings } from "./pages/Bookings.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
+import { Settings } from "./pages/Settings.js";
+import { Communications } from "./pages/Communications.js";
 
 /**
- * Vehicle review, the Merchants lens, the Renters queue and the Bookings
- * directory are built; the rest of the console's nav (Dashboard, Payouts,
- * Invoicing, Disputes, Communications, Settings) lands as later Phase-3
- * slices. Those routes still resolve to a placeholder — so a direct URL
- * or a profile-menu link doesn't 404 — but `SideNav` only lists what's
- * built, and `/` lands on the vehicle-review queue.
+ * Vehicle review, the Merchants lens, the Renters queue, the Bookings
+ * directory, Settings (with its Team tab), and Communications are built;
+ * the rest of the console's nav (Dashboard, Payouts, Invoicing, Disputes)
+ * lands as later Phase-3 slices. Those routes still resolve to a
+ * placeholder — so a direct URL or a profile-menu link doesn't 404 — but
+ * `SideNav` only lists what's built, and `/` lands on the vehicle-review
+ * queue. `/team` redirects into `/settings?tab=team` for the bookmark that
+ * briefly existed while Team was its own top-level route.
  */
 const router = createBrowserRouter([
   { path: "/sign-in", element: <SignIn /> },
@@ -42,8 +46,11 @@ const router = createBrowserRouter([
           { path: "payouts", element: <Placeholder title="Payouts" /> },
           { path: "invoicing", element: <Placeholder title="Invoicing" /> },
           { path: "disputes", element: <Placeholder title="Disputes" /> },
-          { path: "communications", element: <Placeholder title="Communications" /> },
-          { path: "settings", element: <Placeholder title="Settings" /> },
+          { path: "communications", element: <Communications /> },
+          { path: "communications/templates", element: <Communications /> },
+          { path: "communications/logs", element: <Communications /> },
+          { path: "team", element: <Navigate to="/settings?tab=team" replace /> },
+          { path: "settings", element: <Settings /> },
           { path: "settings/notifications", element: <Placeholder title="Notification preferences" /> },
           { path: "profile", element: <Placeholder title="Your profile" /> },
         ],
