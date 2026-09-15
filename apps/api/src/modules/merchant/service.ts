@@ -794,6 +794,36 @@ function buildStorageKey(merchantId: string, vehicleId: string | null, kind: Doc
   return `merchant/${merchantId}/${vehicleId ?? "owner"}/${kind}/${generateId("document")}-${safeName}`;
 }
 
+/** 422s when a vehicle already holds its full complement of photos. */
+async function assertPhotoSlotAvailable(conn: Knex | Knex.Transaction, vehicleId: string): Promise<void> {
+  const count = await conn<DocumentRow>("documents")
+    .where({ vehicle_id: vehicleId, kind: "vehicle_photo" })
+    .count({ n: "*" })
+    .first();
+  if (Number(count?.n ?? 0) >= MAX_VEHICLE_PHOTOS) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "too_many_photos",
+      message: `Only ${MAX_VEHICLE_PHOTOS} photos are allowed per vehicle.`,
+    });
+  }
+}
+
+/**
+ * Deletes stored bytes whose row is already gone. Never throws: the row is
+ * the record of truth and it has been removed, so failing the caller's
+ * request over a leaked file would report a failure that did not happen.
+ */
+async function discardStoredObject(key: string): Promise<void> {
+  try {
+    await getStorageAdapter().deleteObject(key);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[storage] failed to delete object ${key}:`, err);
+  }
+}
+
 export async function uploadDocument(userId: string, input: UploadDocumentInput, _ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
   const isOwnerKind = ACCOUNT_DOC_KINDS.includes(input.kind);
@@ -820,6 +850,13 @@ export async function uploadDocument(userId: string, input: UploadDocumentInput,
   let vehicle: VehicleRow | null = null;
   if (input.vehicleId) vehicle = await requireOwnVehicle(userId, input.vehicleId);
 
+  // Checked before the bytes are written, not inside the transaction below:
+  // a rejected upload that has already been stored leaks a file nothing can
+  // ever reach. The transaction re-checks, since this read is advisory.
+  if (input.kind === "vehicle_photo") {
+    await assertPhotoSlotAvailable(db, vehicle!.id);
+  }
+
   const key = buildStorageKey(merchant.id, vehicle?.id ?? null, input.kind, input.file.originalname);
   await getStorageAdapter().putObject({
     key,
@@ -827,42 +864,51 @@ export async function uploadDocument(userId: string, input: UploadDocumentInput,
     contentType: input.file.mimetype,
   });
 
-  const row = await db.transaction(async (trx) => {
-    if (input.kind === "vehicle_photo") {
-      const count = await trx<DocumentRow>("documents")
-        .where({ vehicle_id: vehicle!.id, kind: "vehicle_photo" })
-        .count({ n: "*" })
-        .first();
-      if (Number(count?.n ?? 0) >= MAX_VEHICLE_PHOTOS) {
-        throw new ApiError({
-          status: 422,
-          type: "validation_error",
-          code: "too_many_photos",
-          message: `Only ${MAX_VEHICLE_PHOTOS} photos are allowed per vehicle.`,
-        });
-      }
-    } else {
-      // Single-slot kind — replace whatever was there before.
-      await trx<DocumentRow>("documents")
-        .where({ merchant_id: merchant.id, vehicle_id: vehicle?.id ?? null, kind: input.kind })
-        .delete();
-    }
+  /** Superseded single-slot files, deleted after the transaction commits. */
+  let replacedKeys: string[] = [];
 
-    const [inserted] = await trx<DocumentRow>("documents")
-      .insert({
-        id: generateId("document"),
-        merchant_id: merchant.id,
-        vehicle_id: vehicle?.id ?? null,
-        kind: input.kind,
-        storage_key: key,
-        original_name: input.file.originalname,
-        size_bytes: input.file.size,
-        content_type: input.file.mimetype,
-      })
-      .returning("*");
-    if (!inserted) throw new Error("Failed to record document");
-    return inserted;
-  });
+  let row: DocumentRow;
+  try {
+    row = await db.transaction(async (trx) => {
+      if (input.kind === "vehicle_photo") {
+        // Re-checked under the transaction: the pre-write check above can go
+        // stale between two uploads racing on the same vehicle.
+        await assertPhotoSlotAvailable(trx, vehicle!.id);
+      } else {
+        // Single-slot kind — replace whatever was there before.
+        const superseded = await trx<DocumentRow>("documents")
+          .where({ merchant_id: merchant.id, vehicle_id: vehicle?.id ?? null, kind: input.kind })
+          .delete()
+          .returning("storage_key");
+        replacedKeys = superseded.map((d) => d.storage_key);
+      }
+
+      const [inserted] = await trx<DocumentRow>("documents")
+        .insert({
+          id: generateId("document"),
+          merchant_id: merchant.id,
+          vehicle_id: vehicle?.id ?? null,
+          kind: input.kind,
+          storage_key: key,
+          original_name: input.file.originalname,
+          size_bytes: input.file.size,
+          content_type: input.file.mimetype,
+        })
+        .returning("*");
+      if (!inserted) throw new Error("Failed to record document");
+      return inserted;
+    });
+  } catch (err) {
+    // The bytes are already written but no row refers to them, so this is
+    // the only moment anything knows the key exists.
+    await discardStoredObject(key);
+    throw err;
+  }
+
+  // Post-commit: the row is gone for good, so the file can go too. Best
+  // effort - a failure here leaks one file, where doing it inside the
+  // transaction would delete bytes a rollback still needed.
+  for (const staleKey of replacedKeys) await discardStoredObject(staleKey);
 
   await touchActivity(merchant.id);
 
@@ -888,6 +934,9 @@ export async function deleteDocument(userId: string, documentId: string, _ctx: R
     });
   }
   await db<DocumentRow>("documents").where({ id: doc.id }).delete();
+  // Row first, bytes second: the reverse order can leave a row pointing at
+  // a file that is gone, which reads to the merchant as a corrupt document.
+  await discardStoredObject(doc.storage_key);
   await touchActivity(merchant.id);
 }
 

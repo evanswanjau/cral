@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdir } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import request from "supertest";
 import { createApp } from "../../../app.js";
@@ -20,6 +21,22 @@ async function newMerchant() {
   const user = await createVerifiedTestUser();
   createdUserIds.push(user.userId);
   return user;
+}
+
+/** Where the local storage adapter actually put a given key. */
+function storagePath(key: string): string {
+  return resolve(process.env.STORAGE_LOCAL_DIR ?? "./.local-storage", key);
+}
+
+/**
+ * Files on disk in a vehicle's photo directory — counted rather than
+ * derived from `documents`, because a leaked file is by definition one the
+ * table doesn't know about.
+ */
+async function countStoredPhotoFiles(vehicleId: string): Promise<number> {
+  const row = await db("documents").where({ vehicle_id: vehicleId, kind: "vehicle_photo" }).first();
+  if (!row) return 0;
+  return (await readdir(dirname(storagePath(row.storage_key)))).length;
 }
 
 /**
@@ -269,8 +286,91 @@ describe("merchant onboarding — document upload", () => {
     });
 
     const row = await db("documents").where({ id: res.body.document_id }).first();
-    const root = process.env.STORAGE_LOCAL_DIR ?? "./.local-storage";
-    expect(existsSync(resolve(root, row.storage_key))).toBe(true);
+    expect(existsSync(storagePath(row.storage_key))).toBe(true);
+  });
+
+  it("deletes the stored bytes when a document is deleted", async () => {
+    const { accessToken } = await newMerchant();
+    const upload = await request(app)
+      .post("/merchant/onboarding/documents")
+      .set(auth(accessToken))
+      .field("kind", "national_id")
+      .attach("file", testJpeg("id scan"), { filename: "id.jpg", contentType: "image/jpeg" });
+    expect(upload.status).toBe(201);
+
+    const row = await db("documents").where({ id: upload.body.document_id }).first();
+    expect(existsSync(storagePath(row.storage_key))).toBe(true);
+
+    const del = await request(app)
+      .delete(`/merchant/onboarding/documents/${upload.body.document_id}`)
+      .set(auth(accessToken));
+    expect(del.status).toBe(204);
+
+    // Without this the file outlives every reference to it, forever.
+    expect(existsSync(storagePath(row.storage_key))).toBe(false);
+  });
+
+  it("deletes the superseded file when a single-slot document is replaced", async () => {
+    const { accessToken } = await newMerchant();
+    const first = await request(app)
+      .post("/merchant/onboarding/documents")
+      .set(auth(accessToken))
+      .field("kind", "kra_pin")
+      .attach("file", testPdf("first"), { filename: "first.pdf", contentType: "application/pdf" });
+    expect(first.status).toBe(201);
+    const firstRow = await db("documents").where({ id: first.body.document_id }).first();
+
+    const second = await request(app)
+      .post("/merchant/onboarding/documents")
+      .set(auth(accessToken))
+      .field("kind", "kra_pin")
+      .attach("file", testPdf("second"), { filename: "second.pdf", contentType: "application/pdf" });
+    expect(second.status).toBe(201);
+    const secondRow = await db("documents").where({ id: second.body.document_id }).first();
+
+    expect(existsSync(storagePath(firstRow.storage_key))).toBe(false);
+    expect(existsSync(storagePath(secondRow.storage_key))).toBe(true);
+  });
+
+  it("stores no bytes for a photo upload the cap rejects", async () => {
+    const { accessToken } = await newMerchant();
+    const vehicleRes = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "sedan",
+        make: "Mazda",
+        model: "Demio",
+        year: "2017",
+        registration: "KDR 771X",
+        transmission: "Automatic",
+        fuel: "Petrol",
+        pickup_address: "Westlands, Nairobi",
+        daily_rate: "4000",
+      });
+    const vehicleId = vehicleRes.body.id;
+
+    for (let i = 0; i < 3; i++) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", "vehicle_photo")
+        .field("vehicle_id", vehicleId)
+        .attach("file", testJpeg(`p-${i}`), { filename: `p-${i}.jpg`, contentType: "image/jpeg" });
+    }
+
+    const before = await countStoredPhotoFiles(vehicleId);
+    const fourth = await request(app)
+      .post("/merchant/onboarding/documents")
+      .set(auth(accessToken))
+      .field("kind", "vehicle_photo")
+      .field("vehicle_id", vehicleId)
+      .attach("file", testJpeg("p-4"), { filename: "p-4.jpg", contentType: "image/jpeg" });
+    expect(fourth.status).toBe(422);
+    expect(fourth.body.error.code).toBe("too_many_photos");
+
+    // The rejected file must not be sitting in storage unreferenced.
+    expect(await countStoredPhotoFiles(vehicleId)).toBe(before);
   });
 
   it("serves an uploaded document's bytes back to its owner, and 404s for anyone else", async () => {
