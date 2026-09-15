@@ -42,6 +42,8 @@ export interface BookingRow {
   returned_at: Date | null;
   deposit_release_at: Date | null;
   deposit_released: boolean;
+  /** Admin hold, keeps this booking out of the next payout cut. See admin-payouts. */
+  payout_held: boolean;
   rating_open_until: Date | null;
   /** The `payment_requests` row that last succeeded for this booking, if any (2026-09-11 payments slice). */
   payment_request_id: string | null;
