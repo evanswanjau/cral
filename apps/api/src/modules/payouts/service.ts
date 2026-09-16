@@ -184,9 +184,22 @@ export async function payableBookings(trx: Knex.Transaction | Knex, merchantId: 
     .where("bookings.merchant_id", merchantId)
     .where("bookings.status", "completed")
     .where("bookings.deposit_released", true)
+    .where("bookings.payout_held", false)
     .whereNull("payout_run_lines.id")
     .orderBy("bookings.dropoff_at", "asc")
     .select("bookings.*");
+}
+
+/** Every merchant with at least one currently-payable booking — what `cutAllDuePayoutRuns` iterates. */
+export async function merchantsWithPayableBookings(trx: Knex.Transaction | Knex): Promise<string[]> {
+  const rows = await trx("bookings")
+    .leftJoin("payout_run_lines", "payout_run_lines.booking_id", "bookings.id")
+    .where("bookings.status", "completed")
+    .where("bookings.deposit_released", true)
+    .where("bookings.payout_held", false)
+    .whereNull("payout_run_lines.id")
+    .distinct("bookings.merchant_id as merchant_id");
+  return rows.map((r) => r.merchant_id as string);
 }
 
 export interface CutRunOptions {
@@ -298,6 +311,53 @@ export async function cutPayoutRun(
   );
 
   return run!;
+}
+
+/**
+ * Manual reconciliation — there is no Daraja B2C callback to flip a run to
+ * `paid` for real, so an admin pastes the M-Pesa confirmation code after
+ * sending it themselves (docs/plans/admin-bookings-payouts.md). Same
+ * notify() shape `cutPayoutRun` writes for its own `markPaid` path, so a
+ * merchant sees one consistent "payout sent" story whichever door it came
+ * through. Flagged as manual, not a payment rail.
+ */
+export async function markPayoutRunPaid(
+  trx: Knex.Transaction,
+  runId: string,
+  input: { providerCode: string; paidAt: Date },
+): Promise<PayoutRunRow> {
+  const run = await trx<PayoutRunRow>("payout_runs").where({ id: runId }).first();
+  if (!run) notFound();
+  if (run.status === "paid") return run;
+
+  const [updated] = await trx<PayoutRunRow>("payout_runs")
+    .where({ id: runId })
+    .update({
+      status: "paid",
+      provider_code: input.providerCode,
+      paid_at: input.paidAt,
+      updated_at: new Date(),
+    })
+    .returning("*");
+  if (!updated) notFound();
+
+  const lineCount = Number(
+    (await trx("payout_run_lines").where({ payout_run_id: runId }).count<{ count: string }[]>("* as count"))[0]
+      ?.count ?? 0,
+  );
+
+  await notify(trx, {
+    merchantId: updated.merchant_id,
+    category: "payout",
+    title: `${updated.ref} · payout sent · KES ${formatAmount(updated.net_amount)}`,
+    body: `${lineCount} finished ${lineCount === 1 ? "hire" : "hires"} cleared to M-Pesa ${updated.destination_detail}. Safaricom code ${input.providerCode}.`,
+    ref: updated.ref,
+    subjectType: "payout_run",
+    subjectId: runId,
+    occurredAt: input.paidAt,
+  });
+
+  return updated;
 }
 
 // ---------------------------------------------------------------------
@@ -450,7 +510,7 @@ async function buildSummary(merchantId: string, destination: { method: string; d
  * rather than a payouts-owned column so it cannot drift from the number
  * onboarding verified. Read-only — see the contract's destination note.
  */
-async function destinationFor(userId: string): Promise<{ method: string; detail: string; accountName: string }> {
+export async function destinationFor(userId: string): Promise<{ method: string; detail: string; accountName: string }> {
   const user = await db("users").where({ id: userId }).first("phone", "full_name");
   return {
     method: "mpesa",
