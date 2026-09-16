@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { COMMISSION_PERCENT, commissionOn } from "@cral/types";
 import { useSeo } from "../lib/use-seo.js";
 import { Section, SectionTitle, Body, Card } from "../components/site/marketing.js";
 
@@ -19,10 +20,11 @@ import { Section, SectionTitle, Body, Card } from "../components/site/marketing.
  * the copy says so rather than implying one continuous session.
  */
 
-// Mirrors apps/api/src/lib/booking-pricing.ts#COMMISSION_RATE. Money math
-// that actually moves a booking lives only there; this is a rough public
-// estimate a visitor can sanity-check, not something the API ever reads.
-const COMMISSION_RATE = 0.1;
+// The rate and its arithmetic come from @cral/types, shared with the API
+// and the merchant app. Money math that actually moves a booking still
+// happens only server-side; this is a public estimate a visitor can
+// sanity-check - but an estimate that disagrees with the real invoice is
+// exactly what a local copy of the rate eventually produces.
 
 const VEHICLE_CATEGORIES: Array<{ value: string; label: string; placeholderRate: number }> = [
   { value: "sedan", label: "Sedan / small car", placeholderRate: 4500 },
@@ -76,7 +78,7 @@ function EarningsCalculator(): JSX.Element {
   const { gross, commission, net } = useMemo(() => {
     if (!validRate || !validDays) return { gross: 0, commission: 0, net: 0 };
     const g = parsedRate * parsedDays;
-    const c = g * COMMISSION_RATE;
+    const c = commissionOn(g);
     return { gross: g, commission: c, net: g - c };
   }, [parsedRate, parsedDays, validRate, validDays]);
 
@@ -191,7 +193,7 @@ function EarningsCalculator(): JSX.Element {
       >
         {[
           { label: "Hirer pays (total)", value: gross, color: "#A7B0BE" },
-          { label: `CRAL fee (${Math.round(COMMISSION_RATE * 100)}%)`, value: -commission, color: "#A7B0BE" },
+          { label: `CRAL fee (${COMMISSION_PERCENT}%)`, value: -commission, color: "#A7B0BE" },
           { label: "You take home", value: net, color: "#FFFFFF", strong: true },
         ].map((row) => (
           <div key={row.label} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
