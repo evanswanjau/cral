@@ -132,6 +132,15 @@ async function newVehicle(accessToken: string, registration: string) {
       pickup_address: "Westlands, Nairobi",
       daily_rate: "4200",
     });
+  // Fail here, with the API's own error, rather than returning a body with
+  // no `id`. A silent undefined surfaces much later as `null value in
+  // column "vehicle_id"` on an unrelated booking insert, which sends you
+  // looking at the bookings code for a fault in vehicle creation.
+  if (res.status !== 201 || !res.body?.id) {
+    throw new Error(
+      `newVehicle(${registration}) failed: ${res.status} ${JSON.stringify(res.body)}`,
+    );
+  }
   return res.body;
 }
 
@@ -385,7 +394,9 @@ describe("bookings — renter notifications (Migration B)", () => {
 describe("bookings — handover", () => {
   it("runs pickup then return through the full state machine", async () => {
     const { accessToken, userId } = await newMerchant();
-    const vehicle = await newVehicle(accessToken, "KDA 106A");
+    // Registrations are globally unique, so every plate in this file must be
+    // distinct - this one duplicated the renter-notifications test's above.
+    const vehicle = await newVehicle(accessToken, "KDA 106C");
     const hirer = await newHirer("Test Hirer", { verifiedDocs: true });
     const merchant = await db("merchants").where({ user_id: userId }).first();
     const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, { status: "confirmed" });
