@@ -76,21 +76,39 @@ git push -u origin feature/portal-round-5-hide-deposit
 Then commit the uncommitted admin-payouts groundwork to its own branch.
 No merges, no deletions yet.
 
-### P0.2 - Database backups *(blocking)*
+### P0.2 - Database backups ✅ **DONE 2026-09-16**
 
-**There are no DB backups.** Every deploy below runs `npm run migrate`
-against production data. Deploying after every PR without backups means
-every PR is an unbacked schema change on live data.
+Was blocking: every deploy runs `npm run migrate` against live data, and
+there were no backups at all.
 
-Set up a nightly `pg_dump` off-box, plus a manual pre-deploy dump for any
-migration-bearing deploy:
+What now exists on the box:
 
-```bash
-ssh cral@46.202.128.68 \
-  'docker exec cral-postgres pg_dump -U <user> cral | gzip > ~/backups/cral-$(date +%F-%H%M).sql.gz'
-```
+- **`/home/cral/cral-backup.sh`** - `pg_dump` run *inside* the container so
+  its version always matches the server. Writes to a `.partial` file and
+  renames only on success, so an interrupted dump is never left looking
+  like a usable backup. Verifies the gzip and checks for pg_dump's own
+  completion marker - a truncated dump is a failure wearing a success
+  costume. Aborts if free disk is under 2GB, because this box is shared
+  with ~10 other production apps and a backup must never be what takes them
+  down. 30-day retention, plus a sweep of abandoned `.partial` files.
+- **Nightly cron**, 01:00 UTC (04:00 Nairobi). Verified to run under cron's
+  minimal environment, not just an interactive shell - `docker` not being
+  on cron's `PATH` is the classic silent failure here.
+- **A backup step inside `~/redeploy.sh`**, now step 4 of 6, immediately
+  before migrate. The script is `set -e`, so **a failed backup aborts the
+  deploy before the schema changes**. Nightly alone would leave up to 24h
+  of data behind a bad migration, which is the whole risk of deploying on
+  every merged PR.
 
-Do not run a migration-bearing deploy until this exists.
+**Verified by restore, not by the file existing.** A dump was restored into
+a throwaway `cral_restore_test` database: 34 tables, and `users`,
+`merchants`, `vehicles`, `bookings`, `documents` and `audit_log` row counts
+all matched production. The scratch database was then dropped.
+
+**Still open: these are on-box backups.** They protect against a bad
+migration, a wrong DELETE, a deploy that mangles data. They do **not**
+protect against losing the host or the disk. An off-box copy is still
+needed and is not done.
 
 ### P0.3 - Rewrite `DEPLOY.md`
 
@@ -100,13 +118,22 @@ Railway/Render. The real deployment is a VPS and has been live since
 deployment memory). A deploy doc that describes a platform you do not use
 is worse than none.
 
-### P0.4 - Verify the live box matches what we think
+### P0.4 - Verify the live box ✅ **DONE 2026-09-16**
 
-The deployment notes are four days old and several sessions pushed
-concurrently. Before trusting them, confirm on the box: current
-`origin/main` SHA, `/readyz`, which `.env` values are actually set.
+Confirmed on the box rather than trusted from notes - and it was worth
+doing. The deploy was **behind `origin/main`**: the 2026-09-16 redeploy
+applied a migration that had never run in production
+(`20260916090000_admin_communications.ts`), meaning the admin Communications
+work was merged but not live.
 
----
+It is now at `6c7e41a`, `/readyz` reports database and redis ok, and
+`cral-api` is active. Postgres and Redis containers are healthy, the disk
+is at 65% (17GB free), and the production database is ~10MB (a compressed
+dump is ~20KB, so retention costs nothing).
+
+**The lesson, not the snapshot:** merging did not mean deployed. Check the
+deployed SHA against `origin/main` rather than assuming the last merge went
+out.
 
 ## Part 3 - The deploy ritual (run for every PR)
 
