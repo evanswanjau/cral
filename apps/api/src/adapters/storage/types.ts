@@ -15,4 +15,15 @@ export interface StorageAdapter {
   getObject(key: string): Promise<Buffer>;
   /** Short-lived signed URL for reading an object — never a public bucket URL (spec §22). */
   getSignedUrl(key: string, expiresInSeconds: number): Promise<string>;
+  /**
+   * Removes an object. Idempotent: deleting a key that isn't there resolves
+   * rather than throwing, so a retried delete and a delete racing a cleanup
+   * both settle.
+   *
+   * Every caller deletes the database row first and the bytes second. The
+   * reverse order can leave a row pointing at nothing, which reads as a
+   * corrupt document; this order can at worst leak a file, which is
+   * recoverable.
+   */
+  deleteObject(key: string): Promise<void>;
 }

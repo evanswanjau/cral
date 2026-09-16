@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve, sep } from "node:path";
 import type { StorageAdapter, PutObjectInput } from "./types.js";
 
@@ -23,15 +23,31 @@ export class LocalStorageAdapter implements StorageAdapter {
     return { key: input.key };
   }
 
-  async getObject(key: string): Promise<Buffer> {
-    // `key` is always built server-side from generated ids (never from a
-    // caller-supplied path), but resolve-and-check anyway so a stored key
-    // can never escape the storage root.
+  /**
+   * `key` is always built server-side from generated ids (never from a
+   * caller-supplied path), but resolve-and-check anyway so a stored key can
+   * never escape the storage root. Shared by every path that touches a file
+   * by key — a second copy of this check is a second chance to get it wrong.
+   */
+  private resolveWithinRoot(key: string): string {
     const filePath = resolve(join(this.root, key));
     if (filePath !== this.root && !filePath.startsWith(this.root + sep)) {
-      throw new Error(`Refusing to read outside the storage root: ${key}`);
+      throw new Error(`Refusing to touch a path outside the storage root: ${key}`);
     }
-    return readFile(filePath);
+    return filePath;
+  }
+
+  async getObject(key: string): Promise<Buffer> {
+    return readFile(this.resolveWithinRoot(key));
+  }
+
+  async deleteObject(key: string): Promise<void> {
+    try {
+      await unlink(this.resolveWithinRoot(key));
+    } catch (err) {
+      // Already gone is the outcome the caller wanted.
+      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    }
   }
 
   async getSignedUrl(key: string, expiresInSeconds: number): Promise<string> {
