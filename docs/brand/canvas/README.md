@@ -1,23 +1,38 @@
-# Canvas source: `Cruz Public Site Pages.dc.html`
+# Canvas source: `Cruz Ride Auto - Website.dc.html`
 
 Pulled from a bundled canvas export the owner supplied on 2026-09-17
 (`CRAL - Cruz Ride Auto (standalone).html`, ~6.5MB, not itself committed -
 it bundles fonts, images and the whole design-tool runtime inline). This
-file is the one thing inside it that matters: the actual
-`Cruz Public Site Pages.dc.html` design source, reconstructed from the
-bundle's `__bundler/template` script block (a JSON-encoded string) plus
-its embedded `x-dc` logic component.
+file is the one thing inside it that matters: the actual canvas source,
+reconstructed from the bundle's `__bundler/template` script block (a
+JSON-encoded string).
 
-**This is the file CLAUDE.md's customer-portal notes have been waiting
-on.** C9 (marketing pages), C10 (list your car) and part of C8 were all
-built from `packages/ui/src/tokens.ts` and `Home.tsx`'s established idiom
-because no canvas tab was reachable in those sessions - each said so in
-its own file comment, flagged for a swap once this file turned up.
+**Correction, same session:** this was first extracted and committed under
+the name `Cruz Public Site Pages.dc.html`, on the assumption that it was
+the marketing-pages file CLAUDE.md's customer-portal notes had been
+waiting on. That was wrong, caught by checking the file itself rather than
+trusting the first read - see CLAUDE.md's own "a plan document is not
+evidence" rule, which applies just as much to a first guess about a
+design file's identity. The real picture:
 
-## What's in it
+- **This file is `Cruz Ride Auto - Website`** - the file CLAUDE.md's
+  Design-tokens section already names as the canvas for home/browse/
+  detail/booking/auth/list/the verticals. Confirmed by its own content:
+  `state.page` switches between exactly those pages, and there is no
+  marketing-page copy anywhere in it.
+- **`Cruz Public Site Pages.dc.html` is a *separate* file this one
+  imports** (`<dc-import name="Cruz Public Site Pages" page="{{subPage}}">`
+  for the `pages` state - `works`/`verify`/`corporate`/`about`/`help`/
+  `contact`/`legal`) and is listed in the bundle's own
+  `__bundler/ext_resources` block as an external dependency, the same way
+  the car photos and the logo are - **not embedded**. The bundle only
+  ships the file that was open when it was exported. **The seven
+  marketing pages are still not pulled** - C9's flag stands exactly as it
+  was.
 
-Everything the design's public site covers, driven by one component's
-`state.page`:
+## What's actually in this file
+
+Driven by one component's `state.page`:
 
 - `home` - hero, search, collection rails, facts strip
 - `browse` - filter rail, Cards/List, sort, result count
@@ -29,14 +44,24 @@ Everything the design's public site covers, driven by one component's
   ever a 2FA challenge" decision** - reproduce this screen without that
   tab, the same call the merchant portal made on its own auth screens.
 - `list` - the "list your car" 3-stage onboarding form
-- `pages` - the seven marketing pages (`works`, `verify`, `corporate`,
-  `about`, `help`, `contact`, `legal`) - copy lives in the markup, not the
-  logic; there is **no real Terms/Privacy text anywhere in this file**,
-  just nav labels. `/legal` still needs real drafting before launch.
 - `vertical` - **three** verticals: `parts`, `services`, and `selling`
-  (only `parts`/`services` are built in `apps/customer` today)
+  (only `parts`/`services` are built in `apps/customer` today). Each is
+  driven by one shared template off a `kicker`/`title`/`sub`/`status`/
+  `points`/`ask`/`askPh` data shape - see `vertDefs` in the logic block.
+  The "Tell me when it opens" card's `submitNotify` is **client-state
+  only in the design** (`this.setState({ notifySent: true })`, no
+  request anywhere) - reproducing that as a real UI would be the same
+  fake-success shape `Contact.tsx`'s own comment already refuses
+  ("a form with no backend behind it... is a fake 'we'll get back to
+  you'"). Built instead as a real `mailto:hello@cral.co.ke` hand-off,
+  the same channel Contact already uses.
 - Masthead + account dropdown (signed-in/signed-out, merchant vs renter
-  framing, a "docs due" indicator)
+  framing, a "docs due" indicator) - `apps/customer` never has a merchant
+  signed in, so only the renter branch is reproduced; see
+  `components/site/AccountMenu.tsx`'s own comment for the two rows
+  handled as flag-not-fabricate.
+- `pages` (the marketing pages) - **empty in this file**, just the
+  `<dc-import>` above. Not usable for C9.
 
 ## How it was reconstructed
 
@@ -58,7 +83,9 @@ No `ListFiles`/`GetFile` API call was needed this time because the owner
 supplied the bundle directly rather than a live canvas link - the
 extraction is the same idea as the `ListFiles`/`GetFile` flow in
 CLAUDE.md's "Getting the real screen source" section, just against a
-static bundle instead of the live API.
+static bundle instead of the live API. That flow (or a fresh bundle
+export of `Cruz Public Site Pages` specifically) is still what's needed
+to unblock C9's marketing-page copy.
 
 ## Using it
 

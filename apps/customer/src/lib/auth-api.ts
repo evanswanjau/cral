@@ -97,12 +97,25 @@ export function resetPassword(input: {
 
 export interface Me {
   id: string;
-  full_name: string;
-  phone: string;
+  full_name: string | null;
+  phone: string | null;
   email: string;
   roles: string[];
   phone_verified: boolean;
   email_verified: boolean;
+  active_merchant_id: string | null;
+  /**
+   * Wired up but currently always 0 server-side (`auth/service.ts#getMe`'s
+   * comment predates the C8 notifications feed) - `Masthead`'s unread
+   * badge does NOT read this; it queries `/me/notifications` directly,
+   * which is real.
+   */
+  unread_notification_count: number;
+  renter_verification: {
+    verified: boolean;
+    documents: { kind: string; state: string; review_note: string | null }[];
+    outstanding: string[];
+  };
 }
 
 export function getMe() {
