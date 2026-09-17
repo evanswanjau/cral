@@ -1,14 +1,21 @@
-import { useRef, type FormEvent, type ReactNode } from "react";
+import { useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
-import { getCollections, type CatalogCollection } from "../lib/catalog-api.js";
+import { getCollections, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 
 /**
- * The home page, reproduced from the "Cruz Ride Auto - Website" canvas
- * ("home" screen) with its own inline styles. Deliberate departures from
- * the canvas copy, per recorded product decisions:
+ * The home page, rebuilt against the real canvas source pulled 2026-09-17
+ * (`docs/brand/canvas/Cruz Ride Auto - Website.dc.html`, its "home" page
+ * state) - the earlier version of this file predated that pull and, despite
+ * its own header comment, was not actually checked against it (its facts
+ * strip and hero copy don't exist anywhere in the real source - see
+ * CLAUDE.md's "a plan document is not evidence" rule, which applies just as
+ * much to an earlier session's confident file comment).
+ *
+ * Deliberate departures from the canvas copy, per recorded product
+ * decisions:
  *
  *  - Deposit visibility. The deposit is never surfaced to the renter on
  *    this page (or anywhere in the marketing/help copy) - mirrors the
@@ -17,10 +24,25 @@ import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
  *  - The rate is fixed once agreed. Copy states plainly that the rate is
  *    agreed before booking and does not change afterwards.
  *  - The M-Pesa pay step. No Daraja integration exists; the flow is
- *    request -> confirm, money settled with the owner.
+ *    request -> confirm, money settled with the owner. The canvas's trust
+ *    band assumes the STK flow is live ("the M-Pesa prompt only appears
+ *    once they have accepted") - that clause is dropped/reworded below,
+ *    same departure the file already documented before this pass.
+ *  - The canvas's body-type tiles are a 7-way fixture taxonomy (Saloon,
+ *    Hatchback, SUV, Large SUV, Double cab, Van, Executive) with no
+ *    backing in our schema - `vehicles.category` is the real, fixed
+ *    5-slug set (CLAUDE.md's vehicle-model-changes note). Kept as 5 real
+ *    categories rather than fabricating the canvas's 7; each tile's price
+ *    tag is a real `FROM <min> / DAY` computed from whatever's already
+ *    loaded in the rails below, shown only when the data supports it.
+ *  - The "selling" door/hero-mode (buy and sell, canvas status "NEXT") has
+ *    no page to open - same as the AccountMenu's inert "Sell a car" row.
  *
  * The collection rails are real data from GET /catalog/collections.
  */
+
+/** The canvas's fixed county list (its hero search bar's `<select>`). */
+const KENYA_COUNTIES = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Uasin Gishu", "Kiambu", "Machakos"];
 
 const CATEGORY_TILES: Array<{ slug: string; label: string; note: string }> = [
   { slug: "sedan", label: "Sedans & small cars", note: "City runs and airport hops" },
@@ -30,14 +52,27 @@ const CATEGORY_TILES: Array<{ slug: string; label: string; note: string }> = [
   { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment" },
 ];
 
-const HERO_FACTS: Array<{ n: string; label: string }> = [
-  { n: "5", label: "categories, from a Vitz to a tipper truck" },
-  { n: "6", label: "documents read on every car, by a person" },
-  { n: "KES 0", label: "booking fee. You pay the owner's rate, nothing on top" },
-  { n: "1×", label: "licence and ID check, then reused on every hire you take" },
-  { n: "Both sides", label: "photograph the car at pickup and return, on the record" },
+/** `vertDefs`-style doors, from the canvas's `doors` fixture, verbatim. */
+const DOORS: Array<{ label: string; note: string; tag: string; to: string | null }> = [
+  { label: "Hire a car", note: "Seven counties, papers read, paid after the owner accepts", tag: "LIVE", to: "/browse" },
+  { label: "Parts", note: "Quoted against your chassis number", tag: "SOON", to: "/parts" },
+  { label: "Service and repair", note: "Vetted garages, quote agreed first", tag: "SOON", to: "/services" },
+  { label: "Buy and sell", note: "Free listings, logbook checked first", tag: "NEXT", to: null },
 ];
 
+const HERO_MODES: Array<{ key: "hire" | "parts" | "services"; label: string; tag: string }> = [
+  { key: "hire", label: "Hire a car", tag: "LIVE" },
+  { key: "parts", label: "Parts", tag: "SOON" },
+  { key: "services", label: "Service", tag: "SOON" },
+];
+
+/**
+ * From the canvas's `trustCols` fixture, verbatim except item [1] - the
+ * canvas's "Nothing leaves your M-Pesa until the owner has accepted your
+ * dates" describes the STK flow, which isn't live (see file header). Kept
+ * the same title and shape, reworded the body to what's actually true
+ * today: nothing is *owed*, because settlement is still owner-direct.
+ */
 const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "01",
@@ -46,8 +81,8 @@ const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   },
   {
     n: "02",
-    title: "Agreed up front",
-    body: "The rate is set on the listing and agreed before you book, and it doesn't change when you collect the car.",
+    title: "Paid only after a yes",
+    body: "Nothing is due until the owner has accepted your dates. If the request lapses, you owe nothing at all.",
   },
   {
     n: "03",
@@ -61,11 +96,19 @@ const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   },
 ];
 
+/**
+ * `roadmap` exists in the canvas's own logic but is never rendered by its
+ * markup - unused fixture data, same category as `CHECK_GLYPH` in the
+ * admin console (kept, documented, not wired to anything). Real enough to
+ * use (it's the design's own words, not invented here), so kept as bonus
+ * content past where the canvas's home page actually ends - see the
+ * section below for where that boundary is.
+ */
 const ROADMAP: Array<{ status: string; title: string; body: string }> = [
   {
     status: "LIVE",
     title: "Hire a car",
-    body: "Any reviewed car, booked in minutes, with the licence and ID behind every hire already checked.",
+    body: "Any reviewed car in seven counties, booked in minutes, with the licence and ID behind every hire already checked.",
   },
   {
     status: "LIVE",
@@ -242,12 +285,40 @@ export function Home(): JSX.Element {
     },
   });
   const navigate = useNavigate();
+  const [heroMode, setHeroMode] = useState<"hire" | "parts" | "services">("hire");
+  const [heroQ, setHeroQ] = useState("");
+  const [city, setCity] = useState<string | undefined>(undefined);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["catalog", "collections"],
     queryFn: getCollections,
   });
 
   const rails = (data?.collections ?? []).filter((c) => c.vehicles.length > 0);
+
+  // A real (if partial - only whatever's already loaded for the rails
+  // below) minimum price per category, for the "FROM <price> / DAY" tag
+  // on the body-type tiles. `category` is the fixed 5-slug enum, so this
+  // grouping is exact - unlike a free-text `county` match, which is why
+  // the hero's city quick-picks below carry no count.
+  const uniqueVehicles = new Map(rails.flatMap((c) => c.vehicles).map((v) => [v.id, v]));
+  const minPriceByCategory = new Map<string, { amount: number; currency: string }>();
+  for (const v of uniqueVehicles.values()) {
+    const cur = minPriceByCategory.get(v.category);
+    if (!cur || v.daily_rate.amount < cur.amount) minPriceByCategory.set(v.category, v.daily_rate);
+  }
+
+  const askCopy =
+    heroMode === "parts"
+      ? {
+          label: "WHAT PART DO YOU NEED?",
+          placeholder: "Front left shock absorber, Fielder 2018",
+          cta: "See how parts will work",
+        }
+      : {
+          label: "WHAT DOES THE CAR NEED?",
+          placeholder: "Full service and brake pads, X-Trail 2019",
+          cta: "See how service will work",
+        };
 
   return (
     <div>
@@ -271,6 +342,19 @@ export function Home(): JSX.Element {
             background: "#D81E32",
             transform: "skewX(-14deg)",
             opacity: 0.55,
+            pointerEvents: "none",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            bottom: -24,
+            left: -50,
+            width: "clamp(160px,22vw,280px)",
+            height: 12,
+            background: "#D81E32",
+            transform: "skewX(-14deg)",
+            opacity: 0.22,
             pointerEvents: "none",
           }}
         />
@@ -322,9 +406,9 @@ export function Home(): JSX.Element {
                 maxWidth: 840,
               }}
             >
-              Your one-stop shop
+              Everything cars in Kenya.
               <br />
-              <span style={{ color: "#8C97A8" }}>for everything vehicles.</span>
+              <span style={{ color: "#AEB8C6" }}>Hire, parts, service, resale.</span>
             </h1>
             <p
               style={{
@@ -334,56 +418,233 @@ export function Home(): JSX.Element {
                 maxWidth: 600,
               }}
             >
-              CRAL is Kenya's one-stop shop for all your vehicle-based needs - hire, parts and
-              services, all in one place. Every listing's paperwork is verified by our team to
-              ensure your safety, and the rate you're shown is the rate you pay - agreed before
-              you book, and it doesn't change after that.
+              One account for everything your car needs: hire one today, order the right part,
+              book a garage that quotes first, or sell the car you are done with. Every car's
+              papers are read by a person before it is listed, and you pay nothing until an owner
+              says yes.
             </p>
 
-            <SearchBar />
-          </div>
-        </div>
-      </div>
-
-      {/* ---- hero facts strip ---- */}
-      <div
-        style={{
-          background: "#FFFFFF",
-          borderBottom: "1px solid #E4E7EC",
-          padding: "clamp(20px,2.4vw,26px) clamp(16px,4vw,40px)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: 1240,
-            margin: "0 auto",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))",
-            gap: "clamp(14px,2vw,22px)",
-          }}
-        >
-          {HERO_FACTS.map((f) => (
-            <div key={f.label} style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-              <span
-                style={{
-                  font: "700 clamp(21px,2.3vw,27px)/1 Archivo,sans-serif",
-                  fontVariationSettings: "'wdth' 108",
-                  letterSpacing: "-.025em",
-                  color: "#0B0F1A",
-                }}
-              >
-                {f.n}
-              </span>
-              <span
-                style={{
-                  font: "400 12.5px/1.45 'Instrument Sans',sans-serif",
-                  color: "#5A6373",
-                }}
-              >
-                {f.label}
-              </span>
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 13 }}>
+              {HERO_MODES.map((m) => {
+                const on = heroMode === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setHeroMode(m.key)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      height: 38,
+                      padding: "0 15px",
+                      background: on ? "#FFFFFF" : "rgba(255,255,255,.06)",
+                      border: `1px solid ${on ? "#FFFFFF" : "#252B3A"}`,
+                      borderRadius: 999,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span
+                      style={{
+                        font: "600 13.5px/1 'Instrument Sans',sans-serif",
+                        color: on ? "#0B0F1A" : "#C7CEDA",
+                      }}
+                    >
+                      {m.label}
+                    </span>
+                    <span
+                      style={{
+                        font: "500 9.5px/1 'IBM Plex Mono',monospace",
+                        letterSpacing: ".08em",
+                        color: on ? "#5A6373" : "#7C8697",
+                      }}
+                    >
+                      {m.tag}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
-          ))}
+
+            {heroMode === "hire" ? (
+              <>
+                <SearchBar city={city} />
+                {/* City quick-picks, from the canvas's `cityCounts` - no
+                    count badge (unlike the canvas), because `county` is
+                    free text on a vehicle and a partial, sample-based
+                    number here would risk reading as wrong rather than as
+                    an honest estimate. */}
+                <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
+                  {KENYA_COUNTIES.map((c) => {
+                    const on = city === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() => setCity(c)}
+                        style={{
+                          height: 32,
+                          padding: "0 12px",
+                          background: on ? "rgba(255,255,255,.09)" : "transparent",
+                          border: `1px solid ${on ? "#5F6B7D" : "#252B3A"}`,
+                          borderRadius: 999,
+                          cursor: "pointer",
+                          font: `${on ? 600 : 500} 13px/1 'Instrument Sans',sans-serif`,
+                          color: on ? "#FFFFFF" : "#C7CED8",
+                        }}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <div
+                style={{
+                  background: "#FFFFFF",
+                  borderRadius: 12,
+                  padding: "clamp(11px,1.5vw,15px)",
+                  display: "flex",
+                  gap: "clamp(8px,1.3vw,11px)",
+                  flexWrap: "wrap",
+                  alignItems: "flex-end",
+                  boxShadow: "0 18px 44px rgba(0,0,0,.32)",
+                }}
+              >
+                <label style={{ flex: "1 1 300px", minWidth: 200, display: "block" }}>
+                  <span
+                    style={{
+                      display: "block",
+                      font: "600 10px/1 'IBM Plex Mono',monospace",
+                      letterSpacing: ".09em",
+                      color: "#838C9B",
+                      marginBottom: 7,
+                    }}
+                  >
+                    {askCopy.label}
+                  </span>
+                  <input
+                    type="text"
+                    value={heroQ}
+                    onChange={(e) => setHeroQ(e.target.value)}
+                    placeholder={askCopy.placeholder}
+                    style={{
+                      width: "100%",
+                      height: 46,
+                      padding: "0 11px",
+                      border: "1px solid #CDD2DA",
+                      borderRadius: 8,
+                      font: "400 15.5px/1 'Instrument Sans',sans-serif",
+                      color: "#0B0F1A",
+                      background: "#FFFFFF",
+                    }}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => navigate(heroMode)}
+                  style={{
+                    flex: "0 0 auto",
+                    height: 46,
+                    padding: "0 clamp(18px,2.6vw,24px)",
+                    background: "#0F23A8",
+                    color: "#FFFFFF",
+                    border: "none",
+                    borderRadius: 8,
+                    font: "600 15px/1 'Instrument Sans',sans-serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  {askCopy.cta}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div
+            style={{
+              flex: "0 1 336px",
+              minWidth: 270,
+              background: "rgba(8,11,19,.75)",
+              border: "1px solid #4A5361",
+              borderRadius: 12,
+              padding: "18px 20px 20px",
+              backdropFilter: "blur(7px)",
+            }}
+          >
+            <div
+              style={{
+                font: "500 10px/1 'IBM Plex Mono',monospace",
+                letterSpacing: ".11em",
+                color: "#5F6B7D",
+                marginBottom: 14,
+              }}
+            >
+              WHAT CRAL COVERS
+            </div>
+            <div style={{ display: "grid", gap: 6 }}>
+              {DOORS.map((d) => {
+                const live = d.tag === "LIVE";
+                return (
+                  <button
+                    key={d.label}
+                    type="button"
+                    disabled={!d.to}
+                    onClick={() => d.to && navigate(d.to)}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 12,
+                      width: "100%",
+                      padding: "11px 13px",
+                      background: live ? "rgba(255,255,255,.09)" : "transparent",
+                      border: `1px solid ${live ? "#5F6B7D" : "#252B3A"}`,
+                      borderRadius: 8,
+                      cursor: d.to ? "pointer" : "default",
+                      textAlign: "left",
+                    }}
+                  >
+                    <span style={{ flex: 1, minWidth: 0 }}>
+                      <span
+                        style={{
+                          display: "block",
+                          font: "600 14px/1.3 'Instrument Sans',sans-serif",
+                          color: "#FFFFFF",
+                          marginBottom: 3,
+                        }}
+                      >
+                        {d.label}
+                      </span>
+                      <span
+                        style={{
+                          display: "block",
+                          font: "400 11.5px/1.45 'Instrument Sans',sans-serif",
+                          color: "#BAC3CF",
+                        }}
+                      >
+                        {d.note}
+                      </span>
+                    </span>
+                    <span
+                      style={{
+                        flex: "none",
+                        padding: "3px 9px",
+                        border: `1px solid ${live ? "#A8DEC7" : "#3A4252"}`,
+                        borderRadius: 999,
+                        font: "600 9.5px/1.5 'IBM Plex Mono',monospace",
+                        letterSpacing: ".07em",
+                        color: live ? "#7FD6AE" : "#8C97A8",
+                      }}
+                    >
+                      {d.tag}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -429,7 +690,9 @@ export function Home(): JSX.Element {
               gap: 12,
             }}
           >
-            {CATEGORY_TILES.map((b) => (
+            {CATEGORY_TILES.map((b) => {
+              const minPrice = minPriceByCategory.get(b.slug);
+              return (
               <button
                 key={b.slug}
                 type="button"
@@ -484,13 +747,26 @@ export function Home(): JSX.Element {
                     style={{
                       font: "400 12.5px/1.45 'Instrument Sans',sans-serif",
                       color: "#5A6373",
+                      marginBottom: minPrice ? 11 : 0,
                     }}
                   >
                     {b.note}
                   </div>
+                  {minPrice && (
+                    <div
+                      style={{
+                        font: "500 11px/1 'IBM Plex Mono',monospace",
+                        letterSpacing: ".06em",
+                        color: "#0F23A8",
+                      }}
+                    >
+                      FROM {formatMoney(minPrice)} / DAY
+                    </div>
+                  )}
                 </div>
               </button>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
@@ -530,7 +806,7 @@ export function Home(): JSX.Element {
               maxWidth: 660,
             }}
           >
-            Each car's paperwork is verified by our team to ensure your safety.
+            Nobody pays before the owner says yes.
           </h2>
           <p
             style={{
@@ -540,9 +816,11 @@ export function Home(): JSX.Element {
               maxWidth: 560,
             }}
           >
-            Every listing is checked before it goes live, and the rate is agreed before you book
-            and never changes after that. What CRAL holds is the record: the verified documents,
-            the photos from both sides, and the booking, in one place either of you can open.
+            {/* Canvas headline verbatim; body reworded - the canvas's own
+                copy here assumes the STK flow (see file header comment). */}
+            The oldest fight in Kenyan car hire is money that moves before anything is agreed. On
+            CRAL a request costs nothing and the owner has 24 hours to answer - you only settle
+            the agreed rate once they say yes, and it doesn't change after that.
           </p>
           <div
             style={{
@@ -588,7 +866,8 @@ export function Home(): JSX.Element {
         </div>
       </div>
 
-      {/* ---- the rest of CRAL ---- */}
+      {/* ---- the rest of CRAL (bonus - past where the canvas's home page
+              actually ends; see the ROADMAP constant's own comment) ---- */}
       <div style={{ padding: "0 clamp(16px,4vw,40px) clamp(24px,3.4vw,40px)" }}>
         <div style={{ maxWidth: 1240, margin: "0 auto" }}>
           <div style={{ marginBottom: 16 }}>
@@ -863,7 +1142,8 @@ function RailsMessage({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-function SearchBar(): JSX.Element {
+/** COUNTY defaults to `city` when passed - the hero's city quick-picks set it. */
+function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
   const navigate = useNavigate();
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -906,15 +1186,22 @@ function SearchBar(): JSX.Element {
       }}
     >
       <label style={{ flex: "1 1 168px", minWidth: 140, display: "block" }}>
-        <span style={labelSpan}>CITY OR COUNTY</span>
-        <input
+        <span style={labelSpan}>COUNTY</span>
+        {/* A fixed select, not free text - the canvas's own hero uses
+            KENYA_COUNTIES. Browse's own filter stays free-text; that's a
+            separate, already-shipped screen, out of scope here. */}
+        <select
+          key={city ?? ""}
           name="county"
-          placeholder="e.g. Nairobi"
-          style={{
-            ...field,
-            font: "500 16px/1 'Instrument Sans',sans-serif",
-          }}
-        />
+          defaultValue={city ?? KENYA_COUNTIES[0]}
+          style={{ ...field, font: "500 16px/1 'Instrument Sans',sans-serif" }}
+        >
+          {KENYA_COUNTIES.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
       </label>
       <label style={{ flex: "1 1 145px", minWidth: 130, display: "block" }}>
         <span style={labelSpan}>FROM</span>
