@@ -223,25 +223,14 @@ function EarningsChart({ earnings }: { earnings: DashboardData["earnings"] }): J
 function BookingRow({
   booking,
   onOpen,
-  onOpenVehicle,
 }: {
   booking: DashboardWeekBooking;
   onOpen: () => void;
-  onOpenVehicle: () => void;
 }): JSX.Element {
   const skin = BOOKING_STATUS[booking.status];
   return (
     <HoverRow onClick={onOpen}>
-      <span
-        style={P.dashPlate}
-        title="Open this vehicle"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpenVehicle();
-        }}
-      >
-        {booking.vehicle_registration}
-      </span>
+      <span style={P.dashPlate}>{booking.vehicle_registration}</span>
       <div style={P.dashRowMain}>
         <div style={P.dashRowTitle}>{booking.hirer_name}</div>
         <div style={P.dashRowMeta}>
@@ -501,7 +490,6 @@ export function Dashboard(): JSX.Element {
                   key={booking.id}
                   booking={booking}
                   onOpen={() => navigate(`/bookings/${booking.id}`)}
-                  onOpenVehicle={() => navigate(`/vehicles/${booking.vehicle_id}`)}
                 />
               ))
             )}
