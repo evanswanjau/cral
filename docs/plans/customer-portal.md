@@ -1,6 +1,11 @@
 # Customer portal - full scope to done
 
-**Status as of 2026-09-11.** `apps/customer` is off its Phase-0 hold and
+**Status tables refreshed 2026-09-15** against the tree - most of §1 still
+described the pre-C4 state and called screens "placeholder" that are now
+several hundred lines each. Remaining gaps are listed as such; the decisions
+in §2 are unchanged except where marked.
+
+**Original status note, 2026-09-11.** `apps/customer` is off its Phase-0 hold and
 building as a real vertical slice: a booking a renter makes is a real
 `bookings` row the merchant sees in their existing Bookings screen and Ops
 sees in an admin lens. Design authority is the "Cruz Ride Auto - Website"
@@ -14,13 +19,13 @@ screens (not yet pulled).
 | Design screen | State |
 | --- | --- |
 | `home` | **Done.** Hero, search bar, facts strip, 8 live collection rails, category tiles, deposit band, roadmap, CTAs, footer. Real data from `GET /catalog/collections`. |
-| `browse` | Placeholder. Needs the filter rail (city, dates, price ceiling, body, seats, gearbox, owner type, "only show" toggles), Cards/List view switch, sort, result count, empty state. |
-| `detail` | Placeholder. Needs gallery, spec grid, "What CRAL checked on this car", owner card, reviews, quote panel, "Request these dates". |
-| `booking` | Not built. Five stages - review, waiting, accepted, check-your-phone, confirmed. |
-| `auth` | Old Phase-0 stubs, not the design. Needs the two-tab screen, the "HOLDING FOR YOU" car panel, and the driving-licence upload step. |
-| `list` (list your car) | Placeholder. Earnings calculator, three steps, "have these ready", then a hand-off to the merchant app. |
-| 7 marketing pages | Placeholders (`how-it-works`, `how-we-protect-you`, `corporate`, `about`, `help`, `contact`, `legal`). |
-| Customer Portal (trips, account, documents) | Separate canvas file, not pulled, not built. |
+| `browse` | **Built** (C4, 471 lines). |
+| `detail` | **Built** (C4, 597 lines). "What CRAL checked on this car" is still outstanding. |
+| `booking` | **Built** (C4, 460 lines). |
+| `auth` | **Built** - CreateAccount/SignIn plus renter document upload (C3/C5), and sign-up now happens inline when sending a booking request rather than as a separate gate. |
+| `list` (list your car) | **Built** (C10). Not from a canvas file - see C10 below. |
+| 7 marketing pages | **Built** (C9), plus `parts` and `services` "coming soon" pages from the one-stop-shop pivot. Not from a canvas file. `legal` is still a holding page and needs real drafting before launch. |
+| Customer Portal (trips, account, documents) | **Built** (C8) - trips, trip detail with handover state, renter notifications, account nav. Not from a canvas file. |
 
 ### Backend
 
@@ -28,19 +33,19 @@ screens (not yet pulled).
 | --- | --- |
 | Catalog search / detail / photos / collections | **Done**, 10 tests, two-gate filter + PII allowlist |
 | Payments: STK initiate + callback | **Scaffold.** Real: adapter interface, OAuth token exchange, `payment_requests` table, idempotent callback handling. **Not confirmed:** Co-op's STK path, request field names, callback shape - gated behind `COOPBANK_STK_PATH_CONFIRMED`. |
-| `POST /bookings` (a renter creating one) | **Missing.** `POST /bookings/:id/pay` exists but nothing can create the booking it pays for. This is the single biggest hole. |
-| Customer trips: list, detail, cancel | Missing |
-| Renter's handover code | Missing (the `handovers` row already stores the hashed OTP) |
-| Renter ID + driving licence documents | Missing - `documents.merchant_id` is `NOT NULL`, `driving_licence` is not a `DocumentKind` |
-| Renter notifications | Missing - `notifications.merchant_id` is `NOT NULL` |
-| Ratings / reviews | Table exists only on the unmerged `feature/portal-round-5-ratings` branch |
+| `POST /bookings` (a renter creating one) | **Built** (C2) - `modules/customer-bookings/`, price computed server-side. |
+| Customer trips: list, detail, cancel | **Built** (C8) |
+| Renter's handover code | **Built** (C8) - and never shown in the customer app either, same rule as the merchant side: only a hash exists server-side and the code goes out by email. Trip detail shows the handover's state, not the code. |
+| Renter ID + driving licence documents | **Built** (C5, Migration A - `documents.merchant_id` nullable + `user_id`) |
+| Renter notifications | **Built** (C8, Migration B - `notifications.merchant_id` nullable + `user_id`) |
+| Ratings / reviews | **Merged.** The `ratings` table and the merchant-facing hirer score are on `main`. Renter-facing reviews on the detail page are still outstanding. |
 | Delivery / collection fees | Not modelled anywhere |
-| Request expiry ("lapses in 4 hours") | `response_due_at` is written and checked lazily at confirm; **nothing expires a request in the background** |
-| Admin renters queue | Missing |
-| Admin bookings lens | Missing |
-| Hirer-documents gate on pickup handover | Missing |
-| SEO: prerender, JSON-LD, sitemap | Missing |
-| Deploy: apex vhost, DNS, CORS | Missing |
+| Request expiry ("lapses in 4 hours") | **Done** (this row previously said nothing expired a request in the background - that was already untrue). `expireStaleBookingRequests` flips overdue `requested` bookings to `expired` with a full refund and zero commission, re-checks the status inside the transaction so a merchant answering mid-sweep wins, is covered by tests including a two-sweep race, and runs from `jobs/booking-expiry.ts`. Note the window is **12h** (spec §14), not the design's 4h copy - a real discrepancy, still unreconciled. |
+| Admin renters queue | **Built** (C11, `modules/admin-renters/`) |
+| Admin bookings lens | **Built** (C11, `modules/admin-bookings/`) - read-only |
+| Hirer-documents gate on pickup handover | **Built** (C11) - pickup 422s unless the hirer's national_id and driving_licence both read `ok` |
+| SEO: prerender, JSON-LD, sitemap | **Mostly built** (C9) - per-route meta, JSON-LD and a real `GET /sitemap.xml`. Build-time prerendering is still deliberately deferred. |
+| Deploy: apex vhost, DNS, CORS | **Done** (C12) |
 
 ### Things the design requires that no plan has covered yet
 
