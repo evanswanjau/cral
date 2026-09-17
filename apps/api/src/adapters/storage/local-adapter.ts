@@ -46,7 +46,7 @@ export class LocalStorageAdapter implements StorageAdapter {
       await unlink(this.resolveWithinRoot(key));
     } catch (err) {
       // Already gone is the outcome the caller wanted.
-      if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      if ((err as { code?: string }).code !== "ENOENT") throw err;
     }
   }
 

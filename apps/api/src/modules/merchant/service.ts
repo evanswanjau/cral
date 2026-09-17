@@ -819,7 +819,6 @@ async function discardStoredObject(key: string): Promise<void> {
   try {
     await getStorageAdapter().deleteObject(key);
   } catch (err) {
-    // eslint-disable-next-line no-console
     console.error(`[storage] failed to delete object ${key}:`, err);
   }
 }

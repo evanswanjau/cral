@@ -18,10 +18,37 @@ export interface RateLimitOptions {
   keyFn?: (req: Request) => string;
 }
 
+/**
+ * The test run bypasses rate limiting unless a test explicitly asks for it.
+ *
+ * The buckets are Redis-backed and keyed on `req.ip`, and every test request
+ * comes from 127.0.0.1 — so all four vitest forks and all the suites inside
+ * them shared one bucket per route. `onboarding_upload` allows 60 an hour,
+ * and as the suite grew a single full run began uploading more documents
+ * than that, at which point unrelated tests started failing with a 429 they
+ * never mention. Flushing Redis between runs did not help: one run alone
+ * crosses the limit.
+ *
+ * Nothing is lost by bypassing it here, because no test ever asserted the
+ * limiter's behaviour through these routes. It is covered directly instead,
+ * in `__tests__/rate-limit.test.ts`, which sets `RATE_LIMIT_IN_TEST=1`.
+ *
+ * Read from the environment per request, not at module load, so that test
+ * can turn it on after the middleware has been imported.
+ */
+function bypassedForTests(): boolean {
+  return process.env.NODE_ENV === "test" && process.env.RATE_LIMIT_IN_TEST !== "1";
+}
+
 export function rateLimit(options: RateLimitOptions) {
   const keyFn = options.keyFn ?? ((req: Request) => req.ip ?? "unknown");
 
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    if (bypassedForTests()) {
+      next();
+      return;
+    }
+
     const identity = keyFn(req);
     const windowStart = Math.floor(Date.now() / 1000 / options.windowSeconds);
     const key = `ratelimit:${options.bucket}:${identity}:${windowStart}`;
