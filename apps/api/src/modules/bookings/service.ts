@@ -182,7 +182,6 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
     gross: kes(booking.gross_amount),
     commission: kes(booking.commission_amount),
     merchant_net: kes(booking.merchant_net_amount),
-    deposit: kes(booking.deposit_amount),
     cancellation_fee: money(booking.cancellation_fee_amount, booking.cancellation_fee_currency),
     refund: money(booking.refund_amount, booking.refund_currency),
     pickup_location: booking.pickup_location,
@@ -192,7 +191,6 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
     payout_detail: booking.payout_detail,
     payout_account_name: booking.payout_account_name,
     has_pickup_condition_photos: booking.has_pickup_condition_photos,
-    deposit_release_at: booking.deposit_release_at ? booking.deposit_release_at.toISOString() : null,
     rating_open_until: booking.rating_open_until ? booking.rating_open_until.toISOString() : null,
     events: events.map(serializeEvent),
   };
@@ -201,12 +199,18 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
 function serializeHandover(handover: HandoverRow) {
   // qr_scan and the hirer-side confirmation are unreachable this phase —
   // see openapi/merchant-bookings.yaml's top-level description.
+  //
+  // The hirer's code proves the hirer is the person standing there. That
+  // matters at pickup (handing a stranger a car). At return the merchant
+  // is receiving their own vehicle back and runs the check themselves —
+  // there's nobody to authenticate — so the return leg drops `otp`
+  // (owner's call, 2026-09-05).
   return {
     id: handover.id,
     booking_id: handover.booking_id,
     kind: handover.kind,
     state: handover.state,
-    required: ["otp", "condition", "confirm"],
+    required: handover.kind === "return" ? ["condition", "confirm"] : ["otp", "condition", "confirm"],
     masked_destination: handover.masked_destination,
     expires_at: handover.expires_at.toISOString(),
     condition: {
@@ -573,7 +577,11 @@ export async function createHandover(userId: string, bookingId: string, input: C
 
   const hirer = await hirerInfoOf(booking.hirer_id);
   const vehicle = await vehicleOf(booking.vehicle_id);
-  const code = generateOtpCode();
+  // The return leg has nobody to authenticate — the merchant is taking
+  // their own vehicle back — so it opens straight at the condition step
+  // with no code generated and no email sent (owner's call, 2026-09-05).
+  const isReturn = input.kind === "return";
+  const code = isReturn ? null : generateOtpCode();
   const now = Date.now();
 
   const handover = await db.transaction(async (trx) => {
@@ -582,12 +590,12 @@ export async function createHandover(userId: string, bookingId: string, input: C
         id: generateId("handover"),
         booking_id: booking.id,
         kind: input.kind,
-        state: "otp_sent",
-        otp_code_hash: hashCode(code),
+        state: isReturn ? "otp_verified" : "otp_sent",
+        otp_code_hash: code ? hashCode(code) : null,
         otp_attempts: 0,
-        otp_sent_at: new Date(now),
-        otp_expires_at: new Date(now + OTP_TTL_MINUTES * 60 * 1000),
-        masked_destination: hirer.email ? maskIdentifier(hirer.email) : null,
+        otp_sent_at: isReturn ? null : new Date(now),
+        otp_expires_at: isReturn ? null : new Date(now + OTP_TTL_MINUTES * 60 * 1000),
+        masked_destination: isReturn || !hirer.email ? null : maskIdentifier(hirer.email),
         expires_at: new Date(now + HANDOVER_SESSION_MINUTES * 60 * 1000),
       })
       .returning("*");
@@ -598,8 +606,8 @@ export async function createHandover(userId: string, bookingId: string, input: C
       merchantId: merchant.id,
       kind: `${input.kind}_started`,
       tone: "blue",
-      label: input.kind === "pickup" ? "Pickup started" : "Return started",
-      body: `Code sent to ${hirer.full_name}.`,
+      label: isReturn ? "Return started" : "Pickup started",
+      body: isReturn ? "Check the vehicle over, then confirm." : `Code sent to ${hirer.full_name}.`,
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -626,7 +634,7 @@ export async function createHandover(userId: string, bookingId: string, input: C
     return row;
   });
 
-  if (hirer.email) {
+  if (code && hirer.email) {
     await emailAdapter.send({
       to: hirer.email,
       subject: `Your ${booking.ref} ${input.kind} code`,
@@ -684,6 +692,10 @@ export async function uploadHandoverPhoto(userId: string, handoverId: string, in
 export async function verifyHandoverOtp(userId: string, handoverId: string, input: VerifyHandoverOtpInput, ctx: RequestContext) {
   const { merchant, booking, handover } = await requireOwnHandover(userId, handoverId);
   await requireHandoverNotExpired(handover);
+
+  if (handover.kind === "return") {
+    conflict("otp_not_required", "The return leg has no code step - check the vehicle over and confirm.");
+  }
 
   // Checked ahead of the generic state check: exhausting attempts also
   // moves state to "failed" (below), which would otherwise make this
@@ -772,7 +784,12 @@ export async function confirmHandover(userId: string, handoverId: string, ctx: R
   const { merchant, booking, handover } = await requireOwnHandover(userId, handoverId);
   await requireHandoverNotExpired(handover);
   if (handover.state !== "otp_verified" && handover.state !== "condition_logged") {
-    conflict("required_steps_incomplete", "Verify the hirer's code before confirming.");
+    conflict(
+      "required_steps_incomplete",
+      handover.kind === "return"
+        ? "Log the vehicle's condition before confirming."
+        : "Verify the hirer's code before confirming.",
+    );
   }
 
   const updated = await db.transaction(async (trx) => {
@@ -866,7 +883,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
       body:
         handover.kind === "pickup"
           ? "Checked over together at pick-up."
-          : "Checked over on return. Deposit clears in 24 hours unless a report is filed.",
+          : "Checked over on return. You have 14 days to report an issue with this hire.",
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -890,7 +907,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
           merchantId: merchant.id,
           category: "return",
           title: `${bookingRow.ref} · vehicle returned and checked`,
-          body: "The return handover is done. The deposit clears in 24 hours unless you file a report.",
+          body: "The return handover is done. You can still report an issue with this hire for 14 days.",
           ref: bookingRow.ref,
           subjectType: "booking",
           subjectId: booking.id,
@@ -920,7 +937,9 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
 }
 
 // ---------------------------------------------------------------------
-// Reports (deposit-backed claim, or a no-money conduct report)
+// Reports (a money claim, capped and settled entirely server-side, or a
+// no-money conduct report). The merchant states what an issue cost to put
+// right; none of the deposit mechanics below are exposed to them.
 // ---------------------------------------------------------------------
 
 function serializeReport(r: BookingReportRow) {
@@ -971,7 +990,7 @@ export async function createBookingReport(userId: string, bookingId: string, inp
   let escalatedDisputeId: string | null = null;
   if (input.kind === "claim") {
     if (!claimableNow(booking)) {
-      conflict("deposit_not_held", "The deposit for this booking is no longer held, so a claim can't move money now.");
+      conflict("claim_window_closed", "The window to file a cost claim for this hire has closed. You can still file a conduct report.");
     }
     const requested = input.amount!;
     const cap = booking.deposit_amount;
@@ -1002,10 +1021,10 @@ export async function createBookingReport(userId: string, bookingId: string, inp
       await appendBookingEvent(trx, {
         bookingId: booking.id,
         merchantId: merchant.id,
-        kind: "deposit_hold_extended",
+        kind: "claim_under_review",
         tone: "amber",
-        label: "Deposit hold extended to 48 hours",
-        body: "A claim was filed, so CRAL is holding the deposit longer while it's reviewed.",
+        label: "Claim under review",
+        body: "CRAL is reviewing your claim. This usually takes up to 48 hours.",
         actorType: "system",
       });
     }
@@ -1015,7 +1034,7 @@ export async function createBookingReport(userId: string, bookingId: string, inp
       merchantId: merchant.id,
       kind: input.kind === "claim" ? "claim_filed" : "conduct_reported",
       tone: "amber",
-      label: input.kind === "claim" ? "Claim filed against the deposit" : "Conduct reported",
+      label: input.kind === "claim" ? "Claim filed" : "Conduct reported",
       body: input.description,
       actorType: "merchant",
     });

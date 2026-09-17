@@ -210,6 +210,9 @@ describe("bookings — confirm / decline", () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe("confirmed");
     expect(res.body.events[0]).toMatchObject({ label: "You accepted the booking" });
+    // The hirer deposit is internal-only — it must never reach a merchant payload.
+    expect(res.body).not.toHaveProperty("deposit");
+    expect(res.body).not.toHaveProperty("deposit_release_at");
   });
 
   it("refuses to confirm twice", async () => {
@@ -447,16 +450,31 @@ describe("bookings — handover", () => {
     expect(completed.body.booking.status).toBe("active");
     expect(completed.body.booking.has_pickup_condition_photos).toBe(true);
 
-    // --- return ---
+    // --- return: no code step - nobody to authenticate, so it opens
+    //     straight at the condition check with no email ---
+    emailSpy.mockClear();
     const openReturn = await request(app)
       .post(`/merchant/bookings/${booking.id}/handovers`)
       .set(auth(accessToken))
       .send({ kind: "return" });
     expect(openReturn.status).toBe(201);
+    expect(openReturn.body.state).toBe("otp_verified");
+    expect(openReturn.body.required).toEqual(["condition", "confirm"]);
+    expect(openReturn.body.masked_destination).toBeNull();
+    expect(emailSpy).not.toHaveBeenCalled();
     const returnHandoverId = openReturn.body.id;
-    const returnCode = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
 
-    await request(app).post(`/merchant/handovers/${returnHandoverId}/otp/verify`).set(auth(accessToken)).send({ code: returnCode });
+    const noCode = await request(app)
+      .post(`/merchant/handovers/${returnHandoverId}/otp/verify`)
+      .set(auth(accessToken))
+      .send({ code: "123456" });
+    expect(noCode.status).toBe(409);
+    expect(noCode.body.error.code).toBe("otp_not_required");
+
+    await request(app)
+      .post(`/merchant/handovers/${returnHandoverId}/condition`)
+      .set(auth(accessToken))
+      .send({ odometer_km: 42500, fuel_level: "full" });
     await request(app).post(`/merchant/handovers/${returnHandoverId}/confirm`).set(auth(accessToken));
     const returnCompleted = await request(app)
       .post(`/merchant/handovers/${returnHandoverId}/complete`)
@@ -465,8 +483,11 @@ describe("bookings — handover", () => {
 
     expect(returnCompleted.status).toBe(200);
     expect(returnCompleted.body.booking.status).toBe("completed");
-    expect(returnCompleted.body.booking.deposit_release_at).toBeTruthy();
     expect(returnCompleted.body.booking.rating_open_until).toBeTruthy();
+    // The deposit-hold clock still runs, it is just never exposed to the merchant.
+    expect(returnCompleted.body.booking.deposit_release_at).toBeUndefined();
+    const returnedRow = await db("bookings").where({ id: booking.id }).first();
+    expect(returnedRow.deposit_release_at).toBeTruthy();
 
     emailSpy.mockRestore();
   });

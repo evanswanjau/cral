@@ -280,6 +280,11 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
   }, []);
 
   const verified = handover && handover.state !== "otp_sent" && handover.state !== "created";
+  // The return leg carries no "otp" in `required` - nobody to authenticate
+  // when the merchant takes their own vehicle back - so it skips the code
+  // step and opens straight at the condition check.
+  const needsCode = handover ? handover.required.includes("otp") : kind === "pickup";
+  const showCodeStep = !!handover && needsCode && !verified;
   const canSkipPhotos = kind === "pickup"; // a return with no pickup photos already can't file a damage claim regardless
 
   function handleVerify() {
@@ -335,11 +340,13 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
           <div>
             <div style={P.modalTitle}>{kind === "pickup" ? "Start the hire" : "Confirm the return"}</div>
             <div style={P.modalSub}>
-              {!verified
-                ? handover?.masked_destination
-                  ? `Ask the hirer for the code sent to ${handover.masked_destination}.`
-                  : "Opening the handover session…"
-                : "Check the vehicle over, then finish to release the next step."}
+              {!handover
+                ? "Opening the handover session…"
+                : showCodeStep
+                  ? handover.masked_destination
+                    ? `Ask the hirer for the code sent to ${handover.masked_destination}.`
+                    : "Ask the hirer for the code sent to them."
+                  : "Check the vehicle over, then finish to release the next step."}
             </div>
           </div>
           <button type="button" onClick={onClose} style={P.modalClose}>×</button>
@@ -352,7 +359,9 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
             </div>
           )}
 
-          {!verified ? (
+          {!handover ? (
+            <div style={P.helperText}>Opening the handover session…</div>
+          ) : showCodeStep ? (
             <div style={{ display: "grid", gap: 14 }}>
               <div>
                 <label style={P.fieldLabel}>Code from the hirer</label>
@@ -431,11 +440,11 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
           <button type="button" onClick={onClose} style={P.modalCancel}>Cancel</button>
           <button
             type="button"
-            disabled={!verified ? verifyOtp.isPending || !code.trim() : finishing}
-            onClick={!verified ? handleVerify : handleFinish}
-            style={{ ...P.modalCta, background: "#0F23A8", opacity: (!verified ? verifyOtp.isPending || !code.trim() : finishing) ? 0.6 : 1 }}
+            disabled={!handover || (showCodeStep ? verifyOtp.isPending || !code.trim() : finishing)}
+            onClick={showCodeStep ? handleVerify : handleFinish}
+            style={{ ...P.modalCta, background: "#0F23A8", opacity: !handover || (showCodeStep ? verifyOtp.isPending || !code.trim() : finishing) ? 0.6 : 1 }}
           >
-            {!verified ? (verifyOtp.isPending ? "Checking…" : "Verify code") : finishing ? "Finishing…" : kind === "pickup" ? "Confirm handover" : "Confirm returned"}
+            {showCodeStep ? (verifyOtp.isPending ? "Checking…" : "Verify code") : finishing ? "Finishing…" : kind === "pickup" ? "Confirm handover" : "Confirm returned"}
           </button>
         </div>
       </div>
@@ -465,15 +474,15 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
 
-  // The merchant states the real cost. The API decides what is actually
-  // recoverable and settles it - none of that reaches this screen.
+  // The merchant states what the issue cost to put right. What CRAL can
+  // actually settle, and how, is decided server-side and never surfaces here.
   const amountNum = (parseInt(amount.replace(/\D/g, ""), 10) || 0) * 100;
   const photosBlocked = category === "damage" && !b.has_pickup_condition_photos;
 
   return (
     <Modal
       title="Report an issue"
-      sub="CRAL reviews claims like this and settles what the hirer owes."
+      sub="CRAL reviews reports like this and follows up with the hirer."
       onClose={onClose}
       ctaLabel={create.isPending ? "Filing…" : "File report"}
       ctaDisabled={create.isPending || !description.trim() || (kind === "claim" && !amount) || photosBlocked}
@@ -498,11 +507,11 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
       <div style={{ display: "grid", gap: 16 }}>
         <div style={P.toggleRow}>
           <div>
-            <div style={P.toggleRowTitle}>Does this need money back from the hirer?</div>
+            <div style={P.toggleRowTitle}>Are you claiming the cost of repair or loss?</div>
             <div style={P.toggleRowSub}>
               {kind === "claim"
-                ? "CRAL reviews the amount and recovers what it can."
-                : "No money - this just goes on their record."}
+                ? "CRAL reviews it and follows up with the hirer."
+                : "No claim - this just goes on their record."}
             </div>
           </div>
           <button
@@ -525,7 +534,7 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
 
         {kind === "claim" && (
           <div>
-            <label style={P.fieldLabel}>Amount claimed (KES)</label>
+            <label style={P.fieldLabel}>What did it cost to put right? (KES)</label>
             <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} placeholder="0" />
           </div>
         )}
