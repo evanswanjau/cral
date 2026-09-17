@@ -19,9 +19,16 @@ what is next.
 
 Three rules that keep tripping this project up:
 
-- **`main` is the branch.** `develop` is dead (zero unique commits); the
-  deploy script pulls `origin/main`, so merging is what deploys. Older plan
-  docs saying "branch off `develop`" are wrong.
+- **`main` is still the branch for the VPS (production).** `~/redeploy.sh`
+  pulls `origin/main`, so merging to `main` is what deploys `cral.co.ke`/
+  `merchant.`/`admin.`/`api.cral.co.ke`. **`develop` is no longer dead** -
+  it was reset to match `main` on 2026-09-17 (its one prior "unique"
+  commit was already content-equivalent to something in `main`, confirmed
+  via `git cherry` before the reset) and is now the tracking branch for
+  the Vercel customer deploy - see the Vercel section below. Older plan
+  docs saying "branch off `develop`" predate both states and are still
+  wrong about *why* to use it, even though the branch itself is alive
+  again.
 - **A plan document is not evidence.** `admin-bookings-payouts.md` was
   written in the past tense describing a module, two screens and two test
   suites that had never been written, and the next session believed it.
@@ -1361,36 +1368,61 @@ exist so a search of this file finds them.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
-the primary one at `cral.co.ke` on the VPS. Same build, same production
-API (`api.cral.co.ke`) — this is not a second backend or a staging
-environment, just a second front door to the same customer portal.
-`CORS_ORIGINS` on the VPS `.env` now includes `https://app-cral.vercel.app`
+the primary one at `cral.co.ke` on the VPS. Same production API
+(`api.cral.co.ke`) — this is not a second backend, just a second front
+door. `CORS_ORIGINS` on the VPS `.env` includes `https://app-cral.vercel.app`
 (no `www`/preview-subdomain wildcard — only the one origin asked for).
 
-- **Redeploy via `apps/customer/deploy-vercel.sh`**, not a GitHub
-  integration or `git push` — none is connected. The script builds
-  locally with the same `VITE_API_URL`/`VITE_MERCHANT_APP_URL` the VPS
-  build uses, then ships the built `dist/` straight to Vercel with
-  `vercel deploy --prod` (a prebuilt/static deploy, not a Vercel-run
-  build). Needs `vercel login` once per machine — interactive OAuth
-  device flow, nothing can complete that non-interactively.
-- **Why a prebuilt deploy, not a source-based Vercel build**: this repo
+**It tracks `develop`, not `main`.** Push or merge to `develop` and
+Vercel auto-builds and deploys; `main`/the VPS are untouched by that.
+This makes `develop` a real staging branch for the customer portal:
+preview work there before it reaches `main` and the VPS. Set via the
+Vercel dashboard, Project → Settings → Environments → Production →
+Branch Tracking (not reachable through the REST API or CLI as of this
+writing — confirmed by trying both).
+
+- **This is a real, git-triggered, source-based Vercel build** — not a
+  manual/prebuilt one. It replaced an earlier prebuilt approach
+  (`vercel deploy` of a locally-built `dist/`) that turned out to be
+  unnecessary once the actual monorepo build settings were right; see
+  `apps/customer/deploy-vercel.sh`'s own comment for that history and
+  why the script still exists as a manual fallback.
+- **What makes the git build actually work**, after failing once
+  (below): Root Directory = `apps/customer`, **"Include files outside
+  the Root Directory" enabled** (`sourceFilesOutsideRootDirectory: true`
+  — this is what makes the *whole* repo available even though the build
+  cwd is `apps/customer`), Install Command
+  `cd ../.. && npm ci`, Build Command
+  `cd ../.. && npm run build -w apps/customer`, Output Directory `dist`.
+  All four are set explicitly (not framework-autodetected) — this repo
   is npm workspaces, and `apps/customer` depends on `@cral/types`/
-  `@cral/ui` via the workspace, not the npm registry. Vercel's own build
-  step only uploads the directory it's told is the project root (Root
-  Directory), so a `cd ../.. && npm ci` from inside that build sandbox
-  has no monorepo root to `cd` into — the install fails with no
-  workspace packages available, and there's no `--include-files-outside-
-  root` equivalent reachable via the CLI outside the dashboard UI. A
-  prebuilt deploy sidesteps this entirely: the real build already ran
-  (same command the VPS uses), and only the finished static output is
-  handed to Vercel.
-- The Vercel project (`evanswanjaus-projects/app-cral`) has **no stored
-  Install/Build Command** — they're cleared (empty string) so Vercel
-  never tries to build from source if a deploy is ever triggered another
-  way. Its `vercel.json` is a single SPA rewrite rule
-  (`/(.*) → /index.html`), copied into `dist/` by the deploy script every
-  run since `dist/` itself is rebuilt (and gitignored) each time.
+  `@cral/ui` via the workspace, not the npm registry, so the `cd ../..`
+  is what lets `npm ci`/the build actually reach the monorepo root.
+- **The first attempt at a git-triggered build failed** (undersized
+  upload, install exited 1) because `sourceFilesOutsideRootDirectory`
+  wasn't on yet — that's what led to trying the prebuilt workaround
+  first. Once that flag and the explicit commands above were set
+  together, a real push to `develop` built and deployed cleanly - don't
+  reintroduce the prebuilt path without checking this project's current
+  settings first.
+- **An outage happened once already from an unnoticed auto-link**:
+  creating the project auto-detected the account's GitHub connection and
+  silently linked `main` as the production branch before this was set up
+  deliberately. The very next merge to `main` triggered a build using
+  settings meant only for the (then-current) prebuilt path, produced an
+  empty deployment, and got promoted over the correct one - 404 on every
+  route within the hour. Fixed by disconnecting and redoing the link
+  properly with `develop` as the tracked branch. **If
+  `https://app-cral.vercel.app` ever 404s, check Project Settings →
+  Environments → Production → Branch Tracking is still `develop`, and
+  that the four build/install/output settings above are still explicit**
+  - a project setting silently reverting to auto-detected defaults is
+  exactly this failure mode recurring.
+- `apps/customer/vercel.json` is a single SPA rewrite rule
+  (`/(.*) → /index.html`), read directly since Root Directory =
+  `apps/customer` — no copying into `dist/` needed for the git-build
+  path (the now-fallback `deploy-vercel.sh` still copies it, since a
+  prebuilt deploy needs the rule to travel with the built output).
 
 ## What NOT to do
 

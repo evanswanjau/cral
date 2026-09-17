@@ -1,11 +1,23 @@
 #!/usr/bin/env bash
-# Redeploy the customer app to Vercel (https://app-cral.vercel.app).
+# MANUAL FALLBACK for the Vercel customer deploy (https://app-cral.vercel.app).
 #
-# This is a SECOND, independent deployment of apps/customer - the primary
-# one is still cral.co.ke on the VPS (see ~/redeploy.sh there, and
-# CLAUDE.md's Vercel section for why this one exists and how it's wired).
-# Nothing else moves here: the API stays on the VPS at api.cral.co.ke: this
-# script ships a new customer build.
+# The primary path is git-triggered: push or merge to `develop` and Vercel
+# builds from source automatically (Production tracks `develop`, not
+# `main` - see CLAUDE.md's Vercel section). Normally you don't run this
+# script at all - just push to develop.
+#
+# This exists for when the git-triggered path is broken or unavailable
+# (e.g. debugging a Vercel project-settings regression, or Vercel/GitHub
+# itself is down) - it builds locally and ships the built dist/ straight
+# to Vercel as a prebuilt static deploy, bypassing Vercel's own build step
+# entirely. This IS how the deploy worked originally, before the real
+# git-build settings were figured out; kept working as a fallback, not
+# removed.
+#
+# This is a SECOND, independent deployment of apps/customer either way -
+# the primary CRAL deployment is still cral.co.ke on the VPS (see
+# ~/redeploy.sh there). Nothing else moves here: the API stays on the VPS
+# at api.cral.co.ke, this only ships a new customer build.
 #
 # Run from anywhere; it cds to the repo root itself.
 set -euo pipefail
