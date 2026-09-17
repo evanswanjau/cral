@@ -23,6 +23,7 @@ import type {
 import type {
   CreateVehicleInput,
   DeleteVehicleInput,
+  EditVehicleDetailsInput,
   ListVehiclesQuery,
   MessageReviewerInput,
   PriceAvailabilityInput,
@@ -334,15 +335,24 @@ export async function createVehicle(userId: string, input: CreateVehicleInput, c
   return serializeDetail(merchant, vehicle);
 }
 
+/**
+ * A duplicated draft can't share the source's (globally-unique) plate and
+ * `registration` is NOT NULL, so the copy gets this placeholder. The
+ * merchant must set a real plate via `updateVehicleDetails` before the
+ * listing can be submitted — `submitVehicle` and the client both gate on
+ * `isPlaceholderRegistration`.
+ */
+const PLACEHOLDER_PLATE_PREFIX = "NEW ";
+export function isPlaceholderRegistration(registration: string): boolean {
+  return registration.startsWith(PLACEHOLDER_PLATE_PREFIX);
+}
+
 export async function duplicateVehicle(userId: string, vehicleId: string, ctx: RequestContext) {
   const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
 
   const copy = await db.transaction(async (trx) => {
     const listingRef = await nextListingRef(trx);
-    // The source plate is real and unique per merchant, so the copy needs a
-    // placeholder the merchant must overwrite before it can be submitted —
-    // registration stays NOT NULL/unique, so it can't be left blank.
-    const placeholderPlate = `NEW ${generateId("vehicle").slice(-6).toUpperCase()}`;
+    const placeholderPlate = `${PLACEHOLDER_PLATE_PREFIX}${generateId("vehicle").slice(-6).toUpperCase()}`;
     const [created] = await trx<VehicleRow>("vehicles")
       .insert({
         id: generateId("vehicle"),
@@ -390,6 +400,86 @@ export async function duplicateVehicle(userId: string, vehicleId: string, ctx: R
   });
 
   return serializeDetail(merchant, copy);
+}
+
+// ---------------------------------------------------------------------
+// Vehicle details (the logbook-derived facts)
+// ---------------------------------------------------------------------
+
+// Identity/spec fields are editable while the listing is still the
+// merchant's to shape - a fresh draft, or one a reviewer sent back.
+// Once it's in the queue (`pending`/`review`) or on the market
+// (`live`/`paused`) the plate especially is load-bearing (globally
+// unique, already reviewed), so a change there is a support path, not a
+// self-serve edit.
+const EDITABLE_DETAIL_STATUSES: VehicleStatus[] = ["draft", "action", "rejected"];
+
+export async function updateVehicleDetails(
+  userId: string,
+  vehicleId: string,
+  input: EditVehicleDetailsInput,
+  ctx: RequestContext,
+) {
+  const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
+  if (!EDITABLE_DETAIL_STATUSES.includes(vehicle.status)) {
+    conflict(
+      "vehicle_locked",
+      "This listing's details are locked while it's in review or on the market. Message the reviewer if something needs to change.",
+    );
+  }
+
+  const update = {
+    type: input.type,
+    make: input.make.trim(),
+    model: input.model.trim(),
+    year: input.year.trim(),
+    registration: input.registration.trim(),
+    transmission: input.transmission,
+    fuel: input.fuel,
+    colour: input.colour?.trim() || null,
+    seats: input.seats ?? vehicle.seats,
+  };
+
+  const updated = await db
+    .transaction(async (trx) => {
+      const [row] = await trx<VehicleRow>("vehicles").where({ id: vehicle.id }).update(update).returning("*");
+      if (!row) throw new Error("Failed to update vehicle");
+
+      await appendVehicleEvent(trx, {
+        vehicleId: vehicle.id,
+        merchantId: merchant.id,
+        kind: "details_updated",
+        tone: "grey",
+        label: "Details updated",
+        body: `${row.make} ${row.model} · ${row.registration}`,
+        actorType: "merchant",
+      });
+      await writeAuditEntry(trx, {
+        actorId: userId,
+        actorType: "user",
+        action: "vehicle.details_updated",
+        entityType: "vehicle",
+        entityId: vehicle.id,
+        before: {
+          make: vehicle.make,
+          model: vehicle.model,
+          year: vehicle.year,
+          registration: vehicle.registration,
+          type: vehicle.type,
+          transmission: vehicle.transmission,
+          fuel: vehicle.fuel,
+          colour: vehicle.colour,
+          seats: vehicle.seats,
+        },
+        after: update,
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+      return row;
+    })
+    .catch(rethrowRegistrationConflict);
+
+  return serializeDetail(merchant, updated);
 }
 
 // ---------------------------------------------------------------------
@@ -461,6 +551,16 @@ const MIN_SUBMISSION_PHOTOS = 3;
 export async function submitVehicle(userId: string, vehicleId: string, ctx: RequestContext) {
   const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
   if (vehicle.status !== "draft") conflict("vehicle_not_draft", "Only a draft listing can be submitted.");
+
+  if (isPlaceholderRegistration(vehicle.registration)) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "registration_required",
+      message: "Set this vehicle's registration before submitting.",
+      field: "registration",
+    });
+  }
 
   const vehicleDocs = await db<DocumentRow>("documents").where({ vehicle_id: vehicle.id });
   if (!vehicle.daily_rate_amount) {

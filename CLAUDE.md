@@ -736,6 +736,24 @@ dropdown (`ProfileMenu`) → "My profile" → `/settings`.
   bookings/payouts are unaffected. Shared `RateField` component
   (`components/onboarding/RateField.tsx`), used by onboarding's Vehicles
   step and the standalone Add-a-vehicle page.
+- **The logbook fields are editable after creation** (owner's call,
+  2026-09-05 — round 5). Before this a duplicated draft was stuck with the
+  source's make/model and a `NEW xxxxxx` placeholder plate and no way to
+  fix either. `PATCH /merchant/vehicles/:id/details`
+  (`EditVehicleDetailsSchema`, `updateVehicleDetails`) takes type / make /
+  model / year / registration / transmission / fuel / colour - **not**
+  county / pickup / rate, which the price PATCH already owns. Accepted
+  only while `status` is `draft` / `action` / `rejected`
+  (`EDITABLE_DETAIL_STATUSES`); otherwise 409 `vehicle_locked` (the plate
+  is globally unique and already reviewed once it's further along - that's
+  a support path). Plate clashes rethrow as 409 `registration_taken`.
+  `submitVehicle` now 422s `registration_required` while the plate is
+  still the `NEW ` placeholder (`isPlaceholderRegistration`), and the
+  client blocks submit + shows "NO PLATE YET" in the masthead. Shared
+  `components/vehicle/VehicleDetailsFields.tsx` renders the field run for
+  both the Add-a-vehicle page and the new VehicleDetail "Edit" modal.
+  This module still has **no `/openapi` contract** (it never did - only
+  onboarding's `/merchant/onboarding/vehicles` is frozen).
 - **`suspended` accounts lose access at the next token refresh** —
   `refreshToken` rejects `suspended` (403) and `deleted` and revokes the
   session, so an admin suspension ends a live merchant's access within a

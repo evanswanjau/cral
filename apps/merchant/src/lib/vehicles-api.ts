@@ -127,6 +127,31 @@ export function updatePriceAvailability(id: string, input: PriceAvailabilityInpu
   return apiPatch<VehicleDetail>(`/merchant/vehicles/${id}`, input);
 }
 
+export interface EditVehicleDetailsInput {
+  type: string;
+  make: string;
+  model: string;
+  year: string;
+  registration: string;
+  transmission: string;
+  fuel: string;
+  colour?: string;
+  seats?: number;
+}
+
+/** The logbook-derived fields. Server accepts this only while the listing
+ *  is a draft or has been sent back (`action` / `rejected`). */
+export function updateVehicleDetails(id: string, input: EditVehicleDetailsInput) {
+  return apiPatch<VehicleDetail>(`/merchant/vehicles/${id}/details`, input);
+}
+
+/** A duplicated draft carries a `NEW xxxxxx` placeholder plate until the
+ *  merchant sets a real one - the server blocks submit until they do
+ *  (`registration_required`), so the client mirrors the check. */
+export function isPlaceholderRegistration(registration: string): boolean {
+  return registration.startsWith("NEW ");
+}
+
 export function deleteVehicleConfirmed(id: string, registration: string) {
   return apiDelete<void>(`/merchant/vehicles/${id}`, { registration });
 }
@@ -200,6 +225,14 @@ export function useUpdatePriceAvailability(id: string) {
   const invalidate = useInvalidateVehicles();
   return useMutation({
     mutationFn: (input: PriceAvailabilityInput) => updatePriceAvailability(id, input),
+    onSuccess: () => invalidate(id),
+  });
+}
+
+export function useUpdateVehicleDetails(id: string) {
+  const invalidate = useInvalidateVehicles();
+  return useMutation({
+    mutationFn: (input: EditVehicleDetailsInput) => updateVehicleDetails(id, input),
     onSuccess: () => invalidate(id),
   });
 }

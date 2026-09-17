@@ -30,6 +30,29 @@ export const CreateVehicleSchema = z.object({
 });
 export type CreateVehicleInput = z.infer<typeof CreateVehicleSchema>;
 
+/**
+ * Body for the "Vehicle details" edit modal — the logbook-derived facts.
+ * Same fields (and enums) as create, minus county/pickup/rate, which the
+ * "Price & availability" modal already owns. A full replacement, not a
+ * patch: the form always submits every field prefilled.
+ *
+ * Only accepted while the listing is a `draft` or has been sent back
+ * (`action` / `rejected`) — see `EDITABLE_DETAIL_STATUSES` in the service.
+ * On a live or in-review listing these are locked (message the reviewer).
+ */
+export const EditVehicleDetailsSchema = z.object({
+  type: z.enum(VEHICLE_CATEGORIES),
+  make: z.string().min(1),
+  model: z.string().min(1),
+  year: z.string().min(1),
+  registration: z.string().min(1),
+  transmission: z.enum(["Automatic", "Manual"]),
+  fuel: z.enum(["Petrol", "Diesel", "Hybrid", "Electric"]),
+  colour: z.string().optional(),
+  seats: z.number().int().min(1).max(70).optional(),
+});
+export type EditVehicleDetailsInput = z.infer<typeof EditVehicleDetailsSchema>;
+
 /** Body for the "Price & availability" modal — only what that modal edits. */
 export const PriceAvailabilitySchema = z.object({
   daily_rate: z.string().optional(),

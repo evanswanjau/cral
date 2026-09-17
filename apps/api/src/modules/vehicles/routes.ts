@@ -10,6 +10,7 @@ import * as vehiclesService from "./service.js";
 import {
   CreateVehicleSchema,
   DeleteVehicleSchema,
+  EditVehicleDetailsSchema,
   ListVehiclesQuerySchema,
   MessageReviewerSchema,
   PriceAvailabilitySchema,
@@ -59,6 +60,21 @@ vehiclesRouter.patch(
   validateBody(PriceAvailabilitySchema),
   asyncHandler(async (req, res) => {
     const result = await vehiclesService.updatePriceAvailability(
+      req.auth!.sub,
+      req.params.vehicleId as string,
+      req.body,
+      ctxOf(req),
+    );
+    res.status(200).json(result);
+  }),
+);
+
+vehiclesRouter.patch(
+  "/merchant/vehicles/:vehicleId/details",
+  authenticate(),
+  validateBody(EditVehicleDetailsSchema),
+  asyncHandler(async (req, res) => {
+    const result = await vehiclesService.updateVehicleDetails(
       req.auth!.sub,
       req.params.vehicleId as string,
       req.body,

@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Combobox } from "../components/onboarding/Combobox.js";
 import { Earnings } from "../components/onboarding/steps/Vehicles.js";
 import { RateField } from "../components/onboarding/RateField.js";
-import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../lib/vehicle-catalogue.js";
-import { VEHICLE_CATEGORIES, type VehicleType } from "../lib/vehicle-categories.js";
+import {
+  EMPTY_VEHICLE_DETAILS,
+  VehicleDetailsFields,
+  type VehicleDetailsValue,
+} from "../components/vehicle/VehicleDetailsFields.js";
 import { COUNTIES } from "../lib/kenya.js";
 import { BackButton, FormField, PrimaryButton, Select, TextInput } from "../components/onboarding/primitives.js";
 import { O } from "../components/onboarding/styles.js";
@@ -12,25 +14,15 @@ import { P } from "../components/portal/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { createVehicle } from "../lib/vehicles-api.js";
 
-type Transmission = "Automatic" | "Manual";
-type Fuel = "Petrol" | "Diesel" | "Hybrid" | "Electric";
-
-const VEHICLE_TYPES = VEHICLE_CATEGORIES;
-const TRANSMISSIONS: Transmission[] = ["Automatic", "Manual"];
-const FUELS: Fuel[] = ["Petrol", "Diesel", "Hybrid", "Electric"];
-
-function formatPlate(raw: string): string {
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
-  return clean.length > 3 ? `${clean.slice(0, 3)} ${clean.slice(3)}` : clean;
-}
-
 /**
  * A standalone "add a vehicle to an already-submitted fleet" screen - the
  * design's own prototype punts this ("lives in the onboarding flow"), but
  * onboarding is a one-time wizard that's already been submitted by the
  * time a merchant reaches this screen, so it needs its own home. Reuses
- * onboarding's Combobox/vehicle-catalogue/primitives for the same look,
- * but talks to the vehicles module rather than the onboarding draft.
+ * onboarding's field primitives for the same look, but talks to the
+ * vehicles module rather than the onboarding draft. The logbook fields
+ * are the shared `VehicleDetailsFields` (also used by the edit modal on
+ * VehicleDetail).
  */
 export function AddVehicle(): JSX.Element {
   const navigate = useNavigate();
@@ -39,20 +31,20 @@ export function AddVehicle(): JSX.Element {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [type, setType] = useState<VehicleType>("sedan");
-  const [make, setMake] = useState("");
-  const [model, setModel] = useState("");
-  const [year, setYear] = useState("");
-  const [registration, setRegistration] = useState("");
-  const [transmission, setTransmission] = useState<Transmission>("Automatic");
-  const [fuel, setFuel] = useState<Fuel>("Petrol");
-  const [colour, setColour] = useState("");
+  const [details, setDetails] = useState<VehicleDetailsValue>(EMPTY_VEHICLE_DETAILS);
   const [county, setCounty] = useState("");
   const [pickupAddress, setPickupAddress] = useState("");
   const [dailyRate, setDailyRate] = useState("");
   const [rateMode, setRateMode] = useState<"list" | "net">("list");
 
-  const requiredFilled = make.trim() && model.trim() && year.trim() && registration.trim() && county.trim() && pickupAddress.trim() && dailyRate.trim();
+  const requiredFilled =
+    details.make.trim() &&
+    details.model.trim() &&
+    details.year.trim() &&
+    details.registration.trim() &&
+    county.trim() &&
+    pickupAddress.trim() &&
+    dailyRate.trim();
 
   async function handleSave() {
     if (!requiredFilled) {
@@ -63,14 +55,14 @@ export function AddVehicle(): JSX.Element {
     setError(null);
     try {
       const created = await createVehicle({
-        type,
-        make: make.trim(),
-        model: model.trim(),
-        year: year.trim(),
-        registration: registration.trim(),
-        transmission,
-        fuel,
-        colour: colour.trim() || undefined,
+        type: details.type,
+        make: details.make.trim(),
+        model: details.model.trim(),
+        year: details.year.trim(),
+        registration: details.registration.trim(),
+        transmission: details.transmission,
+        fuel: details.fuel,
+        colour: details.colour.trim() || undefined,
         county: county.trim(),
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),
@@ -103,42 +95,7 @@ export function AddVehicle(): JSX.Element {
         <div style={O.formMain}>
       <div style={{ ...P.card, padding: 20 }}>
         <div style={O.formFields}>
-          <FormField label="Vehicle type">
-            <Select value={type} onChange={(e) => setType(e.target.value as VehicleType)}>
-              {VEHICLE_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField label="Make" required error={showErrors && !make.trim() ? "Required." : undefined} helper="Pick from the list or type your own.">
-            <Combobox value={make} onChange={setMake} options={MAKE_NAMES} defaultOptions={POPULAR_KENYAN_MAKES} placeholder="Toyota" error={showErrors && !make.trim()} emptyHint="Not listed - we'll use what you typed." />
-          </FormField>
-          <FormField label="Model" required error={showErrors && !model.trim() ? "Required." : undefined} helper="Include the trim if the logbook does.">
-            <Combobox value={model} onChange={setModel} options={modelsForMake(make)} placeholder="Land Cruiser Prado" error={showErrors && !model.trim()} emptyHint="Not listed - we'll use what you typed." />
-          </FormField>
-          <FormField label="Year" required error={showErrors && !year.trim() ? "Required." : undefined} helper="Four digits.">
-            <TextInput value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="2019" error={showErrors && !year.trim()} />
-          </FormField>
-          <FormField label="Registration" required error={showErrors && !registration.trim() ? "Required." : undefined} helper="Spaced and uppercased as you type.">
-            <TextInput value={registration} onChange={(e) => setRegistration(formatPlate(e.target.value))} placeholder="KDL 442N" error={showErrors && !registration.trim()} />
-          </FormField>
-          <FormField label="Transmission">
-            <Select value={transmission} onChange={(e) => setTransmission(e.target.value as Transmission)}>
-              {TRANSMISSIONS.map((t) => (
-                <option key={t} value={t}>{t}</option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField label="Fuel">
-            <Select value={fuel} onChange={(e) => setFuel(e.target.value as Fuel)}>
-              {FUELS.map((f) => (
-                <option key={f} value={f}>{f}</option>
-              ))}
-            </Select>
-          </FormField>
-          <FormField label="Colour" helper="As written in the logbook.">
-            <TextInput value={colour} onChange={(e) => setColour(e.target.value)} placeholder="Pearl white" />
-          </FormField>
+          <VehicleDetailsFields value={details} onChange={setDetails} showErrors={showErrors} />
           <FormField label="County" required error={showErrors && !county.trim() ? "Required." : undefined} helper="Where this vehicle is based.">
             <Select value={county} onChange={(e) => setCounty(e.target.value)}>
               <option value="">Select a county</option>
