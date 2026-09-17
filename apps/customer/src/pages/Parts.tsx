@@ -1,43 +1,41 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useSeo } from "../lib/use-seo.js";
-import { PageHero, Section, Body } from "../components/site/marketing.js";
+import { VerticalPage, type VerticalDef } from "../components/site/VerticalPage.js";
+
+/** `vertDefs.parts` from `docs/brand/canvas/Cruz Ride Auto - Website.dc.html`, verbatim. */
+const DEF: VerticalDef = {
+  kicker: "PARTS",
+  status: "OPENING SOON",
+  title: "Parts that match your car, not just your model year.",
+  sub: "Genuine, OEM and honest used parts from dealers CRAL has read the papers on. They quote against your chassis number instead of guessing, and it arrives fitted or delivered.",
+  ask: "What part do you need?",
+  askPlaceholder: "Front left shock absorber, Fielder 2018",
+  points: [
+    {
+      n: "01",
+      title: "Quoted against your chassis",
+      body: "No more choosing between three shock absorbers that all claim to fit a Fielder. The dealer quotes off the logbook CRAL already holds for your car.",
+    },
+    {
+      n: "02",
+      title: "Sellers are read first",
+      body: "The same document review car owners go through: registration, KRA PIN and an address a person has visited. A dealer with no premises does not get listed.",
+    },
+    {
+      n: "03",
+      title: "Paid on arrival, not on promise",
+      body: "You pay CRAL by M-Pesa. The dealer is paid once the part is in your hands and it is the right one.",
+    },
+  ],
+};
 
 export function Parts(): JSX.Element {
+  const navigate = useNavigate();
   useSeo({
     title: "Find parts",
-    description: "Genuine and quality vehicle parts on Cruz Ride Auto - coming soon.",
+    description: "Genuine and quality vehicle parts on Cruz Ride Auto - opening soon.",
     path: "/parts",
   });
 
-  return (
-    <div>
-      <PageHero
-        kicker="FIND PARTS"
-        title="Parts are coming to Cruz Ride Auto."
-        sub="We're building the same document-checked, no-surprises marketplace for vehicle parts. Hiring a car is live today."
-      />
-      <Section>
-        <Body>
-          When it launches, parts on Cruz Ride Auto will follow the same idea as hiring a car -
-          listings checked before they go live, and a record either side can open.
-        </Body>
-        <Link
-          to="/browse"
-          style={{
-            height: 44,
-            padding: "0 19px",
-            display: "inline-flex",
-            alignItems: "center",
-            background: "#0F23A8",
-            color: "#FFFFFF",
-            borderRadius: 8,
-            font: "600 14px/1 'Instrument Sans',sans-serif",
-            textDecoration: "none",
-          }}
-        >
-          Find a car instead
-        </Link>
-      </Section>
-    </div>
-  );
+  return <VerticalPage def={DEF} onFindCar={() => navigate("/browse")} />;
 }
