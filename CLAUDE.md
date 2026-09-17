@@ -1359,6 +1359,39 @@ exist so a search of this file finds them.
   the underlying functionality is real; only the exact visual fidelity is
   provisional.
 
+**A second, independent deployment of `apps/customer` exists on Vercel**
+(owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
+the primary one at `cral.co.ke` on the VPS. Same build, same production
+API (`api.cral.co.ke`) — this is not a second backend or a staging
+environment, just a second front door to the same customer portal.
+`CORS_ORIGINS` on the VPS `.env` now includes `https://app-cral.vercel.app`
+(no `www`/preview-subdomain wildcard — only the one origin asked for).
+
+- **Redeploy via `apps/customer/deploy-vercel.sh`**, not a GitHub
+  integration or `git push` — none is connected. The script builds
+  locally with the same `VITE_API_URL`/`VITE_MERCHANT_APP_URL` the VPS
+  build uses, then ships the built `dist/` straight to Vercel with
+  `vercel deploy --prod` (a prebuilt/static deploy, not a Vercel-run
+  build). Needs `vercel login` once per machine — interactive OAuth
+  device flow, nothing can complete that non-interactively.
+- **Why a prebuilt deploy, not a source-based Vercel build**: this repo
+  is npm workspaces, and `apps/customer` depends on `@cral/types`/
+  `@cral/ui` via the workspace, not the npm registry. Vercel's own build
+  step only uploads the directory it's told is the project root (Root
+  Directory), so a `cd ../.. && npm ci` from inside that build sandbox
+  has no monorepo root to `cd` into — the install fails with no
+  workspace packages available, and there's no `--include-files-outside-
+  root` equivalent reachable via the CLI outside the dashboard UI. A
+  prebuilt deploy sidesteps this entirely: the real build already ran
+  (same command the VPS uses), and only the finished static output is
+  handed to Vercel.
+- The Vercel project (`evanswanjaus-projects/app-cral`) has **no stored
+  Install/Build Command** — they're cleared (empty string) so Vercel
+  never tries to build from source if a deploy is ever triggered another
+  way. Its `vercel.json` is a single SPA rewrite rule
+  (`/(.*) → /index.html`), copied into `dist/` by the deploy script every
+  run since `dist/` itself is rebuilt (and gitignored) each time.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
