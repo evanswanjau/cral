@@ -176,7 +176,15 @@ export function CarDetail(): JSX.Element {
                 <img
                   src={photoSrc(car.photo_urls[0])}
                   alt={name}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{
+                    display: "block",
+                    position: "absolute",
+                    inset: 0,
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                    objectPosition: "center 75%",
+                  }}
                 />
               ) : (
                 <span
@@ -228,13 +236,26 @@ export function CarDetail(): JSX.Element {
                     key={url}
                     style={{
                       height: 74,
+                      position: "relative",
                       background: "#F1F3F6",
                       border: "1px solid #E4E7EC",
                       borderRadius: 8,
                       overflow: "hidden",
                     }}
                   >
-                    <img src={photoSrc(url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    <img
+                      src={photoSrc(url)}
+                      alt=""
+                      style={{
+                        display: "block",
+                        position: "absolute",
+                        inset: 0,
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        objectPosition: "center 75%",
+                      }}
+                    />
                   </div>
                 ))}
               </div>

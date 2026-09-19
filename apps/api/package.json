@@ -15,6 +15,7 @@
     "smtp:check": "tsx src/scripts/smtp-check.ts",
     "sms:check": "tsx src/scripts/sms-check.ts",
     "reminders:sweep": "tsx src/scripts/run-reminder-sweep.ts",
+    "seed:demo": "tsx src/scripts/seed-demo.ts",
     "seed:vehicles": "tsx src/scripts/seed-vehicles.ts",
     "seed:review-fleet": "tsx src/scripts/seed-review-fleet.ts",
     "approve:merchant": "tsx src/scripts/approve-merchant.ts",
