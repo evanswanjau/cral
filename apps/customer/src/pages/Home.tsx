@@ -4,6 +4,10 @@ import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCollections, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
+import sedanPhoto from "../assets/category-tiles/sedan.jpg";
+import suvPhoto from "../assets/category-tiles/suv.jpg";
+import vanPhoto from "../assets/category-tiles/van.jpg";
+import truckPhoto from "../assets/category-tiles/truck.jpg";
 
 /**
  * The home page, rebuilt against the real canvas source pulled 2026-09-17
@@ -44,12 +48,26 @@ import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 /** The canvas's fixed county list (its hero search bar's `<select>`). */
 const KENYA_COUNTIES = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Uasin Gishu", "Kiambu", "Machakos"];
 
-const CATEGORY_TILES: Array<{ slug: string; label: string; note: string }> = [
-  { slug: "sedan", label: "Sedans & small cars", note: "City runs and airport hops" },
-  { slug: "suv", label: "SUV, 4x4 & pickup", note: "Potholes, game parks, weekends away" },
-  { slug: "van", label: "Vans & minibuses", note: "Eight to fourteen people" },
-  { slug: "truck", label: "Trucks & trailers", note: "Moves, deliveries, hardware runs" },
-  { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment" },
+/**
+ * Photos: four of these five are real images pulled from the same canvas
+ * bundle (`docs/brand/canvas/`'s source), not fabricated stock photography
+ * found separately - the design tool embeds its own stock car photography
+ * per body type (`saloon`/`suvLarge`/`van`/`cab`), keyed by the same
+ * vertDefs-style resource ids the canvas's own `bodyPhoto()` uses. They're
+ * decorative category illustrations, not tied to any specific listing -
+ * same category as Airbnb's "browse by type" tiles, and meaningfully
+ * different from the fabricated-badge precedent this codebase avoids
+ * elsewhere: no factual claim is made about any particular vehicle or
+ * account. `machinery` has no canvas photo at all (the design's own body
+ * types never covered construction equipment) - flagged, not faked with an
+ * unrelated stock image found elsewhere.
+ */
+const CATEGORY_TILES: Array<{ slug: string; label: string; note: string; photo: string | null }> = [
+  { slug: "sedan", label: "Sedans & small cars", note: "City runs and airport hops", photo: sedanPhoto },
+  { slug: "suv", label: "SUV, 4x4 & pickup", note: "Potholes, game parks, weekends away", photo: suvPhoto },
+  { slug: "van", label: "Vans & minibuses", note: "Eight to fourteen people", photo: vanPhoto },
+  { slug: "truck", label: "Trucks & trailers", note: "Moves, deliveries, hardware runs", photo: truckPhoto },
+  { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment", photo: null },
 ];
 
 /** `vertDefs`-style doors, from the canvas's `doors` fixture, verbatim. */
@@ -709,30 +727,43 @@ export function Home(): JSX.Element {
                   cursor: "pointer",
                 }}
               >
-                <div
-                  style={{
-                    height: 104,
-                    background:
-                      "repeating-linear-gradient(135deg,#EEF0F3 0 10px,#E7EAEF 10px 20px)",
-                    borderBottom: "1px solid #E4E7EC",
-                    display: "flex",
-                    alignItems: "flex-end",
-                    padding: "9px 10px",
-                  }}
-                >
-                  <span
+                {b.photo ? (
+                  // Real photo, no overlay chip - matches the canvas's own
+                  // bodyTiles markup (a plain img, label lives below only).
+                  <div style={{ height: 104, borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
+                    <img
+                      src={b.photo}
+                      alt={b.label}
+                      loading="lazy"
+                      style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }}
+                    />
+                  </div>
+                ) : (
+                  <div
                     style={{
-                      font: "500 9px/1.4 'IBM Plex Mono',monospace",
-                      letterSpacing: ".09em",
-                      color: "#7C8697",
-                      background: "#FFFFFF",
-                      padding: "4px 7px",
-                      borderRadius: 4,
+                      height: 104,
+                      background:
+                        "repeating-linear-gradient(135deg,#EEF0F3 0 10px,#E7EAEF 10px 20px)",
+                      borderBottom: "1px solid #E4E7EC",
+                      display: "flex",
+                      alignItems: "flex-end",
+                      padding: "9px 10px",
                     }}
                   >
-                    {b.label.toUpperCase()}
-                  </span>
-                </div>
+                    <span
+                      style={{
+                        font: "500 9px/1.4 'IBM Plex Mono',monospace",
+                        letterSpacing: ".09em",
+                        color: "#7C8697",
+                        background: "#FFFFFF",
+                        padding: "4px 7px",
+                        borderRadius: 4,
+                      }}
+                    >
+                      {b.label.toUpperCase()}
+                    </span>
+                  </div>
+                )}
                 <div style={{ padding: "14px 15px 15px" }}>
                   <div
                     style={{
