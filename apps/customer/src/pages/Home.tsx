@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
@@ -8,6 +8,11 @@ import sedanPhoto from "../assets/category-tiles/sedan.jpg";
 import suvPhoto from "../assets/category-tiles/suv.jpg";
 import vanPhoto from "../assets/category-tiles/van.jpg";
 import truckPhoto from "../assets/category-tiles/truck.jpg";
+import heroXtrail from "../assets/hero/xtrail.jpg";
+import heroDemio from "../assets/hero/demio.jpg";
+import heroCx5 from "../assets/hero/cx5.jpg";
+import heroLandCruiser from "../assets/hero/land-cruiser.jpg";
+import heroMercedes from "../assets/hero/mercedes.jpg";
 
 /**
  * The home page, rebuilt against the real canvas source pulled 2026-09-17
@@ -70,19 +75,17 @@ const CATEGORY_TILES: Array<{ slug: string; label: string; note: string; photo: 
   { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment", photo: null },
 ];
 
-/** `vertDefs`-style doors, from the canvas's `doors` fixture, verbatim. */
-const DOORS: Array<{ label: string; note: string; tag: string; to: string | null }> = [
-  { label: "Hire a car", note: "Seven counties, papers read, paid after the owner accepts", tag: "LIVE", to: "/browse" },
-  { label: "Parts", note: "Quoted against your chassis number", tag: "SOON", to: "/parts" },
-  { label: "Service and repair", note: "Vetted garages, quote agreed first", tag: "SOON", to: "/services" },
-  { label: "Buy and sell", note: "Free listings, logbook checked first", tag: "NEXT", to: null },
-];
-
-const HERO_MODES: Array<{ key: "hire" | "parts" | "services"; label: string; tag: string }> = [
-  { key: "hire", label: "Hire a car", tag: "LIVE" },
-  { key: "parts", label: "Parts", tag: "SOON" },
-  { key: "services", label: "Service", tag: "SOON" },
-];
+/**
+ * Hero background crossfade. The canvas's own hero has a photo carousel
+ * (`cralHeroFade`, 36s loop, staggered) behind resource ids that turned out
+ * not to be in any canvas bundle available this session - see the
+ * conversation this was built from. X-Trail and Demio are real,
+ * freely-licensed (CC BY-SA) photos pulled from Wikimedia Commons; CX-5,
+ * the Land Cruiser lineup and the Mercedes were supplied directly by the
+ * owner (the Mercedes shot is evidently taken in a Kenyan car yard). Not
+ * the canvas's own photography, but real cars, not fabricated ones.
+ */
+const HERO_PHOTOS = [heroXtrail, heroMercedes, heroCx5, heroLandCruiser, heroDemio];
 
 /**
  * From the canvas's `trustCols` fixture, verbatim except item [1] - the
@@ -303,8 +306,6 @@ export function Home(): JSX.Element {
     },
   });
   const navigate = useNavigate();
-  const [heroMode, setHeroMode] = useState<"hire" | "parts" | "services">("hire");
-  const [heroQ, setHeroQ] = useState("");
   const [city, setCity] = useState<string | undefined>(undefined);
   const { data, isLoading, isError } = useQuery({
     queryKey: ["catalog", "collections"],
@@ -325,18 +326,6 @@ export function Home(): JSX.Element {
     if (!cur || v.daily_rate.amount < cur.amount) minPriceByCategory.set(v.category, v.daily_rate);
   }
 
-  const askCopy =
-    heroMode === "parts"
-      ? {
-          label: "WHAT PART DO YOU NEED?",
-          placeholder: "Front left shock absorber, Fielder 2018",
-          cta: "See how parts will work",
-        }
-      : {
-          label: "WHAT DOES THE CAR NEED?",
-          placeholder: "Full service and brake pads, X-Trail 2019",
-          cta: "See how service will work",
-        };
 
   return (
     <div>
@@ -344,12 +333,40 @@ export function Home(): JSX.Element {
       <div
         style={{
           background: "#0B0F1A",
-          padding:
-            "clamp(30px,4.6vw,58px) clamp(16px,4vw,40px) clamp(26px,3.6vw,44px)",
+          minHeight: "100vh",
+          padding: "clamp(30px,4.6vw,58px) 0 clamp(26px,3.6vw,44px)",
           position: "relative",
           overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
         }}
       >
+        {HERO_PHOTOS.map((photo, i) => (
+          <div
+            key={photo}
+            style={{
+              position: "absolute",
+              inset: 0,
+              backgroundImage: `url(${photo})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center right",
+              backgroundRepeat: "no-repeat",
+              animation: `cralHeroFade ${HERO_PHOTOS.length * 9}s linear infinite`,
+              animationDelay: `${-i * 9}s`,
+              opacity: 0,
+            }}
+          />
+        ))}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(100deg, rgba(11,15,26,.93) 0%, rgba(11,15,26,.8) 32%, rgba(11,15,26,.5) 62%, rgba(11,15,26,.72) 100%)",
+            pointerEvents: "none",
+          }}
+        />
         <div
           style={{
             position: "absolute",
@@ -378,42 +395,19 @@ export function Home(): JSX.Element {
         />
         <div
           style={{
-            maxWidth: 1240,
+            width: "100%",
+            maxWidth: 1320,
             margin: "0 auto",
+            padding: "0 clamp(16px,4vw,40px)",
             position: "relative",
             display: "flex",
             gap: "clamp(22px,4vw,54px)",
             flexWrap: "wrap",
-            alignItems: "flex-end",
+            alignItems: "flex-start",
+            boxSizing: "border-box",
           }}
         >
           <div style={{ flex: "1 1 520px", minWidth: 300 }}>
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 9,
-                padding: "6px 13px",
-                background: "rgba(255,255,255,.07)",
-                border: "1px solid #252B3A",
-                borderRadius: 999,
-                font: "500 11px/1.4 'IBM Plex Mono',monospace",
-                letterSpacing: ".09em",
-                color: "#A7B0BE",
-                marginBottom: "clamp(16px,2.4vw,24px)",
-              }}
-            >
-              <span
-                style={{
-                  width: 7,
-                  height: 7,
-                  borderRadius: 999,
-                  background: "#4FD69E",
-                  animation: "cruzPulse 2.4s ease-in-out infinite",
-                }}
-              />
-              CRAL · CRUZ RIDE AUTO LIMITED
-            </div>
             <h1
               style={{
                 margin: "0 0 16px",
@@ -424,16 +418,14 @@ export function Home(): JSX.Element {
                 maxWidth: 840,
               }}
             >
-              Everything cars in Kenya.
-              <br />
-              <span style={{ color: "#AEB8C6" }}>Hire, parts, service, resale.</span>
+              Kenya's one-stop shop for cars.
             </h1>
             <p
               style={{
-                margin: "0 0 clamp(20px,3vw,30px)",
+                margin: "0 0 clamp(32px,4.5vw,48px)",
                 font: "400 clamp(16px,1.9vw,20px)/1.5 'Instrument Sans',sans-serif",
                 color: "#A7B0BE",
-                maxWidth: 600,
+                maxWidth: 840,
               }}
             >
               One account for everything your car needs: hire one today, order the right part,
@@ -442,222 +434,31 @@ export function Home(): JSX.Element {
               says yes.
             </p>
 
-            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 13 }}>
-              {HERO_MODES.map((m) => {
-                const on = heroMode === m.key;
+            <SearchBar city={city} />
+            {/* City quick-picks, from the canvas's `cityCounts` - no count
+                badge (unlike the canvas), because `county` is free text on
+                a vehicle and a partial, sample-based number here would risk
+                reading as wrong rather than as an honest estimate. */}
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
+              {KENYA_COUNTIES.map((c) => {
+                const on = city === c;
                 return (
                   <button
-                    key={m.key}
+                    key={c}
                     type="button"
-                    onClick={() => setHeroMode(m.key)}
+                    onClick={() => setCity(c)}
                     style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      height: 38,
-                      padding: "0 15px",
-                      background: on ? "#FFFFFF" : "rgba(255,255,255,.06)",
-                      border: `1px solid ${on ? "#FFFFFF" : "#252B3A"}`,
+                      height: 32,
+                      padding: "0 12px",
+                      background: on ? "rgba(255,255,255,.09)" : "transparent",
+                      border: `1px solid ${on ? "#5F6B7D" : "#252B3A"}`,
                       borderRadius: 999,
                       cursor: "pointer",
+                      font: `${on ? 600 : 500} 13px/1 'Instrument Sans',sans-serif`,
+                      color: on ? "#FFFFFF" : "#C7CED8",
                     }}
                   >
-                    <span
-                      style={{
-                        font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                        color: on ? "#0B0F1A" : "#C7CEDA",
-                      }}
-                    >
-                      {m.label}
-                    </span>
-                    <span
-                      style={{
-                        font: "500 9.5px/1 'IBM Plex Mono',monospace",
-                        letterSpacing: ".08em",
-                        color: on ? "#5A6373" : "#7C8697",
-                      }}
-                    >
-                      {m.tag}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {heroMode === "hire" ? (
-              <>
-                <SearchBar city={city} />
-                {/* City quick-picks, from the canvas's `cityCounts` - no
-                    count badge (unlike the canvas), because `county` is
-                    free text on a vehicle and a partial, sample-based
-                    number here would risk reading as wrong rather than as
-                    an honest estimate. */}
-                <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
-                  {KENYA_COUNTIES.map((c) => {
-                    const on = city === c;
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        onClick={() => setCity(c)}
-                        style={{
-                          height: 32,
-                          padding: "0 12px",
-                          background: on ? "rgba(255,255,255,.09)" : "transparent",
-                          border: `1px solid ${on ? "#5F6B7D" : "#252B3A"}`,
-                          borderRadius: 999,
-                          cursor: "pointer",
-                          font: `${on ? 600 : 500} 13px/1 'Instrument Sans',sans-serif`,
-                          color: on ? "#FFFFFF" : "#C7CED8",
-                        }}
-                      >
-                        {c}
-                      </button>
-                    );
-                  })}
-                </div>
-              </>
-            ) : (
-              <div
-                style={{
-                  background: "#FFFFFF",
-                  borderRadius: 12,
-                  padding: "clamp(11px,1.5vw,15px)",
-                  display: "flex",
-                  gap: "clamp(8px,1.3vw,11px)",
-                  flexWrap: "wrap",
-                  alignItems: "flex-end",
-                  boxShadow: "0 18px 44px rgba(0,0,0,.32)",
-                }}
-              >
-                <label style={{ flex: "1 1 300px", minWidth: 200, display: "block" }}>
-                  <span
-                    style={{
-                      display: "block",
-                      font: "600 10px/1 'IBM Plex Mono',monospace",
-                      letterSpacing: ".09em",
-                      color: "#838C9B",
-                      marginBottom: 7,
-                    }}
-                  >
-                    {askCopy.label}
-                  </span>
-                  <input
-                    type="text"
-                    value={heroQ}
-                    onChange={(e) => setHeroQ(e.target.value)}
-                    placeholder={askCopy.placeholder}
-                    style={{
-                      width: "100%",
-                      height: 46,
-                      padding: "0 11px",
-                      border: "1px solid #CDD2DA",
-                      borderRadius: 8,
-                      font: "400 15.5px/1 'Instrument Sans',sans-serif",
-                      color: "#0B0F1A",
-                      background: "#FFFFFF",
-                    }}
-                  />
-                </label>
-                <button
-                  type="button"
-                  onClick={() => navigate(heroMode)}
-                  style={{
-                    flex: "0 0 auto",
-                    height: 46,
-                    padding: "0 clamp(18px,2.6vw,24px)",
-                    background: "#0F23A8",
-                    color: "#FFFFFF",
-                    border: "none",
-                    borderRadius: 8,
-                    font: "600 15px/1 'Instrument Sans',sans-serif",
-                    cursor: "pointer",
-                  }}
-                >
-                  {askCopy.cta}
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div
-            style={{
-              flex: "0 1 336px",
-              minWidth: 270,
-              background: "rgba(8,11,19,.75)",
-              border: "1px solid #4A5361",
-              borderRadius: 12,
-              padding: "18px 20px 20px",
-              backdropFilter: "blur(7px)",
-            }}
-          >
-            <div
-              style={{
-                font: "500 10px/1 'IBM Plex Mono',monospace",
-                letterSpacing: ".11em",
-                color: "#5F6B7D",
-                marginBottom: 14,
-              }}
-            >
-              WHAT CRAL COVERS
-            </div>
-            <div style={{ display: "grid", gap: 6 }}>
-              {DOORS.map((d) => {
-                const live = d.tag === "LIVE";
-                return (
-                  <button
-                    key={d.label}
-                    type="button"
-                    disabled={!d.to}
-                    onClick={() => d.to && navigate(d.to)}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 12,
-                      width: "100%",
-                      padding: "11px 13px",
-                      background: live ? "rgba(255,255,255,.09)" : "transparent",
-                      border: `1px solid ${live ? "#5F6B7D" : "#252B3A"}`,
-                      borderRadius: 8,
-                      cursor: d.to ? "pointer" : "default",
-                      textAlign: "left",
-                    }}
-                  >
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span
-                        style={{
-                          display: "block",
-                          font: "600 14px/1.3 'Instrument Sans',sans-serif",
-                          color: "#FFFFFF",
-                          marginBottom: 3,
-                        }}
-                      >
-                        {d.label}
-                      </span>
-                      <span
-                        style={{
-                          display: "block",
-                          font: "400 11.5px/1.45 'Instrument Sans',sans-serif",
-                          color: "#BAC3CF",
-                        }}
-                      >
-                        {d.note}
-                      </span>
-                    </span>
-                    <span
-                      style={{
-                        flex: "none",
-                        padding: "3px 9px",
-                        border: `1px solid ${live ? "#A8DEC7" : "#3A4252"}`,
-                        borderRadius: 999,
-                        font: "600 9.5px/1.5 'IBM Plex Mono',monospace",
-                        letterSpacing: ".07em",
-                        color: live ? "#7FD6AE" : "#8C97A8",
-                      }}
-                    >
-                      {d.tag}
-                    </span>
+                    {c}
                   </button>
                 );
               })}
@@ -1173,9 +974,25 @@ function RailsMessage({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
+/** Local (not UTC) calendar day - so "today" matches the renter's own clock. */
+function todayIso(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
 /** COUNTY defaults to `city` when passed - the hero's city quick-picks set it. */
 function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
   const navigate = useNavigate();
+  const [county, setCounty] = useState(city ?? KENYA_COUNTIES[0]!);
+  const [fromDate, setFromDate] = useState("");
+  const min = todayIso();
+
+  useEffect(() => {
+    if (city) setCounty(city);
+  }, [city]);
+
   const submit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
@@ -1186,86 +1003,137 @@ function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
     }
     navigate(`/browse${params.toString() ? `?${params}` : ""}`);
   };
-  const labelSpan = {
-    display: "block",
-    font: "600 10px/1 'IBM Plex Mono',monospace",
-    letterSpacing: ".09em",
-    color: "#838C9B",
-    marginBottom: 7,
-  } as const;
-  const field = {
-    width: "100%",
-    height: 46,
-    padding: "0 11px",
-    border: "1px solid #CDD2DA",
-    borderRadius: 8,
-    color: "#0B0F1A",
-    background: "#FFFFFF",
-  } as const;
+
   return (
-    <form
-      onSubmit={submit}
-      style={{
-        background: "#FFFFFF",
-        borderRadius: 12,
-        padding: "clamp(11px,1.5vw,15px)",
-        display: "flex",
-        gap: "clamp(8px,1.3vw,11px)",
-        flexWrap: "wrap",
-        alignItems: "flex-end",
-        boxShadow: "0 18px 44px rgba(0,0,0,.32)",
-      }}
-    >
-      <label style={{ flex: "1 1 168px", minWidth: 140, display: "block" }}>
-        <span style={labelSpan}>COUNTY</span>
-        {/* A fixed select, not free text - the canvas's own hero uses
-            KENYA_COUNTIES. Browse's own filter stays free-text; that's a
-            separate, already-shipped screen, out of scope here. */}
-        <select
-          key={city ?? ""}
-          name="county"
-          defaultValue={city ?? KENYA_COUNTIES[0]}
-          style={{ ...field, font: "500 16px/1 'Instrument Sans',sans-serif" }}
-        >
-          {KENYA_COUNTIES.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label style={{ flex: "1 1 145px", minWidth: 130, display: "block" }}>
-        <span style={labelSpan}>FROM</span>
-        <input
-          name="from"
-          type="date"
-          style={{ ...field, font: "500 15px/1 'IBM Plex Mono',monospace" }}
-        />
-      </label>
-      <label style={{ flex: "1 1 145px", minWidth: 130, display: "block" }}>
-        <span style={labelSpan}>UNTIL</span>
-        <input
-          name="to"
-          type="date"
-          style={{ ...field, font: "500 15px/1 'IBM Plex Mono',monospace" }}
-        />
-      </label>
+    <div>
+      <div className="cral-search-kicker">Hire a car</div>
+      <form onSubmit={submit} className="cral-search" style={{ maxWidth: 900 }}>
+        <input type="hidden" name="county" value={county} />
+        <CountyDropdown value={county} onChange={setCounty} />
+        <label className="cral-search-field">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="cral-search-label">FROM</span>
+            <input
+              name="from"
+              type="date"
+              min={min}
+              className="cral-search-input"
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+          </span>
+        </label>
+        <label className="cral-search-field" style={{ borderRight: "none" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="cral-search-label">UNTIL</span>
+            <input name="to" type="date" min={fromDate || min} className="cral-search-input" />
+          </span>
+        </label>
+        <button type="submit" className="cral-search-submit">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          Search cars
+        </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * A fixed list, not free text - the canvas's own hero uses KENYA_COUNTIES.
+ * Browse's own filter stays free-text; that's a separate, already-shipped
+ * screen, out of scope here. Built custom (not a native `<select>`) so it
+ * can carry the same icon/hover/focus treatment as the other fields - a
+ * native select can't be restyled past its own font and colors, which is
+ * why it looked out of place next to the date fields.
+ */
+function CountyDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="cral-search-field" style={{ position: "relative" }}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 22s7-7.58 7-13a7 7 0 1 0-14 0c0 5.42 7 13 7 13Z" />
+        <circle cx="12" cy="9" r="2.5" />
+      </svg>
       <button
-        type="submit"
-        style={{
-          flex: "0 0 auto",
-          height: 46,
-          padding: "0 clamp(18px,2.6vw,26px)",
-          background: "#0F23A8",
-          color: "#FFFFFF",
-          border: "none",
-          borderRadius: 8,
-          font: "600 16px/1 'Instrument Sans',sans-serif",
-          cursor: "pointer",
-        }}
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="cral-county-toggle"
       >
-        Search cars
+        <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+          <span className="cral-search-label">COUNTY</span>
+          <span className="cral-search-input" style={{ display: "block" }}>
+            {value}
+          </span>
+        </span>
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          style={{ flex: "none", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
       </button>
-    </form>
+      {open && (
+        <div className="cral-county-menu" role="listbox">
+          {KENYA_COUNTIES.map((c) => {
+            const selected = c === value;
+            return (
+              <button
+                key={c}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                className="cral-county-option"
+                onClick={() => {
+                  onChange(c);
+                  setOpen(false);
+                }}
+              >
+                {c}
+                {selected && (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

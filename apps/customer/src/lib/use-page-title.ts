@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const SUFFIX = "Cruz Ride Auto";
+const SUFFIX = "CRAL: Cruz Ride Auto Limited";
 
 /**
  * Sets `document.title` for the mounted page and restores the previous

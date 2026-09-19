@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../../assets/cral-logo.png";
+import logoWhite from "../../assets/cral-white-logo.png";
 import { useIsAuthenticated } from "../../lib/auth.js";
 import { AccountMenu } from "./AccountMenu.js";
 
@@ -14,7 +16,16 @@ import { AccountMenu } from "./AccountMenu.js";
  * account, sign-in, notifications and everything else live in the avatar
  * dropdown (see AccountMenu.tsx, including what it adds beyond the
  * canvas and why).
+ *
+ * On the home page only, the masthead starts transparent (white wordmark,
+ * white nav text) floating over the hero's dark background, and reveals
+ * its solid white bar once the page scrolls past it - the hero is the only
+ * public page dark enough at the top for a transparent nav to read. Every
+ * other page keeps the always-solid bar, sitting in flow rather than
+ * floating over content that was never designed to sit under it.
  */
+
+const SCROLL_REVEAL_PX = 24;
 
 const NAV: Array<{ label: string; to: string; activeOn: (pathname: string) => boolean }> = [
   {
@@ -30,16 +41,34 @@ export function Masthead(): JSX.Element {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const isAuthenticated = useIsAuthenticated();
+  const isHome = pathname === "/";
+
+  const [scrolled, setScrolled] = useState(!isHome);
+  useEffect(() => {
+    if (!isHome) {
+      setScrolled(true);
+      return;
+    }
+    const onScroll = () => setScrolled(window.scrollY > SCROLL_REVEAL_PX);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isHome]);
+
+  const transparent = isHome && !scrolled;
 
   return (
     <div
       style={{
-        position: "sticky",
+        position: isHome ? "fixed" : "sticky",
         top: 0,
+        left: 0,
+        right: 0,
         zIndex: 40,
-        background: "rgba(255,255,255,.94)",
-        backdropFilter: "blur(10px)",
-        borderBottom: "1px solid #E4E7EC",
+        background: transparent ? "transparent" : "rgba(255,255,255,.94)",
+        backdropFilter: transparent ? "none" : "blur(10px)",
+        borderBottom: transparent ? "1px solid transparent" : "1px solid #E4E7EC",
+        transition: "background .2s ease, border-color .2s ease",
       }}
     >
       <div
@@ -54,7 +83,11 @@ export function Masthead(): JSX.Element {
         }}
       >
         <Link to="/" style={{ display: "flex", alignItems: "center", gap: 11, flex: "none" }}>
-          <img src={logo} alt="Cruz Ride Auto Limited" style={{ display: "block", height: 46, width: "auto" }} />
+          <img
+            src={transparent ? logoWhite : logo}
+            alt="Cruz Ride Auto Limited"
+            style={{ display: "block", height: 46, width: "auto" }}
+          />
         </Link>
 
         <div className="cral-rail" style={{ flex: 1, display: "flex", alignItems: "center", gap: 2, overflowX: "auto" }}>
@@ -70,8 +103,8 @@ export function Masthead(): JSX.Element {
                   display: "flex",
                   alignItems: "center",
                   padding: "0 12px",
-                  background: on ? "#F1F3F6" : "transparent",
-                  color: on ? "#0B0F1A" : "#5A6373",
+                  background: on ? (transparent ? "rgba(255,255,255,.12)" : "#F1F3F6") : "transparent",
+                  color: transparent ? (on ? "#FFFFFF" : "rgba(255,255,255,.75)") : on ? "#0B0F1A" : "#5A6373",
                   borderRadius: 7,
                   font: `${on ? 600 : 500} 14px/1 'Instrument Sans',sans-serif`,
                   whiteSpace: "nowrap",
@@ -95,7 +128,7 @@ export function Masthead(): JSX.Element {
                 height: 38,
                 padding: "0 13px",
                 background: "none",
-                color: "#333B4A",
+                color: transparent ? "#FFFFFF" : "#333B4A",
                 border: "none",
                 borderRadius: 8,
                 font: "600 14px/1 'Instrument Sans',sans-serif",
