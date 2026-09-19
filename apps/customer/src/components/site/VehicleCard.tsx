@@ -52,7 +52,19 @@ export function VehicleCard({
           <img
             src={photoSrc(car.primary_photo_url)}
             alt={name}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            style={{
+              display: "block",
+              position: "absolute",
+              inset: 0,
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              // Biased toward the bottom - most source photos have the car
+              // sitting low in frame with sky/background above it, so a
+              // plain center-crop was showing that background instead of
+              // the car. This shows more of the vehicle, less of the sky.
+              objectPosition: "center 75%",
+            }}
           />
         ) : (
           <span

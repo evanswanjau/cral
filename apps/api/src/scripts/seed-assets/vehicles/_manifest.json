@@ -1,0 +1,104 @@
+{
+  "prado": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/d/d4/TOYOTA_LAND_CRUISER_PRADO_%28J150%29_China.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 4928,
+    "h": 2885,
+    "lic": "CC BY-SA 4.0"
+  },
+  "probox": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/c/cb/Toyota_Probox_1.5_GL_front.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 1200,
+    "h": 850,
+    "lic": "CC BY 2.0"
+  },
+  "hiace": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/04/Toyota_HiAce_Van_DX_%2720_%281%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 3041,
+    "h": 1711,
+    "lic": "CC0"
+  },
+  "impreza": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/53/Blue_Subaru_Impreza_WRX_-_002.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 2816,
+    "h": 2112,
+    "lic": "CC BY-SA 4.0"
+  },
+  "pajero-sport": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/1/10/Mitsubishi_Montero_Sport_2.5_GLX_V_4x2_2015.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 3000,
+    "h": 2250,
+    "lic": "CC BY-SA 4.0"
+  },
+  "axio": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/42/Toyota_Corolla_Axio_%28E160%29_front.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 2554,
+    "h": 1912,
+    "lic": "CC0"
+  },
+  "isuzu-forward": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/ISUZU_FORWARD%2C_Dump_Truck%2C_white-color.jpg",
+    "w": 2592,
+    "h": 1944,
+    "lic": "CC BY-SA 3.0"
+  },
+  "rav4": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/9/94/Toyota_RAV4_Hybrid_%28XA50%29_DSC_2709.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 4857,
+    "h": 3257,
+    "lic": "CC BY-SA 4.0"
+  },
+  "demio": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/4/46/2015-2019_Mazda_Demio_S.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 4784,
+    "h": 2346,
+    "lic": "CC0"
+  },
+  "vitz": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/5/51/Toyota_Vitz_KSP130_1.0F.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 1600,
+    "h": 740,
+    "lic": "CC0"
+  },
+  "note": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2014-2016_Nissan_Note_X.jpg",
+    "w": 4023,
+    "h": 2217,
+    "lic": "CC0"
+  },
+  "land-cruiser-70": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/0/0a/TOYOTA_Land_Cruiser_HZJ75-01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=original",
+    "w": 1600,
+    "h": 950,
+    "lic": "CC BY 3.0"
+  },
+  "noah": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/Toyota_noah_azr60_s_1_f.jpg",
+    "w": 1600,
+    "h": 1200,
+    "lic": "CC BY-SA 4.0"
+  },
+  "fielder": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/Toyota_Corolla_Fielder_18_(1).jpg",
+    "w": 3720,
+    "h": 2051,
+    "lic": "CC0"
+  },
+  "forester": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/Subaru_Forester_(SJ)_front.JPG",
+    "w": 1600,
+    "h": 1200,
+    "lic": "CC0"
+  },
+  "dmax": {
+    "url": "https://upload.wikimedia.org/wikipedia/commons/2016_Isuzu_D-Max_2.5_LT_4x2,_06-30-2024.jpg",
+    "w": 5468,
+    "h": 4101,
+    "lic": "CC BY-SA 4.0"
+  },
+  "xtrail": {
+    "url": "reused from apps/customer/src/assets/hero/xtrail.jpg (already sourced/blurred earlier this session)",
+    "w": null,
+    "h": null,
+    "lic": "CC BY-SA 4.0"
+  }
+}

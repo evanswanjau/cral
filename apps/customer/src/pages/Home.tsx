@@ -13,6 +13,8 @@ import heroDemio from "../assets/hero/demio.jpg";
 import heroCx5 from "../assets/hero/cx5.jpg";
 import heroLandCruiser from "../assets/hero/land-cruiser.jpg";
 import heroMercedes from "../assets/hero/mercedes.jpg";
+import trustDriverPhoto from "../assets/trust-driver.jpg";
+import keyHandoffPhoto from "../assets/keyhandoff.jpg";
 
 /**
  * The home page, rebuilt against the real canvas source pulled 2026-09-17
@@ -97,67 +99,21 @@ const HERO_PHOTOS = [heroXtrail, heroMercedes, heroCx5, heroLandCruiser, heroDem
 const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "01",
-    title: "Read before it is listed",
-    body: "Logbook, ID, licence, insurance, KRA PIN and tracker certificate, checked by a person for names and dates that agree.",
+    title: "Checked before it goes live",
+    body: "A real person checks every car's details and paperwork before it is listed.",
   },
   {
     n: "02",
     title: "Paid only after a yes",
-    body: "Nothing is due until the owner has accepted your dates. If the request lapses, you owe nothing at all.",
+    body: "You don't pay anything until the owner accepts your dates. If they don't reply in time, you pay nothing.",
   },
   {
     n: "03",
-    title: "Judged on evidence",
-    body: "If something is damaged, a CRAL reviewer reads both sides and both sets of photos before anyone agrees what is owed.",
-  },
-  {
-    n: "04",
-    title: "Expiry is enforced",
-    body: "When an insurance certificate or a licence lapses, the car comes off the site until the owner replaces it.",
+    title: "Decided with evidence",
+    body: "If something gets damaged, a CRAL reviewer looks at photos from both sides before deciding who pays.",
   },
 ];
 
-/**
- * `roadmap` exists in the canvas's own logic but is never rendered by its
- * markup - unused fixture data, same category as `CHECK_GLYPH` in the
- * admin console (kept, documented, not wired to anything). Real enough to
- * use (it's the design's own words, not invented here), so kept as bonus
- * content past where the canvas's home page actually ends - see the
- * section below for where that boundary is.
- */
-const ROADMAP: Array<{ status: string; title: string; body: string }> = [
-  {
-    status: "LIVE",
-    title: "Hire a car",
-    body: "Any reviewed car in seven counties, booked in minutes, with the licence and ID behind every hire already checked.",
-  },
-  {
-    status: "LIVE",
-    title: "Cars by the month",
-    body: "Long hires for families and companies, one invoice at the end of it, paperwork already filed.",
-  },
-  {
-    status: "IN BUILD",
-    title: "Service and repair",
-    body: "Book a garage CRAL has vetted, with the quote agreed before anyone lifts a spanner.",
-  },
-  {
-    status: "NEXT",
-    title: "Buy and sell",
-    body: "The same document review, pointed at a sale, so nobody ever buys a logbook that does not match the car.",
-  },
-  {
-    status: "PLANNED",
-    title: "Insurance and paperwork",
-    body: "Renewals, transfers and the queue at NTSA, handled inside the account you already have.",
-  },
-];
-
-function roadmapPill(status: string): { bg: string; border: string; fg: string } {
-  if (status === "LIVE") return { bg: "#DDF3E9", border: "#A8DEC7", fg: "#076945" };
-  if (status === "IN BUILD") return { bg: "#FFF3D6", border: "#F0D089", fg: "#8A5200" };
-  return { bg: "#F1F3F6", border: "#E4E7EC", fg: "#5A6373" };
-}
 
 function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
   const navigate = useNavigate();
@@ -280,7 +236,7 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
               borderBottom: "1px solid rgba(15,35,168,.3)",
             }}
           >
-            See all in {collection.title}
+            See all
           </button>
         </div>
       </div>
@@ -500,7 +456,7 @@ export function Home(): JSX.Element {
               color: "#0B0F1A",
             }}
           >
-            Or start from the shape of the car
+            Browse by car type
           </h2>
           <div
             style={{
@@ -531,12 +487,12 @@ export function Home(): JSX.Element {
                 {b.photo ? (
                   // Real photo, no overlay chip - matches the canvas's own
                   // bodyTiles markup (a plain img, label lives below only).
-                  <div style={{ height: 104, borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
+                  <div style={{ height: 104, position: "relative", borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
                     <img
                       src={b.photo}
                       alt={b.label}
                       loading="lazy"
-                      style={{ display: "block", width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
                     />
                   </div>
                 ) : (
@@ -609,11 +565,22 @@ export function Home(): JSX.Element {
           style={{
             maxWidth: 1240,
             margin: "0 auto",
-            background: "#0B0F1A",
+            minHeight: "clamp(420px,48vw,560px)",
             borderRadius: 14,
             padding: "clamp(24px,3.6vw,44px)",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
             position: "relative",
             overflow: "hidden",
+            // A real photo, not a design-canvas element - the owner asked for
+            // one showing a happy renter behind the wheel, as the card's own
+            // background. Sourced directly by the owner (Freepik-family CDN);
+            // flagged in case that image's free-tier licence needs an
+            // attribution credit before this ships.
+            backgroundImage: `linear-gradient(90deg, rgba(11,15,26,.96) 0%, rgba(11,15,26,.75) 55%, rgba(11,15,26,.35) 100%), url(${trustDriverPhoto})`,
+            backgroundSize: "cover",
+            backgroundPosition: "center right",
           }}
         >
           <div
@@ -630,7 +597,7 @@ export function Home(): JSX.Element {
           />
           <h2
             style={{
-              margin: "0 0 10px",
+              margin: "clamp(16px,3vw,32px) 0 10px",
               font: "700 clamp(24px,3.2vw,36px)/1.08 Archivo,sans-serif",
               fontVariationSettings: "'wdth' 110",
               letterSpacing: "-.028em",
@@ -638,21 +605,21 @@ export function Home(): JSX.Element {
               maxWidth: 660,
             }}
           >
-            Nobody pays before the owner says yes.
+            You don't pay until the owner says yes.
           </h2>
           <p
             style={{
               margin: "0 0 clamp(22px,3vw,32px)",
               font: "400 clamp(15px,1.7vw,17px)/1.55 'Instrument Sans',sans-serif",
-              color: "#A7B0BE",
+              color: "#C7CED8",
               maxWidth: 560,
             }}
           >
             {/* Canvas headline verbatim; body reworded - the canvas's own
                 copy here assumes the STK flow (see file header comment). */}
-            The oldest fight in Kenyan car hire is money that moves before anything is agreed. On
-            CRAL a request costs nothing and the owner has 24 hours to answer - you only settle
-            the agreed rate once they say yes, and it doesn't change after that.
+            Car hire in Kenya often goes wrong when money changes hands too early. On CRAL, sending
+            a request is free. The owner has twelve hours to reply, and you only pay once they say
+            yes - at a price that never changes after that.
           </p>
           <div
             style={{
@@ -667,7 +634,7 @@ export function Home(): JSX.Element {
                   style={{
                     font: "500 10px/1 'IBM Plex Mono',monospace",
                     letterSpacing: ".11em",
-                    color: "#D81E32",
+                    color: "#F28FA0",
                     marginBottom: 11,
                   }}
                 >
@@ -687,7 +654,7 @@ export function Home(): JSX.Element {
                   style={{
                     margin: 0,
                     font: "400 14px/1.6 'Instrument Sans',sans-serif",
-                    color: "#A7B0BE",
+                    color: "#C7CED8",
                   }}
                 >
                   {t.body}
@@ -698,116 +665,6 @@ export function Home(): JSX.Element {
         </div>
       </div>
 
-      {/* ---- the rest of CRAL (bonus - past where the canvas's home page
-              actually ends; see the ROADMAP constant's own comment) ---- */}
-      <div style={{ padding: "0 clamp(16px,4vw,40px) clamp(24px,3.4vw,40px)" }}>
-        <div style={{ maxWidth: 1240, margin: "0 auto" }}>
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
-              <span
-                style={{
-                  display: "block",
-                  width: 18,
-                  height: 5,
-                  background: "#D81E32",
-                  transform: "skewX(-14deg)",
-                  flex: "none",
-                }}
-              />
-              <span
-                style={{
-                  font: "500 10px/1 'IBM Plex Mono',monospace",
-                  letterSpacing: ".12em",
-                  color: "#838C9B",
-                }}
-              >
-                THE REST OF CRAL
-              </span>
-            </div>
-            <h2
-              style={{
-                margin: "0 0 5px",
-                font: "700 clamp(21px,2.8vw,30px)/1.1 Archivo,sans-serif",
-                fontVariationSettings: "'wdth' 108",
-                letterSpacing: "-.026em",
-                color: "#0B0F1A",
-              }}
-            >
-              Hiring is the first door. It is not the last one.
-            </h2>
-            <p
-              style={{
-                margin: 0,
-                font: "400 14.5px/1.5 'Instrument Sans',sans-serif",
-                color: "#5A6373",
-                maxWidth: 560,
-              }}
-            >
-              The same read documents and the same booking record, pointed at the next thing your
-              car is going to need.
-            </p>
-          </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(215px,1fr))",
-              gap: 1,
-              background: "#E4E7EC",
-              border: "1px solid #E4E7EC",
-              borderRadius: 12,
-              overflow: "hidden",
-            }}
-          >
-            {ROADMAP.map((r) => {
-              const pill = roadmapPill(r.status);
-              return (
-                <div
-                  key={r.title}
-                  style={{
-                    background: "#FFFFFF",
-                    padding: "19px 20px",
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: 9,
-                  }}
-                >
-                  <span
-                    style={{
-                      alignSelf: "flex-start",
-                      padding: "4px 10px",
-                      background: pill.bg,
-                      border: `1px solid ${pill.border}`,
-                      borderRadius: 999,
-                      font: "600 10px/1.4 'IBM Plex Mono',monospace",
-                      letterSpacing: ".07em",
-                      color: pill.fg,
-                    }}
-                  >
-                    {r.status}
-                  </span>
-                  <div
-                    style={{
-                      font: "600 15.5px/1.3 'Instrument Sans',sans-serif",
-                      color: "#0B0F1A",
-                    }}
-                  >
-                    {r.title}
-                  </div>
-                  <p
-                    style={{
-                      margin: 0,
-                      font: "400 13.5px/1.55 'Instrument Sans',sans-serif",
-                      color: "#5A6373",
-                    }}
-                  >
-                    {r.body}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
 
       {/* ---- closing CTAs ---- */}
       <div style={{ padding: "0 clamp(16px,4vw,40px) clamp(34px,5vw,60px)" }}>
@@ -849,7 +706,7 @@ export function Home(): JSX.Element {
                 color: "#0B0F1A",
               }}
             >
-              Four steps, and you never pay a booking fee.
+              Three simple steps. No hidden booking fee.
             </h3>
             <p
               style={{
@@ -858,9 +715,9 @@ export function Home(): JSX.Element {
                 color: "#5A6373",
               }}
             >
-              Search cars that are genuinely free on your dates, send a request, and collect once
-              the owner says yes. You settle the rate directly with the owner - it doesn't change
-              after you book, and CRAL never charges a booking fee.
+              Search for cars that are actually free on your dates. Send a request. Once the owner
+              says yes, go and collect the car - the price never changes, and CRAL never adds a
+              booking fee on top.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
@@ -901,7 +758,7 @@ export function Home(): JSX.Element {
             style={{
               flex: "1 1 300px",
               minWidth: 280,
-              background: "#EDEFFC",
+              position: "relative",
               border: "1px solid #B6C0F4",
               borderRadius: 12,
               padding: "clamp(22px,3vw,32px)",
@@ -909,6 +766,10 @@ export function Home(): JSX.Element {
               flexDirection: "column",
               justifyContent: "space-between",
               gap: 18,
+              overflow: "hidden",
+              backgroundImage: `linear-gradient(180deg, rgba(11,27,133,.42) 0%, rgba(11,27,133,.82) 100%), url(${keyHandoffPhoto})`,
+              backgroundSize: "cover",
+              backgroundPosition: "center 30%",
             }}
           >
             <div>
@@ -916,7 +777,7 @@ export function Home(): JSX.Element {
                 style={{
                   font: "500 10px/1 'IBM Plex Mono',monospace",
                   letterSpacing: ".11em",
-                  color: "#0F23A8",
+                  color: "#DCE1FA",
                   marginBottom: 14,
                 }}
               >
@@ -928,7 +789,7 @@ export function Home(): JSX.Element {
                   font: "700 clamp(19px,2.2vw,24px)/1.18 Archivo,sans-serif",
                   fontVariationSettings: "'wdth' 106",
                   letterSpacing: "-.02em",
-                  color: "#0B1B85",
+                  color: "#FFFFFF",
                 }}
               >
                 Put it to work on the days you are not using it.
@@ -941,8 +802,8 @@ export function Home(): JSX.Element {
                 alignSelf: "flex-start",
                 height: 44,
                 padding: "0 19px",
-                background: "#0F23A8",
-                color: "#FFFFFF",
+                background: "#FFFFFF",
+                color: "#0F23A8",
                 border: "none",
                 borderRadius: 8,
                 font: "600 14px/1 'Instrument Sans',sans-serif",
