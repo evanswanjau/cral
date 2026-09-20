@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { merchantLandingUrl } from "../lib/merchant-app.js";
-import { earliestPickupDay, isAfterHireCutoff } from "../lib/hire-dates.js";
-import { getCollections, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
+import { earliestPickupDay } from "../lib/hire-dates.js";
+import { getCollections, getCounties, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import sedanPhoto from "../assets/category-tiles/sedan.jpg";
 import suvPhoto from "../assets/category-tiles/suv.jpg";
@@ -55,8 +55,14 @@ import keyHandoffPhoto from "../assets/keyhandoff.jpg";
  * The collection rails are real data from GET /catalog/collections.
  */
 
-/** The canvas's fixed county list (its hero search bar's `<select>`). */
-const KENYA_COUNTIES = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Uasin Gishu", "Kiambu", "Machakos"];
+/**
+ * Counties come from `GET /catalog/counties` - only the ones that have a
+ * live listing, busiest first. The canvas's hero hard-codes seven, which
+ * meant five of the seven quick-picks led to an empty results page.
+ * `HERO_COUNTY_CHIPS` caps the quick-pick row; the dropdown lists them
+ * all.
+ */
+const HERO_COUNTY_CHIPS = 7;
 
 /**
  * Photos: the canvas's own body-type stock photography was replaced
@@ -285,6 +291,12 @@ export function Home(): JSX.Element {
     queryKey: ["catalog", "collections"],
     queryFn: getCollections,
   });
+  // Only counties that have something live in them - see HERO_COUNTY_CHIPS.
+  const { data: countyData } = useQuery({
+    queryKey: ["catalog", "counties"],
+    queryFn: getCounties,
+  });
+  const counties = (countyData?.counties ?? []).map((c) => c.county);
 
   const rails = (data?.collections ?? []).filter((c) => c.vehicles.length > 0);
 
@@ -409,13 +421,15 @@ export function Home(): JSX.Element {
               says yes.
             </p>
 
-            <SearchBar city={city} />
-            {/* City quick-picks, from the canvas's `cityCounts` - no count
-                badge (unlike the canvas), because `county` is free text on
-                a vehicle and a partial, sample-based number here would risk
-                reading as wrong rather than as an honest estimate. */}
+            <SearchBar city={city} counties={counties} />
+            {/* City quick-picks - the busiest counties that actually have a
+                live listing. No count badge (unlike the canvas's own
+                `cityCounts`): the number is real now, but a count next to a
+                place name reads as "cars available on your dates", which it
+                is not. The row is empty until the query lands rather than
+                showing places that might have nothing. */}
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
-              {KENYA_COUNTIES.map((c) => {
+              {counties.slice(0, HERO_COUNTY_CHIPS).map((c) => {
                 const on = city === c;
                 return (
                   <button
@@ -846,10 +860,22 @@ function RailsMessage({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-/** COUNTY defaults to `city` when passed - the hero's city quick-picks set it. */
-function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
+/**
+ * COUNTY defaults to `city` when passed - the hero's city quick-picks set
+ * it. `counties` is whatever has a live listing; until it arrives (or if
+ * nothing is listed anywhere) the field reads "Any county" and the search
+ * simply goes to /browse unfiltered, rather than pre-filling a county
+ * that may have nothing in it.
+ */
+function SearchBar({
+  city,
+  counties,
+}: {
+  city?: string | undefined;
+  counties: string[];
+}): JSX.Element {
   const navigate = useNavigate();
-  const [county, setCounty] = useState(city ?? KENYA_COUNTIES[0]!);
+  const [county, setCounty] = useState<string>(city ?? "");
   const [fromDate, setFromDate] = useState("");
   // Nairobi's clock, not the browser's, and never today once six in the
   // evening has passed - cars are back with their owner by then.
@@ -875,7 +901,7 @@ function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
       <div className="cral-search-kicker">Hire a car</div>
       <form onSubmit={submit} className="cral-search" style={{ maxWidth: 900 }}>
         <input type="hidden" name="county" value={county} />
-        <CountyDropdown value={county} onChange={setCounty} />
+        <CountyDropdown value={county} counties={counties} onChange={setCounty} />
         <label className="cral-search-field">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -910,31 +936,28 @@ function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
           Search cars
         </button>
       </form>
-      {isAfterHireCutoff() && (
-        <p
-          style={{
-            margin: "10px 2px 0",
-            font: "400 12.5px/1.5 'Instrument Sans',sans-serif",
-            color: "rgba(255,255,255,.72)",
-          }}
-        >
-          It's past six in Nairobi, so the earliest pickup is tomorrow - cars come back to their
-          owner by six.
-        </p>
-      )}
     </div>
   );
 }
 
 /**
- * A fixed list, not free text - the canvas's own hero uses KENYA_COUNTIES.
- * Browse's own filter stays free-text; that's a separate, already-shipped
- * screen, out of scope here. Built custom (not a native `<select>`) so it
- * can carry the same icon/hover/focus treatment as the other fields - a
- * native select can't be restyled past its own font and colors, which is
- * why it looked out of place next to the date fields.
+ * The options are the counties that have a live listing (the canvas's
+ * fixed seven are gone - most of them led nowhere). Browse's own filter
+ * stays free-text; that's a separate, already-shipped screen, out of
+ * scope here. Built custom (not a native `<select>`) so it can carry the
+ * same icon/hover/focus treatment as the other fields - a native select
+ * can't be restyled past its own font and colors, which is why it looked
+ * out of place next to the date fields.
  */
-function CountyDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
+function CountyDropdown({
+  value,
+  counties,
+  onChange,
+}: {
+  value: string;
+  counties: string[];
+  onChange: (v: string) => void;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -962,15 +985,19 @@ function CountyDropdown({ value, onChange }: { value: string; onChange: (v: stri
       </svg>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => counties.length > 0 && setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={counties.length === 0}
         className="cral-county-toggle"
       >
         <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
           <span className="cral-search-label">COUNTY</span>
-          <span className="cral-search-input" style={{ display: "block" }}>
-            {value}
+          <span
+            className="cral-search-input"
+            style={{ display: "block", color: value ? undefined : "#7C8697" }}
+          >
+            {value || "Any county"}
           </span>
         </span>
         <svg
@@ -985,9 +1012,9 @@ function CountyDropdown({ value, onChange }: { value: string; onChange: (v: stri
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && (
+      {open && counties.length > 0 && (
         <div className="cral-county-menu" role="listbox">
-          {KENYA_COUNTIES.map((c) => {
+          {counties.map((c) => {
             const selected = c === value;
             return (
               <button

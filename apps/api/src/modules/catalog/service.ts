@@ -475,3 +475,51 @@ export async function getCollections() {
     })),
   };
 }
+
+/**
+ * Counties that actually have something to hire, with how many.
+ *
+ * The home page's county filter used to be a fixed seven-county list
+ * copied from the design canvas, so most of its options led to an empty
+ * result page - a choice that isn't one. `vehicles.county` is free text
+ * (a merchant types it at onboarding), so this normalises for display:
+ * trimmed, grouped case-insensitively, and the most common spelling of
+ * each wins. Ordered by count descending so the busiest county leads,
+ * then by name so the tail is stable between calls.
+ */
+export async function getCounties(): Promise<{
+  counties: Array<{ county: string; vehicle_count: number }>;
+}> {
+  const rows = (await baseCatalogQuery()
+    .whereNotNull("v.county")
+    .whereRaw("btrim(v.county) <> ''")
+    .select("v.county")
+    .count<{ county: string; count: string }[]>({ count: "*" })
+    .groupBy("v.county")) as unknown as Array<{ county: string; count: string | number }>;
+
+  // Two merchants typing "nairobi" and "Nairobi" are one county to a
+  // hirer. Fold on a case-insensitive key, keep the spelling that the
+  // most listings use.
+  const byKey = new Map<string, { spellings: Map<string, number>; total: number }>();
+  for (const row of rows) {
+    const label = String(row.county).trim();
+    if (!label) continue;
+    const n = Number(row.count);
+    const key = label.toLowerCase();
+    const entry = byKey.get(key) ?? { spellings: new Map<string, number>(), total: 0 };
+    entry.spellings.set(label, (entry.spellings.get(label) ?? 0) + n);
+    entry.total += n;
+    byKey.set(key, entry);
+  }
+
+  const counties = [...byKey.values()]
+    .map((entry) => {
+      const [label] = [...entry.spellings.entries()].sort(
+        (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+      )[0]!;
+      return { county: label, vehicle_count: entry.total };
+    })
+    .sort((a, b) => b.vehicle_count - a.vehicle_count || a.county.localeCompare(b.county));
+
+  return { counties };
+}
