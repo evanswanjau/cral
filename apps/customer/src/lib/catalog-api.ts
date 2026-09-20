@@ -106,6 +106,16 @@ export function getCatalogVehicle(id: string): Promise<CatalogVehicleDetail> {
   });
 }
 
+export interface CatalogCounty {
+  county: string;
+  vehicle_count: number;
+}
+
+/** Counties with at least one live listing, busiest first. */
+export function getCounties(): Promise<{ counties: CatalogCounty[] }> {
+  return apiGet<{ counties: CatalogCounty[] }>("/catalog/counties", { auth: false });
+}
+
 export function getCollections(): Promise<{ collections: CatalogCollection[] }> {
   return apiGet<{ collections: CatalogCollection[] }>("/catalog/collections", { auth: false });
 }

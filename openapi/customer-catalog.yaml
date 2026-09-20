@@ -220,6 +220,39 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/CatalogCollection" }
 
+  /catalog/counties:
+    get:
+      tags: [catalog]
+      summary: Counties that actually have a live listing
+      operationId: getCatalogCounties
+      security: []
+      description: >
+        Every county with at least one live listing on an approved
+        merchant, with how many. This is what the home page's search
+        filter and its city quick-picks are built from - offering a fixed
+        list of counties, most of which return nothing, is a dead end
+        dressed up as a choice. `county` is free text on a vehicle, so
+        these are the values merchants have actually typed, deduplicated
+        case-insensitively and trimmed; ordered by count descending, then
+        name.
+      responses:
+        "200":
+          description: Counties with live listings, most first.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counties]
+                properties:
+                  counties:
+                    type: array
+                    items:
+                      type: object
+                      required: [county, vehicle_count]
+                      properties:
+                        county: { type: string, example: "Nairobi" }
+                        vehicle_count: { type: integer, example: 12 }
+
 components:
   schemas:
     Money:

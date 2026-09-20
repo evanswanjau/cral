@@ -2,12 +2,15 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
-import { getCollections, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
+import { merchantLandingUrl } from "../lib/merchant-app.js";
+import { earliestPickupDay } from "../lib/hire-dates.js";
+import { getCollections, getCounties, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import sedanPhoto from "../assets/category-tiles/sedan.jpg";
 import suvPhoto from "../assets/category-tiles/suv.jpg";
 import vanPhoto from "../assets/category-tiles/van.jpg";
 import truckPhoto from "../assets/category-tiles/truck.jpg";
+import machineryPhoto from "../assets/category-tiles/machinery.jpg";
 import heroXtrail from "../assets/hero/xtrail.jpg";
 import heroDemio from "../assets/hero/demio.jpg";
 import heroCx5 from "../assets/hero/cx5.jpg";
@@ -52,29 +55,50 @@ import keyHandoffPhoto from "../assets/keyhandoff.jpg";
  * The collection rails are real data from GET /catalog/collections.
  */
 
-/** The canvas's fixed county list (its hero search bar's `<select>`). */
-const KENYA_COUNTIES = ["Nairobi", "Mombasa", "Kisumu", "Nakuru", "Uasin Gishu", "Kiambu", "Machakos"];
+/**
+ * Counties come from `GET /catalog/counties` - only the ones that have a
+ * live listing, busiest first. The canvas's hero hard-codes seven, which
+ * meant five of the seven quick-picks led to an empty results page.
+ * `HERO_COUNTY_CHIPS` caps the quick-pick row; the dropdown lists them
+ * all.
+ */
+const HERO_COUNTY_CHIPS = 7;
 
 /**
- * Photos: four of these five are real images pulled from the same canvas
- * bundle (`docs/brand/canvas/`'s source), not fabricated stock photography
- * found separately - the design tool embeds its own stock car photography
- * per body type (`saloon`/`suvLarge`/`van`/`cab`), keyed by the same
- * vertDefs-style resource ids the canvas's own `bodyPhoto()` uses. They're
- * decorative category illustrations, not tied to any specific listing -
- * same category as Airbnb's "browse by type" tiles, and meaningfully
- * different from the fabricated-badge precedent this codebase avoids
- * elsewhere: no factual claim is made about any particular vehicle or
- * account. `machinery` has no canvas photo at all (the design's own body
- * types never covered construction equipment) - flagged, not faked with an
- * unrelated stock image found elsewhere.
+ * Photos: the canvas's own body-type stock photography was replaced
+ * 2026-09-20 (owner's call) - those images were plainly foreign cars (a
+ * BMW M4, a US-market Expedition, a VW camper) and read as stock, not as
+ * what anyone actually hires in Kenya. These five are freely-licensed
+ * photos of the vehicles this market really runs, pulled from Wikimedia
+ * Commons, same sourcing standard the hero photos already follow:
+ *
+ *  - sedan     Toyota Corolla Fielder Hybrid (CC0)
+ *  - suv       Toyota Land Cruiser Prado 150 (CC0)
+ *  - van       Toyota HiAce high-roof 14-seater (public domain)
+ *  - truck     Isuzu Forward FRR cab and chassis (CC BY-SA 4.0)
+ *  - machinery tracked excavator on a site (public domain)
+ *
+ * Each is cropped to 720x460, the tile's own ratio, so the photo fills
+ * the tile edge to edge - full bleed, right up to the card's top corners.
+ * An earlier pass letterboxed them (whole photo, blurred bands top and
+ * bottom) to avoid cropping any vehicle; the bands read as dead space
+ * above the car, which is exactly what the tile must not have. Where a
+ * photo is taller than the tile the crop is biased slightly downward, so
+ * what gets cut is sky rather than wheels.
+ *
+ * They're decorative category illustrations, not tied to any specific
+ * listing - same category as Airbnb's "browse by type" tiles, and
+ * meaningfully different from the fabricated-badge precedent this codebase
+ * avoids elsewhere: no factual claim is made about any particular vehicle
+ * or account. The two CC BY-SA images need an attribution credit before
+ * this ships - same open flag the trust-band photo below carries.
  */
-const CATEGORY_TILES: Array<{ slug: string; label: string; note: string; photo: string | null }> = [
+const CATEGORY_TILES: Array<{ slug: string; label: string; note: string; photo: string }> = [
   { slug: "sedan", label: "Sedans & small cars", note: "City runs and airport hops", photo: sedanPhoto },
   { slug: "suv", label: "SUV, 4x4 & pickup", note: "Potholes, game parks, weekends away", photo: suvPhoto },
   { slug: "van", label: "Vans & minibuses", note: "Eight to fourteen people", photo: vanPhoto },
   { slug: "truck", label: "Trucks & trailers", note: "Moves, deliveries, hardware runs", photo: truckPhoto },
-  { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment", photo: null },
+  { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment", photo: machineryPhoto },
 ];
 
 /**
@@ -267,6 +291,12 @@ export function Home(): JSX.Element {
     queryKey: ["catalog", "collections"],
     queryFn: getCollections,
   });
+  // Only counties that have something live in them - see HERO_COUNTY_CHIPS.
+  const { data: countyData } = useQuery({
+    queryKey: ["catalog", "counties"],
+    queryFn: getCounties,
+  });
+  const counties = (countyData?.counties ?? []).map((c) => c.county);
 
   const rails = (data?.collections ?? []).filter((c) => c.vehicles.length > 0);
 
@@ -319,7 +349,8 @@ export function Home(): JSX.Element {
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(100deg, rgba(11,15,26,.93) 0%, rgba(11,15,26,.8) 32%, rgba(11,15,26,.5) 62%, rgba(11,15,26,.72) 100%)",
+              // True black, not the brand ink (#0B0F1A reads blue over a photo).
+              "linear-gradient(100deg, rgba(0,0,0,.93) 0%, rgba(0,0,0,.8) 32%, rgba(0,0,0,.5) 62%, rgba(0,0,0,.72) 100%)",
             pointerEvents: "none",
           }}
         />
@@ -390,13 +421,15 @@ export function Home(): JSX.Element {
               says yes.
             </p>
 
-            <SearchBar city={city} />
-            {/* City quick-picks, from the canvas's `cityCounts` - no count
-                badge (unlike the canvas), because `county` is free text on
-                a vehicle and a partial, sample-based number here would risk
-                reading as wrong rather than as an honest estimate. */}
+            <SearchBar city={city} counties={counties} />
+            {/* City quick-picks - the busiest counties that actually have a
+                live listing. No count badge (unlike the canvas's own
+                `cityCounts`): the number is real now, but a count next to a
+                place name reads as "cars available on your dates", which it
+                is not. The row is empty until the query lands rather than
+                showing places that might have nothing. */}
             <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
-              {KENYA_COUNTIES.map((c) => {
+              {counties.slice(0, HERO_COUNTY_CHIPS).map((c) => {
                 const on = city === c;
                 return (
                   <button
@@ -458,6 +491,17 @@ export function Home(): JSX.Element {
           >
             Browse by car type
           </h2>
+          <p
+            style={{
+              margin: "0 0 15px",
+              font: "400 14.5px/1.5 'Instrument Sans',sans-serif",
+              color: "#5A6373",
+              maxWidth: 560,
+            }}
+          >
+            Five categories, from a saloon for the school run to a lorry or an
+            excavator. Pick one to see what is available near you.
+          </p>
           <div
             style={{
               display: "grid",
@@ -473,7 +517,15 @@ export function Home(): JSX.Element {
                 type="button"
                 onClick={() => navigate(`/browse?category=${b.slug}`)}
                 style={{
-                  display: "block",
+                  // A column, not `display: block`. The grid stretches every
+                  // tile to the tallest one's height, and Chrome centres a
+                  // button's content in the leftover space - which showed as
+                  // card background above the photo and below the price on
+                  // every tile except the tallest. A flex column pins the
+                  // photo to the top edge.
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
                   width: "100%",
                   textAlign: "left",
                   padding: 0,
@@ -484,43 +536,15 @@ export function Home(): JSX.Element {
                   cursor: "pointer",
                 }}
               >
-                {b.photo ? (
-                  // Real photo, no overlay chip - matches the canvas's own
-                  // bodyTiles markup (a plain img, label lives below only).
-                  <div style={{ height: 104, position: "relative", borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
-                    <img
-                      src={b.photo}
-                      alt={b.label}
-                      loading="lazy"
-                      style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    />
-                  </div>
-                ) : (
-                  <div
-                    style={{
-                      height: 104,
-                      background:
-                        "repeating-linear-gradient(135deg,#EEF0F3 0 10px,#E7EAEF 10px 20px)",
-                      borderBottom: "1px solid #E4E7EC",
-                      display: "flex",
-                      alignItems: "flex-end",
-                      padding: "9px 10px",
-                    }}
-                  >
-                    <span
-                      style={{
-                        font: "500 9px/1.4 'IBM Plex Mono',monospace",
-                        letterSpacing: ".09em",
-                        color: "#7C8697",
-                        background: "#FFFFFF",
-                        padding: "4px 7px",
-                        borderRadius: 4,
-                      }}
-                    >
-                      {b.label.toUpperCase()}
-                    </span>
-                  </div>
-                )}
+                {/* A plain img, no overlay chip - the label lives below it. */}
+                <div style={{ flex: "none", height: 150, position: "relative", borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
+                  <img
+                    src={b.photo}
+                    alt={b.label}
+                    loading="lazy"
+                    style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
                 <div style={{ padding: "14px 15px 15px" }}>
                   <div
                     style={{
@@ -795,10 +819,11 @@ export function Home(): JSX.Element {
                 Put it to work on the days you are not using it.
               </h3>
             </div>
-            <button
-              type="button"
-              onClick={() => navigate("/list-your-car")}
+            <a
+              href={merchantLandingUrl()}
               style={{
+                display: "inline-flex",
+                alignItems: "center",
                 alignSelf: "flex-start",
                 height: 44,
                 padding: "0 19px",
@@ -807,11 +832,11 @@ export function Home(): JSX.Element {
                 border: "none",
                 borderRadius: 8,
                 font: "600 14px/1 'Instrument Sans',sans-serif",
-                cursor: "pointer",
+                textDecoration: "none",
               }}
             >
               List your car
-            </button>
+            </a>
           </div>
         </div>
       </div>
@@ -835,20 +860,26 @@ function RailsMessage({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
-/** Local (not UTC) calendar day - so "today" matches the renter's own clock. */
-function todayIso(): string {
-  const d = new Date();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-/** COUNTY defaults to `city` when passed - the hero's city quick-picks set it. */
-function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
+/**
+ * COUNTY defaults to `city` when passed - the hero's city quick-picks set
+ * it. `counties` is whatever has a live listing; until it arrives (or if
+ * nothing is listed anywhere) the field reads "Any county" and the search
+ * simply goes to /browse unfiltered, rather than pre-filling a county
+ * that may have nothing in it.
+ */
+function SearchBar({
+  city,
+  counties,
+}: {
+  city?: string | undefined;
+  counties: string[];
+}): JSX.Element {
   const navigate = useNavigate();
-  const [county, setCounty] = useState(city ?? KENYA_COUNTIES[0]!);
+  const [county, setCounty] = useState<string>(city ?? "");
   const [fromDate, setFromDate] = useState("");
-  const min = todayIso();
+  // Nairobi's clock, not the browser's, and never today once six in the
+  // evening has passed - cars are back with their owner by then.
+  const min = earliestPickupDay();
 
   useEffect(() => {
     if (city) setCounty(city);
@@ -870,7 +901,7 @@ function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
       <div className="cral-search-kicker">Hire a car</div>
       <form onSubmit={submit} className="cral-search" style={{ maxWidth: 900 }}>
         <input type="hidden" name="county" value={county} />
-        <CountyDropdown value={county} onChange={setCounty} />
+        <CountyDropdown value={county} counties={counties} onChange={setCounty} />
         <label className="cral-search-field">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -910,14 +941,23 @@ function SearchBar({ city }: { city?: string | undefined }): JSX.Element {
 }
 
 /**
- * A fixed list, not free text - the canvas's own hero uses KENYA_COUNTIES.
- * Browse's own filter stays free-text; that's a separate, already-shipped
- * screen, out of scope here. Built custom (not a native `<select>`) so it
- * can carry the same icon/hover/focus treatment as the other fields - a
- * native select can't be restyled past its own font and colors, which is
- * why it looked out of place next to the date fields.
+ * The options are the counties that have a live listing (the canvas's
+ * fixed seven are gone - most of them led nowhere). Browse's own filter
+ * stays free-text; that's a separate, already-shipped screen, out of
+ * scope here. Built custom (not a native `<select>`) so it can carry the
+ * same icon/hover/focus treatment as the other fields - a native select
+ * can't be restyled past its own font and colors, which is why it looked
+ * out of place next to the date fields.
  */
-function CountyDropdown({ value, onChange }: { value: string; onChange: (v: string) => void }): JSX.Element {
+function CountyDropdown({
+  value,
+  counties,
+  onChange,
+}: {
+  value: string;
+  counties: string[];
+  onChange: (v: string) => void;
+}): JSX.Element {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -945,15 +985,19 @@ function CountyDropdown({ value, onChange }: { value: string; onChange: (v: stri
       </svg>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => counties.length > 0 && setOpen((v) => !v)}
         aria-haspopup="listbox"
         aria-expanded={open}
+        disabled={counties.length === 0}
         className="cral-county-toggle"
       >
         <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
           <span className="cral-search-label">COUNTY</span>
-          <span className="cral-search-input" style={{ display: "block" }}>
-            {value}
+          <span
+            className="cral-search-input"
+            style={{ display: "block", color: value ? undefined : "#7C8697" }}
+          >
+            {value || "Any county"}
           </span>
         </span>
         <svg
@@ -968,9 +1012,9 @@ function CountyDropdown({ value, onChange }: { value: string; onChange: (v: stri
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && (
+      {open && counties.length > 0 && (
         <div className="cral-county-menu" role="listbox">
-          {KENYA_COUNTIES.map((c) => {
+          {counties.map((c) => {
             const selected = c === value;
             return (
               <button

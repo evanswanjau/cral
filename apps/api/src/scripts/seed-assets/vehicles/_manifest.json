@@ -100,5 +100,29 @@
     "w": null,
     "h": null,
     "lic": "CC BY-SA 4.0"
+  },
+  "fit": {
+    "url": "https://commons.wikimedia.org/wiki/File:HONDA_FIT_(GK,GH,GP)_China.jpg",
+    "w": 1400,
+    "h": 985,
+    "lic": "CC BY-SA 4.0"
+  },
+  "e-class": {
+    "url": "https://commons.wikimedia.org/wiki/File:MERCEDES-BENZ_E-CLASS_(W212)_HONG_KONG.jpg",
+    "w": 1400,
+    "h": 691,
+    "lic": "CC BY-SA 4.0"
+  },
+  "bmw-5-series": {
+    "url": "https://commons.wikimedia.org/wiki/File:BMW_5_SERIES_SEDAN_(F10)_HONG_KONG.jpg",
+    "w": 1400,
+    "h": 718,
+    "lic": "CC BY-SA 4.0"
+  },
+  "land-cruiser-200": {
+    "url": "https://commons.wikimedia.org/wiki/File:Toyota_Land_Cruiser_J200_VX_2018.jpg",
+    "w": 1400,
+    "h": 1050,
+    "lic": "CC BY-SA 4.0"
   }
 }

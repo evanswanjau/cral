@@ -30,6 +30,14 @@ catalogRouter.get(
 );
 
 catalogRouter.get(
+  "/catalog/counties",
+  browse,
+  asyncHandler(async (_req, res) => {
+    res.status(200).json(await catalog.getCounties());
+  }),
+);
+
+catalogRouter.get(
   "/catalog/vehicles/:id",
   browse,
   asyncHandler(async (req, res) => {

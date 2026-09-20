@@ -374,6 +374,39 @@ describe("collections", () => {
   });
 });
 
+describe("counties", () => {
+  it("lists only counties with a live listing, busiest first, folding spellings", async () => {
+    const approved = await makeMerchant({ approved: true });
+    const unapproved = await makeMerchant({ approved: false });
+    const county = `Busy ${Date.now()}`;
+    const quiet = `Quiet ${Date.now()}`;
+    const hidden = `Hidden ${Date.now()}`;
+
+    await addVehicle(approved.merchantId, { county });
+    await addVehicle(approved.merchantId, { county });
+    // Same county, a merchant's own spelling - one entry to a hirer, under
+    // whichever spelling the most listings use.
+    await addVehicle(approved.merchantId, { county: county.toLowerCase() });
+    await addVehicle(approved.merchantId, { county: quiet });
+    // Neither of these is hireable, so neither county should appear.
+    await addVehicle(approved.merchantId, { county: hidden, status: "draft" });
+    await addVehicle(unapproved.merchantId, { county: hidden });
+
+    const res = await request(app).get("/catalog/counties");
+    expect(res.status).toBe(200);
+    const rows = res.body.counties as Array<{ county: string; vehicle_count: number }>;
+
+    expect(rows.find((r) => r.county === county)).toEqual({ county, vehicle_count: 3 });
+    expect(rows.find((r) => r.county === quiet)).toEqual({ county: quiet, vehicle_count: 1 });
+    expect(rows.some((r) => r.county.toLowerCase() === hidden.toLowerCase())).toBe(false);
+    // The lower-cased duplicate folded into the majority spelling.
+    expect(rows.filter((r) => r.county.toLowerCase() === county.toLowerCase())).toHaveLength(1);
+
+    const counts = rows.map((r) => r.vehicle_count);
+    expect([...counts].sort((a, b) => b - a)).toEqual(counts);
+  });
+});
+
 describe("photos", () => {
   it("streams a photo for a public listing and 404s one for a hidden listing", async () => {
     const approved = await makeMerchant({ approved: true });
