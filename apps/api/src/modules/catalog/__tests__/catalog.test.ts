@@ -68,6 +68,7 @@ async function makeMerchant(
     companyName?: string;
     firstName?: string;
     phone?: string;
+    fullName?: string;
   } = {},
 ): Promise<{ merchantId: string; userId: string }> {
   const suffix = ulid().slice(-10).toLowerCase();
@@ -78,6 +79,7 @@ async function makeMerchant(
       password_hash: "x",
       roles: ["merchant"],
       email_verified: true,
+      full_name: opts.fullName ?? null,
       phone: opts.phone ?? uniquePhone(),
       terms_accepted_version: "2026-08-24",
       terms_accepted_at: new Date(),
@@ -204,6 +206,7 @@ async function rateOwner(
   vehicleId: string,
   raterUserId: string,
   stars: number,
+  comment?: string,
 ): Promise<void> {
   const bookingId = await seedBooking(
     owner.merchantId,
@@ -220,6 +223,7 @@ async function rateOwner(
     ratee_id: owner.userId,
     ratee_type: "merchant",
     stars,
+    comment: comment ?? null,
   });
 }
 
@@ -538,5 +542,65 @@ describe("what CRAL checked, and the owner's rating", () => {
 
     const res = await request(app).get(`/catalog/vehicles/${id}`);
     expect(res.body.owner_rating).toBeNull();
+  });
+
+  it("returns null rating and an empty review list until someone has rated a hire of this car", async () => {
+    const m = await makeMerchant({ approved: true });
+    const id = await addVehicle(m.merchantId);
+
+    const res = await request(app).get(`/catalog/vehicles/${id}`);
+    // Never an all-zero shape - the page says "Not rated yet" off this.
+    expect(res.body.rating).toBeNull();
+    expect(res.body.reviews).toEqual([]);
+  });
+
+  it("names a reviewer by first name and last initial, never by id or email", async () => {
+    const owner = await makeMerchant({ approved: true });
+    const id = await addVehicle(owner.merchantId);
+    const rater = await makeMerchant({ approved: true, fullName: "Wanjiku Njeri" });
+    await rateOwner(owner, id, rater.userId, 5, "Exactly the car in the photos.");
+
+    const res = await request(app).get(`/catalog/vehicles/${id}`);
+    expect(res.body.reviews).toHaveLength(1);
+    expect(res.body.reviews[0].who).toBe("Wanjiku N.");
+    expect(res.body.reviews[0].stars).toBe(5);
+    expect(res.body.reviews[0].text).toBe("Exactly the car in the photos.");
+    // The rater's identity beyond that initial never crosses the wire.
+    const wire = JSON.stringify(res.body);
+    expect(wire).not.toContain(rater.userId);
+    expect(wire).not.toContain("Njeri");
+  });
+
+  it("scopes `rating` to this car, while `owner_rating` spans the owner's whole fleet", async () => {
+    const owner = await makeMerchant({ approved: true });
+    const thisCar = await addVehicle(owner.merchantId);
+    const otherCar = await addVehicle(owner.merchantId);
+    const rater = await makeMerchant({ approved: true, fullName: "David Kimani" });
+
+    // Two fives on this car, a one on another car of the same owner.
+    await rateOwner(owner, thisCar, rater.userId, 5);
+    await rateOwner(owner, thisCar, rater.userId, 5);
+    await rateOwner(owner, otherCar, rater.userId, 1);
+
+    const res = await request(app).get(`/catalog/vehicles/${thisCar}`);
+    // "From people who hired it" is about this car: 5.0 from two.
+    expect(res.body.rating).toEqual({ average: 5, count: 2 });
+    expect(res.body.reviews).toHaveLength(2);
+    // "The owner" card is about the account: all three hires.
+    expect(res.body.owner_rating.count).toBe(3);
+    expect(res.body.owner_rating.average).toBeCloseTo(3.7, 1);
+  });
+
+  it("caps the review list at ten while `rating.count` stays whole-set", async () => {
+    const owner = await makeMerchant({ approved: true });
+    const id = await addVehicle(owner.merchantId);
+    const rater = await makeMerchant({ approved: true, fullName: "Achieng Otieno" });
+    for (let i = 0; i < 12; i += 1) await rateOwner(owner, id, rater.userId, 4);
+
+    const res = await request(app).get(`/catalog/vehicles/${id}`);
+    expect(res.body.reviews).toHaveLength(10);
+    // The count is the whole set, not the page - the copy under the list
+    // says "showing the 10 most recent of 12" off exactly this gap.
+    expect(res.body.rating).toEqual({ average: 4, count: 12 });
   });
 });
