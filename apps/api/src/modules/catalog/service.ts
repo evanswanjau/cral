@@ -4,7 +4,7 @@ import { db } from "../../db/client.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
-import { ratingSummaries, type RatingSummary } from "../../lib/ratings.js";
+import { ratingSummaries, vehicleReviews, type RatingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
 
 /**
@@ -367,9 +367,13 @@ export async function getCatalogVehicle(id: string) {
     });
   }
 
-  const [aux, documentsCleared] = await Promise.all([
+  const [aux, documentsCleared, hires] = await Promise.all([
     loadAux([row]),
     documentsClearedFor(row.id),
+    // "From people who hired it" - this car's own reviews, not the
+    // owner's whole-account score. The two are different sets and the
+    // page shows them under different headings.
+    vehicleReviews(row.id),
   ]);
   // Nothing writes a hirer->merchant rating yet (no completed customer
   // hires exist) - this stays null honestly rather than fabricate a
@@ -383,6 +387,8 @@ export async function getCatalogVehicle(id: string) {
     photo_urls: photoIds.map((pid) => photoPath(row.id, pid)),
     documents_cleared: documentsCleared,
     owner_rating: ownerRating,
+    rating: hires.rating,
+    reviews: hires.reviews,
   };
 }
 

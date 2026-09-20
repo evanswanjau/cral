@@ -484,3 +484,35 @@ input::placeholder {
     border-radius: 0 0 18px 18px;
   }
 }
+
+/*
+ * The spec strip on a listing (pages/CarDetail.tsx). Six facts laid out
+ * three-up, so they read as two rows of three rather than one long
+ * ribbon of six - at six across each cell is narrow enough that
+ * "Comes with driver" wraps to three lines while the cell beside it
+ * holds the single character "5".
+ *
+ * Two columns below 560px: three 100px-wide cells on a phone is worse
+ * than two 150px ones.
+ *
+ * White cells on a hairline grid (owner's call, 2026-09-20, after trying
+ * the panel in cruzRed then cruzBlue). The strip sits directly above
+ * "What CRAL checked" and its green ticks; a saturated block of either
+ * brand colour pulled the eye off the verification card, which is the
+ * part of this page that has to be read.
+ */
+.cral-spec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  /* The gap fill: neutral-200 showing through the 1px gaps as hairlines. */
+  background: #e4e7ec;
+  border: 1px solid #e4e7ec;
+  border-radius: 12px;
+  overflow: hidden;
+}
+@media (max-width: 560px) {
+  .cral-spec-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -3,11 +3,11 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
-import {
-  earliestPickupDay,
-  hireDays,
-  isAfterHireCutoff,
-} from "../lib/hire-dates.js";
+import { earliestPickupDay, hireDays } from "../lib/hire-dates.js";
+import { PlateBadge } from "../components/site/PlateBadge.js";
+import { Rating, Stars } from "../components/site/Rating.js";
+import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
+import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -16,9 +16,14 @@ import {
  *  - "What CRAL checked" lists only the three per-vehicle documents a
  *    reviewer actually decided on - no semantic claim ("ownership
  *    verified") beyond that, since there is no OCR in this product.
- *  - Reviews render only if `owner_rating` is non-null. Nothing writes a
- *    hirer's rating of a merchant yet, so an empty, honest state is what
- *    ships rather than a fabricated one.
+ *  - Two scores, each labelled with what it counts. `rating`/`reviews`
+ *    are this car's own, from bookings on this vehicle - that is what
+ *    "From people who hired it" claims. `owner_rating` is the owner's
+ *    whole account. The masthead shows the car's, or falls back to the
+ *    owner's with the word "owner" carrying the scope: most listings
+ *    have no reviews of their own for a long while, and a bare "Not
+ *    rated yet" above an owner card reading "5.0 · 3 reviews" reads as
+ *    the page contradicting itself.
  */
 
 const TINT = "#EEF0F3";
@@ -64,9 +69,12 @@ export function CarDetail(): JSX.Element {
       ? `${carName} in ${car.county ?? "Kenya"} - ${formatMoney(car.daily_rate)} / day. Documents read, no booking fee.`
       : undefined,
     path: id ? `/cars/${id}` : undefined,
-    // AggregateRating only when a real rating exists (car.owner_rating) -
-    // emitting it over nothing is structured-data spam, the same
-    // fabrication the id_verified badge was removed for.
+    // AggregateRating only when this CAR has a real rating. Deliberately
+    // `car.rating`, not `car.owner_rating`: the enclosing type is
+    // `Vehicle`, so reporting the owner's whole-account reviewCount here
+    // would tell a search engine this car has reviews it does not have.
+    // Emitting it over nothing at all is the same fabrication the
+    // id_verified badge was removed for.
     jsonLd: car
       ? {
           "@context": "https://schema.org",
@@ -81,12 +89,12 @@ export function CarDetail(): JSX.Element {
             priceCurrency: car.daily_rate.currency,
             availability: "https://schema.org/InStock",
           },
-          ...(car.owner_rating
+          ...(car.rating
             ? {
                 aggregateRating: {
                   "@type": "AggregateRating",
-                  ratingValue: car.owner_rating.average,
-                  reviewCount: car.owner_rating.count,
+                  ratingValue: car.rating.average,
+                  reviewCount: car.rating.count,
                 },
               }
             : {}),
@@ -139,13 +147,21 @@ export function CarDetail(): JSX.Element {
   }
 
   const name = `${car.make} ${car.model} ${car.year}`;
-  const specs: Array<{ k: string; v: string }> = [
-    { k: "CATEGORY", v: car.category },
-    { k: "TRANSMISSION", v: car.transmission === "manual" ? "Manual" : "Automatic" },
-    { k: "FUEL", v: car.fuel },
-    { k: "SEATS", v: String(car.seats) },
-    { k: "DRIVER", v: car.chauffeured ? "Comes with driver" : "Self-drive" },
-    { k: "MIN. HIRE", v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}` },
+  // The icon reinforces the overline, never replaces it - every cell
+  // still reads as "FUEL / Petrol" with the glyph stripped out.
+  const specs: Array<{ k: string; v: string; icon: SpecIconName }> = [
+    // The stored value is a slug ("sedan"); the cell was rendering it
+    // raw, lowercase, mid-sentence. Same label map Browse's filter uses.
+    { k: "CATEGORY", v: VEHICLE_CATEGORY_LABEL[car.category] ?? car.category, icon: "category" },
+    { k: "TRANSMISSION", v: car.transmission === "manual" ? "Manual" : "Automatic", icon: "transmission" },
+    { k: "FUEL", v: car.fuel, icon: "fuel" },
+    { k: "SEATS", v: String(car.seats), icon: "seats" },
+    { k: "DRIVER", v: car.chauffeured ? "Comes with driver" : "Self-drive", icon: "driver" },
+    {
+      k: "MIN. HIRE",
+      v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}`,
+      icon: "hire",
+    },
   ];
 
   // Inclusive Nairobi days - the 19th to the 19th is one day, the 19th to
@@ -306,42 +322,65 @@ export function CarDetail(): JSX.Element {
                 marginBottom: "clamp(20px,2.8vw,28px)",
               }}
             >
-              <span style={{ font: "500 14px/1.4 'IBM Plex Mono',monospace", color: "#5A6373" }}>
-                {car.registration}
+              <PlateBadge value={car.registration} />
+              {/*
+               * The canvas's `{{car.spec}}` line. Composed from the same
+               * three fields, in the same order and wording, as
+               * `VehicleCard` - a renter who clicks a card should not
+               * find the car described differently on the next screen.
+               */}
+              <span style={{ font: "400 14px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                {car.seats} seats · {car.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
+                {car.chauffeured ? "With driver" : "Self-drive"}
               </span>
-              {car.owner_rating && (
-                <>
-                  <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
-                  <span style={{ font: "500 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
-                    ★ {car.owner_rating.average} · {car.owner_rating.count} review
-                    {car.owner_rating.count === 1 ? "" : "s"}
-                  </span>
-                </>
+              <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
+              {/*
+               * This car's own score where it has one. Most listings
+               * won't for a long while - a car needs its own completed,
+               * rated hire - so rather than a bare "Not rated yet" above
+               * an owner card reading "5.0 · 3 reviews" (which reads as
+               * the page contradicting itself), it falls back to the
+               * owner's score with the word "owner" carrying the scope.
+               * Two figures that say what they count, never one figure
+               * disagreeing with itself.
+               */}
+              {car.rating ? (
+                <Rating rating={car.rating} />
+              ) : (
+                <Rating rating={car.owner_rating} noun="owner review" />
               )}
             </div>
 
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fit,minmax(128px,1fr))",
-                gap: 1,
-                background: "#E4E7EC",
-                border: "1px solid #E4E7EC",
-                borderRadius: 12,
-                overflow: "hidden",
-                marginBottom: "clamp(20px,2.8vw,28px)",
-              }}
-            >
+            {/* Layout lives in `.cral-spec-grid` (src/index.css) - the
+                three-up/two-up column count needs a media query, which an
+                inline style cannot express. */}
+            <div className="cral-spec-grid" style={{ marginBottom: "clamp(20px,2.8vw,28px)" }}>
               {specs.map((s) => (
-                <div key={s.k} style={{ background: "#FFFFFF", padding: "15px 16px" }}>
+                <div
+                  key={s.k}
+                  style={{
+                    background: "#FFFFFF",
+                    padding: "18px 14px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    textAlign: "center",
+                  }}
+                >
                   <div
                     style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 7,
                       font: "500 10px/1 'IBM Plex Mono',monospace",
                       letterSpacing: ".09em",
                       color: "#9AA2B0",
-                      marginBottom: 7,
+                      marginBottom: 9,
                     }}
                   >
+                    <SpecIcon name={s.icon} color="#9AA2B0" />
                     {s.k}
                   </div>
                   <div style={{ font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>{s.v}</div>
@@ -464,23 +503,101 @@ export function CarDetail(): JSX.Element {
                   <div style={{ font: "600 15px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 3 }}>
                     {car.owner.display_name}
                   </div>
-                  <div style={{ font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                    {car.owner.listed_count} car{car.owner.listed_count === 1 ? "" : "s"} listed
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 10,
+                      flexWrap: "wrap",
+                      font: "400 13px/1.4 'Instrument Sans',sans-serif",
+                      color: "#5A6373",
+                    }}
+                  >
+                    <span>
+                      {car.owner.listed_count} car{car.owner.listed_count === 1 ? "" : "s"} listed
+                    </span>
+                    <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
+                    {/* The owner's score across every car they list - a
+                        wider set than the masthead's, which is this car
+                        alone. Labelled so the two aren't read as one
+                        number disagreeing with itself. */}
+                    <Rating rating={car.owner_rating} size={13} empty="No owner reviews yet" />
                   </div>
                 </div>
               </div>
             </div>
 
             <div style={{ background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: 12, padding: "clamp(18px,2.4vw,24px)" }}>
-              <div style={{ font: "600 17px/1.3 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", color: "#0B0F1A", marginBottom: 6 }}>
-                From people who hired it
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 14,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  marginBottom: 6,
+                }}
+              >
+                <span style={{ font: "600 17px/1.3 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", color: "#0B0F1A" }}>
+                  From people who hired it
+                </span>
+                {/* Only when this car has its own - otherwise the header
+                    would repeat the owner's score under a heading that
+                    isn't about the owner. */}
+                {car.rating && <Rating rating={car.rating} size={13} />}
               </div>
               <p style={{ margin: "0 0 4px", font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
                 Only renters who completed a hire can leave one.
               </p>
-              {!car.owner_rating && (
+              {car.reviews.length === 0 ? (
                 <p style={{ margin: "12px 0 0", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  No reviews yet.
+                  No reviews for this car yet.
+                  {car.owner_rating
+                    ? ` Its owner is rated ${car.owner_rating.average.toFixed(1)} from ${
+                        car.owner_rating.count
+                      } hire${car.owner_rating.count === 1 ? "" : "s"} of their other cars.`
+                    : ""}
+                </p>
+              ) : (
+                <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                  {car.reviews.map((r) => (
+                    <div key={r.id} style={{ padding: "15px 16px", background: "#F8F9FB", borderRadius: 8 }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          gap: 12,
+                          marginBottom: 8,
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                        }}
+                      >
+                        <span style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
+                          {r.who}
+                        </span>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                          <Stars stars={r.stars} />
+                          <span style={{ font: "500 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B" }}>
+                            {new Date(r.when)
+                              .toLocaleDateString("en-GB", { month: "short", year: "numeric" })
+                              .toUpperCase()}
+                          </span>
+                        </span>
+                      </div>
+                      {r.text && (
+                        <p style={{ margin: 0, font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#333B4A" }}>
+                          {r.text}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {/* The list is capped at ten; the count above is whole-set,
+                  so the two are allowed to disagree and the copy says so. */}
+              {car.rating && car.rating.count > car.reviews.length && (
+                <p style={{ margin: "12px 0 0", font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
+                  Showing the {car.reviews.length} most recent of {car.rating.count}.
                 </p>
               )}
             </div>
@@ -580,18 +697,6 @@ export function CarDetail(): JSX.Element {
               </label>
             </div>
 
-            {isAfterHireCutoff() && (
-              <p
-                style={{
-                  margin: "0 0 12px",
-                  font: "400 12px/1.5 'Instrument Sans',sans-serif",
-                  color: "#8A5200",
-                }}
-              >
-                Past six in Nairobi - the earliest pickup is tomorrow.
-              </p>
-            )}
-
             {days > 0 && (
               <div
                 style={{
@@ -644,9 +749,6 @@ export function CarDetail(): JSX.Element {
             >
               Request these dates
             </button>
-            <p style={{ margin: 0, font: "400 12.5px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", textAlign: "center" }}>
-              No money moves yet. The owner has twelve hours to accept.
-            </p>
           </div>
         </div>
       </div>
