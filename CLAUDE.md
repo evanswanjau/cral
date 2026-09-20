@@ -141,6 +141,36 @@ SMTP socket, so a mail server's firewall never enters the picture. Needs
 domain in Resend's dashboard (a handful of DNS TXT/MX records) before
 sends succeed.
 
+**File storage is real: `B2StorageAdapter` (`STORAGE_ADAPTER=b2`)**, added
+2026-09-20 at the owner's request. Backblaze B2 over its S3-compatible API
+(`@aws-sdk/client-s3`, `forcePathStyle: true` - B2 addresses buckets as a
+path segment). Needs `B2_BUCKET` / `B2_ENDPOINT` / `B2_REGION` /
+`B2_KEY_ID` / `B2_APPLICATION_KEY`; a missing one throws from the
+constructor at boot, same shape as `TextSmsAdapter`. The bucket stays
+private (spec §22) - nothing builds a public URL, reads go through
+`getObject` on an authenticated request or a short-lived presigned URL.
+
+- **`LocalStorageAdapter` is dev-only and always was**: it writes to the
+  container filesystem, which any container host wipes on redeploy. A
+  `documents` row outlives the bytes it points at, and a photo that 404s
+  reads as a corrupt document. That is why the deployed environments must
+  run `b2`, not `local`.
+- **The B2 *master* key does not work with the S3 API.** The first attempt
+  failed with `403 InvalidAccessKeyId / Malformed Access Key Id` on every
+  object because `.env` held the 12-char account id. An S3 application key
+  ID is 25 characters and its secret 31 - create a named Application Key
+  scoped to the bucket, not the master key.
+- **`npm run storage:migrate-b2 -w apps/api [-- --dry-run]`** moves existing
+  files into the bucket. It is driven off `documents` rows, never a
+  directory walk: the local storage dir accumulates orphans from test runs
+  and re-seeds (687 files on disk against 114 live rows when it was
+  written), and paying to store bytes nothing references is waste. It reads
+  each object back after upload, because a truncated write and a good one
+  look identical from the `PutObject` response.
+- `vitest.config.ts` pins `STORAGE_ADAPTER: "local"` for the test run,
+  alongside the email/SMS pins. Don't remove it - the suite would otherwise
+  upload fixture documents to the real bucket.
+
 Credentials for both live in the gitignored `.env`; `.env.example` carries
 the keys with empty secrets.
 

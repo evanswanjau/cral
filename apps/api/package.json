@@ -21,9 +21,12 @@
     "approve:merchant": "tsx src/scripts/approve-merchant.ts",
     "admin:create": "tsx src/scripts/create-admin.ts",
     "review:profile-change": "tsx src/scripts/review-profile-change.ts",
-    "reset:demo": "tsx src/scripts/reset-demo-data.ts"
+    "reset:demo": "tsx src/scripts/reset-demo-data.ts",
+    "storage:migrate-b2": "tsx src/scripts/migrate-storage-to-b2.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/s3-request-presigner": "^3.1136.0",
     "@cral/types": "*",
     "argon2": "^0.41.1",
     "bullmq": "^5.21.2",
