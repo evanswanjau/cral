@@ -1016,6 +1016,82 @@ async function main(): Promise<void> {
         status: "live", photoSlug: "noah",
       },
     ],
+
+    // Budget hatchbacks - the cars most people in this market actually
+    // hire. Three of these models were already seeded under merchant C,
+    // but C is deliberately unapproved and its cars sit in draft/review/
+    // rejected to exercise those states, so none of them reach the
+    // catalog. These are separate cars, on approved merchants, priced
+    // under the "Budget friendly" rail's KES 4,000 line.
+    [
+      merchantA,
+      {
+        key: "A6", type: "sedan", make: "Mazda", model: "Demio", year: "2018", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "Red", county: "Nairobi",
+        pickupAddress: "Nairobi - Kasarani", dailyRateKes: 3000, minimumHireDays: 1, chauffeured: false,
+        status: "live", photoSlug: "demio",
+      },
+    ],
+    [
+      merchantA,
+      {
+        key: "A7", type: "sedan", make: "Toyota", model: "Vitz", year: "2017", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "Silver", county: "Nairobi",
+        pickupAddress: "Nairobi - Ngara", dailyRateKes: 2900, minimumHireDays: 1, chauffeured: false,
+        status: "live", photoSlug: "vitz",
+      },
+    ],
+    [
+      merchantA,
+      {
+        key: "A8", type: "sedan", make: "Honda", model: "Fit", year: "2018", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "White", county: "Nairobi",
+        pickupAddress: "Nairobi - South B", dailyRateKes: 3300, minimumHireDays: 1, chauffeured: false,
+        status: "live", photoSlug: "fit",
+      },
+    ],
+    [
+      merchantB,
+      {
+        key: "B4", type: "sedan", make: "Nissan", model: "Note", year: "2019", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "Blue", county: "Nakuru",
+        pickupAddress: "Nakuru - Lanet", dailyRateKes: 3600, minimumHireDays: 1, chauffeured: false,
+        status: "live", photoSlug: "note",
+      },
+    ],
+
+    // Executive. The "Executive" rail is priced at KES 10,000/day and up,
+    // and until now the only cars over that line were a Prado, a Land
+    // Cruiser 70 and a lorry - so a rail captioned "weddings, client
+    // pitches, delegations" was showing a tipper truck. These are real
+    // chauffeur-driven saloons and a V8, which is what that copy means.
+    [
+      merchantA,
+      {
+        key: "A9", type: "sedan", make: "Mercedes-Benz", model: "E-Class", year: "2018", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "Black", county: "Nairobi",
+        pickupAddress: "Nairobi - Westlands", dailyRateKes: 18000, minimumHireDays: 1, chauffeured: true,
+        status: "live", photoSlug: "e-class",
+      },
+    ],
+    [
+      merchantA,
+      {
+        key: "A10", type: "sedan", make: "BMW", model: "5 Series", year: "2017", seats: 5,
+        transmission: "Automatic", fuel: "Petrol", colour: "Navy", county: "Nairobi",
+        pickupAddress: "Nairobi - Upper Hill", dailyRateKes: 15500, minimumHireDays: 1, chauffeured: true,
+        status: "live", photoSlug: "bmw-5-series",
+      },
+    ],
+    [
+      merchantD,
+      {
+        key: "D3", type: "suv", make: "Toyota", model: "Land Cruiser V8", year: "2018", seats: 7,
+        transmission: "Automatic", fuel: "Diesel", colour: "Pearl white", county: "Mombasa",
+        pickupAddress: "Mombasa - Nyali", dailyRateKes: 22000, minimumHireDays: 2, chauffeured: true,
+        status: "live", photoSlug: "land-cruiser-200",
+      },
+    ],
   ];
 
   const vehicles: Record<string, SeededVehicle> = {};

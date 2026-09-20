@@ -28,7 +28,13 @@ export function VehicleCard({
       style={{
         flex: width ? "none" : undefined,
         width: width ?? "100%",
-        display: "block",
+        // A column, not `display: block` - see the category tiles in
+        // pages/Home.tsx: a button centres its content vertically when a
+        // grid row stretches it taller than its content, leaving a band of
+        // card background above the photo.
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "stretch",
         textAlign: "left",
         padding: 0,
         background: "#FFFFFF",
@@ -40,6 +46,7 @@ export function VehicleCard({
     >
       <div
         style={{
+          flex: "none",
           position: "relative",
           height: 150,
           background: tint,
@@ -59,11 +66,12 @@ export function VehicleCard({
               width: "100%",
               height: "100%",
               objectFit: "cover",
-              // Biased toward the bottom - most source photos have the car
-              // sitting low in frame with sky/background above it, so a
-              // plain center-crop was showing that background instead of
-              // the car. This shows more of the vehicle, less of the sky.
-              objectPosition: "center 75%",
+              // Very slightly below centre. An earlier pass used `center 75%`
+              // to favour the car over the sky above it, but on any photo
+              // where the car already fills the frame that crops the roof
+              // off - which is most listing photos, and looked broken. 58%
+              // still leans away from empty sky without losing the roofline.
+              objectPosition: "center 58%",
             }}
           />
         ) : (

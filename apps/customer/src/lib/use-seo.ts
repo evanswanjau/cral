@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-const SUFFIX = "CRAL: Cruz Ride Auto Limited";
+const SUFFIX = "Cral - Cruz Ride Auto Limited";
 const SITE_URL = "https://cral.co.ke";
 
 export interface SeoInput {

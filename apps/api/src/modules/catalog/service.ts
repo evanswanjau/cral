@@ -427,7 +427,10 @@ const COLLECTION_DEFS: CollectionDef[] = [
     kicker: "ARRIVE WELL",
     title: "Executive",
     sub: "Weddings, client pitches, delegations. Owners who valet before every hire.",
-    apply: (qb) => qb.where("v.daily_rate_amount", ">=", 1_000_000),
+    // Price alone isn't enough here: a lorry or an excavator clears KES
+    // 10,000/day easily, and this rail's own copy says weddings and client
+    // pitches. Cars only.
+    apply: (qb) => qb.where("v.daily_rate_amount", ">=", 1_000_000).whereIn("v.type", ["sedan", "suv"]),
   },
   {
     key: "airport",
