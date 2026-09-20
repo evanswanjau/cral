@@ -1,8 +1,13 @@
 import { useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
+import {
+  earliestPickupDay,
+  hireDays,
+  isAfterHireCutoff,
+} from "../lib/hire-dates.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -20,9 +25,30 @@ const TINT = "#EEF0F3";
 
 export function CarDetail(): JSX.Element {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
+  /**
+   * Back goes to the search the renter actually ran, not a bare `/browse`
+   * - Browse hands its whole querystring over in router state when it
+   * opens a car. A car opened from a shared link or a new tab carries no
+   * state, so that case falls back to the unfiltered search rather than
+   * `history.back()`, which would leave the site.
+   */
+  const backSearch = (location.state as { browseSearch?: string } | null)?.browseSearch ?? "";
+  const backTo = backSearch ? `/browse?${backSearch}` : "/browse";
   const navigate = useNavigate();
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const [params] = useSearchParams();
+  // Seeded from the search the renter already did, so the dates they
+  // picked on the home page are still here when they open a car.
+  const minDay = earliestPickupDay();
+  const [from, setFrom] = useState(() => {
+    const q = params.get("from") ?? "";
+    return q && q >= minDay ? q : "";
+  });
+  const [to, setTo] = useState(() => {
+    const qFrom = params.get("from") ?? "";
+    const qTo = params.get("to") ?? "";
+    return qTo && qFrom >= minDay && qTo >= qFrom ? qTo : "";
+  });
 
   const { data: car, isLoading, isError } = useQuery({
     queryKey: ["catalog", "vehicle", id],
@@ -94,7 +120,7 @@ export function CarDetail(): JSX.Element {
         </p>
         <button
           type="button"
-          onClick={() => navigate("/browse")}
+          onClick={() => navigate(backTo)}
           style={{
             height: 44,
             padding: "0 19px",
@@ -122,10 +148,9 @@ export function CarDetail(): JSX.Element {
     { k: "MIN. HIRE", v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}` },
   ];
 
-  const days =
-    from && to
-      ? Math.max(1, Math.ceil((new Date(to).getTime() - new Date(from).getTime()) / 86_400_000))
-      : 0;
+  // Inclusive Nairobi days - the 19th to the 19th is one day, the 19th to
+  // the 20th is two. Same function the booking page and the server use.
+  const days = hireDays(from, to);
   const total = days > 0 ? car.daily_rate.amount * days : 0;
 
   const requestDates = () => {
@@ -140,7 +165,7 @@ export function CarDetail(): JSX.Element {
       <div style={{ maxWidth: 1180, margin: "0 auto" }}>
         <button
           type="button"
-          onClick={() => navigate("/browse")}
+          onClick={() => navigate(backTo)}
           style={{
             height: 34,
             padding: "0 12px 0 8px",
@@ -505,7 +530,13 @@ export function CarDetail(): JSX.Element {
                 <input
                   type="date"
                   value={from}
-                  onChange={(e) => setFrom(e.target.value)}
+                  min={minDay}
+                  onChange={(e) => {
+                    setFrom(e.target.value);
+                    // Keep the pair coherent: a return before the new
+                    // pickup is never what the renter meant.
+                    if (to && e.target.value && to < e.target.value) setTo(e.target.value);
+                  }}
                   style={{
                     width: "100%",
                     height: 44,
@@ -533,7 +564,7 @@ export function CarDetail(): JSX.Element {
                 <input
                   type="date"
                   value={to}
-                  min={from || undefined}
+                  min={from || minDay}
                   onChange={(e) => setTo(e.target.value)}
                   style={{
                     width: "100%",
@@ -548,6 +579,18 @@ export function CarDetail(): JSX.Element {
                 />
               </label>
             </div>
+
+            {isAfterHireCutoff() && (
+              <p
+                style={{
+                  margin: "0 0 12px",
+                  font: "400 12px/1.5 'Instrument Sans',sans-serif",
+                  color: "#8A5200",
+                }}
+              >
+                Past six in Nairobi - the earliest pickup is tomorrow.
+              </p>
+            )}
 
             {days > 0 && (
               <div
@@ -567,12 +610,6 @@ export function CarDetail(): JSX.Element {
                   <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
                     {formatMoney({ amount: total, currency: car.daily_rate.currency })}
                   </span>
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ font: "400 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                    CRAL booking fee
-                  </span>
-                  <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>KES 0</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>Total</span>

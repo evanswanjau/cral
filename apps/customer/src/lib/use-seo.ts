@@ -6,6 +6,13 @@ const SITE_URL = "https://cral.co.ke";
 export interface SeoInput {
   /** Short, page-specific label. Detail screens pass the entity (a car's name). */
   title: string | null;
+  /**
+   * Use `title` as the whole document title, without the site suffix.
+   * Off by default - the suffix is what puts the brand in a search result
+   * for every other page - so a page that opts out is making that trade
+   * deliberately.
+   */
+  bareTitle?: boolean | undefined;
   description?: string | undefined;
   /** Path only, e.g. "/how-it-works" - the origin is always cral.co.ke. */
   path?: string | undefined;
@@ -46,18 +53,19 @@ function upsertLink(rel: string, href: string): HTMLLinkElement {
  * rather than silently claimed done here.
  */
 export function useSeo(input: SeoInput): void {
-  const { title, description, path, jsonLd } = input;
+  const { title, description, path, jsonLd, bareTitle } = input;
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = title ? `${title} - ${SUFFIX}` : SUFFIX;
+    const fullTitle = title ? (bareTitle ? title : `${title} - ${SUFFIX}`) : SUFFIX;
+    document.title = fullTitle;
 
     const created: Element[] = [];
     const restoreDescription = description ? upsertMeta("name", "description", description) : null;
 
     const url = path ? `${SITE_URL}${path}` : undefined;
     const restoreCanonical = url ? upsertLink("canonical", url) : null;
-    const restoreOgTitle = upsertMeta("property", "og:title", title ? `${title} - ${SUFFIX}` : SUFFIX);
+    const restoreOgTitle = upsertMeta("property", "og:title", fullTitle);
     const restoreOgType = upsertMeta("property", "og:type", "website");
     const restoreOgDescription = description
       ? upsertMeta("property", "og:description", description)
@@ -87,5 +95,5 @@ export function useSeo(input: SeoInput): void {
       void restoreOgUrl;
       for (const el of created) el.remove();
     };
-  }, [title, description, path, jsonLd]);
+  }, [title, bareTitle, description, path, jsonLd]);
 }

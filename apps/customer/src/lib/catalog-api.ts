@@ -13,10 +13,17 @@ export interface Money {
   currency: string;
 }
 
+export interface RatingSummary {
+  average: number;
+  count: number;
+}
+
 export interface CatalogOwner {
   display_name: string;
   since: string;
   listed_count: number;
+  /** null until a hirer has ever rated this owner - nothing fabricated. */
+  rating: RatingSummary | null;
 }
 
 export interface CatalogVehicleSummary {
@@ -44,11 +51,6 @@ export interface DocumentCleared {
   kind: "logbook" | "comprehensive_insurance" | "tracker_certificate";
   label: string;
   cleared: boolean;
-}
-
-export interface RatingSummary {
-  average: number;
-  count: number;
 }
 
 export interface CatalogVehicleDetail extends CatalogVehicleSummary {
@@ -82,7 +84,7 @@ export interface CatalogSearchParams {
   seats_min?: number;
   transmission?: "automatic" | "manual";
   chauffeured?: boolean;
-  sort?: "recommended" | "price_asc" | "price_desc" | "newest";
+  sort?: "recommended" | "price_asc" | "price_desc" | "newest" | "rating_desc";
   cursor?: string;
   limit?: number;
 }

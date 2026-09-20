@@ -103,8 +103,12 @@ paths:
           in: query
           schema:
             type: string
-            enum: [recommended, price_asc, price_desc, newest]
+            enum: [recommended, price_asc, price_desc, newest, rating_desc]
             default: recommended
+          description: >
+            `rating_desc` is the owner's average rating from completed
+            hires, best first; an owner nobody has rated sorts last rather
+            than in the middle.
         - name: cursor
           in: query
           schema: { type: string }
@@ -268,7 +272,7 @@ components:
 
     CatalogOwner:
       type: object
-      required: [display_name, since, listed_count]
+      required: [display_name, since, listed_count, rating]
       properties:
         display_name:
           type: string
@@ -282,6 +286,19 @@ components:
         listed_count:
           type: integer
           description: How many live listings this owner currently has.
+        rating:
+          nullable: true
+          description: >
+            The owner's average rating from completed hires, shown on the
+            listing card. `null`, honestly, until a hirer has ever rated a
+            merchant - nothing writes that direction yet (see the `ratings`
+            table). Never an all-zero shape. Same figure as the detail
+            endpoint's `owner_rating`.
+          type: object
+          required: [average, count]
+          properties:
+            average: { type: number }
+            count: { type: integer }
 
     CatalogVehicleSummary:
       type: object

@@ -6,6 +6,7 @@ import { merchantLandingUrl } from "../lib/merchant-app.js";
 import { earliestPickupDay } from "../lib/hire-dates.js";
 import { getCollections, getCounties, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
+import { Dropdown, PIN_ICON } from "../components/site/Dropdown.js";
 import sedanPhoto from "../assets/category-tiles/sedan.jpg";
 import suvPhoto from "../assets/category-tiles/suv.jpg";
 import vanPhoto from "../assets/category-tiles/van.jpg";
@@ -901,7 +902,16 @@ function SearchBar({
       <div className="cral-search-kicker">Hire a car</div>
       <form onSubmit={submit} className="cral-search" style={{ maxWidth: 900 }}>
         <input type="hidden" name="county" value={county} />
-        <CountyDropdown value={county} counties={counties} onChange={setCounty} />
+        <Dropdown
+          variant="field"
+          label="COUNTY"
+          icon={PIN_ICON}
+          value={county}
+          placeholder="Any county"
+          disabled={counties.length === 0}
+          options={counties.map((c) => ({ value: c, label: c }))}
+          onChange={setCounty}
+        />
         <label className="cral-search-field">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -936,109 +946,6 @@ function SearchBar({
           Search cars
         </button>
       </form>
-    </div>
-  );
-}
-
-/**
- * The options are the counties that have a live listing (the canvas's
- * fixed seven are gone - most of them led nowhere). Browse's own filter
- * stays free-text; that's a separate, already-shipped screen, out of
- * scope here. Built custom (not a native `<select>`) so it can carry the
- * same icon/hover/focus treatment as the other fields - a native select
- * can't be restyled past its own font and colors, which is why it looked
- * out of place next to the date fields.
- */
-function CountyDropdown({
-  value,
-  counties,
-  onChange,
-}: {
-  value: string;
-  counties: string[];
-  onChange: (v: string) => void;
-}): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    function onPointerDown(e: PointerEvent) {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
-  return (
-    <div ref={rootRef} className="cral-search-field" style={{ position: "relative" }}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M12 22s7-7.58 7-13a7 7 0 1 0-14 0c0 5.42 7 13 7 13Z" />
-        <circle cx="12" cy="9" r="2.5" />
-      </svg>
-      <button
-        type="button"
-        onClick={() => counties.length > 0 && setOpen((v) => !v)}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        disabled={counties.length === 0}
-        className="cral-county-toggle"
-      >
-        <span style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
-          <span className="cral-search-label">COUNTY</span>
-          <span
-            className="cral-search-input"
-            style={{ display: "block", color: value ? undefined : "#7C8697" }}
-          >
-            {value || "Any county"}
-          </span>
-        </span>
-        <svg
-          width="14"
-          height="14"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.2"
-          style={{ flex: "none", transform: open ? "rotate(180deg)" : "none", transition: "transform .15s ease" }}
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      {open && counties.length > 0 && (
-        <div className="cral-county-menu" role="listbox">
-          {counties.map((c) => {
-            const selected = c === value;
-            return (
-              <button
-                key={c}
-                type="button"
-                role="option"
-                aria-selected={selected}
-                className="cral-county-option"
-                onClick={() => {
-                  onChange(c);
-                  setOpen(false);
-                }}
-              >
-                {c}
-                {selected && (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4">
-                    <path d="M20 6 9 17l-5-5" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

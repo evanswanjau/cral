@@ -165,9 +165,10 @@ async function seedBooking(
   status: string,
   pickup: string,
   dropoff: string,
-): Promise<void> {
+): Promise<string> {
+  const id = generateId("booking");
   await db("bookings").insert({
-    id: generateId("booking"),
+    id,
     ref: `CB-${Math.floor(Math.random() * 9000 + 1000)}`,
     merchant_id: merchantId,
     vehicle_id: vehicleId,
@@ -188,6 +189,37 @@ async function seedBooking(
     payout_method: "mpesa",
     payout_detail: "0722000000",
     payout_account_name: "Mwangi Karanja",
+  });
+  return id;
+}
+
+/**
+ * A hirer's rating of an owner. Nothing in the product writes
+ * `ratee_type: "merchant"` yet (no completed customer hires), so the
+ * rating sort is exercised against rows inserted directly - the same
+ * shape `rateHirer` writes in the other direction.
+ */
+async function rateOwner(
+  owner: { merchantId: string; userId: string },
+  vehicleId: string,
+  raterUserId: string,
+  stars: number,
+): Promise<void> {
+  const bookingId = await seedBooking(
+    owner.merchantId,
+    vehicleId,
+    raterUserId,
+    "completed",
+    "2026-06-01",
+    "2026-06-03",
+  );
+  await db("ratings").insert({
+    id: generateId("review"),
+    booking_id: bookingId,
+    rater_id: raterUserId,
+    ratee_id: owner.userId,
+    ratee_type: "merchant",
+    stars,
   });
 }
 
@@ -340,6 +372,44 @@ describe("sort and pagination", () => {
       [800_000],
     );
     expect(page3.body.has_more).toBe(false);
+  });
+
+  it("orders by the owner's rating, unrated owners last, and pages without dupes", async () => {
+    const county = "Rating County";
+    const best = await makeMerchant({ approved: true, firstName: "Best" });
+    const middling = await makeMerchant({ approved: true, firstName: "Middling" });
+    const unrated = await makeMerchant({ approved: true, firstName: "Unrated" });
+    const vBest = await addVehicle(best.merchantId, { county });
+    const vMid = await addVehicle(middling.merchantId, { county });
+    const vNone = await addVehicle(unrated.merchantId, { county });
+
+    // The rater is another account's user - `rater_id` is just a users FK.
+    await rateOwner(best, vBest, unrated.userId, 5);
+    await rateOwner(middling, vMid, unrated.userId, 3);
+
+    const res = await request(app)
+      .get("/catalog/vehicles")
+      .query({ county, sort: "rating_desc", limit: 10 });
+    expect(res.body.data.map((v: { id: string }) => v.id)).toEqual([vBest, vMid, vNone]);
+    expect(res.body.data.map((v: { owner: { rating: unknown } }) => v.owner.rating)).toEqual([
+      { average: 5, count: 1 },
+      { average: 3, count: 1 },
+      // Never an all-zero shape - an owner nobody has rated has no score.
+      null,
+    ]);
+
+    // The keyset cursor walks the same order one row at a time.
+    const walked: string[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < 4; i += 1) {
+      const page = await request(app)
+        .get("/catalog/vehicles")
+        .query({ county, sort: "rating_desc", limit: 1, ...(cursor ? { cursor } : {}) });
+      walked.push(...page.body.data.map((v: { id: string }) => v.id));
+      if (!page.body.has_more) break;
+      cursor = page.body.next_cursor as string;
+    }
+    expect(walked).toEqual([vBest, vMid, vNone]);
   });
 });
 

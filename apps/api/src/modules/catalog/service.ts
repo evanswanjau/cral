@@ -4,7 +4,7 @@ import { db } from "../../db/client.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
-import { ratingSummary } from "../../lib/ratings.js";
+import { ratingSummaries, type RatingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
 
 /**
@@ -113,21 +113,27 @@ function photoPath(vehicleId: string, photoId: string): string {
 
 /**
  * One batched pass over the auxiliary data a page of rows needs: how many
- * live listings each distinct owner has, and each vehicle's photo ids in
- * upload order. Avoids an N+1 per card.
+ * live listings each distinct owner has, each vehicle's photo ids in
+ * upload order, and each owner's aggregate rating. Avoids an N+1 per card.
  */
 async function loadAux(rows: CatalogRow[]): Promise<{
   listedCount: Map<string, number>;
   photos: Map<string, string[]>;
+  ownerRatings: Map<string, RatingSummary>;
 }> {
   const listedCount = new Map<string, number>();
   const photos = new Map<string, string[]>();
-  if (rows.length === 0) return { listedCount, photos };
+  let ownerRatings = new Map<string, RatingSummary>();
+  if (rows.length === 0) return { listedCount, photos, ownerRatings };
 
   const merchantIds = [...new Set(rows.map((r) => r.merchant_id))];
   const vehicleIds = rows.map((r) => r.id);
 
-  const [counts, photoRows] = await Promise.all([
+  // Keyed by the merchant's `user_id`, which is what `ratings.ratee_id`
+  // holds for a `merchant` ratee - same id the detail endpoint reads.
+  const ownerUserIds = rows.map((r) => r.m_user_id);
+
+  const [counts, photoRows, ratings] = await Promise.all([
     db("vehicles")
       .whereIn("merchant_id", merchantIds)
       .where("status", "live")
@@ -139,7 +145,9 @@ async function loadAux(rows: CatalogRow[]): Promise<{
       .where("kind", "vehicle_photo")
       .orderBy("created_at", "asc")
       .select("id", "vehicle_id"),
+    ratingSummaries(ownerUserIds, "merchant"),
   ]);
+  ownerRatings = ratings;
 
   for (const c of counts) listedCount.set(c.merchant_id, Number(c.count));
   for (const p of photoRows as { id: string; vehicle_id: string }[]) {
@@ -147,12 +155,16 @@ async function loadAux(rows: CatalogRow[]): Promise<{
     list.push(p.id);
     photos.set(p.vehicle_id, list);
   }
-  return { listedCount, photos };
+  return { listedCount, photos, ownerRatings };
 }
 
 function serializeSummary(
   row: CatalogRow,
-  aux: { listedCount: Map<string, number>; photos: Map<string, string[]> },
+  aux: {
+    listedCount: Map<string, number>;
+    photos: Map<string, string[]>;
+    ownerRatings: Map<string, RatingSummary>;
+  },
 ) {
   const photoIds = aux.photos.get(row.id) ?? [];
   return {
@@ -176,6 +188,9 @@ function serializeSummary(
       display_name: ownerName(row),
       since: row.m_created_at.toISOString(),
       listed_count: aux.listedCount.get(row.merchant_id) ?? 1,
+      // null (never an all-zero shape) until a hirer has actually rated
+      // this owner - the card renders nothing rather than "0.0".
+      rating: aux.ownerRatings.get(row.m_user_id) ?? null,
     },
     created_at: row.created_at.toISOString(),
   };
@@ -185,30 +200,54 @@ function serializeSummary(
 // Search
 // ---------------------------------------------------------------------
 
+/**
+ * The owner's average rating, joined per merchant. Kept as its own
+ * derived table rather than a correlated subquery so the sort, the
+ * keyset cursor and the page all read one aggregate, computed once.
+ */
+const RATING_JOIN = `left join (
+    select ratee_id, avg(stars) as avg_stars
+    from ratings
+    where ratee_type = 'merchant'
+    group by ratee_id
+  ) as rt on rt.ratee_id = m.user_id`;
+
+/** Unrated owners sort last, never in the middle - hence coalesce to 0. */
+const RATING_EXPR = "coalesce(rt.avg_stars, 0)";
+
 interface SortConfig {
-  column: "v.created_at" | "v.daily_rate_amount";
-  key: "created_at" | "daily_rate_amount";
+  /** The SQL ordered on - also what the keyset cursor compares against. */
+  expr: string;
+  key: "created_at" | "daily_rate_amount" | "rating";
   direction: "asc" | "desc";
 }
 
 function sortConfig(sort: CatalogSearchQuery["sort"]): SortConfig {
   switch (sort) {
     case "price_asc":
-      return { column: "v.daily_rate_amount", key: "daily_rate_amount", direction: "asc" };
+      return { expr: "v.daily_rate_amount", key: "daily_rate_amount", direction: "asc" };
     case "price_desc":
-      return { column: "v.daily_rate_amount", key: "daily_rate_amount", direction: "desc" };
+      return { expr: "v.daily_rate_amount", key: "daily_rate_amount", direction: "desc" };
+    case "rating_desc":
+      return { expr: RATING_EXPR, key: "rating", direction: "desc" };
     // "recommended" has no real ranking signal yet (the design's is
     // completed hires) - newest-first until booking volume exists.
     case "newest":
     case "recommended":
     default:
-      return { column: "v.created_at", key: "created_at", direction: "desc" };
+      return { expr: "v.created_at", key: "created_at", direction: "desc" };
   }
 }
 
 export async function listCatalog(query: CatalogSearchQuery) {
   const sort = sortConfig(query.sort);
   const qb = baseCatalogQuery().select(...CATALOG_COLUMNS);
+  if (sort.key === "rating") {
+    // The raw average is selected, not the rounded one the card shows:
+    // a cursor built from a rounded value would skip or repeat rows at
+    // the page boundary wherever two owners round to the same figure.
+    qb.joinRaw(RATING_JOIN).select(db.raw(`${RATING_EXPR} as sort_rating`));
+  }
 
   if (query.county) qb.whereRaw("lower(v.county) = lower(?)", [query.county]);
   if (query.category) qb.where("v.type", query.category);
@@ -239,17 +278,29 @@ export async function listCatalog(query: CatalogSearchQuery) {
   if (query.cursor) {
     const decoded = decodeCursor(query.cursor);
     if (decoded) {
-      qb.where((b) => {
-        b.where(sort.column, op, decoded.v).orWhere((inner) => {
-          inner.where(sort.column, "=", decoded.v).andWhere("v.id", op, decoded.id);
+      if (sort.key === "rating") {
+        qb.whereRaw(
+          `(${RATING_EXPR} ${op} ?::numeric or (${RATING_EXPR} = ?::numeric and v.id ${op} ?))`,
+          [decoded.v, decoded.v, decoded.id],
+        );
+      } else {
+        qb.where((b) => {
+          b.where(sort.expr, op, decoded.v).orWhere((inner) => {
+            inner.where(sort.expr, "=", decoded.v).andWhere("v.id", op, decoded.id);
+          });
         });
-      });
+      }
     }
   }
 
-  qb.orderBy(sort.column, sort.direction).orderBy("v.id", sort.direction).limit(query.limit + 1);
+  if (sort.key === "rating") {
+    qb.orderByRaw(`${RATING_EXPR} ${sort.direction}`);
+  } else {
+    qb.orderBy(sort.expr, sort.direction);
+  }
+  qb.orderBy("v.id", sort.direction).limit(query.limit + 1);
 
-  const fetched = (await qb) as CatalogRow[];
+  const fetched = (await qb) as Array<CatalogRow & { sort_rating?: string | number }>;
   const hasMore = fetched.length > query.limit;
   const rows = hasMore ? fetched.slice(0, query.limit) : fetched;
   const aux = await loadAux(rows);
@@ -257,7 +308,12 @@ export async function listCatalog(query: CatalogSearchQuery) {
   const nextCursor =
     hasMore && last
       ? encodeCursor({
-          v: sort.key === "created_at" ? last.created_at.toISOString() : last.daily_rate_amount,
+          v:
+            sort.key === "created_at"
+              ? last.created_at.toISOString()
+              : sort.key === "rating"
+                ? Number(last.sort_rating ?? 0)
+                : last.daily_rate_amount,
           id: last.id,
         })
       : null;
@@ -311,14 +367,15 @@ export async function getCatalogVehicle(id: string) {
     });
   }
 
-  const [aux, documentsCleared, ownerRating] = await Promise.all([
+  const [aux, documentsCleared] = await Promise.all([
     loadAux([row]),
     documentsClearedFor(row.id),
-    // Nothing writes a hirer->merchant rating yet (no completed customer
-    // hires exist) - this returns null honestly rather than fabricate a
-    // score, exactly the fix that removed the hardcoded id_verified badge.
-    ratingSummary(row.m_user_id, "merchant"),
   ]);
+  // Nothing writes a hirer->merchant rating yet (no completed customer
+  // hires exist) - this stays null honestly rather than fabricate a
+  // score, exactly the fix that removed the hardcoded id_verified badge.
+  // Same map the card's `owner.rating` reads, so the two can't disagree.
+  const ownerRating = aux.ownerRatings.get(row.m_user_id) ?? null;
   const photoIds = aux.photos.get(row.id) ?? [];
   return {
     ...serializeSummary(row, aux),

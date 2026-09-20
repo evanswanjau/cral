@@ -19,7 +19,9 @@ export const CatalogSearchQuerySchema = z
       .enum(["true", "false"])
       .transform((v) => v === "true")
       .optional(),
-    sort: z.enum(["recommended", "price_asc", "price_desc", "newest"]).default("recommended"),
+    sort: z
+      .enum(["recommended", "price_asc", "price_desc", "newest", "rating_desc"])
+      .default("recommended"),
     cursor: z.string().min(1).optional(),
     limit: z.coerce.number().int().min(1).max(48).default(24),
   })

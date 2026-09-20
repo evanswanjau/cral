@@ -158,6 +158,8 @@ export function VehicleCard({
         >
           <span
             style={{
+              flex: "none",
+              whiteSpace: "nowrap",
               font: "700 16px/1.2 Archivo,sans-serif",
               fontVariationSettings: "'wdth' 106",
               color: "#0B0F1A",
@@ -170,13 +172,52 @@ export function VehicleCard({
               / day
             </span>
           </span>
+          {/* The owner, and their score if a hirer has ever rated them.
+              `rating` is null (never an all-zero shape) until then, so an
+              unrated owner shows their name alone rather than "0.0" -
+              the same honesty rule as the removed id_verified badge.
+              Glyph + number, never colour alone. */}
           <span
             style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: 6,
+              flex: "0 1 auto",
               font: "500 11.5px/1.4 'Instrument Sans',sans-serif",
               color: "#5A6373",
+              minWidth: 0,
             }}
           >
-            {car.owner.display_name}
+            {car.owner.rating && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 3,
+                  font: "600 11.5px/1.4 'Instrument Sans',sans-serif",
+                  color: "#0B0F1A",
+                  fontVariantNumeric: "tabular-nums",
+                }}
+                title={`${car.owner.rating.average} from ${car.owner.rating.count} ${
+                  car.owner.rating.count === 1 ? "hire" : "hires"
+                }`}
+              >
+                <span aria-hidden="true" style={{ color: "#C77400" }}>
+                  ★
+                </span>
+                {car.owner.rating.average}
+                <span style={{ color: "#838C9B", fontWeight: 400 }}>({car.owner.rating.count})</span>
+              </span>
+            )}
+            <span
+              style={{
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {car.owner.display_name}
+            </span>
           </span>
         </div>
       </div>
