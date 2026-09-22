@@ -8,7 +8,7 @@ export interface BookingVehicle {
   make: string;
   model: string;
   year: string;
-  category: string;
+  category: "sedan" | "suv" | "van" | "truck" | "machinery";
   registration: string;
   county: string | null;
   seats: number;

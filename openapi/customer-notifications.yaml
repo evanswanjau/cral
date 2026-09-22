@@ -201,9 +201,10 @@ components:
           type: string
           description: >
             Client-relative path for the CTA. A renter's row links into
-            the customer portal's own routes (e.g. "/trips/bkg_…"), not the
-            merchant portal's "/bookings/bkg_…" for the same booking - the
-            two apps are separate origins with separate route maps.
+            the customer portal's own routes (e.g. "/bookings/bkg_…"),
+            which happen to share the same path text as the merchant
+            portal's "/bookings/bkg_…" for the same booking, but the two
+            apps are separate origins with separate route maps.
 
     NotificationCounts:
       type: object

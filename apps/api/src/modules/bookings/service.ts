@@ -12,7 +12,11 @@ import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
-import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
+import { executeRefund, recordRefund } from "../../lib/refunds.js";
+import {
+  enqueueNotificationDelivery,
+  enqueueRenterNotificationDelivery,
+} from "../../jobs/notification-delivery.js";
 import { ratingSummaries, ratingSummary, type RatingSummary } from "../../lib/ratings.js";
 import type { DocumentRow, VehicleRow } from "../merchant/db-types.js";
 import type {
@@ -171,14 +175,44 @@ function serializeEvent(e: BookingEventRow) {
   };
 }
 
+/**
+ * Whether the hirer's money has actually arrived, for the merchant's own
+ * screen.
+ *
+ * The accept modal used to assert "The hirer has already paid CRAL in
+ * full" as a hardcoded line, which was false every time it was shown:
+ * payment was gated behind acceptance, so nothing had been charged at
+ * the moment the merchant was deciding. The merchant was being told
+ * their money was banked in order to get them to accept - the
+ * money-shaped version of the hardcoded `id_verified` badge.
+ *
+ * Payment is gated behind acceptance again (2026-09-21), so at the
+ * moment a merchant decides, a request is normally `unpaid` - and the
+ * screen says exactly that. It stays *reported* rather than assumed
+ * either way: bookings paid under the brief 2026-09-20 pay-first flow
+ * exist, and after acceptance an STK push can fail or sit pending. A
+ * merchant must be told which of those it actually is.
+ */
+async function paymentStateFor(bookingId: string): Promise<"paid" | "pending" | "unpaid"> {
+  const rows = (await db("payment_requests")
+    .where({ booking_id: bookingId })
+    .whereIn("status", ["pending", "success"])
+    .select("status", "expires_at")) as Array<{ status: string; expires_at: Date }>;
+  if (rows.some((r) => r.status === "success")) return "paid";
+  if (rows.some((r) => r.status === "pending" && r.expires_at.getTime() > Date.now())) return "pending";
+  return "unpaid";
+}
+
 async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: HirerInfo) {
-  const [events, hirerRating] = await Promise.all([
+  const [events, hirerRating, paymentState] = await Promise.all([
     db<BookingEventRow>("booking_events").where({ booking_id: booking.id }).orderBy("occurred_at", "desc"),
     ratingSummary(booking.hirer_id, "hirer"),
+    paymentStateFor(booking.id),
   ]);
 
   return {
     ...serializeSummary(booking, vehicle, hirer, hirerRating),
+    payment_state: paymentState,
     gross: kes(booking.gross_amount),
     commission: kes(booking.commission_amount),
     merchant_net: kes(booking.merchant_net_amount),
@@ -336,7 +370,7 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
 
   const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
 
-  const updated = await db.transaction(async (trx) => {
+  const { row: updated, renterNotificationId } = await db.transaction(async (trx) => {
     const [row] = await trx<BookingRow>("bookings")
       .where({ id: booking.id })
       .update({ status: "confirmed", response_due_at: null })
@@ -363,22 +397,26 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    // The renter side of this event - a real in-app row for /trips, per
+    // The renter side of this event - a real in-app row for /bookings, per
     // Migration B (docs/plans/customer-portal.md C8). The email below is
     // sent separately, post-commit; renter notifications don't go through
     // notification-delivery.ts's merchant-scoped preference/quiet-hours
     // pipeline, since there's no renter Settings screen to configure it.
-    await notify(trx, {
+    const renterNotificationId = await notify(trx, {
       userId: booking.hirer_id,
       category: "booking",
-      title: `${booking.ref} confirmed`,
-      body: `${vehicle.make} ${vehicle.model} · ${vehicle.registration}. You'll get a pickup code closer to your pickup time.`,
+      title: `${booking.ref} accepted`,
+      body: `${vehicle.make} ${vehicle.model} · ${vehicle.registration}. Open the booking to pay by M-Pesa and lock in your dates.`,
       ref: booking.ref,
       subjectType: "booking",
       subjectId: booking.id,
     });
-    return row;
+    return { row, renterNotificationId };
   });
+
+  // Post-commit, same rule as the merchant side: a failed enqueue costs a
+  // text, never the notification row itself.
+  await enqueueRenterNotificationDelivery([renterNotificationId]);
 
   if (hirer.email) {
     await emailAdapter.send({
@@ -405,7 +443,7 @@ export async function declineBooking(userId: string, bookingId: string, input: D
 
   const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
 
-  const updated = await db.transaction(async (trx) => {
+  const { row: updated, renterNotificationId, refundId } = await db.transaction(async (trx) => {
     const [row] = await trx<BookingRow>("bookings")
       .where({ id: booking.id })
       .update({
@@ -442,10 +480,10 @@ export async function declineBooking(userId: string, bookingId: string, input: D
       ip: ctx.ip,
     });
     // Previously the renter had no notice at all that their request was
-    // turned down short of polling /trips - closed as part of Migration B
+    // turned down short of polling /bookings - closed as part of Migration B
     // (docs/plans/customer-portal.md C8), the same gap confirmBooking's
     // email already covered for an acceptance.
-    await notify(trx, {
+    const renterNotificationId = await notify(trx, {
       userId: booking.hirer_id,
       category: "booking",
       title: `${booking.ref} declined`,
@@ -454,8 +492,26 @@ export async function declineBooking(userId: string, bookingId: string, input: D
       subjectType: "booking",
       subjectId: booking.id,
     });
-    return row;
+    // Normally there is nothing to send back: nobody can pay a request
+    // before it is accepted (2026-09-21). `recordRefund` returns null on
+    // an unpaid booking and writes no row. It is still called because
+    // bookings paid under the brief pay-first flow can still be declined,
+    // and that money is owed. Recorded in the decline's own transaction;
+    // sent after it commits.
+    const refundId = await recordRefund(trx, {
+      bookingId: booking.id,
+      reason: "declined",
+      actorId: userId,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return { row, renterNotificationId, refundId };
   });
+
+  // Post-commit, same rule as the merchant side: a failed enqueue costs a
+  // text, never the notification row itself.
+  await enqueueRenterNotificationDelivery([renterNotificationId]);
+  if (refundId) await executeRefund(refundId, booking.ref);
 
   if (hirer.email) {
     await emailAdapter.send({
@@ -507,7 +563,7 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
     eventBody = "Cancelled before pick-up — free for the hirer, nothing owed either way.";
   }
 
-  const updated = await db.transaction(async (trx) => {
+  const { row: updated, renterNotificationId, refundId } = await db.transaction(async (trx) => {
     const [row] = await trx<BookingRow>("bookings").where({ id: booking.id }).update(update).returning("*");
     if (!row) throw new Error("Failed to cancel booking");
 
@@ -531,7 +587,7 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    await notify(trx, {
+    const renterNotificationId = await notify(trx, {
       userId: booking.hirer_id,
       category: "booking",
       title: `${booking.ref} cancelled by the owner`,
@@ -540,8 +596,28 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
       subjectType: "booking",
       subjectId: booking.id,
     });
-    return row;
+    // A confirmed booking has been paid for since payment moved ahead of
+    // acceptance, so the owner cancelling owes money back - the whole
+    // payment before pick-up, the balance after the 25% late fee.
+    // `update.refund_amount` is the figure the booking itself records, so
+    // the refund and the booking cannot disagree about what is owed.
+    const refundId = await recordRefund(trx, {
+      bookingId: booking.id,
+      reason: "merchant_cancelled",
+      actorId: userId,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+      ...(update.refund_amount === null || update.refund_amount === undefined
+        ? {}
+        : { amountCents: update.refund_amount }),
+    });
+    return { row, renterNotificationId, refundId };
   });
+
+  // Post-commit, same rule as the merchant side: a failed enqueue costs a
+  // text, never the notification row itself.
+  await enqueueRenterNotificationDelivery([renterNotificationId]);
+  if (refundId) await executeRefund(refundId, booking.ref);
 
   if (hirer.email) {
     await emailAdapter.send({
@@ -584,7 +660,7 @@ export async function createHandover(userId: string, bookingId: string, input: C
   const code = isReturn ? null : generateOtpCode();
   const now = Date.now();
 
-  const handover = await db.transaction(async (trx) => {
+  const { row: handover, renterNotificationId } = await db.transaction(async (trx) => {
     const [row] = await trx<HandoverRow>("handovers")
       .insert({
         id: generateId("handover"),
@@ -622,7 +698,7 @@ export async function createHandover(userId: string, bookingId: string, input: C
     // The in-app record that a code went out - never the code itself, which
     // only ever exists as a hash server-side (see createHandover's own
     // comment on the OTP). The email below carries the real code.
-    await notify(trx, {
+    const renterNotificationId = await notify(trx, {
       userId: booking.hirer_id,
       category: input.kind === "pickup" ? "booking" : "return",
       title: input.kind === "pickup" ? `${booking.ref} · your pickup code was emailed` : `${booking.ref} · your return code was emailed`,
@@ -631,8 +707,12 @@ export async function createHandover(userId: string, bookingId: string, input: C
       subjectType: "booking",
       subjectId: booking.id,
     });
-    return row;
+    return { row, renterNotificationId };
   });
+
+  // Post-commit, same rule as the merchant side: a failed enqueue costs a
+  // text, never the notification row itself.
+  await enqueueRenterNotificationDelivery([renterNotificationId]);
 
   if (code && hirer.email) {
     await emailAdapter.send({
@@ -1155,7 +1235,7 @@ export async function expireStaleBookingRequests(): Promise<number> {
     .where("response_due_at", "<", new Date());
 
   for (const booking of stale) {
-    await db.transaction(async (trx) => {
+    const refundId = await db.transaction(async (trx) => {
       const updatedRows = await trx<BookingRow>("bookings")
         .where({ id: booking.id, status: "requested" }) // re-check status inside the txn in case it was just answered
         .update({
@@ -1170,14 +1250,34 @@ export async function expireStaleBookingRequests(): Promise<number> {
       // changed. Skip the event/audit writes too, or the timeline would
       // permanently show a false "Request expired" on a booking that was
       // in fact accepted or declined in time.
-      if (updatedRows === 0) return;
+      if (updatedRows === 0) return null;
+      /**
+       * Recorded before the timeline event, so the event can say what
+       * actually happened. `recordRefund` returns null when there was
+       * nothing to refund, which since 2026-09-21 is the normal case -
+       * a renter pays only after acceptance, so a request nobody
+       * answered was never charged.
+       *
+       * The body used to claim "refunded in full" unconditionally. That
+       * was written for the brief pay-first flow and became a standing
+       * falsehood about money the moment the order was reversed.
+       */
+      const refundId = await recordRefund(trx, {
+        bookingId: booking.id,
+        reason: "expired",
+        actorId: null,
+        requestId: null,
+        ip: null,
+      });
       await appendBookingEvent(trx, {
         bookingId: booking.id,
         merchantId: booking.merchant_id,
         kind: "expired",
         tone: "grey",
         label: "Request expired",
-        body: "No answer within 12 hours. The hirer has been refunded in full.",
+        body: refundId
+          ? "No answer within 12 hours. The hirer has been refunded in full."
+          : "No answer within 12 hours. The dates are open again - the hirer was never charged.",
         actorType: "system",
       });
       await writeAuditEntry(trx, {
@@ -1189,7 +1289,11 @@ export async function expireStaleBookingRequests(): Promise<number> {
         before: { status: "requested" },
         after: { status: "expired" },
       });
+      // Sent after commit by the caller - a provider timeout must not
+      // roll back the expiry that caused it.
+      return refundId;
     });
+    if (refundId) await executeRefund(refundId, booking.ref);
   }
   return stale.length;
 }

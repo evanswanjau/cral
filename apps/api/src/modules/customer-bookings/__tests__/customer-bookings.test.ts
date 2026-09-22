@@ -57,13 +57,19 @@ function uniquePhone(): string {
   return `+2547${String(phoneSeed).slice(-8)}`;
 }
 
-/** A renter with both identity documents uploaded (pending review). */
-async function renter(opts: { withDocuments?: boolean } = {}) {
+/**
+ * A renter with both identity documents uploaded (pending review) and a
+ * verified phone - both are gates on `POST /bookings`. `withPhoneVerified:
+ * false` exercises the phone gate itself.
+ */
+async function renter(opts: { withDocuments?: boolean; withPhoneVerified?: boolean } = {}) {
   const u = await createVerifiedTestUser();
   userIds.push(u.userId);
-  await db("users")
-    .where({ id: u.userId })
-    .update({ full_name: "Brian Kiptoo", phone: uniquePhone() });
+  await db("users").where({ id: u.userId }).update({
+    full_name: "Brian Kiptoo",
+    phone: uniquePhone(),
+    phone_verified: opts.withPhoneVerified !== false,
+  });
 
   if (opts.withDocuments !== false) {
     for (const kind of ["national_id", "driving_licence"]) {
@@ -133,11 +139,24 @@ async function listing(
 }
 
 const DAY = 24 * 60 * 60 * 1000;
+/**
+ * `nights` is the gap between the two dates, NOT the billed days: hire
+ * days are counted inclusively (owner's call, 2026-09-19), so a pair
+ * `nights` apart bills as `nights + 1`. `dates(3, 0)` is a same-day hire.
+ *
+ * Both instants are pinned to a fixed hour of the Nairobi day (09:00
+ * pickup, 17:00 dropoff) rather than offset from "now" - otherwise a
+ * suite running late in the EAT evening pushes a same-day dropoff over
+ * midnight and it bills as two days.
+ */
 function dates(startInDays: number, nights: number) {
-  const pickup = new Date(Date.now() + startInDays * DAY);
+  const NAIROBI_OFFSET = 3 * 60 * 60 * 1000;
+  const day = (offsetDays: number) =>
+    new Date(Date.now() + NAIROBI_OFFSET + offsetDays * DAY).toISOString().slice(0, 10);
   return {
-    pickup_at: pickup.toISOString(),
-    dropoff_at: new Date(pickup.getTime() + nights * DAY).toISOString(),
+    // 09:00 and 17:00 Nairobi, expressed as the UTC we actually store.
+    pickup_at: new Date(Date.parse(`${day(startInDays)}T09:00:00.000Z`) - NAIROBI_OFFSET).toISOString(),
+    dropoff_at: new Date(Date.parse(`${day(startInDays + nights)}T17:00:00.000Z`) - NAIROBI_OFFSET).toISOString(),
   };
 }
 
@@ -154,11 +173,12 @@ describe("requesting a car", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("requested");
-    expect(res.body.ref).toMatch(/^CB-/);
-    expect(res.body.days).toBe(3);
+    expect(res.body.ref).toMatch(/^CB\d{6}\d{3}$/);
+    // dates(3, 3) spans four Nairobi days inclusive.
+    expect(res.body.days).toBe(4);
 
     // Every figure comes from the server's own pricing function.
-    const expected = computeBookingPricing(420_000, 3);
+    const expected = computeBookingPricing(420_000, 4);
     expect(res.body.gross.amount).toBe(expected.gross.amount);
     // CRAL takes no deposit for now (owner's call, 2026-09-11), so the
     // renter is asked for the hire and nothing else.
@@ -195,7 +215,7 @@ describe("requesting a car", () => {
       .send({ ...dates(2, 2), vehicle_id: vehicleId, gross: { amount: 1, currency: "KES" } });
 
     expect(res.status).toBe(201);
-    expect(res.body.gross.amount).toBe(computeBookingPricing(900_000, 2).gross.amount);
+    expect(res.body.gross.amount).toBe(computeBookingPricing(900_000, 3).gross.amount);
   });
 });
 
@@ -294,6 +314,57 @@ describe("request validation", () => {
     expect(res.body.error.code).toBe("invalid_dates");
   });
 
+  it("bills a same-day hire as one day, and an overnight as two", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ rate: 420_000, minDays: 1 });
+
+    const sameDay = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId });
+    expect(sameDay.status).toBe(201);
+    expect(sameDay.body.days).toBe(1);
+    expect(sameDay.body.gross.amount).toBe(computeBookingPricing(420_000, 1).gross.amount);
+
+    const overnight = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(20, 1), vehicle_id: vehicleId });
+    expect(overnight.status).toBe(201);
+    expect(overnight.body.days).toBe(2);
+    expect(overnight.body.gross.amount).toBe(computeBookingPricing(420_000, 2).gross.amount);
+  });
+
+  it("refuses a pickup date that has already passed in Nairobi", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing();
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(-3, 1), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("invalid_dates");
+  });
+
+  it("requires a verified phone before the request goes out", async () => {
+    const hirer = await renter({ withPhoneVerified: false });
+    const { vehicleId } = await listing();
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 2), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("phone_verification_required");
+  });
+
   it("requires the renter's identity documents to be on file", async () => {
     const hirer = await renter({ withDocuments: false });
     const { vehicleId } = await listing();
@@ -370,6 +441,76 @@ describe("cancelling", () => {
     expect(cancelled.status).toBe(200);
     expect(cancelled.body.status).toBe("cancelled");
     expect(cancelled.body.cancel_reason).toBe("Changed plans");
+  });
+
+  it("refunds a confirmed, paid booking in full when the renter cancels before pickup", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing();
+
+    const created = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(15, 2), vehicle_id: vehicleId });
+
+    const grossAmount = created.body.gross.amount as number;
+    const paymentId = generateId("payment");
+    await db("payment_requests").insert({
+      id: paymentId,
+      booking_id: created.body.id,
+      purpose: "full",
+      amount_amount: grossAmount,
+      amount_currency: "KES",
+      phone: "+254700000111",
+      status: "success",
+      provider: "console",
+      provider_request_id: `test_${ulid()}`,
+      expires_at: new Date(Date.now() + DAY),
+    });
+    await db("bookings").where({ id: created.body.id }).update({
+      status: "confirmed",
+      payment_request_id: paymentId,
+    });
+
+    const cancelled = await request(app)
+      .post(`/bookings/${created.body.id}/cancel`)
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ reason: "Changed plans" });
+
+    expect(cancelled.status).toBe(200);
+    expect(cancelled.body.status).toBe("cancelled");
+
+    const refund = await db("refunds")
+      .where({ booking_id: created.body.id, reason: "hirer_cancelled" })
+      .first();
+    expect(refund).toMatchObject({
+      amount_amount: grossAmount,
+      amount_currency: "KES",
+      phone: "+254700000111",
+      status: "success",
+    });
+  });
+
+  it("does not create a refund obligation for a withdrawn (never-paid) request", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing();
+
+    const created = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(16, 2), vehicle_id: vehicleId });
+
+    const cancelled = await request(app)
+      .post(`/bookings/${created.body.id}/cancel`)
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ reason: "Changed plans" });
+
+    expect(cancelled.status).toBe(200);
+    const refund = await db("refunds").where({ booking_id: created.body.id }).first();
+    expect(refund).toBeUndefined();
   });
 
   it("refuses once the pickup time has passed", async () => {

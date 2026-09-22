@@ -47,6 +47,13 @@ export interface BookingEvent {
 }
 
 export interface BookingDetail extends BookingSummary {
+  /**
+   * Whether the hirer's money has actually arrived. Reported by the
+   * server, never assumed by a screen - the accept modal used to claim
+   * "already paid in full" as fixed copy at a moment when nothing had
+   * been charged.
+   */
+  payment_state: "paid" | "pending" | "unpaid";
   gross: Money;
   commission: Money;
   cancellation_fee: Money | null;

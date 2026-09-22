@@ -3,8 +3,9 @@ import type { Worker } from "bullmq";
 import { createApp } from "./app.js";
 import { db } from "./db/client.js";
 import { redis } from "./lib/redis.js";
-import { emailAdapter, smsAdapter } from "./lib/adapters.js";
+import { emailAdapter, paymentAdapter, smsAdapter } from "./lib/adapters.js";
 import { SmtpEmailAdapter } from "./adapters/email/index.js";
+import { DarajaPaymentAdapter } from "./adapters/payment/index.js";
 import { TextSmsAdapter } from "./adapters/sms/index.js";
 import { scheduleRepeatable, startMerchantReminderWorker } from "./jobs/merchant-reminders.js";
 import { scheduleBookingExpirySweep, startBookingExpiryWorker } from "./jobs/booking-expiry.js";
@@ -107,4 +108,36 @@ if (smsAdapter instanceof TextSmsAdapter) {
   console.log(`[api] sms ready — textsms (sender ${process.env.TEXTSMS_SHORTCODE})`);
 } else if (process.env.NODE_ENV === "production") {
   console.warn("[api] sms adapter is 'console' in production — no SMS will be delivered");
+}
+
+/**
+ * Payments. A missing Daraja credential already throws from the adapter
+ * the first time someone pays, which is far too late to find out - so
+ * say at boot which rail is live and where its callback is registered.
+ *
+ * The callback credentials are a hard boot failure in production, not a
+ * warning: `POST /payments/daraja/callback` is what marks a booking paid,
+ * and an unauthenticated one on a public host is a "mark my own booking
+ * paid" endpoint for anyone who finds it. The amount check in
+ * `applySettlement` narrows that but doesn't close it. Local dev may
+ * leave them unset - there the callback URL is a throwaway tunnel.
+ */
+if (paymentAdapter instanceof DarajaPaymentAdapter) {
+  const callbackSecured = Boolean(
+    process.env.DARAJA_CALLBACK_USER && process.env.DARAJA_CALLBACK_PASSWORD,
+  );
+  if (!callbackSecured && process.env.NODE_ENV === "production") {
+    console.error(
+      "[api] PAYMENT_ADAPTER=daraja in production without DARAJA_CALLBACK_USER/" +
+        "DARAJA_CALLBACK_PASSWORD — the settle callback would be unauthenticated. Refusing to start.",
+    );
+    process.exit(1);
+  }
+  // eslint-disable-next-line no-console
+  console.log(
+    `[api] payments ready — daraja (${process.env.DARAJA_BASE_URL ?? "sandbox"}), ` +
+      `callback ${callbackSecured ? "authenticated" : "OPEN (dev only)"}`,
+  );
+} else if (process.env.NODE_ENV === "production" && (process.env.PAYMENT_ADAPTER ?? "console") === "console") {
+  console.warn("[api] payment adapter is 'console' in production — no money will move");
 }

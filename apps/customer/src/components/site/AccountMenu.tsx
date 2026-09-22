@@ -138,7 +138,7 @@ export function AccountMenu(): JSX.Element {
       tag: unread > 0 ? String(unread > 9 ? "9+" : unread) : "",
       tagColor: "#D81E32",
     },
-    { label: "My bookings", go: goTo("/trips"), tag: bookingCount > 0 ? String(bookingCount) : "" },
+    { label: "My bookings", go: goTo("/bookings"), tag: bookingCount > 0 ? String(bookingCount) : "" },
     { label: "Parts and service orders", go: goTo("/parts"), tag: "SOON" },
     { label: "My documents", go: goTo("/documents"), tag: docTag, tagColor: verified ? "#1B8A5A" : "#C77400" },
   ];

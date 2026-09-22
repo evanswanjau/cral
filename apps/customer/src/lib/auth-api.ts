@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost } from "./api.js";
+import { apiDelete, apiGet, apiPatch, apiPost } from "./api.js";
 
 export interface TokenPair {
   access_token: string;
@@ -120,4 +120,26 @@ export interface Me {
 
 export function getMe() {
   return apiGet<Me>("/me");
+}
+
+/**
+ * Phone verification. Reused verbatim from the merchant side's payout-phone
+ * flow - a renter verifies at the booking-request step, where the reason
+ * is self-evident (the owner rings this number, the M-Pesa prompt goes to
+ * it, and the "your request was accepted" SMS needs a proven number).
+ */
+export function startPhoneVerification() {
+  return apiPost<{ masked_destination: string; retry_after: number }>(
+    "/auth/phone/verification/start",
+    {},
+  );
+}
+
+export function confirmPhoneVerification(code: string) {
+  return apiPost<{ phone_verified: boolean }>("/auth/phone/verification/confirm", { code });
+}
+
+/** Changes the account phone. Clears `phone_verified` server-side. */
+export function updateMyPhone(phone: string) {
+  return apiPatch<unknown>("/me/phone", { phone });
 }

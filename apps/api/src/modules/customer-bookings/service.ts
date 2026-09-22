@@ -6,6 +6,12 @@ import { writeAuditEntry } from "../../lib/audit.js";
 import { computeBookingPricing } from "../../lib/booking-pricing.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { notify } from "../../lib/notifications.js";
+import { recordRefund, executeRefund } from "../../lib/refunds.js";
+import {
+  earliestPickupDayKey,
+  inclusiveHireDays,
+  nairobiDayKey,
+} from "../../lib/dates.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { baseCatalogQuery } from "../catalog/service.js";
 import { getRenterVerification } from "../customer-account/service.js";
@@ -28,7 +34,6 @@ export interface RequestContext {
   requestId: string | null;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * How long a merchant has to answer. Read from the merchant module's own
@@ -121,8 +126,14 @@ function ownerDisplayName(v: PublicVehicleForBooking): string {
   return v.m_first_name || "(no name on file)";
 }
 
+/**
+ * Hire days are Nairobi calendar days, counted inclusively (owner's call,
+ * 2026-09-19): the 19th to the 19th is one day, the 19th to the 20th is
+ * two. Delegates to the shared helper so the client's quote and the
+ * stored price cannot drift apart.
+ */
 function daysBetween(pickup: Date, dropoff: Date): number {
-  return Math.max(1, Math.ceil((dropoff.getTime() - pickup.getTime()) / DAY_MS));
+  return inclusiveHireDays(pickup, dropoff);
 }
 
 // ---------------------------------------------------------------------
@@ -134,7 +145,8 @@ interface VehicleFacts {
   make: string;
   model: string;
   year: string;
-  type: string;
+  /** The five-category slug. `category` on the wire, `type` in the DB. */
+  category: string;
   registration: string;
   county: string | null;
   seats: number;
@@ -187,7 +199,10 @@ async function vehicleFactsFor(vehicleIds: string[]): Promise<Map<string, Vehicl
       make: r.make,
       model: r.model,
       year: r.year,
-      type: r.type,
+      // `category` on the wire, per the frozen contract - the column is
+      // called `type`, and serializing it under that name meant every
+      // client reading `vehicle.category` got undefined.
+      category: r.type,
       registration: r.registration,
       county: r.county,
       seats: r.seats,
@@ -283,21 +298,43 @@ export async function createBooking(
   const pickupAt = new Date(input.pickup_at);
   const dropoffAt = new Date(input.dropoff_at);
 
+  // Same-day hires are legitimate - out in the morning, back by six - so
+  // the comparison is on Nairobi calendar days, not on the instants. A
+  // return *day* before the pickup day is the only ordering error.
+  const pickupDay = nairobiDayKey(pickupAt);
+  const dropoffDay = nairobiDayKey(dropoffAt);
+  if (dropoffDay < pickupDay) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "invalid_dates",
+      message: "The return date can't be before the pickup date.",
+      field: "dropoff_at",
+    });
+  }
   if (!(dropoffAt.getTime() > pickupAt.getTime())) {
     throw new ApiError({
       status: 422,
       type: "validation_error",
       code: "invalid_dates",
-      message: "The return date has to be after the pickup date.",
+      message: "The return time has to be after the pickup time.",
       field: "dropoff_at",
     });
   }
-  if (pickupAt.getTime() < Date.now() - DAY_MS) {
+  // Cars are back with their owner by six, so a hire can't start after
+  // that either (owner's call, 2026-09-19). The client's date input
+  // already carries this as its `min`; re-checked here because a typed-in
+  // date bypasses the attribute.
+  const earliest = earliestPickupDayKey();
+  if (pickupDay < earliest) {
     throw new ApiError({
       status: 422,
       type: "validation_error",
       code: "invalid_dates",
-      message: "Pickup can't be in the past.",
+      message:
+        pickupDay < nairobiDayKey(new Date())
+          ? "Pickup can't be in the past."
+          : "It's past six in Nairobi, so the earliest pickup is tomorrow.",
       field: "pickup_at",
     });
   }
@@ -310,8 +347,36 @@ export async function createBooking(
       status: 422,
       type: "validation_error",
       code: "below_minimum_hire",
-      message: `This car is hired for a minimum of ${vehicle.minimum_hire_days} day(s).`,
+      message: `This car is hired for a minimum of ${vehicle.minimum_hire_days} ${
+        vehicle.minimum_hire_days === 1 ? "day" : "days"
+      }.`,
       field: "dropoff_at",
+    });
+  }
+
+  // A reachable, proven phone before the request goes out (owner's call,
+  // 2026-09-19). This is the same "verify where the reason is
+  // self-evident" call the merchant side made for the payout number: the
+  // owner rings this number, the M-Pesa prompt goes to it, and it is how
+  // the renter is told their request was accepted - which is an SMS, and
+  // `notification-delivery.ts` will not text an unverified number.
+  const account = await db("users").where({ id: userId }).first("phone", "phone_verified");
+  if (!account?.phone) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "phone_required",
+      message: "Add the phone number the owner should reach you on.",
+      field: "phone",
+    });
+  }
+  if (!account.phone_verified) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "phone_verification_required",
+      message: "Confirm your phone number so the owner can reach you and we can text you their answer.",
+      field: "phone",
     });
   }
 
@@ -542,7 +607,7 @@ export async function cancelMyBooking(
     });
   }
 
-  const updated = await db.transaction(async (trx) => {
+  const { row: updated, refundId } = await db.transaction(async (trx) => {
     const changed = await trx<BookingRow>("bookings")
       .where({ id: booking.id, status: booking.status })
       .update({ status: "cancelled", cancel_reason: input.reason ?? null });
@@ -567,9 +632,29 @@ export async function cancelMyBooking(
       requestId: ctx.requestId,
     });
 
-    return trx<BookingRow>("bookings").where({ id: booking.id }).first();
+    // A withdrawn request was never paid (`initiatePayment` refuses one
+    // that isn't `confirmed`/`active`), so `recordRefund` finds no
+    // `success` payment and returns null - only the `cancellable` branch
+    // (always before pickup, per the guard above) can ever have one to
+    // give back. Full refund always: this path has no late-cancellation
+    // fee, unlike the merchant's own cancel - a renter cancelling their
+    // own hire before pickup owes nothing either way.
+    const refundId = await recordRefund(trx, {
+      bookingId: booking.id,
+      reason: "hirer_cancelled",
+      actorId: userId,
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+
+    const row = await trx<BookingRow>("bookings").where({ id: booking.id }).first();
+    return { row: row as BookingRow, refundId };
   });
 
-  return detailOf(updated as BookingRow);
+  // Post-commit, same rule as every other refund in this codebase - a
+  // failed send must not roll back the cancellation itself.
+  if (refundId) await executeRefund(refundId, booking.ref);
+
+  return detailOf(updated);
 }
 

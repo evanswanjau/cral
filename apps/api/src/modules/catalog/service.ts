@@ -212,6 +212,17 @@ const RATING_JOIN = `left join (
     group by ratee_id
   ) as rt on rt.ratee_id = m.user_id`;
 
+/**
+ * Hire days counted inclusively, the same way `lib/dates.ts#daysBetween`
+ * and the client's `hireDays` count them: the 2nd to the 2nd is one day.
+ */
+function hireDaysInclusive(from: string, to: string): number {
+  const a = Date.parse(`${from}T00:00:00.000Z`);
+  const b = Date.parse(`${to}T00:00:00.000Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 1;
+  return Math.max(1, Math.round((b - a) / (24 * 60 * 60 * 1000)) + 1);
+}
+
 /** Unrated owners sort last, never in the middle - hence coalesce to 0. */
 const RATING_EXPR = "coalesce(rt.avg_stars, 0)";
 
@@ -264,6 +275,11 @@ export async function listCatalog(query: CatalogSearchQuery) {
     // closure so the narrowing survives.
     const from = query.from;
     const to = query.to;
+    // A car whose own minimum hire is longer than the window cannot be
+    // booked for it, so it does not belong in the results. Without this a
+    // renter picked a 1-day window, saw a 2-day-minimum car, and only
+    // found out at the end of the booking flow.
+    qb.where("v.minimum_hire_days", "<=", hireDaysInclusive(from, to));
     qb.whereNotExists(function () {
       this.select(db.raw("1"))
         .from("bookings as bk")

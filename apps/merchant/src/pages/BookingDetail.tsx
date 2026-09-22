@@ -108,9 +108,28 @@ function AcceptModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
           ))}
         </div>
         <div style={P.verifyPoints}>
+          {/*
+           * Reads the real payment state. This line used to assert "The
+           * hirer has already paid CRAL in full" unconditionally - which
+           * was false every single time it was shown, since a renter
+           * cannot pay until the booking is confirmed. Telling a
+           * merchant their money is banked to get them to accept is the
+           * money-shaped version of the hardcoded id_verified badge.
+           */}
           <div style={P.verifyPoint}>
-            <span style={{ ...P.verifyPointDot, background: "#0B8A5B" }} />
-            <div style={P.verifyPointText}>The hirer has already paid CRAL in full. Accepting locks the vehicle for these dates.</div>
+            <span
+              style={{
+                ...P.verifyPointDot,
+                background: b.payment_state === "paid" ? "#0B8A5B" : "#C77400",
+              }}
+            />
+            <div style={P.verifyPointText}>
+              {b.payment_state === "paid"
+                ? "The hirer has paid CRAL in full. Accepting locks the vehicle for these dates."
+                : b.payment_state === "pending"
+                  ? "The hirer's payment is in flight but not settled. Accepting locks the vehicle for these dates."
+                  : "Nothing has been charged yet - the hirer pays once you accept. Accepting locks the vehicle for these dates."}
+            </div>
           </div>
           <div style={P.verifyPoint}>
             <span style={{ ...P.verifyPointDot, background: "#0B8A5B" }} />
@@ -195,7 +214,14 @@ function DeclineModal({ b, onClose }: { b: BookingDetailData; onClose: () => voi
         />
         <div style={P.deleteWarn}>
           <div style={P.deleteBody}>
-            The hirer is refunded in full and the dates open up again. Frequent declines push your listings down in search.
+            {/*
+             * A request is unpaid - the hirer pays only after you accept
+             * (2026-09-21), and `initiatePayment` refuses anything that
+             * isn't confirmed or active. So there is no refund to
+             * promise here; saying otherwise describes money that was
+             * never taken.
+             */}
+            The dates open up again. Nothing has been charged, so there is nothing to refund. Frequent declines push your listings down in search.
           </div>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
-import { earliestPickupDay, hireDays } from "../lib/hire-dates.js";
+import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays } from "../lib/hire-dates.js";
 import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
@@ -168,9 +168,15 @@ export function CarDetail(): JSX.Element {
   // the 20th is two. Same function the booking page and the server use.
   const days = hireDays(from, to);
   const total = days > 0 ? car.daily_rate.amount * days : 0;
+  // The minimum is enforced *here*, where the dates are picked, not left
+  // to the booking POST: a renter used to sign up, verify a phone, upload
+  // two documents and only then be told the pair was never bookable.
+  const minHire = car.minimum_hire_days;
+  const belowMinimum = days > 0 && days < minHire;
+  const minReturn = earliestReturnDay(from, minHire) || minDay;
 
   const requestDates = () => {
-    if (!from || !to) return;
+    if (!from || !to || belowMinimum) return;
     // No sign-in gate here - an unauthenticated visitor signs up inline on
     // the booking page itself as part of sending the request.
     navigate(`/book/${car.id}?from=${from}&to=${to}`);
@@ -651,8 +657,10 @@ export function CarDetail(): JSX.Element {
                   onChange={(e) => {
                     setFrom(e.target.value);
                     // Keep the pair coherent: a return before the new
-                    // pickup is never what the renter meant.
-                    if (to && e.target.value && to < e.target.value) setTo(e.target.value);
+                    // pickup, or one inside the car's minimum hire, is
+                    // never what the renter meant.
+                    const soonest = earliestReturnDay(e.target.value, minHire);
+                    if (to && soonest && to < soonest) setTo(soonest);
                   }}
                   style={{
                     width: "100%",
@@ -681,7 +689,7 @@ export function CarDetail(): JSX.Element {
                 <input
                   type="date"
                   value={to}
-                  min={from || minDay}
+                  min={minReturn}
                   onChange={(e) => setTo(e.target.value)}
                   style={{
                     width: "100%",
@@ -731,19 +739,36 @@ export function CarDetail(): JSX.Element {
               </div>
             )}
 
+            {belowMinimum && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  padding: "11px 13px",
+                  background: "#FDE7EA",
+                  border: "1px solid #F7BDC5",
+                  borderRadius: 8,
+                  font: "500 13px/1.5 'Instrument Sans',sans-serif",
+                  color: "#A50E22",
+                }}
+              >
+                This car is hired for {minHire} days at a time. The earliest return for this pickup
+                is {formatHireDate(minReturn)}.
+              </div>
+            )}
+
             <button
               type="button"
-              disabled={!from || !to}
+              disabled={!from || !to || belowMinimum}
               onClick={requestDates}
               style={{
                 width: "100%",
                 height: 50,
-                background: from && to ? "#0F23A8" : "#CDD2DA",
+                background: from && to && !belowMinimum ? "#0F23A8" : "#CDD2DA",
                 color: "#FFFFFF",
                 border: "none",
                 borderRadius: 8,
                 font: "600 16px/1 'Instrument Sans',sans-serif",
-                cursor: from && to ? "pointer" : "not-allowed",
+                cursor: from && to && !belowMinimum ? "pointer" : "not-allowed",
                 marginBottom: 11,
               }}
             >

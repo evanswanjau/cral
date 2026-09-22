@@ -6,11 +6,11 @@ import { listMyBookings, type BookingStatus } from "../lib/bookings-api.js";
 import { formatMoney } from "../lib/catalog-api.js";
 
 /**
- * `/trips` - a renter's own bookings. List only; the design's trip detail
- * (with the handover code) is `Cruz Customer Portal.dc.html`, not yet
- * pulled - see docs/plans/customer-portal.md's C8. `/trips/:id` here
- * renders what `GET /bookings/{id}` already returns honestly, without
- * pretending to have the handover step built.
+ * `/bookings` - a renter's own bookings. List only; the design's trip
+ * detail (with the handover code) is `Cruz Customer Portal.dc.html`, not
+ * yet pulled - see docs/plans/customer-portal.md's C8. `/bookings/:id`
+ * here renders what `GET /bookings/{id}` already returns honestly,
+ * without pretending to have the handover step built.
  */
 
 const FILTERS: Array<{ key: string; label: string }> = [
@@ -41,7 +41,7 @@ function statusChip(status: BookingStatus): { label: string; bg: string; fg: str
 }
 
 export function Trips(): JSX.Element {
-  usePageTitle("My trips");
+  usePageTitle("My bookings");
   const [filter, setFilter] = useState("all");
   const { data, isLoading } = useQuery({
     queryKey: ["bookings", "mine", filter],
@@ -59,7 +59,7 @@ export function Trips(): JSX.Element {
           color: "#0B0F1A",
         }}
       >
-        My trips
+        My bookings
       </h1>
 
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 20 }}>
@@ -102,7 +102,7 @@ export function Trips(): JSX.Element {
           }}
         >
           <div style={{ font: "600 16px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 8 }}>
-            No trips yet.
+            No bookings yet.
           </div>
           <Link
             to="/browse"
@@ -129,7 +129,7 @@ export function Trips(): JSX.Element {
           return (
             <Link
               key={b.id}
-              to={`/trips/${b.id}`}
+              to={`/bookings/${b.id}`}
               style={{
                 display: "flex",
                 gap: 14,

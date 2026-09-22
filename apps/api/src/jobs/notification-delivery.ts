@@ -131,6 +131,36 @@ export async function enqueueNotificationDelivery(
   }
 }
 
+/**
+ * The renter-side counterpart of `enqueueNotificationDelivery`. Same
+ * post-commit rule, same swallowed-Redis-hiccup reasoning - but no quiet
+ * hours to resolve, because a renter has no Settings screen and every
+ * renter notification this product writes is transactional. See
+ * `RENTER_CHANNELS`.
+ */
+export async function enqueueRenterNotificationDelivery(
+  notificationIds: string[],
+): Promise<void> {
+  if (notificationIds.length === 0) return;
+  try {
+    await notificationDeliveryQueue.addBulk(
+      notificationIds.map((id) => ({
+        name: JOB_NAME,
+        data: { notificationId: id } satisfies DeliverJobData,
+        opts: {
+          jobId: `deliver-${id}`,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 30_000 },
+          removeOnComplete: 500,
+          removeOnFail: 200,
+        },
+      })),
+    );
+  } catch (error) {
+    console.error("renter notification delivery enqueue failed", { notificationIds, error });
+  }
+}
+
 async function resolvePreference(
   merchantId: string,
   category: NotificationRow["category"],
@@ -148,66 +178,108 @@ async function resolvePreference(
   };
 }
 
+/**
+ * A renter's channels. Fixed rather than configurable: there is no renter
+ * Settings screen, and every renter-facing notification this product
+ * writes today is transactional (your request was accepted, declined, a
+ * pickup code is on its way). Quiet hours are deliberately not applied —
+ * an owner accepting at 21:00 is exactly when the renter needs to know,
+ * and the same "these two always text" reasoning already applies to the
+ * merchant side's payout/review categories.
+ *
+ * The `phone_verified` gate below still applies, which is why a renter's
+ * phone is verified at the booking-request step.
+ */
+const RENTER_CHANNELS = { sms: true, email: true } as const;
+
 /** Exported for the tests — resolves preferences, applies the phone-verified gate, sends. */
 export async function deliverNotification({ notificationId }: DeliverJobData): Promise<void> {
   const notification = await db<NotificationRow>("notifications").where({ id: notificationId }).first();
   if (!notification) return;
-  // This pipeline is merchant-only — a renter's notifications (Migration B)
-  // never reach this queue in the first place (see notify()'s own comment);
-  // this guard is only for TypeScript's benefit now that the column is
-  // nullable at the type level.
-  if (!notification.merchant_id) return;
+  // Two audiences reach this queue now. A merchant row resolves its
+  // channels from that merchant's own Alerts matrix and quiet hours; a
+  // renter row (Migration B, `user_id`) has no Settings screen to
+  // configure, so it carries the fixed policy below (owner's call,
+  // 2026-09-19 — a renter must be *texted* when an owner accepts, because
+  // that is the moment the hire becomes real and payment is due).
+  let userId: string | null = null;
+  let pref: { sms: boolean; email: boolean };
 
-  const merchant = await db("merchants").where({ id: notification.merchant_id }).first("user_id");
-  if (!merchant) return;
-  const user = await db("users")
-    .where({ id: merchant.user_id })
-    .first("email", "phone", "phone_verified");
+  if (notification.merchant_id) {
+    const merchant = await db("merchants").where({ id: notification.merchant_id }).first("user_id");
+    if (!merchant) return;
+    userId = merchant.user_id as string;
+    pref = await resolvePreference(notification.merchant_id, notification.category);
+  } else if (notification.user_id) {
+    userId = notification.user_id;
+    pref = RENTER_CHANNELS;
+  } else {
+    return;
+  }
+
+  const user = await db("users").where({ id: userId }).first("email", "phone", "phone_verified");
   if (!user) return;
-
-  const pref = await resolvePreference(notification.merchant_id, notification.category);
 
   // Each channel is isolated, and the job only fails when *nothing* got
   // through. The job has `attempts: 3`, and SMS runs first — so letting an
   // email failure bubble would retry the whole body and send a second,
   // billable text. Retrying is only safe when no channel delivered, which
   // is also the case that most needs it (provider or network outage).
+  //
+  // A retry isn't only `attempts` here, though — BullMQ's own stalled-job
+  // recovery redelivers a job whose worker died mid-run without acking
+  // (any ungraceful process restart, e.g. `tsx watch` picking up a file
+  // save during dev, or a real crash/redeploy in production), independent
+  // of the `attempts` counter. `notification.sms_sent_at`/`email_sent_at`
+  // are what make that safe: a channel already marked sent is skipped
+  // rather than re-attempted, so a redelivered job costs a second no-op
+  // pass, not a second real text landing on someone's phone.
   let attempted = 0;
   let delivered = 0;
 
   if (pref.sms && user.phone && user.phone_verified) {
-    attempted++;
-    try {
-      const ref = notification.ref ? ` (${notification.ref})` : "";
-      await smsAdapter.send({
-        to: user.phone as string,
-        body: `CRAL: ${notification.title}${ref}. ${notification.body}`.slice(0, 320),
-      });
+    if (notification.sms_sent_at) {
       delivered++;
-    } catch (error) {
-      console.error("notification sms failed", { notificationId, error });
+    } else {
+      attempted++;
+      try {
+        const ref = notification.ref ? ` (${notification.ref})` : "";
+        await smsAdapter.send({
+          to: user.phone as string,
+          body: `CRAL: ${notification.title}${ref}. ${notification.body}`.slice(0, 320),
+        });
+        await db("notifications").where({ id: notificationId }).update({ sms_sent_at: new Date() });
+        delivered++;
+      } catch (error) {
+        console.error("notification sms failed", { notificationId, error });
+      }
     }
   }
 
   if (pref.email && user.email) {
-    attempted++;
-    try {
-      await emailAdapter.send({
-        to: user.email as string,
-        subject: notification.title,
-        html: emailLayout({
-          preheader: notification.body,
-          bodyHtml: [
-            emailHeading(notification.title),
-            emailParagraph(escapeHtml(notification.body)),
-            notification.ref ? emailMuted(`Reference: ${escapeHtml(notification.ref)}`) : "",
-          ].join(""),
-        }),
-        text: `${notification.title}\n\n${notification.body}${notification.ref ? `\n\nReference: ${notification.ref}` : ""}`,
-      });
+    if (notification.email_sent_at) {
       delivered++;
-    } catch (error) {
-      console.error("notification email failed", { notificationId, error });
+    } else {
+      attempted++;
+      try {
+        await emailAdapter.send({
+          to: user.email as string,
+          subject: notification.title,
+          html: emailLayout({
+            preheader: notification.body,
+            bodyHtml: [
+              emailHeading(notification.title),
+              emailParagraph(escapeHtml(notification.body)),
+              notification.ref ? emailMuted(`Reference: ${escapeHtml(notification.ref)}`) : "",
+            ].join(""),
+          }),
+          text: `${notification.title}\n\n${notification.body}${notification.ref ? `\n\nReference: ${notification.ref}` : ""}`,
+        });
+        await db("notifications").where({ id: notificationId }).update({ email_sent_at: new Date() });
+        delivered++;
+      } catch (error) {
+        console.error("notification email failed", { notificationId, error });
+      }
     }
   }
 

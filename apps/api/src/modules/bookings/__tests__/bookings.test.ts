@@ -348,8 +348,10 @@ describe("bookings — renter notifications (Migration B)", () => {
     expect(feed.status).toBe(200);
     const confirmedRow = feed.body.data.find((n: { subject_id: string }) => n.subject_id === confirmBooking.id);
     expect(confirmedRow).toMatchObject({
-      title: `${confirmBooking.ref} confirmed`,
-      cta_href: `/trips/${confirmBooking.id}`,
+      // "accepted", not "confirmed": this row is the renter's cue that
+      // payment is now due, and it is also the SMS they receive.
+      title: `${confirmBooking.ref} accepted`,
+      cta_href: `/bookings/${confirmBooking.id}`,
     });
 
     // A merchant's own feed never sees the hirer's row, and vice versa.

@@ -633,7 +633,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        ref: { type: string, description: "Public plated reference, e.g. CB-2841" }
+        ref: { type: string, description: "Public plated reference, e.g. CB260922001" }
         status: { $ref: "#/components/schemas/BookingStatus" }
         hirer_name: { type: string }
         hirer_is_corporate: { type: boolean }
@@ -816,6 +816,21 @@ components:
         - $ref: "#/components/schemas/BookingSummary"
         - type: object
           properties:
+            payment_state:
+              type: string
+              enum: [paid, pending, unpaid]
+              description: >
+                Whether the hirer's money has actually arrived.
+                `paid` = a successful payment request exists; `pending` =
+                one is in flight and unexpired; `unpaid` = neither.
+
+                Reported, never assumed. The accept modal used to state
+                "The hirer has already paid CRAL in full" as fixed copy,
+                which was false at the moment it was shown - a renter
+                cannot pay until the booking is `confirmed`, so nothing
+                is ever charged before the merchant accepts. A merchant
+                deciding whether to accept must not be told their money
+                is banked when it is not.
             gross: { $ref: "#/components/schemas/Money" }
             commission: { $ref: "#/components/schemas/Money" }
             merchant_net: { $ref: "#/components/schemas/Money" }

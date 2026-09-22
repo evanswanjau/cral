@@ -241,6 +241,71 @@ describe("merchant notifications — quiet hours", () => {
   });
 });
 
+describe("renter notifications — delivery", () => {
+  /**
+   * The renter half of the delivery pipeline (2026-09-19). Before this,
+   * `deliverNotification` returned early on any row without a
+   * `merchant_id`, so a renter was never texted or emailed anything - the
+   * owner could accept their booking and the only trace was an in-app row
+   * they had to go looking for.
+   */
+  it("texts and emails a renter whose phone is verified", async () => {
+    const u = await createVerifiedTestUser();
+    createdUserIds.push(u.userId);
+    await db("users")
+      .where({ id: u.userId })
+      .update({ phone: `+2547${randomInt(10_000_000, 99_999_999)}`, phone_verified: true });
+
+    const id = await notify(db, {
+      userId: u.userId,
+      category: "booking",
+      title: "CB-1234 accepted",
+      body: "Open the booking to pay by M-Pesa.",
+      subjectType: "booking",
+      subjectId: generateId("booking"),
+    });
+
+    const smsSpy = vi.spyOn(smsAdapter, "send").mockResolvedValue({ providerId: "x" });
+    const emailSpy = vi.spyOn(emailAdapter, "send").mockResolvedValue({ providerId: "y" });
+
+    await deliverNotification({ notificationId: id });
+    expect(smsSpy).toHaveBeenCalledTimes(1);
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+
+    smsSpy.mockRestore();
+    emailSpy.mockRestore();
+    await db("notifications").where({ id }).delete();
+  });
+
+  it("still emails, but does not text, an unverified renter phone", async () => {
+    const u = await createVerifiedTestUser();
+    createdUserIds.push(u.userId);
+    await db("users")
+      .where({ id: u.userId })
+      .update({ phone: `+2547${randomInt(10_000_000, 99_999_999)}`, phone_verified: false });
+
+    const id = await notify(db, {
+      userId: u.userId,
+      category: "booking",
+      title: "CB-1235 accepted",
+      body: "Open the booking to pay by M-Pesa.",
+      subjectType: "booking",
+      subjectId: generateId("booking"),
+    });
+
+    const smsSpy = vi.spyOn(smsAdapter, "send").mockResolvedValue({ providerId: "x" });
+    const emailSpy = vi.spyOn(emailAdapter, "send").mockResolvedValue({ providerId: "y" });
+
+    await deliverNotification({ notificationId: id });
+    expect(smsSpy).not.toHaveBeenCalled();
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+
+    smsSpy.mockRestore();
+    emailSpy.mockRestore();
+    await db("notifications").where({ id }).delete();
+  });
+});
+
 describe("merchant notifications — delivery", () => {
   it("skips SMS when the phone is unverified, sends it once verified", async () => {
     const m = await newMerchant();
@@ -286,9 +351,56 @@ describe("merchant notifications — delivery", () => {
     await expect(deliverNotification({ notificationId: id })).resolves.toBeUndefined();
     expect(smsSpy).toHaveBeenCalledTimes(1);
 
-    // Both down is the case that *should* retry — nothing was delivered.
-    smsSpy.mockRejectedValue(new Error("textsms down"));
+    smsSpy.mockRestore();
+    emailSpy.mockRestore();
+  });
+
+  it("fails (and is retry-worthy) when nothing at all got through", async () => {
+    const m = await newMerchant();
+    await db("users")
+      .where({ id: m.userId })
+      .update({ phone: `+2547${randomInt(10_000_000, 99_999_999)}`, phone_verified: true });
+    const id = await seed(m.merchantId, "expiry");
+
+    const smsSpy = vi.spyOn(smsAdapter, "send").mockRejectedValue(new Error("textsms down"));
+    const emailSpy = vi.spyOn(emailAdapter, "send").mockRejectedValue(new Error("smtp down"));
+
     await expect(deliverNotification({ notificationId: id })).rejects.toThrow("every channel failed");
+
+    smsSpy.mockRestore();
+    emailSpy.mockRestore();
+  });
+
+  it("does not re-send a channel a redelivered job already got through on", async () => {
+    // Reproduces the real bug: BullMQ's stalled-job recovery reruns a job
+    // whose worker died mid-run without acking (a `tsx watch` restart
+    // during dev, a redeploy, a crash) — independent of the `attempts`
+    // counter. Without per-channel tracking, a redelivered job re-sends
+    // every channel from scratch, including ones that already succeeded.
+    const m = await newMerchant();
+    await db("users")
+      .where({ id: m.userId })
+      .update({ phone: `+2547${randomInt(10_000_000, 99_999_999)}`, phone_verified: true });
+    const id = await seed(m.merchantId, "expiry");
+
+    const smsSpy = vi.spyOn(smsAdapter, "send").mockResolvedValue({ providerId: "x" });
+    const emailSpy = vi.spyOn(emailAdapter, "send").mockResolvedValue({ providerId: "y" });
+
+    // The first run delivers both channels...
+    await deliverNotification({ notificationId: id });
+    expect(smsSpy).toHaveBeenCalledTimes(1);
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+
+    // ...and a redelivery of the same job (the stalled-job scenario) must
+    // not touch either channel again, even though nothing here is
+    // preventing the job itself from running a second time.
+    await deliverNotification({ notificationId: id });
+    expect(smsSpy).toHaveBeenCalledTimes(1);
+    expect(emailSpy).toHaveBeenCalledTimes(1);
+
+    const row = await db("notifications").where({ id }).first("sms_sent_at", "email_sent_at");
+    expect(row.sms_sent_at).not.toBeNull();
+    expect(row.email_sent_at).not.toBeNull();
 
     smsSpy.mockRestore();
     emailSpy.mockRestore();

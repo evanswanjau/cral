@@ -1,9 +1,11 @@
 import type { PaymentAdapter } from "./types.js";
 import { ConsolePaymentAdapter } from "./console-adapter.js";
 import { CoopBankPaymentAdapter } from "./coopbank-adapter.js";
+import { DarajaPaymentAdapter } from "./daraja-adapter.js";
 
-export type { PaymentAdapter, StkPushInput, StkPushResult } from "./types.js";
+export type { ParsedCallback, PaymentAdapter, StkPushInput, StkPushResult } from "./types.js";
 export { CoopBankPaymentAdapter } from "./coopbank-adapter.js";
+export { DarajaPaymentAdapter } from "./daraja-adapter.js";
 
 /**
  * Provider chosen by PAYMENT_ADAPTER, same pattern as SMS_ADAPTER /
@@ -16,6 +18,8 @@ export function createPaymentAdapter(): PaymentAdapter {
   switch (kind) {
     case "console":
       return new ConsolePaymentAdapter();
+    case "daraja":
+      return new DarajaPaymentAdapter();
     case "coopbank":
       return new CoopBankPaymentAdapter();
     default:

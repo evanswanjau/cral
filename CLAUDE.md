@@ -455,6 +455,15 @@ is `openapi/merchant-bookings.yaml`, code is
   contract, but dev/test-only** (`NODE_ENV !== "production"` guard in
   routes.ts) — there's no customer portal to generate real requests yet,
   so this is how the Bookings screen gets anything to demo against.
+- **The booking ref changed shape (owner's call, 2026-09-22)**, from an
+  undated `CB-<running count>` (`CB-2841`, off `booking_ref_seq`) to `CB` +
+  `YYMMDD` + a 3-digit sequence that restarts each Nairobi day (`CB260922001`)
+  — the same shape as `vehicles.listing_ref`, so the two plated references
+  both read as "which day, which one that day" instead of one dated and one
+  an opaque count. Backed by `booking_ref_daily_counters`, generated in
+  `lib/booking-ref.ts#nextBookingRef` (mirrors
+  `lib/vehicle-events.ts#nextListingRef`). `booking_ref_seq` is left in
+  place, just unused, same footing as the listing ref's retired sequence.
 
 **Vehicle model changes (owner's call, 2026-08-31 — PR "vehicle data
 model"):**
@@ -586,6 +595,18 @@ and `apps/merchant/src/pages/Notification*`. Design authority is
   the notification, same reasoning as the payout-query email. Quiet hours
   are a **delay on the enqueue**, never a drop. SMS also requires
   `users.phone_verified`.
+- **Delivery is per-channel idempotent (found and fixed 2026-09-22).**
+  `notifications.sms_sent_at`/`email_sent_at` (migration
+  `20260922100000`) are set the moment each channel actually goes out;
+  `deliverNotification` skips a channel that's already marked sent rather
+  than re-attempting it. Found debugging a real duplicate SMS: BullMQ's
+  stalled-job recovery redelivers a job whose worker died mid-run without
+  acking — any ungraceful process restart (`tsx watch` picking up a file
+  save during dev, a crash, a redeploy), independent of the `attempts`
+  counter — and without this, a redelivered job re-sent every channel
+  from scratch even when the first attempt's send had already succeeded
+  provider-side. A real, billable text landing twice is worse than the
+  job occasionally taking a second, now-a-no-op pass.
 - **90-day retention is enforced**, not just claimed — the daily 10:00
   Nairobi reminder sweep (`runDailyReminderSweep`) now also purges
   notifications older than 90 days and runs the insurance-expiry
@@ -1401,6 +1422,68 @@ exist so a search of this file finds them.
   trips/account) is pulled. Don't mistake "not pulled" for "not real" —
   the underlying functionality is real; only the exact visual fidelity is
   provisional.
+
+**Payments run on Safaricom Daraja (owner's call, 2026-09-22 - the
+client demo needed a payment that works).** Plan, runbook and the three
+environments: [`docs/plans/payments-daraja.md`](./docs/plans/payments-daraja.md).
+Contract is `openapi/payments.yaml` (written *after* the code - a
+recorded deviation from contract-first; the module shipped without one).
+
+- **Co-op Bank is NOT replaced.** `CoopBankPaymentAdapter` is intact and
+  still selectable with `PAYMENT_ADAPTER=coopbank`; go-live is still the
+  plan for it. Daraja is a third registered adapter beside it and
+  `console`. The only Co-op change is that its callback parsing moved
+  into the adapter as `parseCallback` - same fields, same logic - so two
+  rails can coexist.
+- **Daraja products mapped to the sandbox app**: "Lipa Na M-Pesa Sandbox"
+  (STK push, built) and "M-Pesa Sandbox" (B2C - payouts and refunds, not
+  built). "B2C Hakikisha" is for spec §10's payout name check, later.
+- **In sandbox Safaricom issues no shortcode or passkey of your own** -
+  everyone uses the published test pair (`174379` + the portal's
+  passkey). Your own arrive at go-live, with
+  `DARAJA_BASE_URL=https://api.safaricom.co.ke`.
+- **The wire format is the adapter's, the settle rules are the
+  service's.** `PaymentAdapter` gained `parseCallback` and
+  `correlatesOn`; `service.ts#applySettlement` is the single copy of the
+  rules, shared by the real callback path and the dev settler. A second
+  copy per provider is how two rails drift apart.
+- **Daraja's correlator is its own, and this is a real difference.** Co-op
+  echoes a `MessageReference` we choose. Daraja has no echo field
+  (`AccountReference` is 12 chars and never returned), so its
+  `CheckoutRequestID` from the ack is the only thing tying a callback to a
+  row - hence `correlatesOn: "provider"`.
+- **The `payment_requests` row is written BEFORE the prompt goes out.**
+  Push-then-insert meant a successful push whose insert failed left the
+  renter charged with no row at all - unsettleable and invisible. The
+  orphan `pending` row when a push throws is marked `failed`, which does
+  not block a retry.
+- **A success only settles if the amount matches.** The callback endpoint
+  is weakly authenticated at best, so `provider_request_id` alone is a
+  thin claim; a mismatch is recorded `failed` with a
+  `payment.amount_mismatch` audit row.
+- **The Daraja callback IS authenticated** - HTTP Basic, via credentials
+  embedded in the URL registered with Safaricom
+  (`DARAJA_CALLBACK_USER`/`_PASSWORD`). **The API refuses to boot in
+  production without them.** Co-op's remains unauthenticated and still
+  unanswered.
+- **The dev settler (`devSettlePayment`/`/bookings/:id/payment/dev-settle`
+  and the `DEMO_MODE` env flag that re-mounted it on a deployed
+  environment) was removed 2026-09-22** once the real STK push flow was
+  confirmed working end to end, including on the Railway demo - a
+  "mark my own booking paid" endpoint has no reason to exist once the real
+  rail is trusted. If a sandbox callback ever proves unreliable again on a
+  live demo, that is a reason to fix the callback path, not to bring this
+  back.
+- **Where the callback lands differs per environment.** Local needs a
+  tunnel (the ngrok one from the Co-op work serves both rails; its URL
+  rotates). The Vercel demo calls the **Railway** API, not the VPS, so
+  Railway is where the callback is registered.
+- **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
+  because a silent success would mark a booking refunded while the money
+  sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
+  called only from `dev-seed.ts`/`seed-demo.ts`**, so no payout run is
+  ever originated in production either. That is the larger half of the
+  payouts slice.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside

@@ -452,6 +452,20 @@ input::placeholder {
     animation: none;
   }
 }
+/* The STK-push waiting spinner (TripDetail.tsx's PaymentCard). */
+.cral-spin {
+  animation: cral-spin 0.8s linear infinite;
+}
+@keyframes cral-spin {
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cral-spin {
+    animation: none;
+  }
+}
 .cral-search-submit {
   flex: none;
   display: flex;

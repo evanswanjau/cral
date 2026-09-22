@@ -257,9 +257,10 @@ established visual idiom, flagged for a swap once that file is pulled.
   `POST /me/notifications/read-all`, `POST /me/notifications/{id}/read`
   (`openapi/customer-notifications.yaml`) - the renter-scoped mirror of
   the merchant contract, minus a preferences endpoint (no renter Settings
-  screen yet, so channel is always in-app + email). `ctaFor()` branches on
-  `user_id` to link `/trips/:id` rather than the merchant portal's
-  `/bookings/:id` for the same booking.
+  screen yet, so channel is always in-app + email). `ctaFor()` links to
+  `/bookings/:id`, the customer portal's own route - which happens to
+  share the same path text as the merchant portal's `/bookings/:id` for
+  the same booking, but the two apps are separate origins.
 - **Real generators, closing a gap that predates this slice**: confirming,
   declining or merchant-cancelling a booking, and a pickup/return code
   going out, all now write the hirer their own in-app row - previously

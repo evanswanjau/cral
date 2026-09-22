@@ -4,9 +4,9 @@ import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { writeAuditEntry } from "../../lib/audit.js";
 import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js";
-import { isUniqueViolation, rethrowRegistrationConflict } from "../../lib/pg-errors.js";
+import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
 import { assertNotPast } from "../../lib/dates.js";
-import { normalizePhone } from "../../lib/identifier.js";
+import { setUserPhone } from "../../lib/user-phone.js";
 import { ratingSummary } from "../../lib/ratings.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
@@ -207,48 +207,6 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     },
     photos: vehicleDocs.filter((d) => d.kind === "vehicle_photo").map((d) => docSlot(d)),
   };
-}
-
-// users.phone is the actual payout-phone home (see identity's spec §4
-// deviation); the onboarding wizard's "phone" field writes there, not to
-// merchants, so patching it needs a users update alongside the merchant one.
-async function setUserPhone(
-  userId: string,
-  rawPhone: string,
-  conn: Knex | Knex.Transaction = db,
-): Promise<void> {
-  const phone = normalizePhone(rawPhone);
-  if (!phone) {
-    throw new ApiError({
-      status: 422,
-      type: "validation_error",
-      code: "invalid_phone",
-      message: "That doesn't look like a valid Kenyan phone number.",
-      field: "phone",
-    });
-  }
-
-  const current = await conn("users").where({ id: userId }).first();
-  // Changing the number drops any prior verification — the new one hasn't
-  // been proven, and a verified flag must never follow a number it wasn't
-  // earned on.
-  const update: Record<string, unknown> =
-    current?.phone === phone ? { phone } : { phone, phone_verified: false };
-
-  try {
-    await conn("users").where({ id: userId }).update(update);
-  } catch (err) {
-    if (isUniqueViolation(err)) {
-      throw new ApiError({
-        status: 409,
-        type: "conflict",
-        code: "phone_taken",
-        message: "That phone number is already registered to another account.",
-        field: "phone",
-      });
-    }
-    throw err;
-  }
 }
 
 export async function patchOnboarding(

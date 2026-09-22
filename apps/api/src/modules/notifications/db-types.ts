@@ -33,6 +33,9 @@ export interface NotificationRow {
   read_at: Date | null;
   created_at: Date;
   updated_at: Date;
+  /** Set once that channel has actually gone out - makes a redelivered job safe. See notification-delivery.ts. */
+  sms_sent_at: Date | null;
+  email_sent_at: Date | null;
 }
 
 export interface NotificationPreferenceRow {

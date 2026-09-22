@@ -52,6 +52,7 @@ function uniquePhone(): string {
 
 interface VehicleSpec {
   status?: string;
+  minimum_hire_days?: number;
   county?: string;
   type?: string;
   transmission?: string;
@@ -128,7 +129,7 @@ async function addVehicle(merchantId: string, spec: VehicleSpec = {}): Promise<s
       pickup_address: "17 Ndemi Road, Kilimani",
       daily_rate_amount: spec.daily_rate_amount ?? 420_000,
       daily_rate_currency: "KES",
-      minimum_hire_days: 1,
+      minimum_hire_days: spec.minimum_hire_days ?? 1,
       chauffeured: spec.chauffeured ?? false,
       status: spec.status ?? "live",
       verification_badge: spec.verification_badge ?? "none",
@@ -344,6 +345,31 @@ describe("availability window", () => {
       .get("/catalog/vehicles")
       .query({ county, from: "2026-10-10", to: "2026-10-12" });
     expect(clear.body.data.map((v: { id: string }) => v.id).sort()).toEqual([busy, free].sort());
+  });
+
+  it("hides a car whose minimum hire is longer than the requested window", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = "Minimum Hire County";
+    const twoDay = await addVehicle(m.merchantId, { county, minimum_hire_days: 2 });
+    const oneDay = await addVehicle(m.merchantId, { county });
+
+    // One day requested - the two-day car cannot be booked for it.
+    const short = await request(app)
+      .get("/catalog/vehicles")
+      .query({ county, from: "2026-10-02", to: "2026-10-02" });
+    expect(short.body.data.map((v: { id: string }) => v.id)).toEqual([oneDay]);
+
+    // Two days, counted inclusively - both are bookable.
+    const long = await request(app)
+      .get("/catalog/vehicles")
+      .query({ county, from: "2026-10-02", to: "2026-10-03" });
+    expect(long.body.data.map((v: { id: string }) => v.id).sort()).toEqual([oneDay, twoDay].sort());
+
+    // No dates at all: the window is unknown, so nothing is filtered out.
+    const undated = await request(app).get("/catalog/vehicles").query({ county });
+    expect(undated.body.data.map((v: { id: string }) => v.id).sort()).toEqual(
+      [oneDay, twoDay].sort(),
+    );
   });
 });
 

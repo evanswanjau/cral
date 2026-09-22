@@ -1,0 +1,374 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Payments API
+  version: "1.0.0"
+  description: >
+    A renter paying for a booking by M-Pesa STK push, and the provider
+    callback that settles it.
+
+    Written after the code rather than before it, which is a deviation
+    from this repo's contract-first rule and is recorded as one: the
+    payments module shipped with the customer portal's C-series without a
+    contract, and this file freezes what is actually there as of
+    2026-09-22 rather than inventing a shape nothing implements.
+
+    **The rail is pluggable and the contract is not.** `PAYMENT_ADAPTER`
+    selects one of three adapters — `daraja` (Safaricom direct, what the
+    product runs on), `coopbank` (Cooperative Bank's gateway, built and
+    kept for go-live, still gated behind `COOPBANK_STK_PATH_CONFIRMED`),
+    and `console` (dev/test, logs instead of prompting). Every path below
+    behaves identically whichever is live; only the callback body differs,
+    and each adapter parses its own. The settle rules are one copy, in
+    `modules/payments/service.ts#applySettlement`.
+
+    **The owner accepts first, then the renter pays** (owner's call,
+    2026-09-21). A `requested` booking is not payable — nobody holds those
+    dates yet, and taking money for a hire an owner may decline is what
+    created the refund obligation in the first place.
+
+    **Money never comes from the client.** The amount charged is read from
+    the booking row server-side; the request body names only *which*
+    figure (`deposit` or `full`) and the phone to prompt. Display
+    formatting is a client concern (spec §2).
+  license:
+    name: Proprietary — Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+  - url: https://api.sandbox.cral.co.ke/v1
+    description: Sandbox
+
+tags:
+  - name: payments
+    description: The renter's side — send a prompt, poll for the result
+  - name: callbacks
+    description: Server-to-server result callbacks, one path per provider
+
+paths:
+  /bookings/{id}/pay:
+    post:
+      tags: [payments]
+      summary: Send an M-Pesa prompt for a booking the owner has accepted
+      description: >
+        Prompts the payer's handset. **The response does not mean anyone
+        paid** — it means the prompt was accepted for delivery. The real
+        result arrives asynchronously on the provider's callback; the
+        client polls `GET /bookings/{id}/payment` for it.
+
+        The `payment_requests` row is written *before* the prompt goes
+        out, so a push that succeeds can never exist without a row to
+        settle against.
+
+        Moves money, so `Idempotency-Key` is required (spec §2). An
+        in-flight prompt that hasn't expired is returned as-is rather than
+        pushing a second one at the same phone.
+      operationId: payForBooking
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/BookingId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [purpose, phone]
+              properties:
+                purpose:
+                  type: string
+                  enum: [deposit, full]
+                  description: >
+                    Which of the booking's own figures to charge. The
+                    amount itself is never taken from the client.
+                phone:
+                  type: string
+                  minLength: 9
+                  maxLength: 15
+                  description: >
+                    The line to prompt, if different from the account
+                    phone. E.164 or local (`07…`) — normalised server-side.
+                  example: "+254712345678"
+      responses:
+        "202":
+          description: Prompt accepted for delivery. Not a payment.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [payment_request_id, status]
+                properties:
+                  payment_request_id:
+                    type: string
+                    example: pay_01J9ZQ8M3K4P5R6S7T8V9W0X1Y
+                  status:
+                    type: string
+                    enum: [pending]
+        "404":
+          description: >
+            No such booking on this account. Another renter's booking is a
+            404, never a 403 — existence is not disclosed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: >
+            `booking_not_payable` (the owner hasn't accepted, or nobody
+            holds these dates) or `already_paid`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`invalid_phone`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /bookings/{id}/payment:
+    get:
+      tags: [payments]
+      summary: The state of this booking's payment
+      description: >
+        What a client polls while a prompt is live, and — just as
+        importantly — what a *reloaded* page reads to recover where it got
+        to. The client never infers payment state from local state a
+        refresh would throw away.
+
+        `none` means no prompt has ever been sent. A `pending` row past
+        its `expires_at` reports as `expired` rather than looking live for
+        ever.
+      operationId: getPaymentState
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/BookingId"
+      responses:
+        "200":
+          description: Current state.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, amount, phone, receipt, failure_reason, expires_at]
+                properties:
+                  status:
+                    type: string
+                    enum: [none, pending, success, failed, cancelled, expired]
+                  amount:
+                    allOf: [{ $ref: "#/components/schemas/Money" }]
+                    nullable: true
+                  phone:
+                    type: string
+                    nullable: true
+                  receipt:
+                    type: string
+                    nullable: true
+                    description: The real M-Pesa receipt, once paid — what the renter can match to their own SMS.
+                    example: NLJ7RT61SV
+                  failure_reason:
+                    type: string
+                    nullable: true
+                    description: The provider's own words, shown to the renter as-is.
+                  expires_at:
+                    type: string
+                    format: date-time
+                    nullable: true
+        "404":
+          description: No such booking on this account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /payments/daraja/callback:
+    post:
+      tags: [callbacks]
+      summary: Safaricom Daraja's async STK result
+      description: >
+        Server-to-server, so no bearer token. Authenticated by **HTTP
+        Basic** instead: Daraja fetches whatever URL is registered, so the
+        URL is registered as
+        `https://user:password@host/payments/daraja/callback` and the
+        credentials come back as an `Authorization` header. Enforced
+        whenever `DARAJA_CALLBACK_USER`/`DARAJA_CALLBACK_PASSWORD` are
+        set; the API refuses to boot in production without them.
+
+        Idempotent: a second callback for an already-decided row is a
+        no-op, never a double-credit. A body that isn't Daraja's, or one
+        naming a reference we don't hold, is accepted and ignored rather
+        than made to fail — a non-2xx just makes Daraja retry.
+
+        A success is settled only if the amount Daraja reports matches the
+        amount asked for. A mismatch is recorded `failed` with an
+        `payment.amount_mismatch` audit row, so being credited for money
+        nobody sent isn't reachable through a guessed reference.
+      operationId: darajaCallback
+      security: [{ callbackBasicAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DarajaStkCallback" }
+      responses:
+        "200":
+          description: >
+            Acknowledged — including for a payload that was ignored.
+            Daraja's own documented ack shape.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ResultCode: { type: integer, example: 0 }
+                  ResultDesc: { type: string, example: Accepted }
+        "401":
+          description: Basic credentials missing or wrong.
+        "422":
+          description: "`unrecognised_callback_shape` — not the configured provider's format."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /payments/coopbank/callback:
+    post:
+      tags: [callbacks]
+      summary: Cooperative Bank's async STK result
+      description: >
+        The earlier rail, kept intact for go-live. Correlates on
+        `MessageReference` — a value *we* generate and send on the
+        initiate call, echoed back verbatim, so nothing depends on a
+        provider-issued id.
+
+        **How this callback authenticates itself is still unconfirmed** —
+        Co-op's portal documents no signature, shared secret or IP range.
+        The endpoint trusts nothing but its own obscurity, which is not a
+        real control. Do not point real money at this without an answer
+        from Co-op; the amount check narrows the exposure but does not
+        close it.
+      operationId: coopbankCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CoopBankStkCallback" }
+      responses:
+        "200":
+          description: Acknowledged.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  MessageCode: { type: string, example: "0" }
+                  MessageDescription: { type: string, example: Accepted }
+        "422":
+          description: "`unrecognised_callback_shape`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    callbackBasicAuth:
+      type: http
+      scheme: basic
+      description: Credentials embedded in the callback URL registered with the provider.
+
+  parameters:
+    BookingId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, example: bkg_01J9ZQ8M3K4P5R6S7T8V9W0X1Y }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: >
+        Required on every POST that moves money (spec §2). Replays safely
+        within 24h; scoped per user, never globally.
+      schema: { type: string, maxLength: 255 }
+
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: integer
+          description: Integer cents. Never a float, anywhere.
+          example: 450000
+        currency:
+          type: string
+          enum: [KES]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string, nullable: true }
+            doc_url: { type: string, nullable: true }
+            request_id: { type: string }
+
+    DarajaStkCallback:
+      type: object
+      description: >
+        `ResultCode` is a number here (0 = paid), unlike the initiate
+        ack's string `ResponseCode`. A failure carries no
+        `CallbackMetadata` at all.
+      properties:
+        Body:
+          type: object
+          properties:
+            stkCallback:
+              type: object
+              required: [CheckoutRequestID, ResultCode]
+              properties:
+                MerchantRequestID: { type: string }
+                CheckoutRequestID:
+                  type: string
+                  description: >
+                    The correlator. Daraja offers no field of ours to echo,
+                    so this — stamped onto the row from the initiate ack —
+                    is what the callback is matched on.
+                  example: ws_CO_191220191020363925
+                ResultCode: { type: integer, example: 0 }
+                ResultDesc: { type: string }
+                CallbackMetadata:
+                  type: object
+                  properties:
+                    Item:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          Name: { type: string, example: MpesaReceiptNumber }
+                          Value: {}
+
+    CoopBankStkCallback:
+      type: object
+      properties:
+        MessageReference:
+          type: string
+          description: Ours, echoed back verbatim. Max 27 chars.
+        MessageCode:
+          type: string
+          description: "`\"0\"` is success."
+          example: "0"
+        MessageDescription: { type: string }
+        TelcoRef: { type: string }
+        TransactionID:
+          type: string
+          description: The real M-Pesa receipt.
+        TransactionAmount: { type: string }
