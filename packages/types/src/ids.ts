@@ -65,6 +65,12 @@ export const ID_PREFIXES = {
   // Internal entities, no prefix in the spec's own identifier list.
   commsTemplate: "cst",
   commsRun: "cmr",
+  // Money sent back to a renter. Its own entity rather than a status on
+  // `payment_requests`, because a refund is a separate movement of money
+  // that can fail on its own and be retried without touching the record
+  // of the payment it reverses. Needed since 2026-09-20, when payment
+  // moved ahead of the owner's decision.
+  refund: "rfd",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

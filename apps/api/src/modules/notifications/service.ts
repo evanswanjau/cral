@@ -48,12 +48,12 @@ function notFound(): never {
 /**
  * The row's "{{cta}} ›" link — label and a client-relative href. A renter's
  * row (`user_id` set) links into the customer portal's own routes
- * (`/trips/:id`), which live at a different path than the merchant
- * portal's `/bookings/:id` for the same booking - the two apps are
- * separate origins with separate route maps.
+ * (`/bookings/:id`), which happen to share the same path text as the
+ * merchant portal's `/bookings/:id` for the same booking, but the two apps
+ * are separate origins with separate route maps.
  */
 function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null {
-  const bookingHref = (id: string) => (row.user_id ? `/trips/${id}` : `/bookings/${id}`);
+  const bookingHref = (id: string) => `/bookings/${id}`;
   if (row.category === "rating" && row.subject_type === "booking" && row.subject_id) {
     return { cta: "Rate back", cta_href: bookingHref(row.subject_id) };
   }

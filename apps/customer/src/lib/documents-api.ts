@@ -15,9 +15,14 @@ export function getRenterDocuments() {
   return apiGet<{ documents: unknown[]; verification: RenterVerification }>("/me/documents");
 }
 
-export function uploadRenterDocument(kind: RenterDocKind, file: File) {
+/**
+ * `expiresAt` (`YYYY-MM-DD`) is required by the API for a licence and
+ * ignored for an ID - a Kenyan licence expires, a national ID does not.
+ */
+export function uploadRenterDocument(kind: RenterDocKind, file: File, expiresAt?: string) {
   const formData = new FormData();
   formData.append("kind", kind);
+  if (expiresAt) formData.append("expires_at", expiresAt);
   formData.append("file", file);
   return apiPost<{ id: string; kind: RenterDocKind }>("/me/documents", undefined, { formData });
 }

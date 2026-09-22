@@ -6,6 +6,7 @@ import { db } from "../db/client.js";
 import { generateId } from "../lib/ids.js";
 import { hashPassword } from "../lib/password.js";
 import { nextListingRef } from "../lib/vehicle-events.js";
+import { nextBookingRef } from "../lib/booking-ref.js";
 import { getOrCreateMerchant } from "../modules/merchant/service.js";
 import { computeBookingPricing } from "../lib/booking-pricing.js";
 import { cutPayoutRun, nextMonday } from "../modules/payouts/service.js";
@@ -72,11 +73,6 @@ function daysAgo(n: number): Date {
 }
 function daysFromNow(n: number): Date {
   return new Date(Date.now() + n * DAY_MS);
-}
-
-async function nextBookingRef(): Promise<string> {
-  const result = await db.raw<{ rows: { n: string }[] }>("select nextval('booking_ref_seq') as n");
-  return `CB-${result.rows[0]!.n}`;
 }
 
 /** Same phone-shape trick the existing dev-seeders use, unique per call. */

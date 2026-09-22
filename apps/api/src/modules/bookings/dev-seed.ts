@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { nextListingRef } from "../../lib/vehicle-events.js";
+import { nextBookingRef } from "../../lib/booking-ref.js";
 import { hashPassword } from "../../lib/password.js";
 import { computeBookingPricing, computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant } from "../merchant/service.js";
@@ -86,11 +87,6 @@ async function appendEvent(
   });
 }
 
-async function nextRef(): Promise<string> {
-  const result = await db.raw<{ rows: { n: string }[] }>("select nextval('booking_ref_seq') as n");
-  return `CB-${result.rows[0]!.n}`;
-}
-
 interface FixtureSpec {
   hirer: (typeof HIRERS)[number];
   status: BookingStatus;
@@ -119,7 +115,7 @@ export async function seedDevBookings(userId: string) {
     const pickupAt = new Date(Date.now() + fixture.daysFromNow * 24 * 60 * 60 * 1000);
     const dropoffAt = new Date(pickupAt.getTime() + fixture.durationDays * 24 * 60 * 60 * 1000);
     const pricing = computeBookingPricing(vehicle.daily_rate_amount, fixture.durationDays);
-    const ref = await nextRef();
+    const ref = await nextBookingRef();
 
     const row: Record<string, unknown> = {
       id: generateId("booking"),

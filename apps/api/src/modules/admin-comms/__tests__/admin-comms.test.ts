@@ -37,7 +37,17 @@ async function newAdmin(role: Parameters<typeof createTestAdmin>[0] = "admin_sup
 async function newMerchant(opts: { approved?: boolean } = {}): Promise<{ merchantId: string; userId: string }> {
   const u = await createVerifiedTestUser();
   userIds.push(u.userId);
-  const phone = `+2547${ulid().slice(-8).replace(/[^0-9]/g, "1")}`;
+  // Map each character to a digit rather than replacing non-digits with
+  // "1". A ULID suffix is Crockford base32 and mostly letters, so the old
+  // `.replace(/[^0-9]/g, "1")` collapsed almost every fixture to
+  // +254711111111 - `users.phone` is unique, so the suite failed on a
+  // duplicate key as soon as a couple of rows were left behind, and which
+  // test drew the collision varied run to run.
+  const phone = `+2547${ulid()
+    .slice(-8)
+    .split("")
+    .map((c) => c.charCodeAt(0) % 10)
+    .join("")}`;
   await db("users").where({ id: u.userId }).update({ phone, phone_verified: true });
 
   const [m] = await db("merchants")

@@ -210,7 +210,12 @@ export function BookingList(): JSX.Element {
               {pendingRequests.length} {pendingRequests.length === 1 ? "request is" : "requests are"} waiting for your answer
             </div>
             <div style={{ ...P.bannerBody, color: "#8A5200" }}>
-              {firstRequest.hirer_name} · {firstRequest.vehicle_registration} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)} - money is already with CRAL.
+              {/*
+                * No money claim here. The hirer pays *after* the owner
+                * accepts (2026-09-21), and this row has no payment state
+                * to read anyway - the booking screen reports the real one.
+                */}
+              {firstRequest.hirer_name} · {firstRequest.vehicle_registration} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)}.
             </div>
           </div>
           <button type="button" style={{ ...P.bannerBtn, background: "#0F23A8" }} onClick={() => navigate(`/bookings/${firstRequest.id}`)}>

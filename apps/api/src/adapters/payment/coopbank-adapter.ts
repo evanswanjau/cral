@@ -1,5 +1,12 @@
 import { ApiError } from "@cral/types";
-import type { PaymentAdapter, StkPushInput, StkPushResult } from "./types.js";
+import type {
+  ParsedCallback,
+  PaymentAdapter,
+  RefundInput,
+  RefundResult,
+  StkPushInput,
+  StkPushResult,
+} from "./types.js";
 
 /**
  * Cooperative Bank's OpenAPI developer portal (developer.co-opbank.co.ke),
@@ -105,6 +112,9 @@ function toMsisdn(e164: string): string {
 }
 
 export class CoopBankPaymentAdapter implements PaymentAdapter {
+  /** Co-op echoes our `MessageReference` verbatim in both the ack and the callback. */
+  readonly correlatesOn = "ours" as const;
+
   async initiateStkPush(input: StkPushInput): Promise<StkPushResult> {
     if (process.env.COOPBANK_STK_PATH_CONFIRMED !== "true") {
       throw new ApiError({
@@ -165,6 +175,70 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
     return {
       providerRef: json.TelcoRef ?? "",
       responseDescription: json.MessageDescription ?? "Accepted",
+    };
+  }
+
+  /**
+   * NOT IMPLEMENTED, and deliberately throwing rather than resolving.
+   *
+   * A renter pays only after the owner accepts (2026-09-21), so CRAL no
+   * longer holds money against an undecided request - but a merchant who
+   * cancels a booking they were already paid for still owes it back.
+   * Co-op's portal exposes no reversal API we have confirmed - the same "unconfirmed resource path" problem that
+   * still gates the STK push above, only with worse consequences if
+   * guessed at.
+   *
+   * It throws so the failure is loud and the refund row is marked
+   * `failed` for a human to settle by hand. A silent success here would
+   * mark a booking refunded while the renter's money sat with us.
+   */
+  async refund(_input: RefundInput): Promise<RefundResult> {
+    throw new ApiError({
+      status: 501,
+      type: "server_error",
+      code: "coopbank_refund_unavailable",
+      message:
+        "Co-op Bank refunds are not wired up - no confirmed reversal endpoint. " +
+        "This refund must be settled manually; the refund row records what is owed.",
+    });
+  }
+
+  /**
+   * Co-op's async callback - the same envelope as the sync ack plus
+   * `TransactionID` (the real M-Pesa receipt) and, on success,
+   * `TransactionAmount`. `MessageReference` is the value WE generated and
+   * sent on the initiate call, echoed back verbatim, so it correlates
+   * directly to `payment_requests.provider_request_id` without depending
+   * on anything the provider issued.
+   *
+   * Moved here from `modules/payments/service.ts` when the Daraja adapter
+   * landed (2026-09-22) - the settle rules stayed in the service, one
+   * copy, and only the wire format is per-provider.
+   *
+   * Still NOT confirmed: how the callback authenticates itself. Parsing
+   * it correctly does not make the endpoint safe to point real money at.
+   */
+  parseCallback(rawBody: unknown): ParsedCallback | null {
+    const body = rawBody as {
+      MessageReference?: unknown;
+      MessageCode?: unknown;
+      MessageDescription?: unknown;
+      TransactionID?: unknown;
+      TransactionAmount?: unknown;
+    } | null;
+    if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
+      return null;
+    }
+    const succeeded = body.MessageCode === "0";
+    const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
+    // A string in Co-op's schema, same as on the way out.
+    const amount = Number(body.TransactionAmount);
+    return {
+      reference: body.MessageReference,
+      succeeded,
+      receipt: typeof body.TransactionID === "string" && body.TransactionID ? body.TransactionID : null,
+      failureReason: succeeded ? null : description,
+      amountShillings: Number.isFinite(amount) && amount > 0 ? amount : null,
     };
   }
 }

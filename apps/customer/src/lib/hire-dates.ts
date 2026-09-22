@@ -48,6 +48,21 @@ export function hireDays(from: string, to: string): number {
 }
 
 /**
+ * The earliest return day for a pickup on `from`, given the car's own
+ * minimum hire. Inclusive, to match `hireDays`: a 2-day minimum picked up
+ * on the 2nd returns on the 3rd at the earliest. This is the `min` on the
+ * return input, so a hire below the minimum cannot be built in the first
+ * place - `createBooking` still re-checks it.
+ */
+export function earliestReturnDay(from: string, minimumHireDays: number): string {
+  if (!from) return "";
+  const extra = Math.max(1, minimumHireDays) - 1;
+  return new Date(Date.parse(`${from}T00:00:00.000Z`) + extra * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
  * The two UTC instants a `YYYY-MM-DD` pair becomes on the wire: a hire
  * runs 09:00 to 18:00 Nairobi, so a same-day hire is a real hire and
  * every car is back by the hour the cutoff above protects.

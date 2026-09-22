@@ -2,6 +2,7 @@ import { ulid } from "ulid";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { nextListingRef } from "../../lib/vehicle-events.js";
+import { nextBookingRef } from "../../lib/booking-ref.js";
 import { hashPassword } from "../../lib/password.js";
 import { computeBookingPricing } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant } from "../merchant/service.js";
@@ -109,11 +110,6 @@ async function getOrCreateSeedVehicle(merchantId: string): Promise<VehicleRow> {
     .returning("*");
   if (!vehicle) throw new Error("Failed to seed vehicle");
   return vehicle;
-}
-
-async function nextBookingRef(): Promise<string> {
-  const result = await db.raw<{ rows: { n: string }[] }>("select nextval('booking_ref_seq') as n");
-  return `CB-${result.rows[0]!.n}`;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

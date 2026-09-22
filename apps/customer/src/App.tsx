@@ -28,7 +28,7 @@ import { Sessions } from "./pages/Sessions.js";
 /**
  * Route map. Everything sits under `SiteShell` (masthead + footer) -
  * including the auth-gated pages, so a signed-out visitor redirected to
- * `/sign-in?next=...` and a signed-in one on `/trips` see the same frame.
+ * `/sign-in?next=...` and a signed-in one on `/bookings` see the same frame.
  * `RequireAuth` preserves the path it interrupted.
  *
  * The seven marketing pages are real now (C9) - see each page's own
@@ -37,8 +37,8 @@ import { Sessions } from "./pages/Sessions.js";
  * footing - an explainer + hand-off to the merchant app, where listing a
  * car has always actually lived.
  *
- * C8 (trips, handover status, notifications, account) is also real now,
- * same not-pulled-from-canvas footing - `/trips/:id` shows the handover's
+ * C8 (bookings, handover status, notifications, account) is also real now,
+ * same not-pulled-from-canvas footing - `/bookings/:id` shows the handover's
  * *state* (a code is on its way / pickup or return is done), never the
  * code itself (only its hash exists server-side; the real code only ever
  * goes out by email). `/notifications` is a renter's own feed off
@@ -77,8 +77,8 @@ const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           { path: "/documents", element: <Documents /> },
-          { path: "/trips", element: <Trips /> },
-          { path: "/trips/:id", element: <TripDetail /> },
+          { path: "/bookings", element: <Trips /> },
+          { path: "/bookings/:id", element: <TripDetail /> },
           { path: "/notifications", element: <Notifications /> },
           { path: "/account", element: <Sessions /> },
         ],
