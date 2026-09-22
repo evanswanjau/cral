@@ -77,7 +77,17 @@ async function newVehicle(merchantId: string) {
       make: "Toyota",
       model: "Axio",
       year: "2019",
-      registration: `KDA ${randomInt(100, 999)}${String.fromCharCode(65 + randomInt(0, 25))}`,
+      /*
+       * Plates are unique PLATFORM-WIDE (a functional unique index on the
+       * normalised plate), not per-merchant. The old
+       * `KDA ${randomInt(100,999)}${letter}` drew from only 900 x 26 =
+       * 23,400 values, and vitest runs maxForks: 4, so several workers
+       * minted plates concurrently inside one run and collided often
+       * enough to fail the suite at random - a different test each time.
+       * A ULID suffix gives a far larger space and is monotonic, so two
+       * workers starting together still diverge.
+       */
+      registration: `KDA ${ulid().slice(-6)}`,
       transmission: "Automatic",
       fuel: "Petrol",
       county: "Nairobi",

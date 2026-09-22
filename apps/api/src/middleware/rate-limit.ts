@@ -53,9 +53,34 @@ export function rateLimit(options: RateLimitOptions) {
     const windowStart = Math.floor(Date.now() / 1000 / options.windowSeconds);
     const key = `ratelimit:${options.bucket}:${identity}:${windowStart}`;
 
-    const count = await redis.incr(key);
-    if (count === 1) {
-      await redis.expire(key, options.windowSeconds);
+    /**
+     * **Fails open when Redis is unreachable.** The counters live in
+     * Redis, and these buckets sit in front of sign-in, OTP requests and
+     * password reset - so an unavailable Redis used to mean every one of
+     * those endpoints threw a 500 and nobody could sign in at all. That
+     * happened for real on Railway when Upstash's free-tier command cap
+     * was exhausted (see lib/redis.ts).
+     *
+     * Letting the request through is the lesser evil, and it is the
+     * conventional choice for a limiter: the alternative is that losing
+     * a cache takes authentication down with it. It is a genuine
+     * trade-off though, not a free win - while Redis is down these
+     * endpoints are unthrottled, so the outage is logged loudly rather
+     * than swallowed silently.
+     */
+    let count: number;
+    try {
+      count = await redis.incr(key);
+      if (count === 1) {
+        await redis.expire(key, options.windowSeconds);
+      }
+    } catch (error) {
+      console.error(
+        `[rate-limit] bucket "${options.bucket}" failing open - Redis unavailable: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      );
+      next();
+      return;
     }
 
     const remaining = Math.max(0, options.limit - count);
@@ -63,7 +88,9 @@ export function rateLimit(options: RateLimitOptions) {
     res.setHeader("Cral-RateLimit-Remaining", remaining);
 
     if (count > options.limit) {
-      const ttl = await redis.ttl(key);
+      // Best-effort: the bucket is already over limit, so a failed TTL
+      // read must not turn a 429 into a 500.
+      const ttl = await redis.ttl(key).catch(() => options.windowSeconds);
       res.setHeader("Retry-After", Math.max(ttl, 1));
       next(
         new ApiError({

@@ -1,5 +1,6 @@
 import { Queue, Worker } from "bullmq";
 import { redis } from "../lib/redis.js";
+import { sharedWorkerOptions } from "./queue.js";
 import { expireStaleBookingRequests } from "../modules/bookings/service.js";
 
 const QUEUE_NAME = "booking-request-expiry";
@@ -30,6 +31,6 @@ export function startBookingExpiryWorker(): Worker {
     async () => {
       await expireStaleBookingRequests();
     },
-    { connection: redis },
+    { connection: redis, ...sharedWorkerOptions },
   );
 }
