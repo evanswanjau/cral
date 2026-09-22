@@ -1,5 +1,6 @@
 import { Queue, Worker } from "bullmq";
 import { redis } from "../lib/redis.js";
+import { sharedWorkerOptions } from "./queue.js";
 import { db } from "../db/client.js";
 import { smsAdapter, emailAdapter } from "../lib/adapters.js";
 import { emailHeading, emailLayout, emailParagraph } from "../lib/email-templates.js";
@@ -105,6 +106,6 @@ export function startCommsBulkSendWorker(): Worker {
     async (job) => {
       await sendCommsRun(job.data);
     },
-    { connection: redis },
+    { connection: redis, ...sharedWorkerOptions },
   );
 }

@@ -1,5 +1,6 @@
 import { Queue, Worker } from "bullmq";
 import { redis } from "../lib/redis.js";
+import { sharedWorkerOptions } from "./queue.js";
 import { runDailyReminderSweep } from "../modules/merchant/service.js";
 
 const QUEUE_NAME = "merchant-onboarding-reminders";
@@ -35,6 +36,6 @@ export function startMerchantReminderWorker(): Worker {
     async () => {
       await runDailyReminderSweep();
     },
-    { connection: redis },
+    { connection: redis, ...sharedWorkerOptions },
   );
 }

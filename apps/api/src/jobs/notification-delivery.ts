@@ -1,5 +1,6 @@
 import { Queue, Worker } from "bullmq";
 import { redis } from "../lib/redis.js";
+import { sharedWorkerOptions } from "./queue.js";
 import { db } from "../db/client.js";
 import { smsAdapter, emailAdapter } from "../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../lib/email-templates.js";
@@ -302,6 +303,6 @@ export function startNotificationDeliveryWorker(): Worker {
     async (job) => {
       await deliverNotification(job.data);
     },
-    { connection: redis },
+    { connection: redis, ...sharedWorkerOptions },
   );
 }

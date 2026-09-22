@@ -11,6 +11,7 @@ import { scheduleRepeatable, startMerchantReminderWorker } from "./jobs/merchant
 import { scheduleBookingExpirySweep, startBookingExpiryWorker } from "./jobs/booking-expiry.js";
 import { startNotificationDeliveryWorker } from "./jobs/notification-delivery.js";
 import { startCommsBulkSendWorker } from "./jobs/comms-bulk-send.js";
+import { workersEnabled } from "./jobs/queue.js";
 
 const port = Number(process.env.PORT ?? 4000);
 const app = createApp();
@@ -27,13 +28,21 @@ const server = app.listen(port, () => {
 // defense-in-depth, not the only thing keeping it out of the test run.
 const workers: Worker[] = [];
 
-if (process.env.NODE_ENV !== "test") {
+if (process.env.NODE_ENV !== "test" && workersEnabled()) {
   void scheduleRepeatable();
   workers.push(startMerchantReminderWorker());
   void scheduleBookingExpirySweep();
   workers.push(startBookingExpiryWorker());
   workers.push(startNotificationDeliveryWorker());
   workers.push(startCommsBulkSendWorker());
+} else if (process.env.NODE_ENV !== "test") {
+  // WORKERS_ENABLED=false. Say so at boot: a deployment silently not
+  // running its reminder sweep or expiry job looks identical to one
+  // where those jobs are broken.
+  console.warn(
+    "[api] WORKERS_ENABLED=false - background jobs are NOT running " +
+      "(reminders, booking expiry, notification delivery, bulk sends). HTTP is served normally.",
+  );
 }
 
 /**
