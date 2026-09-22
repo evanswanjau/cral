@@ -2,6 +2,7 @@ import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
 import { pinoHttp } from "pino-http";
+import { httpSerializers, logger, requestLine } from "./lib/logger.js";
 import { requestId } from "./middleware/request-id.js";
 import { errorHandler, notFoundHandler } from "./middleware/error-handler.js";
 import { healthRouter } from "./routes/health.js";
@@ -83,12 +84,22 @@ export function createApp(): Express {
   );
   app.use(
     pinoHttp({
+      logger,
       genReqId: (req) => req.requestId,
+      serializers: httpSerializers,
       customLogLevel: (_req, res, err) => {
         if (err || res.statusCode >= 500) return "error";
         if (res.statusCode >= 400) return "warn";
         return "info";
       },
+      // CORS preflights and the uptime probe are the two things that log a
+      // lot and say nothing.
+      autoLogging: {
+        ignore: (req) => req.method === "OPTIONS" || req.url === "/health",
+      },
+      customSuccessMessage: (req, res, responseTime) =>
+        requestLine(req, res, responseTime),
+      customErrorMessage: (req, res) => requestLine(req, res),
     }),
   );
   app.use(express.json({ limit: "5mb" }));

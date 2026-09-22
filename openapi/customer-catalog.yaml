@@ -360,7 +360,7 @@ components:
       allOf:
         - $ref: "#/components/schemas/CatalogVehicleSummary"
         - type: object
-          required: [minimum_hire_days, photo_urls, documents_cleared, owner_rating]
+          required: [minimum_hire_days, photo_urls, documents_cleared, owner_rating, rating, reviews]
           properties:
             minimum_hire_days: { type: integer }
             photo_urls:
@@ -385,14 +385,46 @@ components:
             owner_rating:
               nullable: true
               description: >
-                The owner's average rating from completed hires. `null`,
-                honestly, until a hirer has ever rated a merchant - nothing
-                writes that direction yet (see `ratings` table).
+                The owner's average rating across every car they list -
+                the figure shown in the "The owner" card. `null`, never an
+                all-zero shape, until a hirer has actually rated them.
+                Deliberately a different set from `rating` below.
               type: object
               required: [average, count]
               properties:
                 average: { type: number }
                 count: { type: integer }
+            rating:
+              nullable: true
+              description: >
+                This car's own average, aggregated over ratings left on
+                bookings for this vehicle - what the masthead's
+                "star / number / N reviews" claims to describe. Whole-set,
+                never bound to the `reviews` page below. `null`, never an
+                all-zero shape, until someone has rated a hire of this car.
+              type: object
+              required: [average, count]
+              properties:
+                average: { type: number }
+                count: { type: integer }
+            reviews:
+              type: array
+              description: >
+                "From people who hired it" - the newest reviews left on
+                hires of THIS car, newest first, capped at ten. Only a
+                completed hire can produce one. The rater is named as
+                first name + last initial ("Wanjiku N.") and never by id,
+                email or phone. `when` is the raw UTC instant; rendering
+                it as "JUL 2026" is the client's job (spec §2).
+              items:
+                type: object
+                required: [id, who, stars, text, when]
+                properties:
+                  id: { type: string, example: rev_01J... }
+                  who: { type: string, example: "Wanjiku N." }
+                  stars: { type: integer, minimum: 1, maximum: 5 }
+                  text: { type: string, nullable: true }
+                  when: { type: string, format: date-time }
 
     CatalogCollection:
       type: object

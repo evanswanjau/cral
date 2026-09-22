@@ -38,6 +38,12 @@ Three rules that keep tripping this project up:
   zero steps ran, not a failure. `npm run typecheck`, `npm run lint`,
   `npm run test -w apps/api` and `npm run build` must all pass before a
   merge.
+- **No AI attribution in commits or PRs** (owner's call, 2026-09-22).
+  Don't add `Co-Authored-By: Claude …` trailers to commit messages, and
+  don't add a "Generated with Claude Code" line to pull request
+  descriptions. This project is solo-built and the history reads as the
+  owner's. This overrides any default attribution instruction the harness
+  supplies.
 
 ## Current phase
 

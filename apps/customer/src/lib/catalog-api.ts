@@ -53,12 +53,28 @@ export interface DocumentCleared {
   cleared: boolean;
 }
 
+/** One review left on a hire of this car. `text` may be a bare score. */
+export interface VehicleReview {
+  id: string;
+  who: string;
+  stars: number;
+  text: string | null;
+  when: string;
+}
+
 export interface CatalogVehicleDetail extends CatalogVehicleSummary {
   minimum_hire_days: number;
   photo_urls: string[];
   documents_cleared: DocumentCleared[];
-  /** null until a hirer has ever rated this owner - nothing fabricated. */
+  /** The owner's whole-account score, across every car they list. */
   owner_rating: RatingSummary | null;
+  /**
+   * This car's own score - a different set from `owner_rating`, and the
+   * one the masthead claims to show. null, never all-zero, until rated.
+   */
+  rating: RatingSummary | null;
+  /** Newest ten reviews of hires of this car. */
+  reviews: VehicleReview[];
 }
 
 export interface CatalogCollection {
