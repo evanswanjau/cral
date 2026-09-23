@@ -1,5 +1,6 @@
 import { O } from "../styles.js";
 import { PrimaryButton } from "../primitives.js";
+import { whatsappLink } from "../../../lib/support.js";
 
 const STEPS = [
   { title: "Your details, once", body: "Individual or registered company. Fill it in once and it covers every vehicle you ever add." },
@@ -7,8 +8,7 @@ const STEPS = [
   { title: "Approved, then earning", body: "We review your documents, usually within two working days. We let you know the moment your listing is live and taking bookings." },
 ];
 
-const ASK_URL =
-  "https://wa.me/254733376061?text=Hi%20CRAL%20-%20a%20question%20about%20listing";
+const ASK_URL = whatsappLink("Hi CRAL - a question about listing");
 
 export function Welcome({ onStart, resuming }: { onStart: () => void; resuming?: boolean }): JSX.Element {
   return (

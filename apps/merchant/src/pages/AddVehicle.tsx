@@ -13,6 +13,7 @@ import { O } from "../components/onboarding/styles.js";
 import { P } from "../components/portal/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { createVehicle } from "../lib/vehicles-api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
  * A standalone "add a vehicle to an already-submitted fleet" screen - the
@@ -25,6 +26,7 @@ import { createVehicle } from "../lib/vehicles-api.js";
  * VehicleDetail).
  */
 export function AddVehicle(): JSX.Element {
+  usePageTitle("Add a vehicle");
   const navigate = useNavigate();
   const flash = useToast();
   const [showErrors, setShowErrors] = useState(false);

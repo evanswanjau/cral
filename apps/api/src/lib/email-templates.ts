@@ -93,7 +93,7 @@ export function emailLayout({ preheader, bodyHtml }: EmailLayoutOptions): string
               <td style="padding:28px 32px 32px;">
                 <div style="height:1px;background:${NEUTRAL_200};margin-bottom:20px;"></div>
                 <p style="margin:0 0 6px;font:400 12px/1.6 ${SANS};color:${NEUTRAL_500};">
-                  © 2026 CRAL · cral.co.ke · Stuck? Call 0733 376 061
+                  © 2026 CRAL · cral.co.ke · Stuck? WhatsApp or call 0735 656 066
                 </p>
                 <p style="margin:0;font:400 12px/1.6 ${SANS};color:${NEUTRAL_500};">
                   This is an automated message from CRAL's merchant portal.

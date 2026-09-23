@@ -14,6 +14,7 @@ import {
   type NotificationFilter,
   type NotificationRow,
 } from "../lib/notifications-api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /** "15 AUG 2026 · 07:12" - the design's mono timestamp, in Nairobi time. */
 function formatWhen(iso: string): string {
@@ -92,6 +93,7 @@ function SkeletonRow(): JSX.Element {
 }
 
 export function Notifications(): JSX.Element {
+  usePageTitle("Notifications");
   const navigate = useNavigate();
   const toast = useToast();
   const [filter, setFilter] = useState<NotificationFilter>("all");

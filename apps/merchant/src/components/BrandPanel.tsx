@@ -1,31 +1,61 @@
 import type { CSSProperties } from "react";
+import { Link } from "react-router-dom";
+import type { Icon } from "@phosphor-icons/react";
+import { Coins } from "@phosphor-icons/react/dist/ssr/Coins";
+import { Key } from "@phosphor-icons/react/dist/ssr/Key";
+import { Wallet } from "@phosphor-icons/react/dist/ssr/Wallet";
+import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
+import { Prohibit } from "@phosphor-icons/react/dist/ssr/Prohibit";
+import { Tag } from "@phosphor-icons/react/dist/ssr/Tag";
+import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr/WhatsappLogo";
+import { SUPPORT_PHONE_DISPLAY, whatsappLink } from "../lib/support.js";
 
-const PROOF = [
-  {
-    title: "Answer requests in one tap",
-    body: "Hirers pay CRAL up front, so your yes is money already on the way - not a promise to chase.",
+export type BrandPanelVariant = "signin" | "register";
+
+const COPY: Record<
+  BrandPanelVariant,
+  { eyebrow: string; h1: string; lede: string; proof: Array<{ icon: Icon; title: string; body: string }> }
+> = {
+  signin: {
+    eyebrow: "WELCOME BACK",
+    h1: "Your vehicles, your money, in one place.",
+    lede: "Sign in to answer booking requests, see what each vehicle earns and follow every payout.",
+    proof: [
+      { icon: Coins, title: "See every shilling", body: "What each vehicle earned, what's clearing and what's already been paid." },
+      { icon: Key, title: "Handovers you can trust", body: "Check the hirer's pickup code before the keys change hands." },
+      { icon: Wallet, title: "Payouts to M-Pesa or bank", body: "A receipt and a statement for every payout run." },
+    ],
   },
-  {
-    title: "Get paid your way",
-    body: "M-Pesa, bank transfer, or invoiced terms for corporate hirers - payouts move as soon as each booking wraps.",
+  register: {
+    eyebrow: "LIST WITH CRAL",
+    h1: "Start earning from your vehicle.",
+    lede: "An email and a password is all it takes to begin. Your details, documents and first vehicle come next.",
+    proof: [
+      { icon: ShieldCheck, title: "Checked by a real person", body: "A CRAL reviewer reads every listing's papers before it goes live." },
+      { icon: Prohibit, title: "No listing fee", body: "Nothing is charged while a vehicle sits idle. We only earn when you do." },
+      { icon: Tag, title: "You set the rate", body: "Per day or per trip, and you choose which requests to accept." },
+    ],
   },
-  {
-    title: "List as many vehicles as you want",
-    body: "One account, one fleet - add your next car whenever you're ready, with no cap on how many.",
-  },
-];
+};
 
 /**
- * The dark panel, reproduced from the design canvas source
- * ("Cruz Merchant Login.dc.html") with its exact inline styles - the
- * clamp() sizing, the 14° skewed red rule, the Archivo 'wdth' 110 display
- * axis, and the radial glow anchored to this panel's bottom-right corner.
+ * The dark panel beside every auth form. Started as a verbatim copy of the
+ * design canvas ("Cruz Merchant Login.dc.html"); redesigned at the owner's
+ * request (2026-09-23) with a photo backdrop, icons, per-page copy and a
+ * WhatsApp help link. The type scale, 14° skewed rule and Archivo
+ * 'wdth' 110 display axis are kept from the canvas.
  */
-export function BrandPanel(): JSX.Element {
+export function BrandPanel({ variant = "signin" }: { variant?: BrandPanelVariant }): JSX.Element {
+  const copy = COPY[variant];
   return (
     <div style={S.panel}>
+      <img src="/images/landing/auth.webp" alt="" style={S.photo} />
+      <div style={S.shade} />
+
       <div style={S.masthead}>
-        <img src="/logo-white.png" alt="Cruz Ride Auto Limited" style={S.logo} />
+        <Link to="/" aria-label="CRAL merchant home">
+          <img src="/logo-white.png" alt="Cruz Ride Auto Limited" style={S.logo} />
+        </Link>
         <span style={S.mastheadRule} />
         <span style={S.mastheadLabel}>MERCHANT PORTAL</span>
       </div>
@@ -33,30 +63,35 @@ export function BrandPanel(): JSX.Element {
       <div style={S.middle}>
         <div style={S.eyebrow}>
           <span style={S.eyebrowRule} />
-          <span style={S.eyebrowText}>CRAL · NAIROBI, KENYA</span>
+          <span style={S.eyebrowText}>{copy.eyebrow}</span>
         </div>
-        <h1 style={S.h1}>Your vehicles, your money, in one place.</h1>
-        <p style={S.lede}>
-          Sign in to answer booking requests, track what each vehicle earns, and get paid the moment
-          each trip wraps.
-        </p>
+        <h1 style={S.h1}>{copy.h1}</h1>
+        <p style={S.lede}>{copy.lede}</p>
 
         <div style={S.proofList}>
-          {PROOF.map((p) => (
-            <div key={p.title} style={S.proofRow}>
-              <span style={S.proofCheck}>✓</span>
-              <div>
-                <div style={S.proofTitle}>{p.title}</div>
-                <div style={S.proofBody}>{p.body}</div>
+          {copy.proof.map((p) => {
+            const ProofIcon = p.icon;
+            return (
+              <div key={p.title} style={S.proofRow}>
+                <span style={S.proofIcon}>
+                  <ProofIcon size={20} weight="regular" />
+                </span>
+                <div>
+                  <div style={S.proofTitle}>{p.title}</div>
+                  <div style={S.proofBody}>{p.body}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div style={S.footer}>
         <span style={S.footerLeft}>© 2026 CRAL · CRAL.CO.KE</span>
-        <span style={S.footerRight}>Stuck? Call 0733 376 061</span>
+        <a href={whatsappLink("Hi CRAL - I need help with my merchant account")} target="_blank" rel="noreferrer" style={S.footerRight}>
+          <WhatsappLogo size={16} weight="fill" color="#25D366" />
+          Stuck? WhatsApp {SUPPORT_PHONE_DISPLAY}
+        </a>
       </div>
 
       <div style={S.glow} />
@@ -75,17 +110,33 @@ const S: Record<string, CSSProperties> = {
     position: "relative",
     overflow: "hidden",
   },
+  photo: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "60% 50%",
+    zIndex: 0,
+  },
+  shade: {
+    position: "absolute",
+    inset: 0,
+    background:
+      "linear-gradient(180deg,rgba(11,15,26,.82) 0%,rgba(11,15,26,.9) 45%,rgba(11,15,26,.97) 100%)",
+    zIndex: 1,
+  },
   masthead: { display: "flex", alignItems: "center", gap: 14, position: "relative", zIndex: 2 },
   logo: {
     height: "clamp(40px,7vw,50px)",
     width: "auto",
     display: "block",
   },
-  mastheadRule: { width: 1, height: 22, background: "#242C3D" },
+  mastheadRule: { width: 1, height: 22, background: "#2A3346" },
   mastheadLabel: {
     font: "500 11px/1 'IBM Plex Mono',monospace",
     letterSpacing: ".09em",
-    color: "#8C97A8",
+    color: "#A7B0BE",
   },
 
   middle: { position: "relative", zIndex: 2, maxWidth: 520 },
@@ -101,7 +152,7 @@ const S: Record<string, CSSProperties> = {
   eyebrowText: {
     font: "500 11px/1.4 'IBM Plex Mono',monospace",
     letterSpacing: ".14em",
-    color: "#8C97A8",
+    color: "#A7B0BE",
   },
   h1: {
     margin: "0 0 16px",
@@ -114,29 +165,29 @@ const S: Record<string, CSSProperties> = {
   lede: {
     margin: "0 0 28px",
     font: "400 clamp(14px,1.4vw,16px)/1.6 'Instrument Sans',sans-serif",
-    color: "#A7B0BE",
+    color: "#C3CAD5",
     maxWidth: "46ch",
     textWrap: "pretty",
   } as CSSProperties,
 
-  proofList: { display: "grid", gap: 14 },
-  proofRow: { display: "flex", alignItems: "flex-start", gap: 12 },
-  proofCheck: {
-    width: 22,
-    height: 22,
-    borderRadius: 999,
-    background: "#141B2B",
-    border: "1px solid #242C3D",
-    color: "#57D69E",
-    font: "600 10px/20px 'IBM Plex Mono',monospace",
-    textAlign: "center",
+  proofList: { display: "grid", gap: 16 },
+  proofRow: { display: "flex", alignItems: "flex-start", gap: 14 },
+  proofIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    background: "rgba(255,255,255,.08)",
+    border: "1px solid rgba(255,255,255,.14)",
+    color: "#FFFFFF",
+    display: "grid",
+    placeItems: "center",
     flex: "none",
   },
-  proofTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#F2F5F9" },
+  proofTitle: { font: "600 14.5px/1.35 'Instrument Sans',sans-serif", color: "#F2F5F9" },
   proofBody: {
     font: "400 13px/1.5 'Instrument Sans',sans-serif",
-    color: "#8C97A8",
-    marginTop: 2,
+    color: "#A7B0BE",
+    marginTop: 3,
     maxWidth: "44ch",
     textWrap: "pretty",
   } as CSSProperties,
@@ -150,14 +201,21 @@ const S: Record<string, CSSProperties> = {
     gap: 16,
     flexWrap: "wrap",
     paddingTop: 22,
-    borderTop: "1px solid #1D2637",
+    borderTop: "1px solid rgba(255,255,255,.1)",
   },
   footerLeft: {
     font: "500 11px/1.6 'IBM Plex Mono',monospace",
     letterSpacing: ".08em",
-    color: "#5F6B7C",
+    color: "#7C8697",
   },
-  footerRight: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5F6B7C" },
+  footerRight: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 7,
+    font: "500 13px/1.5 'Instrument Sans',sans-serif",
+    color: "#E6EAF0",
+    textDecoration: "none",
+  },
 
   glow: {
     position: "absolute",

@@ -5,6 +5,7 @@ import { BOOKING_FILTER_ORDER, BOOKING_STATUS, bookingFilterLabel, money } from 
 import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { useToast } from "../components/portal/Toast.js";
 import { useBookingList, useSeedDevBookings, type BookingFilter, type BookingSummary } from "../lib/bookings-api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -146,6 +147,7 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
 }
 
 export function BookingList(): JSX.Element {
+  usePageTitle("Bookings");
   const navigate = useNavigate();
   const flash = useToast();
   const [filter, setFilterState] = useState<BookingFilter>("all");

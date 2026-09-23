@@ -1,6 +1,8 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { BrandPanel } from "../BrandPanel.js";
+import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr/WhatsappLogo";
+import { BrandPanel, type BrandPanelVariant } from "../BrandPanel.js";
+import { whatsappLink } from "../../lib/support.js";
 import { ErrorBanner, GoogleIcon } from "./primitives.jsx";
 import { S } from "./styles.js";
 
@@ -13,6 +15,8 @@ export interface AuthShellProps {
   error?: string | null;
   /** The bordered link row at the bottom ("New to CRAL? Register instead", etc.). */
   footer?: { text: string; linkLabel: string; to: string };
+  /** Which pitch the brand panel shows beside the form. */
+  panel?: BrandPanelVariant;
 }
 
 /**
@@ -28,6 +32,7 @@ export function AuthShell({
   showGoogle = false,
   error,
   footer,
+  panel = "signin",
 }: AuthShellProps): JSX.Element {
   const [googleNotice, setGoogleNotice] = useState<string | null>(null);
 
@@ -46,7 +51,7 @@ export function AuthShell({
       */}
       <style>{`@media (max-width: 860px) { .cral-auth-form-panel { order: -1; } }`}</style>
 
-      <BrandPanel />
+      <BrandPanel variant={panel} />
 
       <div className="cral-auth-form-panel" style={S.formPanel}>
         <div style={S.formInner}>
@@ -91,8 +96,31 @@ export function AuthShell({
               </div>
             </div>
           )}
+
+          <a
+            href={whatsappLink("Hi CRAL - I need help signing in or signing up")}
+            target="_blank"
+            rel="noreferrer"
+            style={HELP}
+          >
+            <WhatsappLogo size={18} weight="fill" color="#1DA851" />
+            <span>
+              Need a hand? <span style={{ color: "#0F23A8", fontWeight: 600 }}>Chat with us on WhatsApp</span>
+            </span>
+          </a>
         </div>
       </div>
     </div>
   );
 }
+
+const HELP = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  gap: 8,
+  marginTop: 22,
+  font: "400 13.5px/1.4 'Instrument Sans',sans-serif",
+  color: "#5A6373",
+  textDecoration: "none",
+} as const;

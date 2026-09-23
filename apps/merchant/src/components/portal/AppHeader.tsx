@@ -1,5 +1,6 @@
 import { P } from "./styles.js";
 import { ProfileMenu } from "./ProfileMenu.js";
+import { whatsappLink } from "../../lib/support.js";
 
 export function AppHeader({
   name,
@@ -24,7 +25,7 @@ export function AppHeader({
           <span style={P.skewRule} />
         </div>
         <div style={P.topBarRight}>
-          <a href="https://wa.me/254733376061?text=Hi%20CRAL" target="_blank" rel="noreferrer" style={P.helpLink}>
+          <a href={whatsappLink()} target="_blank" rel="noreferrer" style={P.helpLink}>
             Help
           </a>
           <span style={P.topBarRuleThin} />

@@ -14,6 +14,7 @@ import { isTwoFactorRequired, login, register, requestOtp, verifySignupOtp } fro
 import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
  * Create account - the design's `isRegister` / `isRegisterVerify` branches,
@@ -30,6 +31,7 @@ import { ApiClientError } from "../lib/api.js";
  * so eight would be rejected server-side and the copy would be lying.
  */
 export function CreateAccount(): JSX.Element {
+  usePageTitle("Create your account");
   const navigate = useNavigate();
   const [step, setStep] = useState<"details" | "verify">("details");
   const [error, setError] = useState<string | null>(null);
@@ -89,6 +91,7 @@ export function CreateAccount(): JSX.Element {
   if (step === "verify") {
     return (
       <AuthShell
+        panel="register"
         heading="Confirm your email"
         subheading="Enter the six-digit code we sent. Then we'll start on your company papers."
         error={error}
@@ -140,6 +143,7 @@ export function CreateAccount(): JSX.Element {
 
   return (
     <AuthShell
+      panel="register"
       heading="Create your account"
       subheading="Email and a password to start. Company papers and vehicles come next."
       showGoogle

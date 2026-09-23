@@ -63,7 +63,7 @@ export function PhoneInput({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="733 376 061"
+        placeholder="712 345 678"
         inputMode="tel"
         autoComplete="tel-national"
         style={{ flex: 1, minWidth: 0 }}

@@ -3,6 +3,7 @@ import { AuthShell } from "../components/auth/AuthShell.jsx";
 import { Field, InfoBanner, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
 import { forgotPassword } from "../lib/auth-api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
  * Forgot password. No canvas file exists for this screen (the design's auth
@@ -18,6 +19,7 @@ import { forgotPassword } from "../lib/auth-api.js";
  * is conditional-free and the request error is swallowed.
  */
 export function ForgotPassword(): JSX.Element {
+  usePageTitle("Reset your password");
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);

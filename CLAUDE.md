@@ -1655,6 +1655,19 @@ day bookings made before it (they had all defaulted to 1).
   across units, not a claim about what a booking on that listing actually
   costs. Not reworked this pass.
 
+**CRAL's commission percentage is never shown to a merchant (owner's
+global rule, 2026-09-23).** Only admins see the rate; a merchant sees it
+only in the merchant terms and conditions. Don't render
+`COMMISSION_PERCENT`/`COMMISSION_RATE` (or a hardcoded "10%") on any
+merchant surface - portal, emails, SMS, receipt PDFs. KES commission
+*amounts* on booking/payout records stay (owner confirmed). Estimators show
+take-home "after CRAL's service fee", pointing to the merchant terms. The
+same pass prefixed every merchant page title with `Merchant:`
+(`use-page-title.ts`), rebuilt the signed-out landing page and the auth
+brand panel with photos + Phosphor icons (no emojis), and moved the
+support line to `+254 735 656 066` (`apps/merchant/src/lib/support.ts` -
+use `whatsappLink()`, don't hand-write `wa.me` URLs).
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
