@@ -27,11 +27,24 @@ export interface VehicleSummary {
   doc_count: number;
   doc_has_issue: boolean;
   daily_rate: Money | null;
+  hiring_unit: HiringUnit;
+  hourly_rate: Money | null;
+  trip_rate: Money | null;
   submitted_at: string | null;
   created_at: string;
 }
 
 export type HiringUnit = "day" | "hour" | "trip";
+
+/** The rate a listing is actually priced on, and its unit word ("day" / "trip"). */
+export function listingRate(v: Pick<VehicleSummary, "hiring_unit" | "daily_rate" | "hourly_rate" | "trip_rate">): {
+  rate: Money | null;
+  per: string;
+} {
+  if (v.hiring_unit === "trip") return { rate: v.trip_rate, per: "trip" };
+  if (v.hiring_unit === "hour") return { rate: v.hourly_rate, per: "hour" };
+  return { rate: v.daily_rate, per: "day" };
+}
 
 export interface VehicleDocInfo {
   document_id: string;
@@ -55,9 +68,6 @@ export interface VehicleDetail extends VehicleSummary {
   minimum_hire_days: number;
   chauffeured: boolean;
   rate_mode: "list" | "net";
-  hiring_unit: HiringUnit;
-  hourly_rate: Money | null;
-  trip_rate: Money | null;
   verification_badge_expires_at: string | null;
   reviewer_note: string | null;
   reviewer_note_meta: string | null;
@@ -122,7 +132,6 @@ export function createVehicle(input: CreateVehicleInput) {
 export interface PriceAvailabilityInput {
   daily_rate?: string;
   hiring_unit?: HiringUnit;
-  hourly_rate?: string;
   trip_rate?: string;
   rate_mode?: "list" | "net";
   minimum_hire_days?: number;

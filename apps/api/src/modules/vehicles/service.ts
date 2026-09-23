@@ -147,6 +147,9 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
     doc_count: count,
     doc_has_issue: hasIssue,
     daily_rate: moneyOrNull(vehicle),
+    hiring_unit: vehicle.hiring_unit,
+    hourly_rate: vehicle.hourly_rate_amount ? kes(vehicle.hourly_rate_amount) : null,
+    trip_rate: vehicle.trip_rate_amount ? kes(vehicle.trip_rate_amount) : null,
     submitted_at: vehicle.submitted_at ? vehicle.submitted_at.toISOString() : null,
     created_at: vehicle.created_at.toISOString(),
   };
@@ -183,9 +186,6 @@ async function serializeDetail(merchant: MerchantRow, vehicle: VehicleRow) {
     minimum_hire_days: vehicle.minimum_hire_days,
     chauffeured: vehicle.chauffeured,
     rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
-    hiring_unit: vehicle.hiring_unit,
-    hourly_rate: vehicle.hourly_rate_amount ? kes(vehicle.hourly_rate_amount) : null,
-    trip_rate: vehicle.trip_rate_amount ? kes(vehicle.trip_rate_amount) : null,
     verification_badge_expires_at: vehicle.verification_badge_expires_at
       ? vehicle.verification_badge_expires_at.toISOString()
       : null,
@@ -503,7 +503,6 @@ export async function updatePriceAvailability(
   const update: Record<string, unknown> = {};
   if (input.daily_rate !== undefined) update.daily_rate_amount = dailyRateCents(input.daily_rate);
   if (input.hiring_unit !== undefined) update.hiring_unit = input.hiring_unit;
-  if (input.hourly_rate !== undefined) update.hourly_rate_amount = dailyRateCents(input.hourly_rate);
   if (input.trip_rate !== undefined) update.trip_rate_amount = dailyRateCents(input.trip_rate);
   if (input.rate_mode !== undefined) update.rate_mode = input.rate_mode;
   if (input.minimum_hire_days !== undefined) update.minimum_hire_days = input.minimum_hire_days;
@@ -511,22 +510,23 @@ export async function updatePriceAvailability(
   if (input.pickup_address !== undefined) update.pickup_address = input.pickup_address;
   if (input.chauffeured !== undefined) update.chauffeured = input.chauffeured;
 
-  // The unit picks which rate actually prices a booking - that rate must
-  // be a real positive figure before the unit can be saved, or a hirer
-  // would be quoted KES 0 for an hour/trip listing that only ever had a
-  // daily rate set.
-  const effectiveUnit = (update.hiring_unit as string | undefined) ?? vehicle.hiring_unit;
-  const effectiveHourly = (update.hourly_rate_amount as number | undefined) ?? vehicle.hourly_rate_amount;
-  const effectiveTrip = (update.trip_rate_amount as number | undefined) ?? vehicle.trip_rate_amount;
-  if (effectiveUnit === "hour" && !effectiveHourly) {
+  // Per-hour pricing stays switched off until the customer booking flow
+  // has a real time-of-day picker. Today it only collects dates, and
+  // `hireInstants` turns a date range into 09:00-to-close across every
+  // day, so an hourly listing would bill the nights in between.
+  if (input.hiring_unit === "hour") {
     throw new ApiError({
       status: 422,
       type: "validation_error",
-      code: "hourly_rate_required",
-      message: "Set an hourly rate before pricing this listing per hour.",
-      field: "hourly_rate",
+      code: "hiring_unit_unavailable",
+      message: "Per-hour pricing isn't available yet. Price this listing per day or per trip.",
+      field: "hiring_unit",
     });
   }
+  // A trip listing must carry a real trip rate, or a hirer would be quoted
+  // KES 0 for a listing that only ever had a daily rate set.
+  const effectiveUnit = (update.hiring_unit as string | undefined) ?? vehicle.hiring_unit;
+  const effectiveTrip = (update.trip_rate_amount as number | undefined) ?? vehicle.trip_rate_amount;
   if (effectiveUnit === "trip" && !effectiveTrip) {
     throw new ApiError({
       status: 422,
@@ -550,7 +550,10 @@ export async function updatePriceAvailability(
       kind: "price_updated",
       tone: "blue",
       label: "Price updated",
-      body: `KES ${Math.round(rate / 100).toLocaleString("en-KE")} a day, minimum ${minDays} day${minDays === 1 ? "" : "s"}.`,
+      body:
+        effectiveUnit === "trip"
+          ? `KES ${Math.round((effectiveTrip ?? 0) / 100).toLocaleString("en-KE")} a trip.`
+          : `KES ${Math.round(rate / 100).toLocaleString("en-KE")} a day, minimum ${minDays} day${minDays === 1 ? "" : "s"}.`,
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -559,8 +562,13 @@ export async function updatePriceAvailability(
       action: "vehicle.price_updated",
       entityType: "vehicle",
       entityId: vehicle.id,
-      before: { daily_rate_amount: vehicle.daily_rate_amount, minimum_hire_days: vehicle.minimum_hire_days },
-      after: { daily_rate_amount: rate, minimum_hire_days: minDays },
+      before: {
+        daily_rate_amount: vehicle.daily_rate_amount,
+        minimum_hire_days: vehicle.minimum_hire_days,
+        hiring_unit: vehicle.hiring_unit,
+        trip_rate_amount: vehicle.trip_rate_amount,
+      },
+      after: { daily_rate_amount: rate, minimum_hire_days: minDays, hiring_unit: effectiveUnit, trip_rate_amount: effectiveTrip },
       requestId: ctx.requestId,
       ip: ctx.ip,
     });

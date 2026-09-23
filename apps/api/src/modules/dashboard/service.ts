@@ -180,6 +180,8 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
     status: vehicle.status,
     verification_badge: vehicle.verification_badge,
     daily_rate: vehicle.daily_rate_amount > 0 ? kes(vehicle.daily_rate_amount) : null,
+    hiring_unit: vehicle.hiring_unit,
+    trip_rate: vehicle.trip_rate_amount ? kes(vehicle.trip_rate_amount) : null,
     documents: VEHICLE_DOC_KINDS.map((kind) => ({
       kind,
       state: effectiveDocState(docsFor(vehicle.id).find((d) => d.kind === kind)),

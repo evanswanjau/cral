@@ -56,15 +56,13 @@ export type EditVehicleDetailsInput = z.infer<typeof EditVehicleDetailsSchema>;
 
 /**
  * Body for the "Price & availability" modal — only what that modal edits.
- * `hiring_unit` picks which rate governs pricing; `hourly_rate`/`trip_rate`
- * are only meaningful (and only required) for their matching unit - the
- * service enforces that, this schema just accepts all three as optional
- * strings the same way `daily_rate` always has.
+ * `hiring_unit` picks which rate governs pricing; `trip_rate` is required
+ * (by the service) only for a trip listing. `hour` is in the enum but the
+ * service refuses it for now - see `updatePriceAvailability`.
  */
 export const PriceAvailabilitySchema = z.object({
   daily_rate: z.string().optional(),
   hiring_unit: z.enum(HIRING_UNITS).optional(),
-  hourly_rate: z.string().optional(),
   trip_rate: z.string().optional(),
   rate_mode: z.enum(["list", "net"]).optional(),
   minimum_hire_days: z.number().int().min(1).max(30).optional(),

@@ -28,7 +28,8 @@ paths:
       description: >
         Cursor-paginated, oldest first (so the longest-waiting request
         surfaces first, same as the vehicle review queue). Defaults to
-        `requested` + `quoted` - the open ones.
+        `requested` + `quoted` + `accepted` - everything Ops still has to
+        quote, chase or dispatch.
       parameters:
         - name: status
           in: query

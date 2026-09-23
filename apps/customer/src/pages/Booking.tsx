@@ -28,7 +28,7 @@ import {
   hireDays,
   hireInstants,
 } from "../lib/hire-dates.js";
-import { HIRING_UNIT_LABEL } from "../lib/hiring-units.js";
+import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
 
 /**
  * `/book/:id` - the pre-booking half of a hire, reproduced from the
@@ -303,17 +303,15 @@ export function Booking(): JSX.Element {
 
   const name = `${car.make} ${car.model} ${car.year}`;
   const days = hireDays(from, to);
-  // Same honesty call as CarDetail.tsx: this page only ever collects a
-  // date range, so only a `day` listing's total can be computed here. The
-  // server works out the real total from the actual pickup/dropoff
-  // instants once the request is sent.
+  // Same rule as CarDetail.tsx: day and trip totals are knowable from the
+  // dates; the server computes the real figure either way.
   const isDayUnit = car.hiring_unit === "day";
-  const total = isDayUnit ? car.daily_rate.amount * days : 0;
+  const total = quoteTotal(car, days);
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
   // rather than at the end of the flow - the car page now blocks it at
   // the point the dates are picked.
-  const belowMinimum = days > 0 && days < car.minimum_hire_days;
+  const belowMinimum = isDayUnit && days > 0 && days < car.minimum_hire_days;
   const here = `/book/${id}?from=${from}&to=${to}`;
   const steps = isAuthenticated ? BOOKING_STEPS : NEW_ACCOUNT_BOOKING_STEPS;
   const doneIndex = isAuthenticated ? 0 : stage === "account" ? 0 : 1;
@@ -875,7 +873,7 @@ export function Booking(): JSX.Element {
                           min={earliestPickupDay()}
                           onChange={(e) => {
                             setDraftFrom(e.target.value);
-                            const soonest = earliestReturnDay(e.target.value, car.minimum_hire_days);
+                            const soonest = earliestReturnDay(e.target.value, isDayUnit ? car.minimum_hire_days : 1);
                             if (draftTo && soonest && draftTo < soonest) setDraftTo(soonest);
                           }}
                           style={monoField}
@@ -886,7 +884,7 @@ export function Booking(): JSX.Element {
                         <input
                           type="date"
                           value={draftTo}
-                          min={earliestReturnDay(draftFrom, car.minimum_hire_days) || earliestPickupDay()}
+                          min={earliestReturnDay(draftFrom, isDayUnit ? car.minimum_hire_days : 1) || earliestPickupDay()}
                           onChange={(e) => setDraftTo(e.target.value)}
                           style={monoField}
                         />
@@ -938,9 +936,12 @@ export function Booking(): JSX.Element {
                     action={editingDates ? undefined : { text: "Change", onClick: openDateEditor }}
                   />
                   <Row label="Return" value={formatHireDate(to)} />
-                  {isDayUnit ? (
+                  {total !== null ? (
                     <>
-                      <Row label={`${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                      <Row
+                        label={isDayUnit ? `${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}` : "Flat trip rate"}
+                        value={formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                      />
                       <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
                         <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
                       </div>
@@ -1132,9 +1133,12 @@ export function Booking(): JSX.Element {
             </div>
             <div style={{ display: "grid", gap: 9, paddingTop: 14, borderTop: "1px solid #F1F3F6" }}>
               <Row label={`${formatHireDate(from)} - ${formatHireDate(to)}`} value={`${days} day${days > 1 ? "s" : ""}`} />
-              {isDayUnit ? (
+              {total !== null ? (
                 <>
-                  <Row label={`${formatMoney(car.daily_rate)} × ${days}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                  <Row
+                    label={isDayUnit ? `${formatMoney(car.daily_rate)} × ${days}` : "Flat trip rate"}
+                    value={formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                  />
                   <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
                     <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
                   </div>

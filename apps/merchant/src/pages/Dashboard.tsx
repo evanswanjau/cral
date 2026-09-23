@@ -252,6 +252,7 @@ function BookingRow({
 
 function FleetRow({ vehicle, onOpen }: { vehicle: DashboardFleetVehicle; onOpen: () => void }): JSX.Element {
   const skin = STATUS[vehicle.status];
+  const fleetRate = vehicle.hiring_unit === "trip" ? vehicle.trip_rate : vehicle.daily_rate;
   return (
     <HoverRow onClick={onOpen}>
       <span style={P.dashPlate}>{vehicle.registration}</span>
@@ -274,8 +275,8 @@ function FleetRow({ vehicle, onOpen }: { vehicle: DashboardFleetVehicle; onOpen:
         <span style={{ ...P.dashPillDot, background: skin.core }} />
         {skin.label}
       </span>
-      <span style={{ ...P.dashFleetRate, color: vehicle.daily_rate ? "#0B0F1A" : "#A7AEBB" }}>
-        {vehicle.daily_rate ? `KES ${money(vehicle.daily_rate.amount)}` : "No rate yet"}
+      <span style={{ ...P.dashFleetRate, color: fleetRate ? "#0B0F1A" : "#A7AEBB" }}>
+        {fleetRate ? `KES ${money(fleetRate.amount)} / ${vehicle.hiring_unit === "trip" ? "trip" : "day"}` : "No rate yet"}
       </span>
       <span style={P.dashChevron}>›</span>
     </HoverRow>

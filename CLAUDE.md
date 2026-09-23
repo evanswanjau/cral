@@ -1578,6 +1578,20 @@ rest of that out-of-scope note still stands until its own owner call.
   isn't. Not pulled from a canvas file (no towing screen exists in any
   design bundle) - built in the confirmed-token idiom the seven marketing
   pages already established, same footing as those pages.
+- **Ops is emailed at every point it has to act** - a new request, a
+  quote accepted ("dispatch"), and a cancel after quoting - via
+  `emailDispatch`, which escapes the renter's own text (`emailParagraph`
+  doesn't). The renter is *not* notified of their own accept. The admin
+  queue's default "Open" view is `requested` + `quoted` + `accepted`: an
+  accepted job is the one that most needs someone, and an earlier version
+  hid it.
+- **Every state change is conditional on the state that was checked**
+  (`service-requests/service.ts#transition` updates `WHERE id AND status`),
+  so a renter's accept and an admin's decline landing together can't both
+  succeed - the loser gets 409 `service_request_changed`.
+- `contact_phone` is normalised to E.164 (`lib/identifier.ts#normalizePhone`,
+  422 `invalid_phone`), and `POST /services/towing` is rate-limited to 5 an
+  hour per renter, since each one emails the dispatch inbox.
 - **Admin UI is a new `/services` queue + case screen**
   (`apps/admin/src/pages/services/`), modeled on `Renters.tsx`/`RenterFile.tsx`'s
   simpler list-and-file idiom rather than the vehicle-review queue's
@@ -1588,7 +1602,19 @@ rest of that out-of-scope note still stands until its own owner call.
 as Services).** Three units: `day` (unchanged default, small cars), `hour`
 (mainly heavy machinery/equipment), `trip` (mainly trucks/transport) - "mainly",
 not "only": nothing hard-locks a unit to a vehicle category. Migration
-`20260923110000`.
+`20260923110000`; `20260923120000` backfills `bookings.rate_quantity` for
+day bookings made before it (they had all defaulted to 1).
+
+- **`hour` is switched off, deliberately.** The customer booking flow only
+  collects dates, and `hire-dates.ts#hireInstants` turns a range into
+  09:00-to-close across every day - so an hourly listing would bill the
+  nights in between and the renter could never pick "3 hours".
+  `updatePriceAvailability` refuses `hiring_unit: "hour"` (422
+  `hiring_unit_unavailable`) and the merchant modal only offers day/trip
+  (`SELECTABLE_UNITS`). The column, `hourly_rate_amount` and the pricing
+  branch in `unitPricingBasis` stay (tested against a directly-inserted
+  hourly vehicle), so switching it on is: build a real time-of-day picker,
+  then drop the 422. Don't lift the 422 without the picker.
 
 - **`vehicles.hiring_unit` picks which rate prices a booking.**
   `daily_rate_amount` keeps its exact existing meaning and is still always
@@ -1598,10 +1624,9 @@ not "only": nothing hard-locks a unit to a vehicle category. Migration
   (`VehicleDetail.tsx`'s `PriceModal`) - not exposed at onboarding creation,
   same footing as the logbook fields becoming editable after creation
   rather than threading a new field through the wizard.
-- **The unit can't be saved without its rate.** `updatePriceAvailability`
-  422s `hourly_rate_required`/`trip_rate_required` rather than letting a
-  listing go live priced at KES 0 - the same "flag, don't fabricate" rule
-  as everything else in this codebase.
+- **A trip listing can't be saved without its trip rate.**
+  `updatePriceAvailability` 422s `trip_rate_required` rather than letting a
+  listing go live priced at KES 0.
 - **`computeBookingPricing(rateAmountCents, quantity)` needed no signature
   change** - it already just multiplied a rate by a quantity; only the
   *meaning* of that quantity is new. `customer-bookings/service.ts#unitPricingBasis`
@@ -1617,18 +1642,14 @@ not "only": nothing hard-locks a unit to a vehicle category. Migration
   hours" instead of always "days"; `BookingSummary.days` is unchanged and
   still always the calendar-day span, even for an hour/trip booking where
   it isn't the pricing basis.
-- **The customer catalog/booking pages are date-range pickers, not
-  date+time or flat-fee pickers.** Building three real per-unit pickers
-  was out of scope for this pass - `Browse`/`CarDetail`/`Booking.tsx` show
-  the correct rate and unit label (`KES X / hour`, `KES X / trip`) via
-  `apps/customer/src/lib/hiring-units.ts#unitRate`, but for a non-`day`
-  listing they skip the day-multiplied estimate entirely rather than
-  fabricate an hour count from a date-only picker - "Priced per hour - the
-  exact total is worked out once you send the request" instead. The
-  server still computes the real total correctly from the actual
-  pickup/dropoff instants; only the pre-submit *estimate* is honestly
-  incomplete. A real time-of-day/flat-fee picker per unit is future work,
-  flagged here rather than silently claimed done.
+- **Pre-submit totals are shown where they're honest**
+  (`apps/customer/src/lib/hiring-units.ts#quoteTotal`): day = rate × inclusive
+  days, trip = the flat trip rate whatever the dates. The unit label
+  (`KES X / trip`) follows the listing everywhere - catalog card, car page,
+  SEO/JSON-LD price, the merchant fleet list, dashboard and price card. The
+  minimum-hire gate and the "MIN. HIRE" spec row only apply to day listings.
+  `Home.tsx`'s featured cars still read "/ day" - left alone because that
+  file carried unrelated uncommitted work at the time.
 - **The public catalog's sort/filter-by-price stays `daily_rate_amount`-based**,
   even for hour/trip listings - an approximate ordering/filter signal
   across units, not a claim about what a booking on that listing actually
