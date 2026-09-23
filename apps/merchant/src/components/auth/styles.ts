@@ -173,7 +173,7 @@ export const S = {
     borderRadius: "var(--r)",
   },
   infoDot: { width: 8, height: 8, borderRadius: 999, background: "#0F23A8", flex: "none" },
-  infoText: { flex: 1, minWidth: 140, font: "600 13px/1.45 'Instrument Sans',sans-serif", color: "#0F23A8" },
+  infoText: { flex: 1, minWidth: "min(100%,140px)", font: "600 13px/1.45 'Instrument Sans',sans-serif", color: "#0F23A8" },
 
   errorBanner: {
     display: "flex",

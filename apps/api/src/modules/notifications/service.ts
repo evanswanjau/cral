@@ -220,18 +220,6 @@ export async function markAllMyNotificationsRead(userId: string) {
 // Preferences
 // ---------------------------------------------------------------------
 
-function serializeQuietHours(merchant: {
-  quiet_hours_enabled: boolean;
-  quiet_from: string | null;
-  quiet_until: string | null;
-}) {
-  return {
-    enabled: Boolean(merchant.quiet_hours_enabled),
-    from: merchant.quiet_from ?? "22:00",
-    until: merchant.quiet_until ?? "06:30",
-  };
-}
-
 export async function getNotificationPreferences(userId: string) {
   const merchant = await getOrCreateMerchant(userId);
   const rows = await db<NotificationPreferenceRow>("notification_preferences").where({ merchant_id: merchant.id });
@@ -251,7 +239,6 @@ export async function getNotificationPreferences(userId: string) {
         locked: meta.locked,
       };
     }),
-    quiet_hours: serializeQuietHours(merchant),
   };
 }
 
@@ -304,20 +291,13 @@ export async function updateNotificationPreferences(
         .merge(["sms", "email", "updated_at"]);
     }
 
-    await trx("merchants").where({ id: merchant.id }).update({
-      quiet_hours_enabled: input.quiet_hours.enabled,
-      quiet_from: input.quiet_hours.from,
-      quiet_until: input.quiet_hours.until,
-      updated_at: new Date(),
-    });
-
     await writeAuditEntry(trx, {
       actorId: userId,
       actorType: "user",
       action: "notification_preferences.updated",
       entityType: "merchant",
       entityId: merchant.id,
-      after: { categories: input.categories, quiet_hours: input.quiet_hours },
+      after: { categories: input.categories },
       requestId: ctx.requestId,
       ip: ctx.ip,
     });

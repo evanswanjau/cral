@@ -140,7 +140,7 @@ const FAQ: Array<{ q: string; a: string }> = [
   },
   {
     q: "What if the vehicle comes back damaged?",
-    a: "Take condition photos at pickup. If something's wrong on return, you have 14 days to report it from the booking, and CRAL reviews every report.",
+    a: "Walk round the vehicle with the hirer at pickup and take your own photos. If something's wrong on return, email support@cral.co.ke and CRAL follows it up.",
   },
 ];
 

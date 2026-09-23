@@ -1668,6 +1668,27 @@ brand panel with photos + Phosphor icons (no emojis), and moved the
 support line to `+254 735 656 066` (`apps/merchant/src/lib/support.ts` -
 use `whatsappLink()`, don't hand-write `wa.me` URLs).
 
+**Merchant portal trim (owner's call, 2026-09-23).** Supersedes the
+matching parts of the Bookings / Notifications / Payouts notes above.
+- **Handover asks for nothing.** No odometer, fuel or condition photos in
+  the merchant modal - just handover tips. The API still accepts those
+  fields; the UI no longer sends them.
+- **Pickup code is 4 digits** (`PICKUP_CODE_DIGITS`; sign-in/2FA codes stay
+  6). The hirer gets only the email carrying the code - the extra "your
+  code was emailed" notification is gone, on both legs.
+- **"Report an issue" is gone from the merchant UI**; issues go to
+  `support@cral.co.ke` (`SUPPORT_EMAIL` in `apps/merchant/src/lib/support.ts`).
+  The reports API is untouched.
+- **"Message the reviewer" only after `action` or `rejected`** - UI and API
+  (409 `nothing_to_discuss`).
+- **A vehicle can't be submitted without an insurance expiry date**
+  (422 `insurance_expiry_required`).
+- **Quiet hours are removed** (migration `20260923130000`) and **the
+  bookings/payouts/notifications dev-seed endpoints and `reset:demo` are
+  deleted.**
+- **Mobile layout**: grids and columns shrink via `min(100%, …)`; the nav
+  strip and table rows use `m-*` classes in `apps/merchant/src/responsive.css`.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

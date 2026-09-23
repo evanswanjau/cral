@@ -12,7 +12,7 @@ import type { CSSProperties } from "react";
 // row - see `table`/`tableHead`/`row` below for why this lives outside P
 // (it's a grid-template string, not a CSSProperties object).
 export const TABLE_GRID_COLS =
-  "minmax(96px,1fr) minmax(180px,2.4fr) minmax(120px,1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
+  "minmax(96px,1fr) minmax(min(100%,180px),2.4fr) minmax(min(100%,120px),1.4fr) minmax(64px,.8fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px";
 
 /**
  * Payout column templates, shared by each table's header and its rows so the
@@ -41,7 +41,7 @@ export const P = {
     color: "#1A1F2B",
     display: "flex",
     flexDirection: "column",
-    minWidth: 360,
+    minWidth: "min(100%,360px)",
   },
 
   // --- top bar ----------------------------------------------------------
@@ -69,7 +69,7 @@ export const P = {
   bodyInner: { maxWidth: 1320, margin: "0 auto", display: "flex", gap: "clamp(18px,2.6vw,30px)", alignItems: "flex-start", flexWrap: "wrap" },
 
   // --- side nav -------------------------------------------------------
-  nav: { flex: "0 0 214px", minWidth: 214, display: "grid", gap: 3, position: "sticky", top: 20 },
+  nav: { flex: "0 0 214px", minWidth: "min(100%,214px)", display: "grid", gap: 3, position: "sticky", top: 20 },
   navItem: {
     display: "flex",
     alignItems: "center",
@@ -89,7 +89,7 @@ export const P = {
   navLabel: { flex: 1 },
   navTag: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em" },
 
-  main: { flex: 1, minWidth: 300 },
+  main: { flex: 1, minWidth: "min(100%,300px)" },
 
   // --- list heading -----------------------------------------------------
   listHead: { display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 20 },
@@ -180,8 +180,8 @@ export const P = {
 
   // --- detail: two-column body --------------------------------------------
   detailBody: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
-  detailMain: { flex: 1.55, minWidth: 320, display: "grid", gap: 16 },
-  detailSide: { flex: 1, minWidth: 280, display: "grid", gap: 16 },
+  detailMain: { flex: 1.55, minWidth: "min(100%,320px)", display: "grid", gap: 16 },
+  detailSide: { flex: 1, minWidth: "min(100%,280px)", display: "grid", gap: 16 },
 
   // --- photos ---------------------------------------------------------
   // A shared explicit row height (not aspect-ratio on the main tile alone)
@@ -222,7 +222,7 @@ export const P = {
   cardHeadTag: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em" },
   ownerStrip: { display: "flex", alignItems: "center", gap: 11, padding: "12px 18px", background: "#F4FBF7", borderBottom: "1px solid #F1F3F6", flexWrap: "wrap" },
   ownerStripDot: { width: 18, height: 18, borderRadius: 999, background: "#DDF3E9", color: "#076945", font: "600 10px/18px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
-  ownerStripText: { flex: "1 1 0%", minWidth: 220, font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
+  ownerStripText: { flex: "1 1 0%", minWidth: "min(100%,220px)", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
   docRow: { display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderBottom: "1px solid #F8F9FB", flexWrap: "wrap" },
   docRowDot: { width: 8, height: 8, borderRadius: 999, flex: "none" },
   docRowTitle: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" },
@@ -233,7 +233,7 @@ export const P = {
   cardFoot: { padding: "12px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
 
   // --- vehicle details grid ---------------------------------------------
-  specGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "16px 18px" },
+  specGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,140px),1fr))", gap: "16px 18px" },
   specKey: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0", marginBottom: 6 },
   specVal: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" },
 
@@ -293,7 +293,7 @@ export const P = {
   fieldLabel: { display: "block", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", marginBottom: 7 },
   fieldInput: { width: "100%", height: 44, padding: "0 13px", border: "1.5px solid #CDD2DA", borderRadius: "var(--r)", font: "500 15px/1 'IBM Plex Mono',monospace", color: "#0B0F1A", background: "#FFFFFF" },
   fieldInputText: { width: "100%", height: 44, padding: "0 13px", border: "1.5px solid #CDD2DA", borderRadius: "var(--r)", font: "400 15px/1 'Instrument Sans',sans-serif", color: "#0B0F1A", background: "#FFFFFF" },
-  fieldGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 16 },
+  fieldGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,170px),1fr))", gap: 16 },
   toggleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, padding: "14px 16px", background: "#F8F9FB", border: "1px solid #E4E7EC", borderRadius: "var(--r)", flexWrap: "wrap" },
   toggleRowTitle: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" },
   toggleRowSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#5A6373" },
@@ -327,7 +327,7 @@ export const P = {
 
   deleteWarn: { display: "flex", alignItems: "center", gap: 13, padding: "14px 16px", background: "#FDE7EA", border: "1px solid #F7BDC5", borderRadius: "var(--r)", flexWrap: "wrap" },
   deleteWarnPlate: { display: "inline-block", padding: "5px 10px", border: "1.5px solid #A50E22", borderRadius: "var(--r-sm)", font: "600 14px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".05em", color: "#A50E22", flex: "none" },
-  deleteWarnTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#A50E22", flex: "1 1 0%", minWidth: 160 },
+  deleteWarnTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#A50E22", flex: "1 1 0%", minWidth: "min(100%,160px)" },
   deleteBody: { font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#333B4A" },
 
   // --- toast --------------------------------------------------------
@@ -349,7 +349,7 @@ export const P = {
   // Literal reads off "Cruz Merchant Bookings & Payouts.dc.html". Prefixed
   // `po` because `payoutCard`/`payoutRow`/... above are already taken by the
   // Vehicles detail screen's payout-destination side card.
-  poTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(212px,1fr))", gap: 12, marginBottom: 16 },
+  poTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 12, marginBottom: 16 },
   poTile: { borderRadius: "var(--r-lg)", padding: 18 },
   poTileHead: { display: "flex", alignItems: "center", gap: 9, marginBottom: 13 },
   poTileDot: { width: 8, height: 8, borderRadius: 999, flex: "none" },
@@ -396,7 +396,7 @@ export const P = {
   // card relies on (a note card counts as its own surface).
   poFootnote: { display: "flex", alignItems: "center", gap: 14, padding: "15px 18px", background: "#EDEFFC", border: "1px solid #B6C0F4", borderRadius: "var(--r-lg)", flexWrap: "wrap" },
   poFootnoteRule: { display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)", flex: "none" },
-  poFootnoteText: { flex: 1, minWidth: 220, font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#333B4A", textWrap: "pretty" },
+  poFootnoteText: { flex: 1, minWidth: "min(100%,220px)", font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#333B4A", textWrap: "pretty" },
 
   // --- Notifications ----------------------------------------------------
   // Literal reads off "Cruz Merchant Notifications.dc.html" and the Alerts
@@ -414,9 +414,9 @@ export const P = {
   ntFilterCount: { font: "500 11px/1 'IBM Plex Mono',monospace" },
 
   ntGroupLabel: { padding: "11px 18px", background: "#FAFBFC", borderBottom: "1px solid #F1F3F6", font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0" },
-  ntRow: { display: "flex", alignItems: "flex-start", gap: 14, padding: "15px 18px", borderBottom: "1px solid #F8F9FB", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
+  ntRow: { display: "flex", alignItems: "flex-start", flexWrap: "wrap", gap: 14, padding: "15px 18px", borderBottom: "1px solid #F8F9FB", cursor: "pointer", transition: "background 110ms cubic-bezier(.2,.8,.25,1)" },
   ntIcon: { width: 34, height: 34, borderRadius: 999, font: "600 11px/32px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
-  ntRowMain: { flex: 1, minWidth: 180 },
+  ntRowMain: { flex: 1, minWidth: "min(100%,180px)" },
   ntRowTitleLine: { display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" },
   ntRowTitle: { font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
   ntUnreadDot: { width: 7, height: 7, borderRadius: 999, background: "#0F23A8", flex: "none" },
@@ -436,7 +436,7 @@ export const P = {
 
   // --- Settings: Notifications matrix ----------------------------------
   ntSettingsWrap: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
-  ntMatrix: { flex: 1.6, minWidth: 320, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
+  ntMatrix: { flex: 1.6, minWidth: "min(100%,320px)", background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
   ntCardHead: { padding: "16px 18px", borderBottom: "1px solid #F1F3F6" },
   ntCardTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
   ntCardSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
@@ -449,13 +449,6 @@ export const P = {
   ntToggleKnob: { width: 18, height: 18, margin: "0 2px", borderRadius: 999, boxShadow: "0 1px 3px rgba(11,15,26,.28)", display: "block" },
   ntMatrixFoot: { padding: "13px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
 
-  ntQuietCard: { flex: 1, minWidth: 280, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
-  ntQuietBody: { padding: 18, display: "grid", gap: 16 },
-  ntQuietToggleRow: { display: "flex", alignItems: "center", gap: 14 },
-  ntQuietToggleLabel: { flex: 1, font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
-  ntQuietTimeGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 },
-  ntQuietTimeLabel: { display: "block", font: "600 12px/1.3 'Instrument Sans',sans-serif", color: "#333B4A", marginBottom: 7 },
-  ntQuietTimeInput: { width: "100%", height: 44, padding: "0 11px", background: "#FFFFFF", border: "1px solid #CDD2DA", borderRadius: "var(--r)", font: "500 14px/1 'IBM Plex Mono',monospace", color: "#1A1F2B" },
 
   ntSaveBar: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 12, marginTop: 18, flexWrap: "wrap" },
 
@@ -495,8 +488,8 @@ export const P = {
   },
 
   setBodyWrap: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
-  setBodyMain: { flex: 1.6, minWidth: 320, display: "grid", gap: 16 },
-  setBodySide: { flex: 1, minWidth: 280, display: "grid", gap: 16 },
+  setBodyMain: { flex: 1.6, minWidth: "min(100%,320px)", display: "grid", gap: 16 },
+  setBodySide: { flex: 1, minWidth: "min(100%,280px)", display: "grid", gap: 16 },
 
   setCard: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
   setCardHead: { padding: "16px 18px", borderBottom: "1px solid #F1F3F6" },
@@ -514,11 +507,11 @@ export const P = {
   setCardHeadTag: { font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#9AA2B0" },
   setCardFoot: { padding: "13px 18px", background: "#FAFBFC", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
 
-  setFieldGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 16 },
+  setFieldGrid: { padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,220px),1fr))", gap: 16 },
   // Same grid without the card padding - for use inside setFieldStack.
-  setFieldGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(216px,1fr))", gap: 16 },
+  setFieldGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,216px),1fr))", gap: 16 },
   // Equal-width radio-card pairs (payout method, long-booking rhythm).
-  setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 10 },
+  setOptionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,230px),1fr))", gap: 10 },
   setFieldStack: { padding: 18, display: "grid", gap: 16 },
   setField: { display: "block" },
   // Fixed label-row height so a field with a chip (e.g. "✓ VERIFIED") and a
@@ -641,7 +634,7 @@ export const P = {
 
   // Security → "Signing in" card
   setSignRow: { display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" },
-  setSignMain: { flex: 1, minWidth: 200 },
+  setSignMain: { flex: 1, minWidth: "min(100%,200px)" },
   setSignTitle: { font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" },
   setSignSub: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2 },
   setSignDivider: { height: 1, background: "#F1F3F6" },
@@ -743,7 +736,7 @@ export const P = {
   dashNavCardBody: { font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", textWrap: "pretty" },
 
   // --- stat tiles -------------------------------------------------------
-  dashTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 12, marginBottom: 16 },
+  dashTileGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 12, marginBottom: 16 },
   dashTile: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", padding: "16px 17px" },
   dashTileKicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 11 },
   dashTileValue: {
@@ -762,8 +755,8 @@ export const P = {
 
   // --- two-column body --------------------------------------------------
   dashCols: { display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" },
-  dashColMain: { flex: 1.55, minWidth: 320, display: "grid", gap: 16 },
-  dashColSide: { flex: 1, minWidth: 290, display: "grid", gap: 16 },
+  dashColMain: { flex: 1.55, minWidth: "min(100%,320px)", display: "grid", gap: 16 },
+  dashColSide: { flex: 1, minWidth: "min(100%,290px)", display: "grid", gap: 16 },
   dashCard: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
   dashCardHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", flexWrap: "wrap" },
   dashCardTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#0B0F1A" },
@@ -793,7 +786,7 @@ export const P = {
     cursor: "pointer",
     background: "transparent",
   },
-  dashRowMain: { flex: 1, minWidth: 150 },
+  dashRowMain: { flex: 1, minWidth: "min(100%,150px)" },
   dashRowTitle: { font: "600 14px/1.25 'Instrument Sans',sans-serif", color: "#0B0F1A", textDecoration: "underline", textDecorationColor: "#CDD2DA", textUnderlineOffset: 3 },
   dashRowMeta: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2 },
   dashPill: { display: "inline-flex", alignItems: "center", gap: 7, padding: "5px 11px", borderRadius: 999, font: "600 12px/1.3 'Instrument Sans',sans-serif", flex: "none" },
@@ -804,7 +797,7 @@ export const P = {
   dashChevron: { font: "400 16px/1 'Instrument Sans',sans-serif", color: "#CDD2DA", flex: "none" },
 
   // --- fleet row -------------------------------------------------------
-  dashFleetMain: { flex: 1, minWidth: 160 },
+  dashFleetMain: { flex: 1, minWidth: "min(100%,160px)" },
   dashFleetTitleLine: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
   dashFleetTitle: { font: "600 14px/1.25 Archivo,sans-serif", color: "#0B0F1A" },
   dashFleetBadge: { display: "inline-flex", alignItems: "center", gap: 5, padding: "2px 9px", background: "#DDF3E9", border: "1px solid #A8DEC7", borderRadius: 999, font: "600 10px/1.5 'IBM Plex Mono',monospace", letterSpacing: ".05em", color: "#076945" },

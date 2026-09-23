@@ -82,7 +82,7 @@ async function submittedVehicle(): Promise<{ token: string; vehicleId: string; m
     await request(app)
       .post(`/merchant/vehicles/${vehicleId}/documents`)
       .set(bearer(accessToken))
-      .field("kind", kind)
+      .field(kind === "comprehensive_insurance" ? { kind, expires_at: "2030-01-01" } : { kind })
       .attach("file", testPdf(kind), { filename: `${kind}.pdf`, contentType: "application/pdf" });
   }
   for (let i = 0; i < 3; i++) {

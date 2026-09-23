@@ -6,9 +6,8 @@ import { db } from "../../../db/client.js";
 import { createVerifiedTestUser } from "../../../test/helpers.js";
 import { generateId } from "../../../lib/ids.js";
 import { getOrCreateMerchant } from "../../merchant/service.js";
-import { notify, categoryBypassesQuietHours, categoryLocksSms } from "../../../lib/notifications.js";
+import { notify, categoryLocksSms } from "../../../lib/notifications.js";
 import {
-  quietHoursDelayMs,
   deliverNotification,
   enqueueNotificationDelivery,
   notificationDeliveryQueue,
@@ -151,7 +150,7 @@ describe("merchant notifications — feed", () => {
 });
 
 describe("merchant notifications — preferences", () => {
-  it("round-trips the matrix and quiet hours", async () => {
+  it("round-trips the matrix", async () => {
     const m = await newMerchant();
 
     const before = await request(app).get("/merchant/notification-preferences").set(auth(m.accessToken));
@@ -170,10 +169,9 @@ describe("merchant notifications — preferences", () => {
           sms: c.category === "return" ? true : c.category === "payout" || c.category === "review",
           email: true,
         })),
-        quiet_hours: { enabled: true, from: "21:30", until: "07:00" },
       });
     expect(put.status).toBe(200);
-    expect(put.body.quiet_hours).toMatchObject({ enabled: true, from: "21:30", until: "07:00" });
+    expect(put.body).not.toHaveProperty("quiet_hours");
     expect(put.body.categories.find((c: { category: string }) => c.category === "return")).toMatchObject({
       sms: true,
       email: true,
@@ -181,7 +179,6 @@ describe("merchant notifications — preferences", () => {
 
     const after = await request(app).get("/merchant/notification-preferences").set(auth(m.accessToken));
     expect(after.body.categories.find((c: { category: string }) => c.category === "return").sms).toBe(true);
-    expect(after.body.quiet_hours.from).toBe("21:30");
   });
 
   it("rejects clearing a locked SMS channel", async () => {
@@ -191,39 +188,20 @@ describe("merchant notifications — preferences", () => {
       .set(auth(m.accessToken))
       .send({
         categories: [{ category: "payout", sms: false, email: true }],
-        quiet_hours: { enabled: false, from: null, until: null },
       });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("channel_locked");
   });
 });
 
-describe("merchant notifications — quiet hours", () => {
-  it("delays a held alert inside the window and not outside it", () => {
-    // Window 22:00–06:30 Nairobi. 02:00 Nairobi is 23:00 UTC the day before.
-    const inside = new Date("2026-09-01T23:00:00.000Z");
-    const outside = new Date("2026-09-01T09:00:00.000Z"); // 12:00 Nairobi
-    const quiet = { enabled: true, from: "22:00", until: "06:30" };
-
-    expect(quietHoursDelayMs(quiet, inside)).toBeGreaterThan(0);
-    expect(quietHoursDelayMs(quiet, outside)).toBe(0);
-    expect(quietHoursDelayMs({ ...quiet, enabled: false }, inside)).toBe(0);
-  });
-
-  it("payout and review bypass quiet hours; booking does not", () => {
-    expect(categoryBypassesQuietHours("payout")).toBe(true);
-    expect(categoryBypassesQuietHours("review")).toBe(true);
-    expect(categoryBypassesQuietHours("booking")).toBe(false);
+describe("merchant notifications — delivery enqueue", () => {
+  it("payout always texts; booking does not", () => {
     expect(categoryLocksSms("payout")).toBe(true);
     expect(categoryLocksSms("booking")).toBe(false);
   });
 
-  it("enqueue holds a booking alert but lets a payout through immediately", async () => {
+  it("enqueues every alert immediately, with no delay", async () => {
     const m = await newMerchant();
-    await db("merchants")
-      .where({ id: m.merchantId })
-      .update({ quiet_hours_enabled: true, quiet_from: "00:00", quiet_until: "23:59" });
-
     const bookingId = await seed(m.merchantId, "booking");
     const payoutId = await seed(m.merchantId, "payout");
 
@@ -232,10 +210,8 @@ describe("merchant notifications — quiet hours", () => {
     await enqueueNotificationDelivery(m.merchantId, [bookingId, payoutId]);
 
     const jobs = addBulk.mock.calls[0]?.[0] as Array<{ data: { notificationId: string }; opts: { delay?: number } }>;
-    const bookingJob = jobs.find((j) => j.data.notificationId === bookingId);
-    const payoutJob = jobs.find((j) => j.data.notificationId === payoutId);
-    expect(bookingJob?.opts.delay).toBeGreaterThan(0);
-    expect(payoutJob?.opts.delay ?? 0).toBe(0);
+    expect(jobs).toHaveLength(2);
+    for (const job of jobs) expect(job.opts.delay ?? 0).toBe(0);
 
     addBulk.mockRestore();
   });

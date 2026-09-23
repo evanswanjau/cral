@@ -4,7 +4,6 @@ import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import type { RequestContext } from "../merchant/service.js";
 import * as notificationsService from "./service.js";
-import { seedDevNotifications } from "./dev-seed.js";
 import { ListNotificationsQuerySchema, UpdateNotificationPreferencesSchema } from "./schemas.js";
 
 export const notificationsRouter = Router();
@@ -104,19 +103,3 @@ notificationsRouter.post(
     res.status(200).json(result);
   }),
 );
-
-// ---------------------------------------------------------------------
-// Dev-only fixture seeding — reproduces the design's ten feed fixtures.
-// There is no customer portal or ops console generating most of these
-// events for real yet, same footing as the bookings and payouts seeders.
-// ---------------------------------------------------------------------
-
-if (process.env.NODE_ENV !== "production") {
-  notificationsRouter.post(
-    "/merchant/notifications/dev-seed",
-    authenticate(),
-    asyncHandler(async (req, res) => {
-      res.status(201).json(await seedDevNotifications(req.auth!.sub));
-    }),
-  );
-}

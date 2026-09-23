@@ -32,8 +32,7 @@ const CATEGORY_KEYS = [
 ] as const satisfies readonly NotificationCategory[];
 
 /**
- * The Settings matrix payload: a channel row per category, plus the
- * quiet-hours block. A locked channel that arrives switched off is rejected
+ * The Settings matrix payload: a channel row per category. A locked channel that arrives switched off is rejected
  * (422 `channel_locked`) rather than silently coerced — the design shows
  * the toggle as visibly locked, so an attempt to clear it is a client bug
  * worth surfacing.
@@ -48,16 +47,5 @@ export const UpdateNotificationPreferencesSchema = z.object({
       }),
     )
     .min(1),
-  quiet_hours: z.object({
-    enabled: z.boolean(),
-    from: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Give the time as HH:MM.")
-      .nullable(),
-    until: z
-      .string()
-      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Give the time as HH:MM.")
-      .nullable(),
-  }),
 });
 export type UpdateNotificationPreferencesInput = z.infer<typeof UpdateNotificationPreferencesSchema>;

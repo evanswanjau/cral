@@ -334,7 +334,7 @@ function SessionsCard(): JSX.Element {
         <>
           <div style={P.setListRow}>
             <span style={{ ...P.setSessionDot, background: "#0B8A5B" }} />
-            <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ flex: 1, minWidth: "min(100%,160px)" }}>
               <div style={P.setListName}>{current.device}</div>
               <div style={P.setListMeta}>
                 {uaLabel(current.user_agent)} · {seenLabel(current.last_seen_at)}

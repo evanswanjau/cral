@@ -229,10 +229,6 @@ export function rateHirer(bookingId: string, input: RateHirerInput) {
   return apiPost<BookingDetail>(`/merchant/bookings/${bookingId}/rating`, input);
 }
 
-export function seedDevBookings() {
-  return apiPost<{ seeded: number }>(`/merchant/bookings/dev-seed`);
-}
-
 // --- TanStack Query hooks -----------------------------------------------
 
 export function useBookingList(filter: BookingFilter) {
@@ -324,9 +320,4 @@ export function useHirerHistory(bookingId: string | undefined) {
 export function useRateHirer(id: string) {
   const invalidate = useInvalidateBookings();
   return useMutation({ mutationFn: (input: RateHirerInput) => rateHirer(id, input), onSuccess: () => invalidate(id) });
-}
-
-export function useSeedDevBookings() {
-  const invalidate = useInvalidateBookings();
-  return useMutation({ mutationFn: () => seedDevBookings(), onSuccess: () => invalidate() });
 }

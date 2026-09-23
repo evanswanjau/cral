@@ -8,11 +8,10 @@ import {
   useUpdateNotificationPreferences,
   type NotificationCategory,
   type NotificationPreferenceRow,
-  type QuietHours,
 } from "../../lib/notifications-api.js";
 
 /**
- * Settings → Notifications. The category × channel matrix and quiet hours - 
+ * Settings → Notifications. The category × channel matrix -
  * shipped as "Notifications" per the 2026-09-02 naming call (the design
  * file names the tab "Alerts"). Formerly the standalone
  * `pages/NotificationSettings.tsx` route; folded in here unchanged except
@@ -28,13 +27,12 @@ const CHANNELS: Array<[ChannelKey, string]> = [
 
 interface Draft {
   categories: Record<NotificationCategory, { sms: boolean; email: boolean }>;
-  quiet: QuietHours;
 }
 
-function toDraft(rows: NotificationPreferenceRow[], quiet: QuietHours): Draft {
+function toDraft(rows: NotificationPreferenceRow[]): Draft {
   const categories = {} as Draft["categories"];
   for (const row of rows) categories[row.category] = { sms: row.sms, email: row.email };
-  return { categories, quiet };
+  return { categories };
 }
 
 function Toggle({
@@ -74,12 +72,12 @@ export function NotificationsTab(): JSX.Element {
   const [draft, setDraft] = useState<Draft | null>(null);
 
   useEffect(() => {
-    if (data) setDraft(toDraft(data.categories, data.quiet_hours));
+    if (data) setDraft(toDraft(data.categories));
   }, [data]);
 
   const dirty = useMemo(() => {
     if (!data || !draft) return false;
-    const base = toDraft(data.categories, data.quiet_hours);
+    const base = toDraft(data.categories);
     return JSON.stringify(base) !== JSON.stringify(draft);
   }, [data, draft]);
 
@@ -105,12 +103,8 @@ export function NotificationsTab(): JSX.Element {
     );
   }
 
-  function setQuiet(patch: Partial<QuietHours>): void {
-    setDraft((d) => (d ? { ...d, quiet: { ...d.quiet, ...patch } } : d));
-  }
-
   function reset(): void {
-    if (data) setDraft(toDraft(data.categories, data.quiet_hours));
+    if (data) setDraft(toDraft(data.categories));
   }
 
   async function onSave(): Promise<void> {
@@ -122,11 +116,6 @@ export function NotificationsTab(): JSX.Element {
           sms: draft.categories[row.category].sms,
           email: draft.categories[row.category].email,
         })),
-        quiet_hours: {
-          enabled: draft.quiet.enabled,
-          from: draft.quiet.from,
-          until: draft.quiet.until,
-        },
       });
       toast("Notification settings saved.", "#0B8A5B");
     } catch (error) {
@@ -175,46 +164,8 @@ export function NotificationsTab(): JSX.Element {
               })}
             </div>
           ))}
-
-          <div style={P.ntMatrixFoot}>Quiet hours are not applied to payout or reviewer messages.</div>
         </div>
 
-        <div style={P.ntQuietCard}>
-          <div style={P.ntCardHead}>
-            <div style={P.ntCardTitle}>Quiet hours</div>
-            <div style={P.ntCardSub}>Booking alerts hold until morning. Everything else still comes through.</div>
-          </div>
-          <div style={P.ntQuietBody}>
-            <div style={P.ntQuietToggleRow}>
-              <span style={P.ntQuietToggleLabel}>Hold overnight alerts</span>
-              <Toggle
-                on={draft.quiet.enabled}
-                locked={false}
-                onToggle={() => setQuiet({ enabled: !draft.quiet.enabled })}
-              />
-            </div>
-            <div style={P.ntQuietTimeGrid}>
-              <label style={{ display: "block" }}>
-                <span style={P.ntQuietTimeLabel}>From</span>
-                <input
-                  type="time"
-                  value={draft.quiet.from}
-                  onChange={(e) => setQuiet({ from: e.target.value })}
-                  style={P.ntQuietTimeInput}
-                />
-              </label>
-              <label style={{ display: "block" }}>
-                <span style={P.ntQuietTimeLabel}>Until</span>
-                <input
-                  type="time"
-                  value={draft.quiet.until}
-                  onChange={(e) => setQuiet({ until: e.target.value })}
-                  style={P.ntQuietTimeInput}
-                />
-              </label>
-            </div>
-          </div>
-        </div>
       </div>
 
       {dirty && <SaveBar onSave={onSave} onDiscard={reset} saving={save.isPending} />}

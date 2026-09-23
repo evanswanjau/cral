@@ -5,16 +5,15 @@
  * source — see that file's header) rather than re-guessed here: ink,
  * cruzBlue, cruzRed, the neutral ramp, and the Instrument Sans stack.
  *
- * Loads Instrument Sans from Google Fonts via a <link> in <head>, same
- * family the app uses. This is the one place in the codebase that's
+ * Loads the brand fonts (Archivo, Instrument Sans, IBM Plex Mono) from
+ * Google Fonts via a <link> in <head>, same families the app uses. This is the one place in the codebase that's
  * allowed to do that: `apps/merchant` self-hosts via `@fontsource*`
  * (see fonts.css) because a failed CDN request there silently falls back
  * to a system font and nobody notices the wrong typeface — but an email
  * can't bundle an npm package, and a client that drops the <link> just
  * falls back to `SANS` below, which is the correct behaviour for mail,
  * not a bug to work around. Gmail and Outlook strip <link> entirely and
- * render the fallback; Apple Mail and most others load Instrument Sans.
- *
+ * render the fallback; Apple Mail and most others load the brand fonts.
 
  * Table-based layout, inline styles only, no CSS classes — the only way to
  * get consistent rendering across Outlook/Gmail/Apple Mail. Max width
@@ -38,9 +37,13 @@ const NEUTRAL_600 = "#5A6373";
 
 const SANS =
   "'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-const MONO = "'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
+const DISPLAY = "Archivo,'Instrument Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const MONO = "'IBM Plex Mono','SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace";
+// The brand's three faces, each in its one job: Archivo (headlines, wide cut),
+// Instrument Sans (body), IBM Plex Mono (codes and identifiers).
 const GOOGLE_FONTS_HREF =
-  "https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600;700&display=swap";
+  "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,600..700&family=IBM+Plex+Mono:wght@500;600&family=Instrument+Sans:wght@400;500;600;700&display=swap";
+const DISPLAY_WIDTH = "font-variation-settings:'wdth' 110;font-stretch:110%;";
 
 export interface EmailLayoutOptions {
   /** Shown by the client's inbox preview, hidden in the rendered body. */
@@ -76,7 +79,7 @@ export function emailLayout({ preheader, bodyHtml }: EmailLayoutOptions): string
               <td style="background:${INK};padding:22px 32px;">
                 <table role="presentation" cellpadding="0" cellspacing="0">
                   <tr>
-                    <td style="font:700 17px/1 ${SANS};color:#FFFFFF;letter-spacing:-0.01em;">CRAL</td>
+                    <td style="font:700 17px/1 ${DISPLAY};${DISPLAY_WIDTH}color:#FFFFFF;letter-spacing:-0.01em;">CRAL</td>
                     <td style="padding-left:12px;">
                       <div style="width:22px;height:3px;background:${CRUZ_RED};transform:skewX(-14deg);"></div>
                     </td>
@@ -109,7 +112,7 @@ export function emailLayout({ preheader, bodyHtml }: EmailLayoutOptions): string
 }
 
 export function emailHeading(text: string): string {
-  return `<h1 style="margin:0 0 16px;font:600 22px/1.3 ${SANS};color:${INK};letter-spacing:-0.01em;">${escapeHtml(text)}</h1>`;
+  return `<h1 style="margin:0 0 16px;font:700 22px/1.25 ${DISPLAY};${DISPLAY_WIDTH}color:${INK};letter-spacing:-0.01em;">${escapeHtml(text)}</h1>`;
 }
 
 export function emailParagraph(text: string): string {
@@ -120,7 +123,7 @@ export function emailMuted(text: string): string {
   return `<p style="margin:0 0 16px;font:400 13px/1.6 ${SANS};color:${NEUTRAL_600};">${text}</p>`;
 }
 
-/** The large, spaced-out six-digit code display used by every OTP email. */
+/** The large, spaced-out code display used by every OTP email. */
 export function emailCode(code: string): string {
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
     <tr>

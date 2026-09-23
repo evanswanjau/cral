@@ -1,0 +1,32 @@
+/*
+ * Phone layout for the merchant portal. Screens are styled inline, so the
+ * handful of layouts that can't reflow on their own (the side nav and the
+ * table rows) carry an `m-*` class and are overridden here - hence
+ * !important. Grids and columns elsewhere shrink via min(100%, …) instead.
+ */
+@media (max-width: 760px) {
+  .m-nav {
+    flex: 1 1 100% !important;
+    min-width: 0 !important;
+    display: flex !important;
+    gap: 4px !important;
+    overflow-x: auto;
+    position: static !important;
+    margin: 0 -16px;
+    padding: 0 16px 2px;
+    scrollbar-width: none;
+  }
+  .m-nav::-webkit-scrollbar { display: none; }
+  .m-nav > a { flex: none !important; width: auto !important; height: 38px !important; white-space: nowrap; }
+  .m-nav-footer { display: none; }
+
+  .m-thead { display: none !important; }
+  .m-trow {
+    display: flex !important;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px !important;
+  }
+  .m-trow > * { min-width: 0; max-width: 100%; }
+  .m-trow > *:nth-child(2) { flex: 1 1 100%; order: -1; }
+}

@@ -6,7 +6,6 @@ import { smsAdapter, emailAdapter } from "../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../lib/email-templates.js";
 import {
   NOTIFICATION_CATEGORIES,
-  categoryBypassesQuietHours,
   categoryLocksSms,
 } from "../lib/notifications.js";
 import type { NotificationRow, NotificationPreferenceRow } from "../modules/notifications/db-types.js";
@@ -17,13 +16,8 @@ import type { NotificationRow, NotificationPreferenceRow } from "../modules/noti
  * jobs/merchant-reminders.ts — jobs/queue.ts's own comment already named
  * "notifications" as the next queue.
  *
- * Two rules the design fixes:
- *  - `payout` and `review` always send by SMS, whatever the preference says
- *    (`categoryLocksSms`), and ignore quiet hours entirely
- *    (`categoryBypassesQuietHours`).
- *  - Quiet hours *delay* a held alert to when the window closes — they
- *    never drop it. The delay is applied here at enqueue time via BullMQ's
- *    `delay`, so the job simply isn't runnable until morning.
+ * `payout` and `review` always send by SMS, whatever the preference says
+ * (`categoryLocksSms`).
  *
  * SMS also requires `users.phone_verified` — texting an unverified number
  * is the exact failure mode onboarding phone verification exists to stop.
@@ -33,48 +27,6 @@ const QUEUE_NAME = "notification-delivery";
 const JOB_NAME = "deliver-notification";
 
 export const notificationDeliveryQueue = new Queue(QUEUE_NAME, { connection: redis });
-
-const NAIROBI_OFFSET_MIN = 3 * 60;
-
-/** Minutes past local (Nairobi) midnight for an instant. */
-function nairobiMinutes(at: Date): number {
-  return (Math.floor(at.getTime() / 60_000) + NAIROBI_OFFSET_MIN) % 1440;
-}
-
-/** "HH:MM" -> minutes past midnight, or null if unparseable. */
-function parseHhMm(value: string | null): number | null {
-  if (!value) return null;
-  const m = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!m) return null;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return null;
-  return h * 60 + min;
-}
-
-/**
- * How long to hold a booking alert so it lands after the quiet window
- * closes. 0 when quiet hours are off, unset, or `now` is already outside
- * the window. The window may wrap midnight (22:00 -> 06:30).
- */
-export function quietHoursDelayMs(
-  quiet: { enabled: boolean; from: string | null; until: string | null },
-  now: Date,
-): number {
-  if (!quiet.enabled) return 0;
-  const from = parseHhMm(quiet.from);
-  const until = parseHhMm(quiet.until);
-  if (from === null || until === null || from === until) return 0;
-
-  const cur = nairobiMinutes(now);
-  const wraps = from > until;
-  const inside = wraps ? cur >= from || cur < until : cur >= from && cur < until;
-  if (!inside) return 0;
-
-  const minutesUntilClose = (until - cur + 1440) % 1440;
-  // A minute of slack so the job fires just after the boundary, not on it.
-  return (minutesUntilClose + 1) * 60_000;
-}
 
 interface DeliverJobData {
   notificationId: string;
@@ -93,39 +45,18 @@ export async function enqueueNotificationDelivery(
   if (notificationIds.length === 0) return;
 
   try {
-    const merchant = await db("merchants")
-      .where({ id: merchantId })
-      .first("quiet_hours_enabled", "quiet_from", "quiet_until");
-    const rows = await db<NotificationRow>("notifications")
-      .whereIn("id", notificationIds)
-      .select("id", "category");
-
-    const now = new Date();
-    const heldDelay = quietHoursDelayMs(
-      {
-        enabled: Boolean(merchant?.quiet_hours_enabled),
-        from: (merchant?.quiet_from as string | null) ?? null,
-        until: (merchant?.quiet_until as string | null) ?? null,
-      },
-      now,
-    );
-
     await notificationDeliveryQueue.addBulk(
-      rows.map((row) => {
-        const delay = categoryBypassesQuietHours(row.category) ? 0 : heldDelay;
-        return {
-          name: JOB_NAME,
-          data: { notificationId: row.id } satisfies DeliverJobData,
-          opts: {
-            jobId: `deliver-${row.id}`,
-            attempts: 3,
-            backoff: { type: "exponential", delay: 30_000 },
-            removeOnComplete: 500,
-            removeOnFail: 200,
-            ...(delay > 0 ? { delay } : {}),
-          },
-        };
-      }),
+      notificationIds.map((id) => ({
+        name: JOB_NAME,
+        data: { notificationId: id } satisfies DeliverJobData,
+        opts: {
+          jobId: `deliver-${id}`,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 30_000 },
+          removeOnComplete: 500,
+          removeOnFail: 200,
+        },
+      })),
     );
   } catch (error) {
     console.error("notification delivery enqueue failed", { merchantId, notificationIds, error });
@@ -134,9 +65,7 @@ export async function enqueueNotificationDelivery(
 
 /**
  * The renter-side counterpart of `enqueueNotificationDelivery`. Same
- * post-commit rule, same swallowed-Redis-hiccup reasoning - but no quiet
- * hours to resolve, because a renter has no Settings screen and every
- * renter notification this product writes is transactional. See
+ * post-commit rule, same swallowed-Redis-hiccup reasoning. See
  * `RENTER_CHANNELS`.
  */
 export async function enqueueRenterNotificationDelivery(
@@ -183,10 +112,7 @@ async function resolvePreference(
  * A renter's channels. Fixed rather than configurable: there is no renter
  * Settings screen, and every renter-facing notification this product
  * writes today is transactional (your request was accepted, declined, a
- * pickup code is on its way). Quiet hours are deliberately not applied —
- * an owner accepting at 21:00 is exactly when the renter needs to know,
- * and the same "these two always text" reasoning already applies to the
- * merchant side's payout/review categories.
+ * pickup code is on its way).
  *
  * The `phone_verified` gate below still applies, which is why a renter's
  * phone is verified at the booking-request step.
@@ -198,7 +124,7 @@ export async function deliverNotification({ notificationId }: DeliverJobData): P
   const notification = await db<NotificationRow>("notifications").where({ id: notificationId }).first();
   if (!notification) return;
   // Two audiences reach this queue now. A merchant row resolves its
-  // channels from that merchant's own Alerts matrix and quiet hours; a
+  // channels from that merchant's own Alerts matrix; a
   // renter row (Migration B, `user_id`) has no Settings screen to
   // configure, so it carries the fixed policy below (owner's call,
   // 2026-09-19 — a renter must be *texted* when an owner accepts, because

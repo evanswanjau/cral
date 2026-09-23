@@ -7,7 +7,6 @@ import { assertDeclaredTypeMatchesBytes, createUpload } from "../../lib/uploads.
 import { ApiError } from "@cral/types";
 import type { RequestContext } from "../merchant/service.js";
 import * as bookingsService from "./service.js";
-import { seedDevBookings } from "./dev-seed.js";
 import {
   CancelBookingSchema,
   CreateBookingReportSchema,
@@ -215,20 +214,3 @@ bookingsRouter.post(
     res.status(201).json(result);
   }),
 );
-
-// ---------------------------------------------------------------------
-// Dev-only fixture seeding — there is no customer portal yet to create
-// real requests, so this is how the merchant portal's Bookings screen
-// gets something to show. Never available in production.
-// ---------------------------------------------------------------------
-
-if (process.env.NODE_ENV !== "production") {
-  bookingsRouter.post(
-    "/merchant/bookings/dev-seed",
-    authenticate(),
-    asyncHandler(async (req, res) => {
-      const result = await seedDevBookings(req.auth!.sub);
-      res.status(201).json(result);
-    }),
-  );
-}

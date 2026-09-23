@@ -561,28 +561,6 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
-  # ---------------------------------------------------------------------
-  # Dev-only fixture seeding — never mounted when NODE_ENV=production
-  # (see routes.ts's guard). There is no customer portal yet to create
-  # real requests, so this is how the Bookings screen gets anything to
-  # show in development. Documented here so the contract doesn't drift
-  # from what actually exists, even though it's not a "real" endpoint.
-  # ---------------------------------------------------------------------
-  /merchant/bookings/dev-seed:
-    post:
-      tags: [bookings]
-      summary: "Dev/test only: seed a fixture set of bookings for this merchant"
-      operationId: seedDevBookings
-      responses:
-        "201":
-          description: Seeded
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  seeded: { type: integer }
-
 components:
   parameters:
     IdempotencyKey:

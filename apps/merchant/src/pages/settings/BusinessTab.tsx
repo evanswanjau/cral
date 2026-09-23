@@ -169,7 +169,7 @@ export function BusinessTab(): JSX.Element {
       {pending && (
         <div style={{ ...P.banner, background: "#FFF3DB", borderColor: "#F5D9A3", marginBottom: 16 }}>
           <span style={{ ...P.bannerDot, background: "#C77400" }} />
-          <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ flex: 1, minWidth: "min(100%,220px)" }}>
             <div style={{ ...P.bannerTitle, color: "#8A5200" }}>A change is waiting for review</div>
             <div style={{ ...P.bannerBody, color: "#8A5200" }}>
               {Object.keys(pending.changes)
@@ -191,7 +191,7 @@ export function BusinessTab(): JSX.Element {
 
       {locked && !pending && !editing && (
         <div style={{ ...P.setInlineNote, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <span style={{ flex: 1, minWidth: 200 }}>
+          <span style={{ flex: 1, minWidth: "min(100%,200px)" }}>
             These details are locked after submission. A change needs a reviewer&rsquo;s approval and
             re-check.
           </span>
@@ -411,7 +411,7 @@ function DocRow({ doc, canEdit }: { doc: ProfileDocument; canEdit: boolean }): J
 
   return (
     <div style={P.setListRow}>
-      <div style={{ flex: 1, minWidth: 140 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,140px)" }}>
         <div style={P.setListName}>{doc.label}</div>
         <div style={P.setListMeta}>
           {doc.uploaded_at

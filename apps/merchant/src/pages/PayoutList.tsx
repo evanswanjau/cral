@@ -6,7 +6,6 @@ import { useToast } from "../components/portal/Toast.js";
 import {
   downloadStatement,
   usePayoutList,
-  useSeedDevPayouts,
   type PayoutRunSummary,
   type PayoutTile,
 } from "../lib/payouts-api.js";
@@ -73,6 +72,7 @@ function HistoryRow({ run, onOpen }: { run: PayoutRunSummary; onOpen: () => void
       onClick={onOpen}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="m-trow"
       style={{ ...P.poHistoryRow, background: hover ? "#FAFBFC" : "transparent" }}
     >
       <span style={P.poRefChip}>{run.ref}</span>
@@ -98,7 +98,7 @@ function HistoryRow({ run, onOpen }: { run: PayoutRunSummary; onOpen: () => void
 function SkeletonRow(): JSX.Element {
   const bar = (width: number, height = 12): CSSProperties => ({ ...P.skeletonBar, width, height });
   return (
-    <div style={{ ...P.poHistoryRow, cursor: "default" }}>
+    <div className="m-trow" style={{ ...P.poHistoryRow, cursor: "default" }}>
       <div className="cral-shimmer" style={{ ...bar(80, 26), borderRadius: 4 }} />
       <div>
         <div className="cral-shimmer" style={bar(110)} />
@@ -111,7 +111,7 @@ function SkeletonRow(): JSX.Element {
   );
 }
 
-function EmptyState({ onSeed, seeding }: { onSeed: () => void; seeding: boolean }): JSX.Element {
+function EmptyState(): JSX.Element {
   return (
     <div style={P.emptyWrap}>
       <div style={P.emptyIcon}>◎</div>
@@ -119,11 +119,6 @@ function EmptyState({ onSeed, seeding }: { onSeed: () => void; seeding: boolean 
       <p style={P.emptyBody}>
         A payout run is cut once a hire is finished and cleared. Nothing has reached that point yet.
       </p>
-      {import.meta.env.DEV && (
-        <button type="button" onClick={onSeed} disabled={seeding} style={P.actionBtn}>
-          {seeding ? "Seeding…" : "Seed demo payouts"}
-        </button>
-      )}
     </div>
   );
 }
@@ -133,7 +128,6 @@ export function PayoutList(): JSX.Element {
   const navigate = useNavigate();
   const toast = useToast();
   const { data, isLoading } = usePayoutList();
-  const seed = useSeedDevPayouts();
   const [downloading, setDownloading] = useState(false);
 
   const summary = data?.summary;
@@ -182,7 +176,7 @@ export function PayoutList(): JSX.Element {
           <span style={{ ...P.cardHeadTag, color: "#838C9B" }}>{new Date().getFullYear()} · YEAR TO DATE</span>
         </div>
 
-        <div style={P.poHistoryHead}>
+        <div className="m-thead" style={P.poHistoryHead}>
           <span style={P.poHistoryHeadCell}>PAYOUT</span>
           <span style={P.poHistoryHeadCell}>RUN DATE · COVERS</span>
           <span style={{ ...P.poHistoryHeadCell, textAlign: "right" }}>NET PAID</span>
@@ -193,7 +187,7 @@ export function PayoutList(): JSX.Element {
         {isLoading && [0, 1, 2].map((i) => <SkeletonRow key={i} />)}
 
         {!isLoading && data?.data.length === 0 && (
-          <EmptyState onSeed={() => seed.mutate()} seeding={seed.isPending} />
+          <EmptyState />
         )}
 
         {!isLoading &&

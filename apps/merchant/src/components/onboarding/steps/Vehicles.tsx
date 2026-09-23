@@ -96,7 +96,7 @@ export function Vehicles({
         {draft.vehicles.map((v) => (
           <div key={v.id} style={O.fleetRow}>
             <PlateBadge>{v.registration || "-"}</PlateBadge>
-            <div style={{ flex: "1 1 0%", minWidth: 160 }}>
+            <div style={{ flex: "1 1 0%", minWidth: "min(100%,160px)" }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
                 {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}

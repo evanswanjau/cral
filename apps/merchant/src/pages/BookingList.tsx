@@ -4,7 +4,7 @@ import { P } from "../components/portal/styles.js";
 import { BOOKING_FILTER_ORDER, BOOKING_STATUS, bookingFilterLabel, money } from "../components/portal/status.js";
 import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { useToast } from "../components/portal/Toast.js";
-import { useBookingList, useSeedDevBookings, type BookingFilter, type BookingSummary } from "../lib/bookings-api.js";
+import { useBookingList, type BookingFilter, type BookingSummary } from "../lib/bookings-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
 function isSameDay(a: Date, b: Date): boolean {
@@ -45,7 +45,7 @@ function FilterPill({
 
 function TableHead(): JSX.Element {
   return (
-    <div style={{ ...P.tableHead, gridTemplateColumns: "minmax(96px,1fr) minmax(200px,2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }}>
+    <div className="m-thead" style={{ ...P.tableHead, gridTemplateColumns: "minmax(96px,1fr) minmax(min(100%,200px),2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }}>
       <span style={P.tableHeadPlate}>VEHICLE</span>
       <span style={P.tableHeadTitle}>HIRER · MODEL · DATES</span>
       <span style={{ ...P.tableHeadRate, textAlign: "right" }}>YOU KEEP</span>
@@ -58,7 +58,7 @@ function TableHead(): JSX.Element {
 function SkeletonRow(): JSX.Element {
   const bar = (width: number, height = 12): CSSProperties => ({ ...P.skeletonBar, width, height });
   return (
-    <div style={{ ...P.skeletonRow, gridTemplateColumns: "minmax(96px,1fr) minmax(200px,2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }}>
+    <div className="m-trow" style={{ ...P.skeletonRow, gridTemplateColumns: "minmax(96px,1fr) minmax(min(100%,200px),2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }}>
       <div className="cral-shimmer" style={{ ...bar(74, 26), borderRadius: 4 }} />
       <div style={{ minWidth: 0, display: "grid", gap: 6 }}>
         <div className="cral-shimmer" style={bar(160, 14)} />
@@ -86,7 +86,7 @@ function TableSkeleton(): JSX.Element {
   );
 }
 
-function EmptyState({ filter, onSeed, seeding }: { filter: BookingFilter; onSeed: () => void; seeding: boolean }): JSX.Element {
+function EmptyState({ filter }: { filter: BookingFilter }): JSX.Element {
   const isAll = filter === "all";
   return (
     <div style={P.emptyWrap}>
@@ -102,11 +102,6 @@ function EmptyState({ filter, onSeed, seeding }: { filter: BookingFilter; onSeed
           ? "Requests show up here once a hirer books one of your vehicles."
           : "Bookings show up here once they match this filter."}
       </p>
-      {isAll && import.meta.env.DEV && (
-        <button type="button" style={P.addButton} onClick={onSeed} disabled={seeding}>
-          {seeding ? "Seeding…" : "Seed sample bookings (dev only)"}
-        </button>
-      )}
     </div>
   );
 }
@@ -121,7 +116,7 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
     : `${formatDate(b.pickup_at)} → ${formatDate(b.dropoff_at)}`;
 
   return (
-    <div style={{ ...P.row, gridTemplateColumns: "minmax(96px,1fr) minmax(200px,2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+    <div className="m-trow" style={{ ...P.row, gridTemplateColumns: "minmax(96px,1fr) minmax(min(100%,200px),2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
       <span style={P.plateBadge}>{b.vehicle_registration}</span>
       <div style={P.rowTitleWrap}>
         <div style={P.rowTitleLine}>
@@ -154,7 +149,6 @@ export function BookingList(): JSX.Element {
   const { data, isPending } = useBookingList(filter);
   const { data: requestsData } = useBookingList("requests");
   const { data: onHireData } = useBookingList("on_hire");
-  const seed = useSeedDevBookings();
 
   const pendingRequests = requestsData?.data ?? [];
   const firstRequest = pendingRequests[0];
@@ -207,7 +201,7 @@ export function BookingList(): JSX.Element {
       {pendingRequests.length > 0 && firstRequest && (
         <div style={{ ...P.banner, background: "#FFF3DB", border: "1px solid #F5D9A3" }}>
           <span style={{ ...P.bannerDot, background: "#C77400" }} />
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: "min(100%,200px)" }}>
             <div style={{ ...P.bannerTitle, color: "#8A5200" }}>
               {pendingRequests.length} {pendingRequests.length === 1 ? "request is" : "requests are"} waiting for your answer
             </div>
@@ -237,7 +231,7 @@ export function BookingList(): JSX.Element {
       ) : data.data.length === 0 ? (
         <div style={P.table}>
           <TableHead />
-          <EmptyState filter={filter} onSeed={() => seed.mutate()} seeding={seed.isPending} />
+          <EmptyState filter={filter} />
         </div>
       ) : (
         <div style={P.table}>

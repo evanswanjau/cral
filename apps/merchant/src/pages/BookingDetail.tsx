@@ -7,28 +7,25 @@ import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { Modal } from "../components/portal/Modal.js";
 import { useToast } from "../components/portal/Toast.js";
 import { ApiClientError } from "../lib/api.js";
+import { SUPPORT_EMAIL } from "../lib/support.js";
 import {
   useBookingDetail,
   useCancelBooking,
   useCompleteHandover,
   useConfirmBooking,
   useConfirmHandover,
-  useCreateBookingReport,
   useCreateHandover,
   useDeclineBooking,
   useHirerHistory,
   useLogHandoverCondition,
   useRateHirer,
-  useUploadHandoverPhoto,
   useVerifyHandoverOtp,
   type BookingDetail as BookingDetailData,
-  type BookingReportCategory,
-  type BookingReportKind,
   type DeclineBookingInput,
   type Handover,
 } from "../lib/bookings-api.js";
 
-type ModalKind = "accept" | "decline" | "cancel" | "handover" | "report" | "rate" | "hirer-history" | null;
+type ModalKind = "accept" | "decline" | "cancel" | "handover" | "rate" | "hirer-history" | null;
 
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase();
@@ -280,20 +277,30 @@ function CancelModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
 // this phase (no customer app); the OTP step is real.
 // ---------------------------------------------------------------------
 
+const PICKUP_TIPS = [
+  "Check the hirer's driving licence matches the name on the booking.",
+  "Walk round the vehicle together and point out any existing marks or damage.",
+  "Agree the fuel level and mileage out loud before the keys change hands.",
+  "Show them the spare tyre, jack and warning triangle, and where the documents are kept.",
+  "Take your own photos on your phone - they're your record if anything comes up later.",
+];
+
+const RETURN_TIPS = [
+  "Walk round the vehicle and compare it with how it left.",
+  "Check the fuel level and mileage.",
+  "Make sure the keys, spare tyre, jack and documents are all back.",
+  "Take your own photos before the hirer leaves.",
+];
+
 function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pickup" | "return"; onClose: () => void }): JSX.Element {
   const flash = useToast();
   const [handover, setHandover] = useState<Handover | null>(null);
   const [code, setCode] = useState("");
-  const [odometer, setOdometer] = useState("");
-  const [fuel, setFuel] = useState<"empty" | "quarter" | "half" | "three_quarter" | "full" | "">("");
-  const [photoIds, setPhotoIds] = useState<string[]>([]);
-  const [skippedPhotos, setSkippedPhotos] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const createHandover = useCreateHandover(b.id);
   const verifyOtp = useVerifyHandoverOtp();
   const logCondition = useLogHandoverCondition();
-  const uploadPhoto = useUploadHandoverPhoto();
   const confirmHandover = useConfirmHandover();
   const completeHandover = useCompleteHandover(b.id);
 
@@ -311,7 +318,6 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
   // step and opens straight at the condition check.
   const needsCode = handover ? handover.required.includes("otp") : kind === "pickup";
   const showCodeStep = !!handover && needsCode && !verified;
-  const canSkipPhotos = kind === "pickup"; // a return with no pickup photos already can't file a damage claim regardless
 
   function handleVerify() {
     if (!handover || !code.trim()) return;
@@ -329,14 +335,7 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
     if (!handover) return;
     setError(null);
     logCondition.mutate(
-      {
-        handoverId: handover.id,
-        input: {
-          ...(odometer ? { odometer_km: Number(odometer) } : {}),
-          ...(fuel ? { fuel_level: fuel } : {}),
-          ...(photoIds.length ? { photo_document_ids: photoIds } : {}),
-        },
-      },
+      { handoverId: handover.id, input: {} },
       {
         onSuccess: () => {
           confirmHandover.mutate(handover.id, {
@@ -393,70 +392,25 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
                 <label style={P.fieldLabel}>Code from the hirer</label>
                 <input
                   value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-                  placeholder="000000"
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="0000"
                   style={{ ...P.fieldInput, letterSpacing: ".3em", textAlign: "center", fontSize: 20 }}
-                  maxLength={6}
                 />
               </div>
               <div style={P.helperText}>There is no chat on CRAL - if the hirer can't find their code, call CRAL support.</div>
             </div>
           ) : (
-            <div style={{ display: "grid", gap: 16 }}>
-              <div style={P.fieldGrid}>
-                <div>
-                  <label style={P.fieldLabel}>Odometer (km)</label>
-                  <input value={odometer} onChange={(e) => setOdometer(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} />
-                </div>
-                <div>
-                  <label style={P.fieldLabel}>Fuel level</label>
-                  <select value={fuel} onChange={(e) => setFuel(e.target.value as typeof fuel)} style={{ ...P.fieldInputText, fontFamily: "'Instrument Sans',sans-serif" }}>
-                    <option value="">Not checked</option>
-                    <option value="empty">Empty</option>
-                    <option value="quarter">Quarter</option>
-                    <option value="half">Half</option>
-                    <option value="three_quarter">Three-quarter</option>
-                    <option value="full">Full</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label style={P.fieldLabel}>Condition photos</label>
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  multiple
-                  style={{ display: "none" }}
-                  id="handover-photo-input"
-                  onChange={(e) => {
-                    const files = Array.from(e.target.files ?? []);
-                    files.forEach((file) => {
-                      if (!handover) return;
-                      uploadPhoto.mutate(
-                        { handoverId: handover.id, file },
-                        { onSuccess: (doc) => setPhotoIds((ids) => [...ids, doc.document_id]) },
-                      );
-                    });
-                    e.target.value = "";
-                  }}
-                />
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  <label htmlFor="handover-photo-input" style={{ ...P.docRowBtn, borderColor: "#CDD2DA", color: "#0F23A8", background: "#fff", cursor: "pointer" }}>
-                    {uploadPhoto.isPending ? "Uploading…" : "Add photos"}
-                  </label>
-                  <span style={P.helperText}>{photoIds.length > 0 ? `${photoIds.length} attached` : "None yet"}</span>
-                </div>
-                {photoIds.length === 0 && !skippedPhotos && canSkipPhotos && (
-                  <div style={{ ...P.verifyNotice, marginTop: 10 }}>
-                    Skipping means a damage claim can't be filed against this booking later - there will be no before-state to check against.
-                  </div>
-                )}
-                {photoIds.length === 0 && canSkipPhotos && (
-                  <button type="button" onClick={() => setSkippedPhotos(true)} style={{ ...P.tlViewAll, marginTop: 8, padding: 0 }}>
-                    {skippedPhotos ? "Skipping without photos" : "Skip photos for now"}
-                  </button>
-                )}
+            <div style={{ display: "grid", gap: 10 }}>
+              <label style={P.fieldLabel}>{kind === "pickup" ? "Before you hand over the keys" : "Before you confirm the return"}</label>
+              <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6, font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#333B4A" }}>
+                {(kind === "pickup" ? PICKUP_TIPS : RETURN_TIPS).map((tip) => (
+                  <li key={tip}>{tip}</li>
+                ))}
+              </ul>
+              <div style={P.helperText}>
+                Something not right? Email <a href={`mailto:${SUPPORT_EMAIL}`} style={{ color: "#0F23A8" }}>{SUPPORT_EMAIL}</a>.
               </div>
             </div>
           )}
@@ -475,108 +429,6 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
         </div>
       </div>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------
-// Report an issue
-// ---------------------------------------------------------------------
-
-const REPORT_CATEGORIES: { value: BookingReportCategory; label: string }[] = [
-  { value: "damage", label: "Damage" },
-  { value: "fuel_short", label: "Fuel short" },
-  { value: "late_return", label: "Late return" },
-  { value: "missing_equipment", label: "Missing equipment" },
-  { value: "cleaning", label: "Cleaning" },
-  { value: "conduct", label: "Conduct" },
-  { value: "other", label: "Other" },
-];
-
-function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void }): JSX.Element {
-  const flash = useToast();
-  const create = useCreateBookingReport(b.id);
-  const [kind, setKind] = useState<BookingReportKind>("claim");
-  const [category, setCategory] = useState<BookingReportCategory>("damage");
-  const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
-
-  // The merchant states what the issue cost to put right. What CRAL can
-  // actually settle, and how, is decided server-side and never surfaces here.
-  const amountNum = (parseInt(amount.replace(/\D/g, ""), 10) || 0) * 100;
-  const photosBlocked = category === "damage" && !b.has_pickup_condition_photos;
-
-  return (
-    <Modal
-      title="Report an issue"
-      sub="CRAL reviews reports like this and follows up with the hirer."
-      onClose={onClose}
-      ctaLabel={create.isPending ? "Filing…" : "File report"}
-      ctaDisabled={create.isPending || !description.trim() || (kind === "claim" && !amount) || photosBlocked}
-      onConfirm={() =>
-        create.mutate(
-          {
-            kind,
-            category,
-            description: description.trim(),
-            ...(kind === "claim" ? { amount: amountNum } : {}),
-          },
-          {
-            onSuccess: () => {
-              onClose();
-              flash(kind === "claim" ? "Claim filed. CRAL is reviewing it." : "Reported. This is added to the hirer's record.");
-            },
-            onError: (err) => flash(err instanceof ApiClientError ? err.message : "Couldn't file that. Try again.", "#FF8A8A"),
-          },
-        )
-      }
-    >
-      <div style={{ display: "grid", gap: 16 }}>
-        <div style={P.toggleRow}>
-          <div>
-            <div style={P.toggleRowTitle}>Are you claiming the cost of repair or loss?</div>
-            <div style={P.toggleRowSub}>
-              {kind === "claim"
-                ? "CRAL reviews it and follows up with the hirer."
-                : "No claim - this just goes on their record."}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setKind((k) => (k === "claim" ? "conduct" : "claim"))}
-            style={{ ...P.toggleTrack, background: kind === "claim" ? "#0F23A8" : "#CDD2DA", justifyContent: kind === "claim" ? "flex-end" : "flex-start" }}
-          >
-            <span style={P.toggleThumb} />
-          </button>
-        </div>
-
-        <div>
-          <label style={P.fieldLabel}>Category</label>
-          <select value={category} onChange={(e) => setCategory(e.target.value as BookingReportCategory)} style={{ ...P.fieldInputText, fontFamily: "'Instrument Sans',sans-serif" }}>
-            {REPORT_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.label}</option>
-            ))}
-          </select>
-        </div>
-
-        {kind === "claim" && (
-          <div>
-            <label style={P.fieldLabel}>What did it cost to put right? (KES)</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} placeholder="0" />
-          </div>
-        )}
-
-        <div>
-          <label style={P.fieldLabel}>What happened</label>
-          <textarea value={description} onChange={(e) => setDescription(e.target.value)} style={P.textarea} />
-        </div>
-
-        {category === "damage" && !b.has_pickup_condition_photos && (
-          <div style={P.deleteWarn}>
-            <div style={P.deleteBody}>No pickup condition photos are on file for this booking, so a damage claim can't be filed.</div>
-          </div>
-        )}
-      </div>
-    </Modal>
   );
 }
 
@@ -709,7 +561,6 @@ export function BookingDetail(): JSX.Element {
 
   const meta = BOOKING_STATUS[b.status];
   const days = durationDays(b.pickup_at, b.dropoff_at);
-  const canReport = b.status === "active" || b.status === "completed";
   const canRate = b.status === "completed" && b.rating_open_until && new Date(b.rating_open_until).getTime() > Date.now() && !hasRated(b);
 
   return (
@@ -782,9 +633,9 @@ export function BookingDetail(): JSX.Element {
                 Mark returned
               </button>
               <button type="button" style={P.actionBtn} onClick={() => flash("Booking sheets are coming soon.", "#8C97A8")}>Booking sheet</button>
-              {canReport && (
-                <button type="button" style={P.actionBtn} onClick={() => setModal("report")}>Report an issue</button>
-              )}
+              <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Booking ${b.ref}`)}`} style={{ ...P.actionBtn, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                Contact support
+              </a>
               <button type="button" style={{ ...P.deleteBtn, marginLeft: 0 }} onClick={() => setModal("cancel")}>Cancel booking</button>
             </>
           )}
@@ -796,9 +647,9 @@ export function BookingDetail(): JSX.Element {
                 </button>
               )}
               <button type="button" style={P.actionBtn} onClick={() => flash("Receipts are coming soon.", "#8C97A8")}>Download receipt</button>
-              {canReport && (
-                <button type="button" style={P.actionBtn} onClick={() => setModal("report")}>Report an issue</button>
-              )}
+              <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Booking ${b.ref}`)}`} style={{ ...P.actionBtn, textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+                Contact support
+              </a>
             </>
           )}
           {(b.status === "cancelled" || b.status === "declined" || b.status === "expired") && (
@@ -814,7 +665,7 @@ export function BookingDetail(): JSX.Element {
               <span style={P.cardTitle}>Itinerary</span>
               <span style={{ font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" }}>{days} DAYS</span>
             </div>
-            <div style={{ ...P.specGrid, gridTemplateColumns: "1fr 1fr" }}>
+            <div style={{ ...P.specGrid, gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,200px),1fr))" }}>
               <div>
                 <div style={{ ...P.specKey, color: "#0F23A8" }}>● PICK-UP</div>
                 <div style={{ font: "700 18px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>
@@ -834,11 +685,6 @@ export function BookingDetail(): JSX.Element {
               <div style={{ padding: "0 18px 18px" }}>
                 <div style={P.specKey}>NOTE FROM THE HIRER</div>
                 <div style={{ font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#333B4A" }}>{b.note_from_hirer}</div>
-              </div>
-            )}
-            {(b.status === "active" || b.status === "completed") && !b.has_pickup_condition_photos && (
-              <div style={{ padding: "0 18px 18px" }}>
-                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up - a damage claim can't be filed on this booking.</div>
               </div>
             )}
           </div>
@@ -862,7 +708,7 @@ export function BookingDetail(): JSX.Element {
                 </div>
               </div>
             </div>
-            <div style={{ ...P.specGrid, gridTemplateColumns: "repeat(3,1fr)", paddingTop: 0 }}>
+            <div style={{ ...P.specGrid, gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,140px),1fr))", paddingTop: 0 }}>
               <div>
                 <div style={P.specKey}>DRIVING LICENCE</div>
                 <div style={{ ...P.specVal, fontSize: 13 }}>
@@ -892,11 +738,11 @@ export function BookingDetail(): JSX.Element {
             <div style={P.cardHead}>
               <span style={P.cardTitle}>Vehicle</span>
             </div>
-            <div style={{ padding: 18, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ padding: 18, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
               <span style={P.plateBadge}>{b.vehicle_registration}</span>
-              <div>
+              <div style={{ minWidth: 0, flex: "1 1 180px" }}>
                 <div style={{ font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>{b.vehicle_make} {b.vehicle_model}</div>
-                <div style={P.rowMeta}>
+                <div style={{ ...P.rowMeta, whiteSpace: "normal" }}>
                   {b.vehicle_type} · {b.vehicle_year} · {b.vehicle_chauffeured ? "With driver" : "Self-drive"}
                   {b.vehicle_pickup_address ? ` · ${b.vehicle_pickup_address}` : ""}
                 </div>
@@ -973,7 +819,6 @@ export function BookingDetail(): JSX.Element {
       {modal === "decline" && <DeclineModal b={b} onClose={() => setModal(null)} />}
       {modal === "cancel" && <CancelModal b={b} onClose={() => setModal(null)} />}
       {modal === "handover" && <HandoverModal b={b} kind={handoverKind} onClose={() => setModal(null)} />}
-      {modal === "report" && <ReportModal b={b} onClose={() => setModal(null)} />}
       {modal === "rate" && <RateModal b={b} onClose={() => setModal(null)} />}
       {modal === "hirer-history" && bookingId && <HirerHistoryModal bookingId={bookingId} onClose={() => setModal(null)} />}
     </div>

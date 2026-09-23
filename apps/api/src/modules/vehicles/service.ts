@@ -620,6 +620,16 @@ export async function submitVehicle(userId: string, vehicleId: string, ctx: Requ
       message: "Attach all three documents before submitting.",
     });
   }
+  const insurance = vehicleDocs.find((d) => d.kind === "comprehensive_insurance");
+  if (!insurance?.expires_at) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "insurance_expiry_required",
+      message: "Set the insurance expiry date before submitting.",
+      field: "expires_at",
+    });
+  }
   const photoCount = vehicleDocs.filter((d) => d.kind === "vehicle_photo").length;
   if (photoCount < MIN_SUBMISSION_PHOTOS) {
     throw new ApiError({
@@ -757,6 +767,9 @@ export async function messageReviewer(userId: string, vehicleId: string, input: 
   }
   if (vehicle.status === "pending") {
     conflict("vehicle_pending_review", "This listing is with a reviewer — there's nothing to discuss until they've had a first look.");
+  }
+  if (vehicle.status !== "action" && vehicle.status !== "rejected") {
+    conflict("nothing_to_discuss", "You can message the reviewer once they've sent this listing back or turned it down.");
   }
   const user = await db("users").where({ id: userId }).first();
 

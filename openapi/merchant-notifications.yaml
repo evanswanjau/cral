@@ -30,7 +30,7 @@ info:
     the 2026-08-24 "SMS is only ever a 2FA challenge" decision, which said
     every non-2FA message goes by email: notifications may now also text,
     subject to preference. Two categories always text regardless —
-    `payout` and `review` — and those two also bypass quiet hours. WhatsApp
+    `payout` and `review`. WhatsApp
     is on the design but omitted here: there is no Business API number, and
     a toggle that sends nothing is worse than an absent one.
 
@@ -39,8 +39,8 @@ info:
 
     Delivery note — SMS/email delivery is asynchronous (a BullMQ worker) and
     enqueued only after the transaction that wrote the notification commits.
-    A failed send never rolls back the in-app row. Quiet hours are applied
-    as a *delay* on the enqueue, never a drop.
+    A failed send never rolls back the in-app row. There are no quiet
+    hours (removed 2026-09-23) - every alert is enqueued immediately.
   license:
     name: Proprietary — Cruz Ride Auto Limited
 servers:
@@ -55,7 +55,7 @@ tags:
   - name: notifications
     description: The feed — list, filters, counts, mark-read
   - name: preferences
-    description: The category × channel matrix and quiet hours
+    description: The category × channel matrix
 
 paths:
   # ---------------------------------------------------------------------
@@ -154,7 +154,7 @@ paths:
   /merchant/notification-preferences:
     get:
       tags: [preferences]
-      summary: The category × channel matrix and quiet hours
+      summary: The category × channel matrix
       operationId: getNotificationPreferences
       responses:
         "200":
@@ -164,7 +164,7 @@ paths:
               schema: { $ref: "#/components/schemas/NotificationPreferences" }
     put:
       tags: [preferences]
-      summary: Replace the matrix and quiet hours
+      summary: Replace the matrix
       operationId: updateNotificationPreferences
       description: >
         A locked channel arriving switched off is rejected with 422
@@ -183,37 +183,10 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/NotificationPreferences" }
         "422":
-          description: A locked channel was switched off, or a bad time value
+          description: A locked channel was switched off
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
-
-  # ---------------------------------------------------------------------
-  # Dev-only fixture seeding
-  # ---------------------------------------------------------------------
-  /merchant/notifications/dev-seed:
-    post:
-      tags: [notifications]
-      summary: Seed the ten design feed fixtures (non-production only)
-      operationId: devSeedNotifications
-      description: >
-        Documented because it is a real route, but guarded by
-        `NODE_ENV !== "production"` and absent from the production router —
-        the same arrangement as `/merchant/bookings/dev-seed`. Most
-        notification sources have no real generator yet (no customer portal,
-        no ops console), so this reproduces the ten fixtures from "Cruz
-        Merchant Notifications.dc.html" against real seeded subjects so the
-        deep links go somewhere. A re-seed replaces the feed rather than
-        stacking a second ten.
-      responses:
-        "201":
-          description: Fixtures created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  seeded: { type: integer }
 
 components:
   schemas:
@@ -310,24 +283,16 @@ components:
           description: Channels that cannot be switched off for this category.
           items: { type: string, enum: [sms, email] }
 
-    QuietHours:
-      type: object
-      properties:
-        enabled: { type: boolean }
-        from: { type: string, description: "HH:MM Nairobi wall-clock", example: "22:00" }
-        until: { type: string, example: "06:30" }
-
     NotificationPreferences:
       type: object
       properties:
         categories:
           type: array
           items: { $ref: "#/components/schemas/NotificationPreferenceRow" }
-        quiet_hours: { $ref: "#/components/schemas/QuietHours" }
 
     UpdateNotificationPreferences:
       type: object
-      required: [categories, quiet_hours]
+      required: [categories]
       properties:
         categories:
           type: array
@@ -339,19 +304,6 @@ components:
               category: { $ref: "#/components/schemas/NotificationCategory" }
               sms: { type: boolean }
               email: { type: boolean }
-        quiet_hours:
-          type: object
-          required: [enabled, from, until]
-          properties:
-            enabled: { type: boolean }
-            from:
-              type: string
-              nullable: true
-              pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
-            until:
-              type: string
-              nullable: true
-              pattern: "^([01][0-9]|2[0-3]):[0-5][0-9]$"
 
   responses:
     NotFound:

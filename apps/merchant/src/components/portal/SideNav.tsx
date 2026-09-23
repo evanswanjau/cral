@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { NavLink } from "react-router-dom";
+import { useEffect, useRef, type ReactNode } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { P } from "./styles.js";
 
 /**
@@ -34,8 +34,19 @@ export function SideNav({
   /** Hangs below the links. Only the dashboard passes one (its status card). */
   footer?: ReactNode;
 }): JSX.Element {
+  const navRef = useRef<HTMLElement>(null);
+  const { pathname } = useLocation();
+  // On a phone the nav is a sideways-scrolling strip; keep the current tab in view.
+  useEffect(() => {
+    const nav = navRef.current;
+    const active = nav?.querySelector<HTMLElement>("a.active");
+    if (!nav || !active || nav.scrollWidth <= nav.clientWidth) return;
+    const offset = active.getBoundingClientRect().left - nav.getBoundingClientRect().left;
+    nav.scrollTo({ left: nav.scrollLeft + offset - (nav.clientWidth - active.offsetWidth) / 2 });
+  }, [pathname]);
+
   return (
-    <nav style={P.nav}>
+    <nav ref={navRef} className="m-nav" style={P.nav}>
       <NavLink to="/" end style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
         {({ isActive }) => (
           <>
@@ -89,7 +100,7 @@ export function SideNav({
           </>
         )}
       </NavLink>
-      {footer}
+      {footer && <div className="m-nav-footer">{footer}</div>}
     </nav>
   );
 }

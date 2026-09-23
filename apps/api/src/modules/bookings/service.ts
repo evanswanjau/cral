@@ -41,6 +41,8 @@ import type {
 const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
 const OTP_TTL_MINUTES = 10;
+// Read aloud in person, so short; the attempt cap is what keeps it safe.
+const PICKUP_CODE_DIGITS = 4;
 const OTP_MAX_ATTEMPTS = 5;
 const DEPOSIT_HOLD_HOURS = 24;
 // Filing a claim extends the hold while CRAL reviews it — the design's
@@ -657,10 +659,10 @@ export async function createHandover(userId: string, bookingId: string, input: C
   // their own vehicle back — so it opens straight at the condition step
   // with no code generated and no email sent (owner's call, 2026-09-05).
   const isReturn = input.kind === "return";
-  const code = isReturn ? null : generateOtpCode();
+  const code = isReturn ? null : generateOtpCode(PICKUP_CODE_DIGITS);
   const now = Date.now();
 
-  const { row: handover, renterNotificationId } = await db.transaction(async (trx) => {
+  const handover = await db.transaction(async (trx) => {
     const [row] = await trx<HandoverRow>("handovers")
       .insert({
         id: generateId("handover"),
@@ -695,39 +697,26 @@ export async function createHandover(userId: string, bookingId: string, input: C
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-    // The in-app record that a code went out - never the code itself, which
-    // only ever exists as a hash server-side (see createHandover's own
-    // comment on the OTP). The email below carries the real code.
-    const renterNotificationId = await notify(trx, {
-      userId: booking.hirer_id,
-      category: input.kind === "pickup" ? "booking" : "return",
-      title: input.kind === "pickup" ? `${booking.ref} · your pickup code was emailed` : `${booking.ref} · your return code was emailed`,
-      body: `Read it to the merchant at ${vehicle.registration} to start the ${input.kind === "pickup" ? "hire" : "return"}.`,
-      ref: booking.ref,
-      subjectType: "booking",
-      subjectId: booking.id,
-    });
-    return { row, renterNotificationId };
+    return row;
   });
 
-  // Post-commit, same rule as the merchant side: a failed enqueue costs a
-  // text, never the notification row itself.
-  await enqueueRenterNotificationDelivery([renterNotificationId]);
-
+  // The emailed code is the hirer's only message here - a second "your code
+  // was emailed" notification just doubled their inbox (owner's call, 2026-09-23).
+  // Only the pickup leg generates a code, so this is only ever the pickup email.
   if (code && hirer.email) {
     await emailAdapter.send({
       to: hirer.email,
-      subject: `Your ${booking.ref} ${input.kind} code`,
+      subject: `Your ${booking.ref} pickup code`,
       html: emailLayout({
-        preheader: `Your one-time code for ${vehicle.registration}`,
+        preheader: `Your pickup code for ${vehicle.registration}`,
         bodyHtml: [
-          emailHeading(input.kind === "pickup" ? "Your pickup code" : "Your return code"),
-          emailParagraph(`Read this code to the merchant at ${vehicle.registration} to start the ${input.kind === "pickup" ? "hire" : "return"}.`),
+          emailHeading("Your pickup code"),
+          emailParagraph(`Read this code to the owner at ${vehicle.registration} to start the hire.`),
           emailCode(code),
-          emailMuted("Never share this code except with CRAL merchant staff in person."),
+          emailMuted("Only share this code in person, with the owner handing you the vehicle."),
         ].join(""),
       }),
-      text: `Your ${booking.ref} ${input.kind} code: ${code}`,
+      text: `Your ${booking.ref} pickup code: ${code}`,
     });
   }
 
@@ -963,7 +952,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
       body:
         handover.kind === "pickup"
           ? "Checked over together at pick-up."
-          : "Checked over on return. You have 14 days to report an issue with this hire.",
+          : "Checked over on return. Anything wrong? Email support@cral.co.ke.",
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -987,7 +976,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
           merchantId: merchant.id,
           category: "return",
           title: `${bookingRow.ref} · vehicle returned and checked`,
-          body: "The return handover is done. You can still report an issue with this hire for 14 days.",
+          body: "The return handover is done. If anything is wrong, email support@cral.co.ke.",
           ref: bookingRow.ref,
           subjectType: "booking",
           subjectId: booking.id,
