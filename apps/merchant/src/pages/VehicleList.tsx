@@ -4,6 +4,7 @@ import { P } from "../components/portal/styles.js";
 import { FILTER_ORDER, STATUS, filterLabel, money } from "../components/portal/status.js";
 import { useVehicleList, type VehicleFilter, type VehicleSummary, listingRate } from "../lib/vehicles-api.js";
 import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 function FilterPill({
   filter,
@@ -133,6 +134,7 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
 }
 
 export function VehicleList(): JSX.Element {
+  usePageTitle("Your vehicles");
   const navigate = useNavigate();
   const [filter, setFilter] = useState<VehicleFilter>("all");
   const { data, isPending } = useVehicleList(filter);

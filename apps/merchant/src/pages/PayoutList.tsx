@@ -10,6 +10,7 @@ import {
   type PayoutRunSummary,
   type PayoutTile,
 } from "../lib/payouts-api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 /** Nairobi's calendar month, which is what the statement endpoint expects. */
 function currentMonth(): string {
@@ -128,6 +129,7 @@ function EmptyState({ onSeed, seeding }: { onSeed: () => void; seeding: boolean 
 }
 
 export function PayoutList(): JSX.Element {
+  usePageTitle("Payouts");
   const navigate = useNavigate();
   const toast = useToast();
   const { data, isLoading } = usePayoutList();

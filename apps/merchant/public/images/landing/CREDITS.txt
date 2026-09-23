@@ -1,0 +1,14 @@
+Placeholder photos from Unsplash (Unsplash License - free to use, no attribution required).
+Swap for real CRAL photography by replacing the file with the same name.
+
+hero.webp - "a white car on a road" by Mr Dibo - https://unsplash.com/photos/S5Th_yrifOY
+cat-suv.webp - "a black toyota land cruiser parked in front of a building" by Tim Vegas - https://unsplash.com/photos/r3cA8C6a-UA
+cat-van.webp - "A row of white vans parked in a lot in Mössingen, Germany" by Markus Winkler - https://unsplash.com/photos/3vlGNkDep4E
+cat-truck.webp - "white and blue truck on road during daytime" by Tiry Nelson Gono - https://unsplash.com/photos/h-kD4142VIQ
+cat-machinery.webp - "yellow Caterpillar excavator digging up dirt" by Jamar  Penny - https://unsplash.com/photos/ZgmGq_eFmUs
+step-check.webp - "a laptop computer sitting on top of a wooden desk" by 2H Media - https://unsplash.com/photos/3q4V539j_bw
+step-earn.webp - "person holding black and red round digital watch" by Kashif Afridi - https://unsplash.com/photos/gc0ohxlP9rY
+cta.webp - "a bridge with a city in the background" by Wambui - https://unsplash.com/photos/ESmWYVFII9I
+cat-sedan.webp - "white sedan parked on gray pavement during daytime" by Mr Dibo - https://unsplash.com/photos/pZL9h3rIxLI
+step-list.webp - "a woman smiles while holding a cell phone" by Hassan Kibwana - https://unsplash.com/photos/pkrVTwflG-E
+auth.webp - "a white car on a dirt road" by Mr Dibo - https://unsplash.com/photos/PrD-ocyzzZ8

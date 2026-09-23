@@ -5,6 +5,7 @@ import { Field, InfoBanner, PrimaryButton, TextInput } from "../components/auth/
 import { S } from "../components/auth/styles.js";
 import { checkPasswordReset, resetPassword } from "../lib/auth-api.js";
 import { ApiClientError } from "../lib/api.js";
+import { usePageTitle } from "../lib/use-page-title.js";
 
 type View = "checking" | "form" | "expired" | "done";
 
@@ -18,6 +19,7 @@ type View = "checking" | "form" | "expired" | "done";
  * out explicitly as a gap in the original designs.
  */
 export function ResetPassword(): JSX.Element {
+  usePageTitle("Set a new password");
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get("token");

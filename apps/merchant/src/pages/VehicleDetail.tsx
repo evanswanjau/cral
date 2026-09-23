@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { commissionOn } from "@cral/types";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { O } from "../components/onboarding/styles.js";
@@ -261,7 +262,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
 
   const isTrip = unit === "trip";
   const rateNum = parseInt((isTrip ? tripRate : rate).replace(/[^0-9]/g, ""), 10) || 0;
-  const comm = Math.round(rateNum * 0.1);
+  const comm = commissionOn(rateNum);
   const net = rateNum - comm;
   const days = Math.max(1, parseInt(minDays, 10) || 1);
   const per = isTrip ? "per trip" : "per day";
@@ -373,7 +374,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             <span style={P.breakdownVal}>{rateNum ? `KES ${money(rateNum * 100)}` : " - "}</span>
           </div>
           <div style={{ ...P.breakdownRow, ...P.breakdownRowTop }}>
-            <span style={P.breakdownKey}>CRAL commission · 10%</span>
+            <span style={P.breakdownKey}>CRAL commission</span>
             <span style={{ ...P.breakdownVal, color: "#A50E22" }}>{rateNum ? `− KES ${money(comm * 100)}` : " - "}</span>
           </div>
           <div style={P.breakdownNet}>

@@ -13,6 +13,7 @@ import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { whatsappLink } from "../lib/support.js";
 
 /**
  * Sign in - the design's `isPassword` branch only.
@@ -154,7 +155,7 @@ export function SignIn(): JSX.Element {
             </button>
           </div>
           <p style={S.helper}>
-            Still not getting it? <a href="https://wa.me/254733376061?text=2FA%20help">Contact CRAL support</a>.
+            Still not getting it? <a href={whatsappLink("Hi CRAL - I'm not getting my sign-in code")} target="_blank" rel="noreferrer">Chat with CRAL support on WhatsApp</a>.
           </p>
           <button
             type="button"
