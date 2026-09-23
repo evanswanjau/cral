@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { PaginationQuerySchema } from "@cral/types";
 import { VEHICLE_CATEGORIES } from "./categories.js";
+import { HIRING_UNITS } from "./hiring-units.js";
 
 /** Matches the design's five filter pills — see Cruz Merchant Portal.dc.html's `filters`. */
 export const VEHICLE_FILTERS = ["all", "awaiting_approval", "needs_action", "live", "draft"] as const;
@@ -53,9 +54,18 @@ export const EditVehicleDetailsSchema = z.object({
 });
 export type EditVehicleDetailsInput = z.infer<typeof EditVehicleDetailsSchema>;
 
-/** Body for the "Price & availability" modal — only what that modal edits. */
+/**
+ * Body for the "Price & availability" modal — only what that modal edits.
+ * `hiring_unit` picks which rate governs pricing; `hourly_rate`/`trip_rate`
+ * are only meaningful (and only required) for their matching unit - the
+ * service enforces that, this schema just accepts all three as optional
+ * strings the same way `daily_rate` always has.
+ */
 export const PriceAvailabilitySchema = z.object({
   daily_rate: z.string().optional(),
+  hiring_unit: z.enum(HIRING_UNITS).optional(),
+  hourly_rate: z.string().optional(),
+  trip_rate: z.string().optional(),
   rate_mode: z.enum(["list", "net"]).optional(),
   minimum_hire_days: z.number().int().min(1).max(30).optional(),
   county: z.string().optional(),

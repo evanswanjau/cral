@@ -41,6 +41,10 @@ export interface CatalogVehicleSummary {
   chauffeured: boolean;
   county: string | null;
   daily_rate: Money;
+  /** What `daily_rate`/`hourly_rate`/`trip_rate` actually prices a booking on (owner's call, 2026-09-23). */
+  hiring_unit: "day" | "hour" | "trip";
+  hourly_rate: Money | null;
+  trip_rate: Money | null;
   verified: boolean;
   primary_photo_url: string | null;
   owner: CatalogOwner;

@@ -1,4 +1,5 @@
 import { photoSrc, formatMoney, type CatalogVehicleSummary } from "../../lib/catalog-api.js";
+import { HIRING_UNIT_LABEL, unitRate } from "../../lib/hiring-units.js";
 
 /**
  * A listing card, reproduced from the design's card markup (used on the
@@ -166,10 +167,10 @@ export function VehicleCard({
               fontVariantNumeric: "tabular-nums",
             }}
           >
-            {formatMoney(car.daily_rate)}
+            {formatMoney(unitRate(car))}
             <span style={{ font: "400 11.5px/1 'Instrument Sans',sans-serif", color: "#838C9B" }}>
               {" "}
-              / day
+              / {HIRING_UNIT_LABEL[car.hiring_unit]}
             </span>
           </span>
           {/* The owner, and their score if a hirer has ever rated them.

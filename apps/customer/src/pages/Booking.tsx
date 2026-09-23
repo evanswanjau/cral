@@ -28,6 +28,7 @@ import {
   hireDays,
   hireInstants,
 } from "../lib/hire-dates.js";
+import { HIRING_UNIT_LABEL } from "../lib/hiring-units.js";
 
 /**
  * `/book/:id` - the pre-booking half of a hire, reproduced from the
@@ -302,7 +303,12 @@ export function Booking(): JSX.Element {
 
   const name = `${car.make} ${car.model} ${car.year}`;
   const days = hireDays(from, to);
-  const total = car.daily_rate.amount * days;
+  // Same honesty call as CarDetail.tsx: this page only ever collects a
+  // date range, so only a `day` listing's total can be computed here. The
+  // server works out the real total from the actual pickup/dropoff
+  // instants once the request is sent.
+  const isDayUnit = car.hiring_unit === "day";
+  const total = isDayUnit ? car.daily_rate.amount * days : 0;
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
   // rather than at the end of the flow - the car page now blocks it at
@@ -932,10 +938,19 @@ export function Booking(): JSX.Element {
                     action={editingDates ? undefined : { text: "Change", onClick: openDateEditor }}
                   />
                   <Row label="Return" value={formatHireDate(to)} />
-                  <Row label={`${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
-                  <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
-                    <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
-                  </div>
+                  {isDayUnit ? (
+                    <>
+                      <Row label={`${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                      <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
+                        <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                      </div>
+                    </>
+                  ) : (
+                    <Row
+                      label={`Priced per ${HIRING_UNIT_LABEL[car.hiring_unit]}`}
+                      value="Total shown after you send this"
+                    />
+                  )}
                 </div>
 
                 <label style={{ display: "block", marginBottom: 22 }}>
@@ -1117,10 +1132,19 @@ export function Booking(): JSX.Element {
             </div>
             <div style={{ display: "grid", gap: 9, paddingTop: 14, borderTop: "1px solid #F1F3F6" }}>
               <Row label={`${formatHireDate(from)} - ${formatHireDate(to)}`} value={`${days} day${days > 1 ? "s" : ""}`} />
-              <Row label={`${formatMoney(car.daily_rate)} × ${days}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
-              <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
-                <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
-              </div>
+              {isDayUnit ? (
+                <>
+                  <Row label={`${formatMoney(car.daily_rate)} × ${days}`} value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                  <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
+                    <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
+                  </div>
+                </>
+              ) : (
+                <Row
+                  label={`Priced per ${HIRING_UNIT_LABEL[car.hiring_unit]}`}
+                  value="Total shown after you send this"
+                />
+              )}
             </div>
             <p style={{ margin: "14px 0 0", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
               Earliest pickup is {formatHireDate(earliestPickupDay())} - cars are back with their

@@ -91,7 +91,15 @@ async function renter(opts: { withDocuments?: boolean; withPhoneVerified?: boole
 }
 
 async function listing(
-  opts: { approved?: boolean; status?: string; rate?: number; minDays?: number } = {},
+  opts: {
+    approved?: boolean;
+    status?: string;
+    rate?: number;
+    minDays?: number;
+    hiringUnit?: "day" | "hour" | "trip";
+    hourlyRate?: number;
+    tripRate?: number;
+  } = {},
 ) {
   const owner = await createVerifiedTestUser();
   userIds.push(owner.userId);
@@ -133,6 +141,11 @@ async function listing(
     minimum_hire_days: opts.minDays ?? 1,
     chauffeured: false,
     status: opts.status ?? "live",
+    hiring_unit: opts.hiringUnit ?? "day",
+    ...(opts.hourlyRate !== undefined
+      ? { hourly_rate_amount: opts.hourlyRate, hourly_rate_currency: "KES" }
+      : {}),
+    ...(opts.tripRate !== undefined ? { trip_rate_amount: opts.tripRate, trip_rate_currency: "KES" } : {}),
   });
 
   return { merchantId, vehicleId, ownerUserId: owner.userId };
@@ -216,6 +229,72 @@ describe("requesting a car", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.gross.amount).toBe(computeBookingPricing(900_000, 3).gross.amount);
+  });
+});
+
+describe("hiring cadence (day/hour/trip)", () => {
+  it("prices an hour-unit vehicle by hours, not days", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ hiringUnit: "hour", hourlyRate: 50_000 });
+
+    // 09:00 to 17:00 same day - 8 hours, well inside one calendar day.
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(201);
+    expect(res.body.rate_unit).toBe("hour");
+    expect(res.body.rate_quantity).toBe(8);
+    expect(res.body.gross.amount).toBe(computeBookingPricing(50_000, 8).gross.amount);
+
+    const stored = await db("bookings").where({ id: res.body.id }).first("rate_unit", "rate_quantity");
+    expect(stored.rate_unit).toBe("hour");
+    expect(stored.rate_quantity).toBe(8);
+  });
+
+  it("prices a trip-unit vehicle as a flat fee regardless of duration", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ hiringUnit: "trip", tripRate: 1_500_000 });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 4), vehicle_id: vehicleId }); // a 5-day span - price must ignore it
+
+    expect(res.status).toBe(201);
+    expect(res.body.rate_unit).toBe("trip");
+    expect(res.body.rate_quantity).toBe(1);
+    expect(res.body.gross.amount).toBe(1_500_000);
+  });
+
+  it("422s an hour-unit vehicle with no hourly rate set, rather than pricing it at zero", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ hiringUnit: "hour" });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("vehicle_not_bookable");
+  });
+
+  it("does not apply the day-unit minimum-hire gate to an hour/trip vehicle", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ hiringUnit: "trip", tripRate: 2_000_000, minDays: 30 });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(201);
   });
 });
 

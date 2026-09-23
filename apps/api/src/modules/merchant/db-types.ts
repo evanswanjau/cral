@@ -64,6 +64,12 @@ export interface VehicleRow {
   daily_rate_currency: string;
   /** "list" | "net" - which price view the merchant used (see 20260904090000). Display only. */
   rate_mode: string;
+  /** "day" | "hour" | "trip" - which rate below governs pricing (owner's call, 2026-09-23). */
+  hiring_unit: string;
+  hourly_rate_amount: number | null;
+  hourly_rate_currency: string | null;
+  trip_rate_amount: number | null;
+  trip_rate_currency: string | null;
   insurance_expiry: string | null;
   status: VehicleStatus;
   listing_ref: string | null;

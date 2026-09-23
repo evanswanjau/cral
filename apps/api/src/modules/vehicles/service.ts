@@ -183,6 +183,9 @@ async function serializeDetail(merchant: MerchantRow, vehicle: VehicleRow) {
     minimum_hire_days: vehicle.minimum_hire_days,
     chauffeured: vehicle.chauffeured,
     rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
+    hiring_unit: vehicle.hiring_unit,
+    hourly_rate: vehicle.hourly_rate_amount ? kes(vehicle.hourly_rate_amount) : null,
+    trip_rate: vehicle.trip_rate_amount ? kes(vehicle.trip_rate_amount) : null,
     verification_badge_expires_at: vehicle.verification_badge_expires_at
       ? vehicle.verification_badge_expires_at.toISOString()
       : null,
@@ -499,11 +502,40 @@ export async function updatePriceAvailability(
 
   const update: Record<string, unknown> = {};
   if (input.daily_rate !== undefined) update.daily_rate_amount = dailyRateCents(input.daily_rate);
+  if (input.hiring_unit !== undefined) update.hiring_unit = input.hiring_unit;
+  if (input.hourly_rate !== undefined) update.hourly_rate_amount = dailyRateCents(input.hourly_rate);
+  if (input.trip_rate !== undefined) update.trip_rate_amount = dailyRateCents(input.trip_rate);
   if (input.rate_mode !== undefined) update.rate_mode = input.rate_mode;
   if (input.minimum_hire_days !== undefined) update.minimum_hire_days = input.minimum_hire_days;
   if (input.county !== undefined) update.county = input.county;
   if (input.pickup_address !== undefined) update.pickup_address = input.pickup_address;
   if (input.chauffeured !== undefined) update.chauffeured = input.chauffeured;
+
+  // The unit picks which rate actually prices a booking - that rate must
+  // be a real positive figure before the unit can be saved, or a hirer
+  // would be quoted KES 0 for an hour/trip listing that only ever had a
+  // daily rate set.
+  const effectiveUnit = (update.hiring_unit as string | undefined) ?? vehicle.hiring_unit;
+  const effectiveHourly = (update.hourly_rate_amount as number | undefined) ?? vehicle.hourly_rate_amount;
+  const effectiveTrip = (update.trip_rate_amount as number | undefined) ?? vehicle.trip_rate_amount;
+  if (effectiveUnit === "hour" && !effectiveHourly) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "hourly_rate_required",
+      message: "Set an hourly rate before pricing this listing per hour.",
+      field: "hourly_rate",
+    });
+  }
+  if (effectiveUnit === "trip" && !effectiveTrip) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "trip_rate_required",
+      message: "Set a trip rate before pricing this listing per trip.",
+      field: "trip_rate",
+    });
+  }
 
   const rate = (update.daily_rate_amount as number | undefined) ?? vehicle.daily_rate_amount;
   const minDays = (update.minimum_hire_days as number | undefined) ?? vehicle.minimum_hire_days;
