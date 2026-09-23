@@ -60,6 +60,9 @@ interface PublicVehicleForBooking {
   county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;
+  hiring_unit: string;
+  hourly_rate_amount: number | null;
+  trip_rate_amount: number | null;
   minimum_hire_days: number;
   m_user_id: string;
   m_owner_type: string;
@@ -95,6 +98,9 @@ async function requirePublicVehicle(vehicleId: string): Promise<PublicVehicleFor
       "v.county",
       "v.pickup_address",
       "v.daily_rate_amount",
+      "v.hiring_unit",
+      "v.hourly_rate_amount",
+      "v.trip_rate_amount",
       "v.minimum_hire_days",
       "m.user_id as m_user_id",
       "m.owner_type as m_owner_type",
@@ -134,6 +140,62 @@ function ownerDisplayName(v: PublicVehicleForBooking): string {
  */
 function daysBetween(pickup: Date, dropoff: Date): number {
   return inclusiveHireDays(pickup, dropoff);
+}
+
+/** Hours between two instants, rounded up - a 45-minute job is billed as one hour, not zero. */
+function hoursBetween(pickup: Date, dropoff: Date): number {
+  return Math.max(1, Math.ceil((dropoff.getTime() - pickup.getTime()) / (60 * 60 * 1000)));
+}
+
+/**
+ * What a booking is actually priced on, picked off the vehicle's own
+ * `hiring_unit` (owner's call, 2026-09-23) - day (unchanged default),
+ * hour, or trip. `quantity` feeds straight into `computeBookingPricing`,
+ * which has always just multiplied a rate by a quantity regardless of what
+ * that quantity counts.
+ */
+function unitPricingBasis(
+  vehicle: PublicVehicleForBooking,
+  pickupAt: Date,
+  dropoffAt: Date,
+): { unit: string; quantity: number; rateAmountCents: number } {
+  if (vehicle.hiring_unit === "hour") {
+    if (!vehicle.hourly_rate_amount) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "vehicle_not_bookable",
+        message: "This listing has no hourly rate set yet.",
+      });
+    }
+    return { unit: "hour", quantity: hoursBetween(pickupAt, dropoffAt), rateAmountCents: vehicle.hourly_rate_amount };
+  }
+  if (vehicle.hiring_unit === "trip") {
+    if (!vehicle.trip_rate_amount) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "vehicle_not_bookable",
+        message: "This listing has no trip rate set yet.",
+      });
+    }
+    // A trip is a flat fee - the pickup/dropoff window still matters for
+    // scheduling and availability, just not for the price.
+    return { unit: "trip", quantity: 1, rateAmountCents: vehicle.trip_rate_amount };
+  }
+  const days = daysBetween(pickupAt, dropoffAt);
+  if (days < vehicle.minimum_hire_days) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "below_minimum_hire",
+      message: `This car is hired for a minimum of ${vehicle.minimum_hire_days} ${
+        vehicle.minimum_hire_days === 1 ? "day" : "days"
+      }.`,
+      field: "dropoff_at",
+    });
+  }
+  return { unit: "day", quantity: days, rateAmountCents: vehicle.daily_rate_amount };
 }
 
 // ---------------------------------------------------------------------
@@ -223,6 +285,8 @@ function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined) {
     pickup_at: b.pickup_at.toISOString(),
     dropoff_at: b.dropoff_at.toISOString(),
     days: daysBetween(b.pickup_at, b.dropoff_at),
+    rate_unit: b.rate_unit,
+    rate_quantity: b.rate_quantity,
     gross: kes(b.gross_amount) as Money,
     vehicle: vehicle ?? null,
     created_at: b.created_at.toISOString(),
@@ -341,18 +405,7 @@ export async function createBooking(
 
   const vehicle = await requirePublicVehicle(input.vehicle_id);
 
-  const days = daysBetween(pickupAt, dropoffAt);
-  if (days < vehicle.minimum_hire_days) {
-    throw new ApiError({
-      status: 422,
-      type: "validation_error",
-      code: "below_minimum_hire",
-      message: `This car is hired for a minimum of ${vehicle.minimum_hire_days} ${
-        vehicle.minimum_hire_days === 1 ? "day" : "days"
-      }.`,
-      field: "dropoff_at",
-    });
-  }
+  const { unit, quantity, rateAmountCents } = unitPricingBasis(vehicle, pickupAt, dropoffAt);
 
   // A reachable, proven phone before the request goes out (owner's call,
   // 2026-09-19). This is the same "verify where the reason is
@@ -415,7 +468,7 @@ export async function createBooking(
   }
 
   // Every figure is computed here, from the vehicle's own stored rate.
-  const pricing = computeBookingPricing(vehicle.daily_rate_amount, days);
+  const pricing = computeBookingPricing(rateAmountCents, quantity);
 
   const hirer = await db("users").where({ id: userId }).first("full_name", "phone");
   const merchantUser = await db("users").where({ id: vehicle.m_user_id }).first("phone");
@@ -432,6 +485,8 @@ export async function createBooking(
         status: "requested",
         pickup_at: pickupAt,
         dropoff_at: dropoffAt,
+        rate_unit: unit,
+        rate_quantity: quantity,
         // The exact pickup address is withheld until the booking is
         // confirmed; the county is what the renter has seen all along.
         pickup_location: location,

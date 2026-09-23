@@ -317,6 +317,9 @@ components:
           chauffeured,
           county,
           daily_rate,
+          hiring_unit,
+          hourly_rate,
+          trip_rate,
           verified,
           primary_photo_url,
           owner,
@@ -343,7 +346,23 @@ components:
         seats: { type: integer }
         chauffeured: { type: boolean }
         county: { type: string, nullable: true }
-        daily_rate: { $ref: "#/components/schemas/Money" }
+        daily_rate:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          description: >
+            Always present regardless of `hiring_unit` (existing field,
+            unchanged meaning). What a booking is actually priced on is
+            `hiring_unit` + the matching rate field below (owner's call,
+            2026-09-23) - a client must not show "/ day" for a listing
+            whose `hiring_unit` isn't `day`.
+        hiring_unit:
+          type: string
+          enum: [day, hour, trip]
+        hourly_rate:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+        trip_rate:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
         verified:
           type: boolean
           description: >

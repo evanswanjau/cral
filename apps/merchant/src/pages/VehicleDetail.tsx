@@ -12,6 +12,7 @@ import { ApiClientError } from "../lib/api.js";
 import { toE164 } from "../lib/device.js";
 import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
+import { HIRING_UNITS, HIRING_UNIT_LABELS, type HiringUnit } from "../lib/hiring-units.js";
 import {
   isPlaceholderRegistration,
   useDeleteVehicle,
@@ -253,11 +254,16 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   const [county, setCounty] = useState(v.county ?? "");
   const [loc, setLoc] = useState(v.pickup_address ?? "");
   const [driver, setDriver] = useState(v.chauffeured);
+  const [unit, setUnit] = useState<HiringUnit>(v.hiring_unit ?? "day");
+  const [hourlyRate, setHourlyRate] = useState(v.hourly_rate ? String(Math.round(v.hourly_rate.amount / 100)) : "");
+  const [tripRate, setTripRate] = useState(v.trip_rate ? String(Math.round(v.trip_rate.amount / 100)) : "");
 
   const rateNum = parseInt(rate.replace(/[^0-9]/g, ""), 10) || 0;
   const comm = Math.round(rateNum * 0.1);
   const net = rateNum - comm;
   const days = Math.max(1, parseInt(minDays, 10) || 1);
+  const hourlyRateNum = parseInt(hourlyRate.replace(/[^0-9]/g, ""), 10) || 0;
+  const tripRateNum = parseInt(tripRate.replace(/[^0-9]/g, ""), 10) || 0;
 
   return (
     <Modal
@@ -268,17 +274,55 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
       ctaDisabled={update.isPending}
       onConfirm={() => {
         update.mutate(
-          { daily_rate: String(rateNum), minimum_hire_days: days, county, pickup_address: loc, chauffeured: driver },
+          {
+            daily_rate: String(rateNum),
+            hiring_unit: unit,
+            ...(unit === "hour" ? { hourly_rate: String(hourlyRateNum) } : {}),
+            ...(unit === "trip" ? { trip_rate: String(tripRateNum) } : {}),
+            minimum_hire_days: days,
+            county,
+            pickup_address: loc,
+            chauffeured: driver,
+          },
           {
             onSuccess: () => {
               onClose();
-              flash(`Saved. KES ${money(rateNum * 100)} a day.`);
+              flash(`Saved. Priced ${HIRING_UNIT_LABELS[unit].toLowerCase()}.`);
             },
           },
         );
       }}
     >
       <div style={{ display: "grid", gap: 16 }}>
+        <div>
+          <label style={P.fieldLabel}>Hiring unit</label>
+          <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+            {HIRING_UNITS.map((u) => (
+              <button
+                key={u}
+                type="button"
+                onClick={() => setUnit(u)}
+                style={{
+                  flex: 1,
+                  height: 34,
+                  borderRadius: 8,
+                  border: `1.5px solid ${unit === u ? "#0F23A8" : "#E4E7EC"}`,
+                  background: unit === u ? "#EDEFFC" : "#FFFFFF",
+                  color: unit === u ? "#0F23A8" : "#5A6373",
+                  font: "600 12.5px/1 'Instrument Sans',sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                {HIRING_UNIT_LABELS[u]}
+              </button>
+            ))}
+          </div>
+          <p style={{ margin: "6px 0 0", font: "400 11.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
+            Mainly applies to small cars (day), heavy machinery (hour) and trucks/transport
+            (trip) - but any listing can use any unit.
+          </p>
+        </div>
+
         <div style={P.fieldGrid}>
           <div>
             <label style={P.fieldLabel}>Daily rate (KES)</label>
@@ -289,6 +333,19 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             <input style={P.fieldInput} value={minDays} onChange={(e) => setMinDays(e.target.value.replace(/\D/g, ""))} />
           </div>
         </div>
+
+        {unit === "hour" && (
+          <div>
+            <label style={P.fieldLabel}>Hourly rate (KES)</label>
+            <input style={P.fieldInput} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value.replace(/\D/g, ""))} />
+          </div>
+        )}
+        {unit === "trip" && (
+          <div>
+            <label style={P.fieldLabel}>Trip rate (KES, flat)</label>
+            <input style={P.fieldInput} value={tripRate} onChange={(e) => setTripRate(e.target.value.replace(/\D/g, ""))} />
+          </div>
+        )}
         <div style={P.fieldGrid}>
           <div>
             <label style={P.fieldLabel}>County</label>

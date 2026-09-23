@@ -8,6 +8,7 @@ import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
 import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { HIRING_UNIT_LABEL, unitRate } from "../lib/hiring-units.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -167,12 +168,19 @@ export function CarDetail(): JSX.Element {
   // Inclusive Nairobi days - the 19th to the 19th is one day, the 19th to
   // the 20th is two. Same function the booking page and the server use.
   const days = hireDays(from, to);
-  const total = days > 0 ? car.daily_rate.amount * days : 0;
+  // Only a `day` listing's total can be honestly computed here - this page
+  // only ever collects a date range, no time-of-day, so there's no real
+  // hour count to multiply an hourly rate by, and a trip rate is flat
+  // regardless of the dates picked. The server computes the real total
+  // from the actual instants once the request is sent (spec §2).
+  const isDayUnit = car.hiring_unit === "day";
+  const total = isDayUnit && days > 0 ? car.daily_rate.amount * days : 0;
   // The minimum is enforced *here*, where the dates are picked, not left
   // to the booking POST: a renter used to sign up, verify a phone, upload
   // two documents and only then be told the pair was never bookable.
+  // Only meaningful for a day-unit listing - hour/trip carry no minimum.
   const minHire = car.minimum_hire_days;
-  const belowMinimum = days > 0 && days < minHire;
+  const belowMinimum = isDayUnit && days > 0 && days < minHire;
   const minReturn = earliestReturnDay(from, minHire) || minDay;
 
   const requestDates = () => {
@@ -632,9 +640,11 @@ export function CarDetail(): JSX.Element {
                   fontVariantNumeric: "tabular-nums",
                 }}
               >
-                {formatMoney(car.daily_rate)}
+                {formatMoney(unitRate(car))}
               </span>
-              <span style={{ font: "400 15px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>per day</span>
+              <span style={{ font: "400 15px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                per {HIRING_UNIT_LABEL[car.hiring_unit]}
+              </span>
             </div>
 
             <div style={{ display: "flex", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
@@ -705,7 +715,7 @@ export function CarDetail(): JSX.Element {
               </label>
             </div>
 
-            {days > 0 && (
+            {isDayUnit && days > 0 && (
               <div
                 style={{
                   display: "grid",
@@ -736,6 +746,21 @@ export function CarDetail(): JSX.Element {
                     {formatMoney({ amount: total, currency: car.daily_rate.currency })}
                   </span>
                 </div>
+              </div>
+            )}
+            {!isDayUnit && days > 0 && (
+              <div
+                style={{
+                  padding: "13px 0",
+                  borderTop: "1px solid #F1F3F6",
+                  borderBottom: "1px solid #F1F3F6",
+                  marginBottom: 15,
+                  font: "400 13px/1.5 'Instrument Sans',sans-serif",
+                  color: "#5A6373",
+                }}
+              >
+                Priced per {HIRING_UNIT_LABEL[car.hiring_unit]} - the exact total is worked out from
+                your pickup and return times once you send the request.
               </div>
             )}
 

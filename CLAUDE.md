@@ -1584,11 +1584,55 @@ rest of that out-of-scope note still stands until its own owner call.
   checklist machinery - there's nothing here that needs one. Listed in
   `SideNav` for `admin_support`/`admin_reviewer` (`admin_super` always
   sees it).
-- **Multi-unit hiring (day/hour/trip) has not been built yet** - it's the
-  second half of the same feedback that produced Services, still just a
-  plan. `computeBookingPricing` remains daily-rate × days only; don't
-  assume `vehicles.hiring_unit` or a `bookings` rate-snapshot exists until
-  that PR lands.
+**Hiring cadence - day/hour/trip (owner's call, 2026-09-23, same feedback
+as Services).** Three units: `day` (unchanged default, small cars), `hour`
+(mainly heavy machinery/equipment), `trip` (mainly trucks/transport) - "mainly",
+not "only": nothing hard-locks a unit to a vehicle category. Migration
+`20260923110000`.
+
+- **`vehicles.hiring_unit` picks which rate prices a booking.**
+  `daily_rate_amount` keeps its exact existing meaning and is still always
+  set (creation still only collects it); `hourly_rate_amount`/
+  `trip_rate_amount` are new, nullable, additive columns. Merchants set the
+  unit and matching rate from the existing Price & availability modal
+  (`VehicleDetail.tsx`'s `PriceModal`) - not exposed at onboarding creation,
+  same footing as the logbook fields becoming editable after creation
+  rather than threading a new field through the wizard.
+- **The unit can't be saved without its rate.** `updatePriceAvailability`
+  422s `hourly_rate_required`/`trip_rate_required` rather than letting a
+  listing go live priced at KES 0 - the same "flag, don't fabricate" rule
+  as everything else in this codebase.
+- **`computeBookingPricing(rateAmountCents, quantity)` needed no signature
+  change** - it already just multiplied a rate by a quantity; only the
+  *meaning* of that quantity is new. `customer-bookings/service.ts#unitPricingBasis`
+  is the single place that picks the rate + quantity per unit: `day` =
+  `daysBetween` (unchanged, and the only unit with a minimum-hire gate);
+  `hour` = hours between pickup/dropoff rounded up (`hoursBetween`, min 1);
+  `trip` = a flat rate, quantity always 1 regardless of the dates picked.
+- **`bookings.rate_unit`/`rate_quantity` are a display-only snapshot.**
+  `gross`/`commission`/`merchant_net` were already computed once at
+  booking time and never recomputed, so no further snapshot was needed to
+  stop a later rate change rewriting a past booking - that guarantee
+  already existed. These two columns only exist so a booking can say "8
+  hours" instead of always "days"; `BookingSummary.days` is unchanged and
+  still always the calendar-day span, even for an hour/trip booking where
+  it isn't the pricing basis.
+- **The customer catalog/booking pages are date-range pickers, not
+  date+time or flat-fee pickers.** Building three real per-unit pickers
+  was out of scope for this pass - `Browse`/`CarDetail`/`Booking.tsx` show
+  the correct rate and unit label (`KES X / hour`, `KES X / trip`) via
+  `apps/customer/src/lib/hiring-units.ts#unitRate`, but for a non-`day`
+  listing they skip the day-multiplied estimate entirely rather than
+  fabricate an hour count from a date-only picker - "Priced per hour - the
+  exact total is worked out once you send the request" instead. The
+  server still computes the real total correctly from the actual
+  pickup/dropoff instants; only the pre-submit *estimate* is honestly
+  incomplete. A real time-of-day/flat-fee picker per unit is future work,
+  flagged here rather than silently claimed done.
+- **The public catalog's sort/filter-by-price stays `daily_rate_amount`-based**,
+  even for hour/trip listings - an approximate ordering/filter signal
+  across units, not a claim about what a booking on that listing actually
+  costs. Not reworked this pass.
 
 ## What NOT to do
 

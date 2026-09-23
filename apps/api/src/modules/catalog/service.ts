@@ -45,6 +45,9 @@ interface CatalogRow {
   county: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;
+  hiring_unit: string;
+  hourly_rate_amount: number | null;
+  trip_rate_amount: number | null;
   verification_badge: string;
   minimum_hire_days: number;
   created_at: Date;
@@ -73,6 +76,9 @@ const CATALOG_COLUMNS = [
   "v.county",
   "v.daily_rate_amount",
   "v.daily_rate_currency",
+  "v.hiring_unit",
+  "v.hourly_rate_amount",
+  "v.trip_rate_amount",
   "v.verification_badge",
   "v.minimum_hire_days",
   "v.created_at",
@@ -182,6 +188,9 @@ function serializeSummary(
     chauffeured: row.chauffeured,
     county: row.county,
     daily_rate: kes(row.daily_rate_amount) as Money,
+    hiring_unit: row.hiring_unit,
+    hourly_rate: row.hourly_rate_amount ? (kes(row.hourly_rate_amount) as Money) : null,
+    trip_rate: row.trip_rate_amount ? (kes(row.trip_rate_amount) as Money) : null,
     verified: row.verification_badge === "active",
     primary_photo_url: photoIds[0] ? photoPath(row.id, photoIds[0]) : null,
     owner: {

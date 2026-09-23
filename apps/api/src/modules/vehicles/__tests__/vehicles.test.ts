@@ -187,6 +187,43 @@ describe("vehicles — price & availability", () => {
     expect(patchRes.body.rate_mode).toBe("list");
     expect(patchRes.body.daily_rate).toEqual({ amount: 1000000, currency: "KES" });
   });
+
+  it("defaults to day and reports the vehicle unbookable at hour/trip units with no matching rate", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KHU 100H");
+    expect(created.body.hiring_unit).toBe("day");
+    expect(created.body.hourly_rate).toBeNull();
+    expect(created.body.trip_rate).toBeNull();
+
+    const missingHourly = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}`)
+      .set(auth(accessToken))
+      .send({ hiring_unit: "hour" });
+    expect(missingHourly.status).toBe(422);
+    expect(missingHourly.body.error.code).toBe("hourly_rate_required");
+
+    const missingTrip = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}`)
+      .set(auth(accessToken))
+      .send({ hiring_unit: "trip" });
+    expect(missingTrip.status).toBe(422);
+    expect(missingTrip.body.error.code).toBe("trip_rate_required");
+  });
+
+  it("switches a listing to hourly pricing", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KHU 200M");
+
+    const patchRes = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}`)
+      .set(auth(accessToken))
+      .send({ hiring_unit: "hour", hourly_rate: "500" });
+    expect(patchRes.status).toBe(200);
+    expect(patchRes.body.hiring_unit).toBe("hour");
+    expect(patchRes.body.hourly_rate).toEqual({ amount: 50000, currency: "KES" });
+    // daily_rate is untouched - it just stops being what prices the hire.
+    expect(patchRes.body.daily_rate).toEqual({ amount: 450000, currency: "KES" });
+  });
 });
 
 describe("vehicles — pause / resume", () => {

@@ -31,6 +31,8 @@ export interface VehicleSummary {
   created_at: string;
 }
 
+export type HiringUnit = "day" | "hour" | "trip";
+
 export interface VehicleDocInfo {
   document_id: string;
   original_name: string;
@@ -53,6 +55,9 @@ export interface VehicleDetail extends VehicleSummary {
   minimum_hire_days: number;
   chauffeured: boolean;
   rate_mode: "list" | "net";
+  hiring_unit: HiringUnit;
+  hourly_rate: Money | null;
+  trip_rate: Money | null;
   verification_badge_expires_at: string | null;
   reviewer_note: string | null;
   reviewer_note_meta: string | null;
@@ -116,6 +121,9 @@ export function createVehicle(input: CreateVehicleInput) {
 
 export interface PriceAvailabilityInput {
   daily_rate?: string;
+  hiring_unit?: HiringUnit;
+  hourly_rate?: string;
+  trip_rate?: string;
   rate_mode?: "list" | "net";
   minimum_hire_days?: number;
   county?: string;
