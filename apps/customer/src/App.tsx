@@ -4,6 +4,7 @@ import { Home } from "./pages/Home.js";
 import { Browse } from "./pages/Browse.js";
 import { Parts } from "./pages/Parts.js";
 import { Services } from "./pages/Services.js";
+import { Towing } from "./pages/Towing.js";
 import { CarDetail } from "./pages/CarDetail.js";
 import { Booking } from "./pages/Booking.js";
 import { Documents } from "./pages/Documents.js";
@@ -17,7 +18,6 @@ import { About } from "./pages/About.js";
 import { Help } from "./pages/Help.js";
 import { Contact } from "./pages/Contact.js";
 import { Legal } from "./pages/Legal.js";
-import { ListYourCar } from "./pages/ListYourCar.js";
 import { RequireAuth } from "./components/RequireAuth.js";
 import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
@@ -33,9 +33,10 @@ import { Sessions } from "./pages/Sessions.js";
  *
  * The seven marketing pages are real now (C9) - see each page's own
  * comment on where its copy came from (not a canvas file; none was
- * reachable this session). `/list-your-car` (C10) is real too, same
- * footing - an explainer + hand-off to the merchant app, where listing a
- * car has always actually lived.
+ * reachable this session). "List your car" is not one of these pages -
+ * every such link hands off straight to the merchant app's own landing
+ * page (`lib/merchant-app.ts#merchantLandingUrl`), where listing a car
+ * has always actually lived, rather than to an explainer page of its own.
  *
  * C8 (bookings, handover status, notifications, account) is also real now,
  * same not-pulled-from-canvas footing - `/bookings/:id` shows the handover's
@@ -62,7 +63,6 @@ const router = createBrowserRouter([
       { path: "/help", element: <Help /> },
       { path: "/contact", element: <Contact /> },
       { path: "/legal", element: <Legal /> },
-      { path: "/list-your-car", element: <ListYourCar /> },
       // Not behind RequireAuth: a signed-out visitor lands here straight
       // from "Request these dates" and signs up inline as part of sending
       // the request - see Booking.tsx.
@@ -76,6 +76,7 @@ const router = createBrowserRouter([
       {
         element: <RequireAuth />,
         children: [
+          { path: "/services/towing", element: <Towing /> },
           { path: "/documents", element: <Documents /> },
           { path: "/bookings", element: <Trips /> },
           { path: "/bookings/:id", element: <TripDetail /> },

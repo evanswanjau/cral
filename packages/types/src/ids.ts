@@ -71,6 +71,11 @@ export const ID_PREFIXES = {
   // of the payment it reverses. Needed since 2026-09-20, when payment
   // moved ahead of the owner's decision.
   refund: "rfd",
+  // A towing/recovery request under the "Services" umbrella (owner's call,
+  // 2026-09-23) — CRAL-dispatched, not a vehicle-hire booking, so its own
+  // entity rather than a `bookings` row. Internal entity, no prefix named
+  // in the spec's own identifier list.
+  serviceRequest: "svc",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

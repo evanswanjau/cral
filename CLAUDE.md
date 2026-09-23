@@ -1543,6 +1543,53 @@ writing — confirmed by trying both).
   path (the now-fallback `deploy-vercel.sh` still copies it, since a
   prebuilt deploy needs the rule to travel with the built output).
 
+**"Services" (owner's call, 2026-09-23) - a deliberate deviation from
+`road-to-transactable.md`/`pr-delivery-plan.md`, which both still list
+"Parts/Services" as out of scope.** Only the pieces below are real; the
+rest of that out-of-scope note still stands until its own owner call.
+
+- **Towing and recovery is the first offering, and it's CRAL-run dispatch,
+  not a vehicle-hire booking.** No merchant, no vehicle, no
+  `computeBookingPricing` - it's its own table (`service_requests`,
+  migration `20260923090000`, `svc_` prefix) because "charged per km or
+  subject to discussion" means there's no fixed price at request time to
+  compute. Contracts: `openapi/customer-services.yaml` +
+  `openapi/admin-services.yaml`. Modules:
+  `apps/api/src/modules/service-requests/` (renter side) and
+  `apps/api/src/modules/admin-service-requests/` (Ops side, `admin_support`
+  or `admin_reviewer`, the new `services` queue - `admin_super` bypasses
+  both, same as every other `/admin/*` module).
+- **v1 is deliberately lead-capture, not transactional** - same reasoning
+  as car-hire bookings before Daraja existed: request → owner (here, an
+  admin) responds → settled off-platform. A renter picks
+  `mechanical_breakdown` or `accident` and describes where they are; an
+  admin quotes it by hand (a figure, or leaves `amount_cents` out entirely
+  for "subject to discussion" - that's a real state, distinct from "not
+  yet quoted"); the renter accepts or cancels. Nothing here touches the
+  payment rail, and there's no automatic per-km fare calculation - this
+  product has no GPS/routing input to back a precise figure, and inventing
+  one would repeat the fabricated `id_verified`-badge mistake this codebase
+  has already reversed once.
+- **Customer UI is `/services/towing`** (`apps/customer/src/pages/Towing.tsx`),
+  linked from the existing `/services` page (the still-unbuilt
+  garage/repair vertical) via a plain banner - not folded into that page's
+  shared `VerticalPage` "opening soon" template, since towing is real
+  today and that template is deliberately built around an offering that
+  isn't. Not pulled from a canvas file (no towing screen exists in any
+  design bundle) - built in the confirmed-token idiom the seven marketing
+  pages already established, same footing as those pages.
+- **Admin UI is a new `/services` queue + case screen**
+  (`apps/admin/src/pages/services/`), modeled on `Renters.tsx`/`RenterFile.tsx`'s
+  simpler list-and-file idiom rather than the vehicle-review queue's
+  checklist machinery - there's nothing here that needs one. Listed in
+  `SideNav` for `admin_support`/`admin_reviewer` (`admin_super` always
+  sees it).
+- **Multi-unit hiring (day/hour/trip) has not been built yet** - it's the
+  second half of the same feedback that produced Services, still just a
+  plan. `computeBookingPricing` remains daily-rate × days only; don't
+  assume `vehicles.hiring_unit` or a `bookings` rate-snapshot exists until
+  that PR lands.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

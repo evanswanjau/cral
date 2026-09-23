@@ -1,0 +1,241 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Services API
+  version: "1.0.0"
+  description: >
+    Ops's side of the "Services" umbrella (owner's call, 2026-09-23) - the
+    towing/recovery queue. `admin_support` or `admin_reviewer`, assigned
+    the `services` queue (`admin_super` bypasses both checks, per every
+    other `/admin/*` module).
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+
+tags:
+  - name: admin-services
+    description: The towing/recovery request queue
+
+paths:
+  /admin/service-requests:
+    get:
+      tags: [admin-services]
+      summary: The service-request queue
+      operationId: listServiceRequestQueue
+      description: >
+        Cursor-paginated, oldest first (so the longest-waiting request
+        surfaces first, same as the vehicle review queue). Defaults to
+        `requested` + `quoted` - the open ones.
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [requested, quoted, accepted, declined, completed, cancelled, all]
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+      responses:
+        "200":
+          description: A page of the queue.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ServiceRequestQueueItem" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /admin/service-requests/{id}:
+    get:
+      tags: [admin-services]
+      summary: One service-request case
+      operationId: getServiceRequestCase
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequestCase" }
+        "404":
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/service-requests/{id}/quote:
+    post:
+      tags: [admin-services]
+      summary: Quote a service request
+      operationId: quoteServiceRequest
+      description: >
+        Sets `status` to `quoted` and emails the requester. Omit
+        `amount_cents` entirely for "subject to discussion" - that is
+        distinct from a figure of zero, the same way every other money
+        field in this codebase treats an absent value. No
+        `Idempotency-Key`: this doesn't move money, it puts a number in
+        front of a human who still has to say yes.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                distance_km: { type: number, nullable: true }
+                amount_cents:
+                  type: integer
+                  nullable: true
+                  description: Integer cents. Omit or send null for "subject to discussion".
+                note: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        "200":
+          description: Quoted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequestCase" }
+        "409":
+          description: "`service_request_wrong_state` - no longer open for a quote."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/service-requests/{id}/decline:
+    post:
+      tags: [admin-services]
+      summary: Decline a service request
+      operationId: declineServiceRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, maxLength: 1000 }
+      responses:
+        "200":
+          description: Declined.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequestCase" }
+        "409":
+          description: "`service_request_wrong_state` - already closed."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /admin/service-requests/{id}/complete:
+    post:
+      tags: [admin-services]
+      summary: Mark a service request complete
+      operationId: completeServiceRequest
+      description: Only once `accepted` - the tow/recovery job actually happened.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Completed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequestCase" }
+        "409":
+          description: "`service_request_wrong_state` - not currently accepted."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer }
+        currency: { type: string, example: KES }
+
+    ServiceRequestQueueItem:
+      type: object
+      required:
+        [
+          id,
+          reason,
+          status,
+          pickup_location,
+          destination_location,
+          requester_name,
+          requester_email,
+          distance_km,
+          quoted_amount,
+          created_at,
+        ]
+      properties:
+        id: { type: string, example: svc_01J... }
+        reason: { type: string, enum: [mechanical_breakdown, accident] }
+        status:
+          type: string
+          enum: [requested, quoted, accepted, declined, completed, cancelled]
+        pickup_location: { type: string }
+        destination_location: { type: string, nullable: true }
+        requester_name: { type: string, nullable: true }
+        requester_email: { type: string }
+        distance_km: { type: number, nullable: true }
+        quoted_amount:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+        created_at: { type: string, format: date-time }
+
+    ServiceRequestCase:
+      allOf:
+        - $ref: "#/components/schemas/ServiceRequestQueueItem"
+        - type: object
+          required: [contact_phone, description, quote_note, quoted_at, decline_reason, cancel_reason]
+          properties:
+            contact_phone: { type: string }
+            description: { type: string, nullable: true }
+            quote_note: { type: string, nullable: true }
+            quoted_at: { type: string, format: date-time, nullable: true }
+            decline_reason: { type: string, nullable: true }
+            cancel_reason: { type: string, nullable: true }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
