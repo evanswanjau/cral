@@ -5,6 +5,7 @@ import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailButton, emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import type { ServiceRequestRow, ServiceRequestStatus } from "../service-requests/db-types.js";
+import { transition } from "../service-requests/service.js";
 import type { DeclineServiceRequestInput, QueueQuery, QuoteServiceRequestInput } from "./schemas.js";
 
 export interface AdminContextInput {
@@ -12,6 +13,10 @@ export interface AdminContextInput {
   adminName: string;
   ip: string | null;
   requestId: string | null;
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
 function notFound(): never {
@@ -97,7 +102,9 @@ export async function listQueue(query: QueueQuery): Promise<PaginatedResult<Serv
   if (query.status && query.status !== "all") {
     q = q.where({ status: query.status });
   } else if (!query.status) {
-    q = q.whereIn("status", ["requested", "quoted"]);
+    // "Open" = everything Ops still has to act on: quote it, chase it, or
+    // dispatch it. An accepted job is the most urgent of the three.
+    q = q.whereIn("status", ["requested", "quoted", "accepted"]);
   }
   q = applyCursor(q, {
     sortColumn: "created_at",
@@ -108,12 +115,18 @@ export async function listQueue(query: QueueQuery): Promise<PaginatedResult<Serv
   const rows = await q.select("*");
   const page = toPaginatedResult(rows, query.limit, "created_at");
 
-  const requesters = new Map<string, Requester>();
-  for (const row of page.data) {
-    if (!requesters.has(row.user_id)) requesters.set(row.user_id, await requesterOf(row.user_id));
-  }
+  const userIds = [...new Set(page.data.map((r) => r.user_id))];
+  const users = userIds.length
+    ? await db("users").whereIn("id", userIds).select("id", "full_name", "email")
+    : [];
+  const requesters = new Map<string, Requester>(
+    users.map((u: { id: string; full_name: string | null; email: string }) => [
+      u.id,
+      { full_name: u.full_name, email: u.email },
+    ]),
+  );
 
-  return { ...page, data: page.data.map((row) => toQueueItem(row, requesters.get(row.user_id)!)) };
+  return { ...page, data: page.data.map((row) => toQueueItem(row, requesters.get(row.user_id) ?? { full_name: null, email: "" })) };
 }
 
 export async function getCase(id: string): Promise<ServiceRequestCase> {
@@ -133,9 +146,7 @@ export async function quoteRequest(
 
   const amount = input.amount_cents ?? null;
   const updated = await db.transaction(async (trx) => {
-    const [next] = await trx<ServiceRequestRow>("service_requests")
-      .where({ id })
-      .update({
+    const next = await transition(trx, row, {
         status: "quoted",
         distance_km: input.distance_km == null ? null : String(input.distance_km),
         quoted_amount: amount,
@@ -143,9 +154,7 @@ export async function quoteRequest(
         quote_note: input.note ?? null,
         quoted_by: ctx.adminId,
         quoted_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returning("*");
+      });
 
     await writeAuditEntry(trx, {
       actorId: ctx.adminId,
@@ -159,7 +168,7 @@ export async function quoteRequest(
       ip: ctx.ip,
     });
 
-    return next!;
+    return next;
   });
 
   const requester = await requesterOf(row.user_id);
@@ -176,9 +185,9 @@ export async function quoteRequest(
         bodyHtml: [
           emailHeading("Your towing request has been quoted"),
           emailParagraph(priceLine),
-          input.note ? emailParagraph(input.note) : "",
+          input.note ? emailParagraph(escapeHtml(input.note)) : "",
           emailMuted(`Request ${id}`),
-          emailButton("View request", "https://cral.co.ke/services"),
+          emailButton("View request", "https://cral.co.ke/services/towing"),
         ].join(""),
       }),
     });
@@ -200,16 +209,12 @@ export async function declineRequest(
   }
 
   const updated = await db.transaction(async (trx) => {
-    const [next] = await trx<ServiceRequestRow>("service_requests")
-      .where({ id })
-      .update({
+    const next = await transition(trx, row, {
         status: "declined",
         decline_reason: input.reason,
         decided_by: ctx.adminId,
         decided_at: new Date(),
-        updated_at: new Date(),
-      })
-      .returning("*");
+      });
 
     await writeAuditEntry(trx, {
       actorId: ctx.adminId,
@@ -223,7 +228,7 @@ export async function declineRequest(
       ip: ctx.ip,
     });
 
-    return next!;
+    return next;
   });
 
   const requester = await requesterOf(row.user_id);
@@ -235,7 +240,7 @@ export async function declineRequest(
         preheader: "An update on your towing request.",
         bodyHtml: [
           emailHeading("We can't take this one"),
-          emailParagraph(input.reason),
+          emailParagraph(escapeHtml(input.reason)),
           emailMuted(`Request ${id}`),
         ].join(""),
       }),
@@ -254,10 +259,9 @@ export async function completeRequest(id: string, ctx: AdminContextInput): Promi
   }
 
   const updated = await db.transaction(async (trx) => {
-    const [next] = await trx<ServiceRequestRow>("service_requests")
-      .where({ id })
-      .update({ status: "completed", decided_by: ctx.adminId, decided_at: new Date(), updated_at: new Date() })
-      .returning("*");
+    const next = await transition(trx, row, {
+        status: "completed", decided_by: ctx.adminId, decided_at: new Date(),
+      });
 
     await writeAuditEntry(trx, {
       actorId: ctx.adminId,
@@ -271,7 +275,7 @@ export async function completeRequest(id: string, ctx: AdminContextInput): Promi
       ip: ctx.ip,
     });
 
-    return next!;
+    return next;
   });
 
   return toCase(updated, await requesterOf(row.user_id));

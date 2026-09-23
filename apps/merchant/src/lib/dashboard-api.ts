@@ -75,6 +75,8 @@ export interface DashboardFleetVehicle {
   status: VehicleStatus;
   verification_badge: "none" | "pending" | "active";
   daily_rate: Money | null;
+  hiring_unit: "day" | "hour" | "trip";
+  trip_rate: Money | null;
   documents: { kind: "logbook" | "comprehensive_insurance" | "tracker_certificate"; state: DocReviewState }[];
 }
 

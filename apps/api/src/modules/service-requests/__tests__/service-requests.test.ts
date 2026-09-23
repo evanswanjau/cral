@@ -3,6 +3,7 @@ import request from "supertest";
 import { createApp } from "../../../app.js";
 import { db } from "../../../db/client.js";
 import { createTestAdmin, createVerifiedTestUser } from "../../../test/helpers.js";
+import { transition } from "../service.js";
 
 /**
  * Towing/recovery, the first offering under "Services" (owner's call,
@@ -62,6 +63,23 @@ describe("POST /services/towing", () => {
     const list = await request(app).get("/me/service-requests").set(bearer(u.accessToken));
     expect(list.status).toBe(200);
     expect(list.body.data.map((r: { id: string }) => r.id)).toContain(created.body.id);
+  });
+
+  it("stores the contact number as E.164 and rejects one that isn't a Kenyan mobile", async () => {
+    const u = await renter();
+    const ok = await request(app)
+      .post("/services/towing")
+      .set(bearer(u.accessToken))
+      .send({ ...BASE_REQUEST, contact_phone: "0712 345 678" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.contact_phone).toBe("+254712345678");
+
+    const bad = await request(app)
+      .post("/services/towing")
+      .set(bearer(u.accessToken))
+      .send({ ...BASE_REQUEST, contact_phone: "12345678" });
+    expect(bad.status).toBe(422);
+    expect(bad.body.error.code).toBe("invalid_phone");
   });
 
   it("rejects an unknown reason", async () => {
@@ -174,5 +192,41 @@ describe("admin decline", () => {
     expect(declined.status).toBe(200);
     expect(declined.body.status).toBe("declined");
     expect(declined.body.decline_reason).toBe("Outside our coverage area.");
+  });
+});
+
+describe("admin queue", () => {
+  it("keeps an accepted job in the default view, and filters by status", async () => {
+    const u = await renter();
+    const admin = await opsAdmin();
+    const created = await request(app).post("/services/towing").set(bearer(u.accessToken)).send(BASE_REQUEST);
+    const id = created.body.id as string;
+    await request(app).post(`/admin/service-requests/${id}/quote`).set(bearer(admin.token)).send({ amount_cents: 400000 });
+    await request(app).post(`/me/service-requests/${id}/accept`).set(bearer(u.accessToken));
+
+    const open = await request(app).get("/admin/service-requests?limit=100").set(bearer(admin.token));
+    expect(open.status).toBe(200);
+    const row = open.body.data.find((r: { id: string }) => r.id === id);
+    expect(row).toMatchObject({ status: "accepted", requester_email: u.email });
+
+    const quotedOnly = await request(app).get("/admin/service-requests?status=quoted&limit=100").set(bearer(admin.token));
+    expect(quotedOnly.body.data.some((r: { id: string }) => r.id === id)).toBe(false);
+
+    const kase = await request(app).get(`/admin/service-requests/${id}`).set(bearer(admin.token));
+    expect(kase.status).toBe(200);
+    expect(kase.body).toMatchObject({ id, contact_phone: "+254712345678", status: "accepted" });
+  });
+
+  it("refuses a stale state change instead of letting two decisions both land", async () => {
+    const u = await renter();
+    const created = await request(app).post("/services/towing").set(bearer(u.accessToken)).send(BASE_REQUEST);
+    const stale = await db("service_requests").where({ id: created.body.id }).first();
+    await db("service_requests").where({ id: created.body.id }).update({ status: "declined" });
+
+    await expect(db.transaction((trx) => transition(trx, stale, { status: "cancelled" }))).rejects.toMatchObject({
+      code: "service_request_changed",
+    });
+    const after = await db("service_requests").where({ id: created.body.id }).first("status");
+    expect(after.status).toBe("declined");
   });
 });

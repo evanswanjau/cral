@@ -8,7 +8,7 @@ import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
 import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
-import { HIRING_UNIT_LABEL, unitRate } from "../lib/hiring-units.js";
+import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../lib/hiring-units.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -67,7 +67,7 @@ export function CarDetail(): JSX.Element {
   useSeo({
     title: carName,
     description: car
-      ? `${carName} in ${car.county ?? "Kenya"} - ${formatMoney(car.daily_rate)} / day. Documents read, no booking fee.`
+      ? `${carName} in ${car.county ?? "Kenya"} - ${formatMoney(unitRate(car))} / ${HIRING_UNIT_LABEL[car.hiring_unit]}. Documents read, no booking fee.`
       : undefined,
     path: id ? `/cars/${id}` : undefined,
     // AggregateRating only when this CAR has a real rating. Deliberately
@@ -86,8 +86,8 @@ export function CarDetail(): JSX.Element {
           vehicleModelDate: car.year,
           offers: {
             "@type": "Offer",
-            price: (car.daily_rate.amount / 100).toString(),
-            priceCurrency: car.daily_rate.currency,
+            price: (unitRate(car).amount / 100).toString(),
+            priceCurrency: unitRate(car).currency,
             availability: "https://schema.org/InStock",
           },
           ...(car.rating
@@ -158,28 +158,23 @@ export function CarDetail(): JSX.Element {
     { k: "FUEL", v: car.fuel, icon: "fuel" },
     { k: "SEATS", v: String(car.seats), icon: "seats" },
     { k: "DRIVER", v: car.chauffeured ? "Comes with driver" : "Self-drive", icon: "driver" },
-    {
-      k: "MIN. HIRE",
-      v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}`,
-      icon: "hire",
-    },
+    car.hiring_unit === "day"
+      ? { k: "MIN. HIRE", v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}`, icon: "hire" }
+      : { k: "PRICED", v: `Per ${HIRING_UNIT_LABEL[car.hiring_unit]}`, icon: "hire" },
   ];
 
   // Inclusive Nairobi days - the 19th to the 19th is one day, the 19th to
   // the 20th is two. Same function the booking page and the server use.
   const days = hireDays(from, to);
-  // Only a `day` listing's total can be honestly computed here - this page
-  // only ever collects a date range, no time-of-day, so there's no real
-  // hour count to multiply an hourly rate by, and a trip rate is flat
-  // regardless of the dates picked. The server computes the real total
-  // from the actual instants once the request is sent (spec §2).
+  // Day and trip totals are both knowable from dates alone (see
+  // lib/hiring-units.ts#quoteTotal); the server still computes the real one.
   const isDayUnit = car.hiring_unit === "day";
-  const total = isDayUnit && days > 0 ? car.daily_rate.amount * days : 0;
+  const total = quoteTotal(car, days);
   // The minimum is enforced *here*, where the dates are picked, not left
   // to the booking POST: a renter used to sign up, verify a phone, upload
   // two documents and only then be told the pair was never bookable.
-  // Only meaningful for a day-unit listing - hour/trip carry no minimum.
-  const minHire = car.minimum_hire_days;
+  // Only a day listing carries a minimum; a trip is priced once.
+  const minHire = isDayUnit ? car.minimum_hire_days : 1;
   const belowMinimum = isDayUnit && days > 0 && days < minHire;
   const minReturn = earliestReturnDay(from, minHire) || minDay;
 
@@ -715,7 +710,7 @@ export function CarDetail(): JSX.Element {
               </label>
             </div>
 
-            {isDayUnit && days > 0 && (
+            {days > 0 && total !== null && (
               <div
                 style={{
                   display: "grid",
@@ -728,7 +723,9 @@ export function CarDetail(): JSX.Element {
               >
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span style={{ font: "400 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                    {days} day{days > 1 ? "s" : ""} × {formatMoney(car.daily_rate)}
+                    {isDayUnit
+                      ? `${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}`
+                      : "Flat trip rate"}
                   </span>
                   <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
                     {formatMoney({ amount: total, currency: car.daily_rate.currency })}
@@ -748,7 +745,7 @@ export function CarDetail(): JSX.Element {
                 </div>
               </div>
             )}
-            {!isDayUnit && days > 0 && (
+            {days > 0 && total === null && (
               <div
                 style={{
                   padding: "13px 0",

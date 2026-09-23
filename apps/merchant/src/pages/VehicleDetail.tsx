@@ -12,7 +12,7 @@ import { ApiClientError } from "../lib/api.js";
 import { toE164 } from "../lib/device.js";
 import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
-import { HIRING_UNITS, HIRING_UNIT_LABELS, type HiringUnit } from "../lib/hiring-units.js";
+import { HIRING_UNIT_LABELS, SELECTABLE_UNITS, type HiringUnit } from "../lib/hiring-units.js";
 import {
   isPlaceholderRegistration,
   useDeleteVehicle,
@@ -254,16 +254,17 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   const [county, setCounty] = useState(v.county ?? "");
   const [loc, setLoc] = useState(v.pickup_address ?? "");
   const [driver, setDriver] = useState(v.chauffeured);
-  const [unit, setUnit] = useState<HiringUnit>(v.hiring_unit ?? "day");
-  const [hourlyRate, setHourlyRate] = useState(v.hourly_rate ? String(Math.round(v.hourly_rate.amount / 100)) : "");
+  // Per-hour can't be chosen yet (the API refuses it until the customer
+  // booking flow has a time picker), so a listing only ever opens on day or trip.
+  const [unit, setUnit] = useState<HiringUnit>(v.hiring_unit === "trip" ? "trip" : "day");
   const [tripRate, setTripRate] = useState(v.trip_rate ? String(Math.round(v.trip_rate.amount / 100)) : "");
 
-  const rateNum = parseInt(rate.replace(/[^0-9]/g, ""), 10) || 0;
+  const isTrip = unit === "trip";
+  const rateNum = parseInt((isTrip ? tripRate : rate).replace(/[^0-9]/g, ""), 10) || 0;
   const comm = Math.round(rateNum * 0.1);
   const net = rateNum - comm;
   const days = Math.max(1, parseInt(minDays, 10) || 1);
-  const hourlyRateNum = parseInt(hourlyRate.replace(/[^0-9]/g, ""), 10) || 0;
-  const tripRateNum = parseInt(tripRate.replace(/[^0-9]/g, ""), 10) || 0;
+  const per = isTrip ? "per trip" : "per day";
 
   return (
     <Modal
@@ -275,11 +276,8 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
       onConfirm={() => {
         update.mutate(
           {
-            daily_rate: String(rateNum),
             hiring_unit: unit,
-            ...(unit === "hour" ? { hourly_rate: String(hourlyRateNum) } : {}),
-            ...(unit === "trip" ? { trip_rate: String(tripRateNum) } : {}),
-            minimum_hire_days: days,
+            ...(isTrip ? { trip_rate: String(rateNum) } : { daily_rate: String(rateNum), minimum_hire_days: days }),
             county,
             pickup_address: loc,
             chauffeured: driver,
@@ -287,7 +285,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
           {
             onSuccess: () => {
               onClose();
-              flash(`Saved. Priced ${HIRING_UNIT_LABELS[unit].toLowerCase()}.`);
+              flash(`Saved. KES ${money(rateNum * 100)} ${per}.`);
             },
           },
         );
@@ -295,9 +293,9 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
     >
       <div style={{ display: "grid", gap: 16 }}>
         <div>
-          <label style={P.fieldLabel}>Hiring unit</label>
+          <label style={P.fieldLabel}>Price it</label>
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-            {HIRING_UNITS.map((u) => (
+            {SELECTABLE_UNITS.map((u) => (
               <button
                 key={u}
                 type="button"
@@ -318,32 +316,25 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             ))}
           </div>
           <p style={{ margin: "6px 0 0", font: "400 11.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
-            Mainly applies to small cars (day), heavy machinery (hour) and trucks/transport
-            (trip) - but any listing can use any unit.
+            Per trip suits trucks and transport: one flat price, whatever the dates.
           </p>
         </div>
 
-        <div style={P.fieldGrid}>
+        {isTrip ? (
           <div>
-            <label style={P.fieldLabel}>Daily rate (KES)</label>
-            <input style={P.fieldInput} value={rate} onChange={(e) => setRate(e.target.value.replace(/\D/g, ""))} />
-          </div>
-          <div>
-            <label style={P.fieldLabel}>Minimum hire (days)</label>
-            <input style={P.fieldInput} value={minDays} onChange={(e) => setMinDays(e.target.value.replace(/\D/g, ""))} />
-          </div>
-        </div>
-
-        {unit === "hour" && (
-          <div>
-            <label style={P.fieldLabel}>Hourly rate (KES)</label>
-            <input style={P.fieldInput} value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value.replace(/\D/g, ""))} />
-          </div>
-        )}
-        {unit === "trip" && (
-          <div>
-            <label style={P.fieldLabel}>Trip rate (KES, flat)</label>
+            <label style={P.fieldLabel}>Trip rate (KES)</label>
             <input style={P.fieldInput} value={tripRate} onChange={(e) => setTripRate(e.target.value.replace(/\D/g, ""))} />
+          </div>
+        ) : (
+          <div style={P.fieldGrid}>
+            <div>
+              <label style={P.fieldLabel}>Daily rate (KES)</label>
+              <input style={P.fieldInput} value={rate} onChange={(e) => setRate(e.target.value.replace(/\D/g, ""))} />
+            </div>
+            <div>
+              <label style={P.fieldLabel}>Minimum hire (days)</label>
+              <input style={P.fieldInput} value={minDays} onChange={(e) => setMinDays(e.target.value.replace(/\D/g, ""))} />
+            </div>
           </div>
         )}
         <div style={P.fieldGrid}>
@@ -378,7 +369,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
         </div>
         <div style={P.breakdown}>
           <div style={P.breakdownRow}>
-            <span style={P.breakdownKey}>Hirer pays, per day</span>
+            <span style={P.breakdownKey}>Hirer pays, {per}</span>
             <span style={P.breakdownVal}>{rateNum ? `KES ${money(rateNum * 100)}` : " - "}</span>
           </div>
           <div style={{ ...P.breakdownRow, ...P.breakdownRowTop }}>
@@ -386,15 +377,17 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             <span style={{ ...P.breakdownVal, color: "#A50E22" }}>{rateNum ? `− KES ${money(comm * 100)}` : " - "}</span>
           </div>
           <div style={P.breakdownNet}>
-            <span style={P.breakdownNetKey}>You keep, per day</span>
+            <span style={P.breakdownNetKey}>You keep, {per}</span>
             <span style={P.breakdownNetVal}>
               <span style={P.breakdownNetPrefix}>KES</span> {rateNum ? money(net * 100) : " - "}
             </span>
           </div>
           <div style={P.breakdownNote}>
-            {rateNum
-              ? `A ${days}-day hire pays you KES ${money(net * days * 100)} - KES ${money(rateNum * days * 100)} less KES ${money(comm * days * 100)} commission.`
-              : "Type a daily rate to see what you keep."}
+            {!rateNum
+              ? `Type a ${isTrip ? "trip" : "daily"} rate to see what you keep.`
+              : isTrip
+                ? `Each trip pays you KES ${money(net * 100)} - KES ${money(rateNum * 100)} less KES ${money(comm * 100)} commission.`
+                : `A ${days}-day hire pays you KES ${money(net * days * 100)} - KES ${money(rateNum * days * 100)} less KES ${money(comm * days * 100)} commission.`}
           </div>
         </div>
       </div>
@@ -1033,10 +1026,18 @@ export function VehicleDetail(): JSX.Element {
             </div>
             <div style={P.priceBody}>
               {[
-                ["Daily rate", v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "Not set"],
-                ["Minimum hire", `${v.minimum_hire_days} ${v.minimum_hire_days === 1 ? "day" : "days"}`],
-                ["Driver", v.chauffeured ? "Included" : "Self-drive"],
-                ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : " - "],
+                ...(v.hiring_unit === "trip"
+                  ? [
+                      ["Trip rate", v.trip_rate ? `KES ${money(v.trip_rate.amount)}` : "Not set"],
+                      ["Driver", v.chauffeured ? "Included" : "Self-drive"],
+                      ["You keep per trip", v.trip_rate ? `KES ${money(Math.round(v.trip_rate.amount * 0.9))}` : " - "],
+                    ]
+                  : [
+                      ["Daily rate", v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "Not set"],
+                      ["Minimum hire", `${v.minimum_hire_days} ${v.minimum_hire_days === 1 ? "day" : "days"}`],
+                      ["Driver", v.chauffeured ? "Included" : "Self-drive"],
+                      ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : " - "],
+                    ]),
               ].map(([k, val]) => (
                 <div key={k} style={P.priceRow}>
                   <span style={P.priceKey}>{k}</span>

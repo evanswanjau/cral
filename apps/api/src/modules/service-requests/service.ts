@@ -1,3 +1,4 @@
+import type { Knex } from "knex";
 import { ApiError, kes, type Money, type PaginatedResult } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -5,8 +6,7 @@ import { writeAuditEntry } from "../../lib/audit.js";
 import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
-import { notify } from "../../lib/notifications.js";
-import { enqueueRenterNotificationDelivery } from "../../jobs/notification-delivery.js";
+import { normalizePhone } from "../../lib/identifier.js";
 import type { ServiceRequestRow, ServiceRequestStatus } from "./db-types.js";
 import type { CancelServiceRequestInput, CreateServiceRequestInput, ListMyServiceRequestsQuery } from "./schemas.js";
 
@@ -26,6 +26,36 @@ const REASON_LABEL: Record<string, string> = {
   mechanical_breakdown: "Mechanical breakdown",
   accident: "Accident",
 };
+
+/**
+ * Tells dispatch something changed on a request. Always after the commit:
+ * the row is the record and the email is a courtesy, so a bounce must not
+ * undo the renter's action.
+ */
+async function emailDispatch(row: ServiceRequestRow, heading: string, lines: string[]): Promise<void> {
+  try {
+    await emailAdapter.send({
+      to: SERVICES_EMAIL,
+      subject: `${heading} · ${REASON_LABEL[row.reason] ?? row.reason}`,
+      html: emailLayout({
+        preheader: heading,
+        bodyHtml: [
+          emailHeading(heading),
+          emailParagraph(`Pickup: ${escapeHtml(row.pickup_location)}`),
+          emailParagraph(`Contact: ${escapeHtml(row.contact_phone)}`),
+          ...lines.map((l) => emailParagraph(escapeHtml(l))),
+          emailMuted(`Request ${row.id} · user ${row.user_id}`),
+        ].join(""),
+      }),
+    });
+  } catch (error) {
+    console.error("service request dispatch email failed", { requestId: row.id, heading, error });
+  }
+}
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 
 function notFound(): never {
   throw new ApiError({
@@ -89,6 +119,17 @@ export async function createServiceRequest(
   input: CreateServiceRequestInput,
   ctx: RequestContext,
 ): Promise<ServiceRequestOut> {
+  const contactPhone = normalizePhone(input.contact_phone);
+  if (!contactPhone) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "invalid_phone",
+      message: "Enter a Kenyan mobile number, like 0712 345 678.",
+      field: "contact_phone",
+    });
+  }
+
   const id = generateId("serviceRequest");
   const row = await db.transaction(async (trx) => {
     const [inserted] = await trx<ServiceRequestRow>("service_requests")
@@ -98,7 +139,7 @@ export async function createServiceRequest(
         reason: input.reason,
         pickup_location: input.pickup_location,
         destination_location: input.destination_location ?? null,
-        contact_phone: input.contact_phone,
+        contact_phone: contactPhone,
         description: input.description ?? null,
         status: "requested",
       })
@@ -118,28 +159,11 @@ export async function createServiceRequest(
     return inserted!;
   });
 
-  // After the commit, deliberately — a bounced dispatch email must not lose
-  // the request itself. Same reasoning as the payout-query support email.
-  try {
-    await emailAdapter.send({
-      to: SERVICES_EMAIL,
-      subject: `Towing request · ${REASON_LABEL[input.reason] ?? input.reason}`,
-      html: emailLayout({
-        preheader: "A new towing/recovery request needs a quote.",
-        bodyHtml: [
-          emailHeading("New towing request"),
-          emailParagraph(`Reason: ${REASON_LABEL[input.reason] ?? input.reason}`),
-          emailParagraph(`Pickup: ${row.pickup_location}`),
-          emailParagraph(row.destination_location ? `Destination: ${row.destination_location}` : "Destination: not given"),
-          emailParagraph(`Contact: ${row.contact_phone}`),
-          row.description ? emailParagraph(row.description) : "",
-          emailMuted(`Request ${id} · user ${userId}`),
-        ].join(""),
-      }),
-    });
-  } catch (error) {
-    console.error("service request dispatch email failed", { requestId: id, error });
-  }
+  await emailDispatch(row, "New towing request", [
+    `Reason: ${REASON_LABEL[row.reason] ?? row.reason}`,
+    row.destination_location ? `Destination: ${row.destination_location}` : "Destination: not given",
+    ...(row.description ? [row.description] : []),
+  ]);
 
   return serialize(row);
 }
@@ -164,6 +188,24 @@ export async function getMyServiceRequest(userId: string, id: string): Promise<S
   return serialize(await requireOwn(userId, id));
 }
 
+/**
+ * Moves a request on only if it is still in the state the caller checked.
+ * The renter and Ops act on the same row independently, so a plain
+ * update-by-id would let a decline and an accept both "succeed".
+ */
+export async function transition(
+  trx: Knex.Transaction,
+  row: ServiceRequestRow,
+  patch: Partial<ServiceRequestRow>,
+): Promise<ServiceRequestRow> {
+  const [next] = await trx<ServiceRequestRow>("service_requests")
+    .where({ id: row.id, status: row.status })
+    .update({ ...patch, updated_at: new Date() })
+    .returning("*");
+  if (!next) badState("This request changed while you were looking at it. Reload and try again.", "service_request_changed");
+  return next;
+}
+
 export async function cancelMyServiceRequest(
   userId: string,
   id: string,
@@ -176,11 +218,7 @@ export async function cancelMyServiceRequest(
   }
 
   const updated = await db.transaction(async (trx) => {
-    const [next] = await trx<ServiceRequestRow>("service_requests")
-      .where({ id })
-      .update({ status: "cancelled", cancel_reason: input.reason ?? null, updated_at: new Date() })
-      .returning("*");
-
+    const next = await transition(trx, row, { status: "cancelled", cancel_reason: input.reason ?? null });
     await writeAuditEntry(trx, {
       actorId: userId,
       actorType: "user",
@@ -192,10 +230,14 @@ export async function cancelMyServiceRequest(
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-
-    return next!;
+    return next;
   });
 
+  if (row.status === "quoted") {
+    await emailDispatch(updated, "Towing request cancelled", [
+      `The renter cancelled after being quoted.${input.reason ? ` Reason: ${input.reason}` : ""}`,
+    ]);
+  }
   return serialize(updated);
 }
 
@@ -210,11 +252,7 @@ export async function acceptMyServiceRequestQuote(
   }
 
   const updated = await db.transaction(async (trx) => {
-    const [next] = await trx<ServiceRequestRow>("service_requests")
-      .where({ id })
-      .update({ status: "accepted", updated_at: new Date() })
-      .returning("*");
-
+    const next = await transition(trx, row, { status: "accepted" });
     await writeAuditEntry(trx, {
       actorId: userId,
       actorType: "user",
@@ -226,18 +264,14 @@ export async function acceptMyServiceRequestQuote(
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
-
-    const notificationId = await notify(trx, {
-      userId,
-      category: "booking",
-      title: "Towing quote accepted",
-      body: "We'll be in touch on the number you gave us to arrange dispatch.",
-      subjectType: null,
-      subjectId: null,
-    });
-    return { next: next!, notificationId };
+    return next;
   });
 
-  await enqueueRenterNotificationDelivery([updated.notificationId]);
-  return serialize(updated.next);
+  // Ops is who has to act now - the renter already knows they accepted.
+  await emailDispatch(updated, "Towing quote accepted - dispatch", [
+    updated.quoted_amount === null
+      ? "Quoted as subject to discussion - agree the price on the call."
+      : `Agreed price: KES ${(updated.quoted_amount / 100).toLocaleString("en-KE")}.`,
+  ]);
+  return serialize(updated);
 }

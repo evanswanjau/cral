@@ -2,7 +2,7 @@ import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
 import { FILTER_ORDER, STATUS, filterLabel, money } from "../components/portal/status.js";
-import { useVehicleList, type VehicleFilter, type VehicleSummary } from "../lib/vehicles-api.js";
+import { useVehicleList, type VehicleFilter, type VehicleSummary, listingRate } from "../lib/vehicles-api.js";
 import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
 
 function FilterPill({
@@ -36,7 +36,7 @@ function TableHead(): JSX.Element {
       <span style={P.tableHeadTitle}>VEHICLE</span>
       <span style={P.tableHeadStatus}>STATUS</span>
       <span style={P.tableHeadDocs}>DOCS</span>
-      <span style={P.tableHeadRate}>DAILY RATE</span>
+      <span style={P.tableHeadRate}>RATE</span>
       <span style={P.tableHeadDate}>SUBMITTED</span>
       <span style={P.tableHeadSpacer} />
     </div>
@@ -103,6 +103,7 @@ function EmptyState({ filter, onAdd }: { filter: VehicleFilter; onAdd: () => voi
 
 function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Element {
   const meta = STATUS[v.status];
+  const { rate, per } = listingRate(v);
   return (
     <div style={P.row} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
       <span style={P.plateBadge}>{v.registration}</span>
@@ -120,8 +121,8 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
       <span style={{ ...P.docsLabel, color: v.doc_has_issue ? "#A50E22" : v.doc_count === 3 ? "#5A6373" : "#8A5200" }}>
         {v.doc_count}/3 docs
       </span>
-      <span style={{ ...P.rateLabel, color: v.daily_rate ? "#0B0F1A" : "#A7AEBB" }}>
-        {v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "No rate yet"}
+      <span style={{ ...P.rateLabel, color: rate ? "#0B0F1A" : "#A7AEBB" }}>
+        {rate ? `KES ${money(rate.amount)} / ${per}` : "No rate yet"}
       </span>
       <span style={P.dateLabel}>
         {v.status === "draft" ? "NOT SENT" : v.submitted_at ? new Date(v.submitted_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase() : " - "}

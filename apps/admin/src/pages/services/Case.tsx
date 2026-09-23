@@ -48,12 +48,16 @@ export function Case(): JSX.Element {
   const setCase = (updated: typeof c) => queryClient.setQueryData(["admin", "service-requests", id], updated);
 
   const quoteMut = useMutation({
-    mutationFn: () =>
-      quoteServiceRequest(id!, {
+    mutationFn: () => {
+      if ((distanceKm.trim() && !Number.isFinite(Number(distanceKm))) || (amount.trim() && !Number.isFinite(Number(amount)))) {
+        return Promise.reject(new Error("Distance and amount must be numbers."));
+      }
+      return quoteServiceRequest(id!, {
         distance_km: distanceKm.trim() ? Number(distanceKm) : null,
         amount_cents: amount.trim() ? Math.round(Number(amount) * 100) : null,
         note: note.trim() || null,
-      }),
+      });
+    },
     onSuccess: (updated) => {
       setCase(updated);
       setDistanceKm("");
@@ -79,6 +83,7 @@ export function Case(): JSX.Element {
   if (isLoading) return <div style={S.empty}>Loading…</div>;
   if (error || !c) return <div style={S.empty}>Couldn't load that request.</div>;
 
+  const actionError = [quoteMut.error, declineMut.error, completeMut.error].find(Boolean);
   const canQuote = c.status === "requested" || c.status === "quoted";
   const canDecline = !["completed", "cancelled", "declined"].includes(c.status);
   const canComplete = c.status === "accepted";
@@ -163,6 +168,12 @@ export function Case(): JSX.Element {
         </div>
       )}
 
+      {actionError && (
+        <div role="alert" style={S.error}>
+          {actionError instanceof Error ? actionError.message : "That didn't go through. Try again."}
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 10, marginTop: 16, flexWrap: "wrap" }}>
         {canComplete && (
           <button
@@ -228,5 +239,6 @@ const S = {
   input: { width: "100%", height: 40, padding: "0 12px", border: "1.5px solid #E4E7EC", borderRadius: "var(--r)", font: "400 14px/1 'Instrument Sans',sans-serif", color: "#1A1F2B", background: "#FFFFFF", boxSizing: "border-box" },
   textarea: { width: "100%", minHeight: 70, padding: 12, border: "1.5px solid #E4E7EC", borderRadius: "var(--r)", font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#1A1F2B", background: "#FFFFFF", resize: "vertical", boxSizing: "border-box" },
   btn: { height: 40, padding: "0 16px", background: "#FFFFFF", color: "#1A1F2B", border: "1px solid #E4E7EC", borderRadius: "var(--r)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
+  error: { marginTop: 16, padding: "11px 14px", background: "#FDE7EA", border: "1px solid #F7BDC5", borderRadius: "var(--r)", font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#A50E22" },
   empty: { padding: "28px 18px", font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
 } satisfies Record<string, CSSProperties>;

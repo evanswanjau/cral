@@ -374,6 +374,14 @@ components:
                 allOf: [{ $ref: "#/components/schemas/Money" }]
                 nullable: true
                 description: Null on a draft with no rate set yet.
+              hiring_unit:
+                type: string
+                enum: [day, hour, trip]
+                description: Which rate prices a booking. `hour` can't be set yet.
+              trip_rate:
+                allOf: [{ $ref: "#/components/schemas/Money" }]
+                nullable: true
+                description: The flat rate for a `trip` listing; null otherwise.
               documents:
                 type: array
                 description: >

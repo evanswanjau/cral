@@ -61,6 +61,7 @@ export function Towing(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [justFiled, setJustFiled] = useState<ServiceRequest | null>(null);
   const [requests, setRequests] = useState<ServiceRequest[] | null>(null);
+  const [acceptError, setAcceptError] = useState<string | null>(null);
 
   async function loadRequests() {
     try {
@@ -104,12 +105,14 @@ export function Towing(): JSX.Element {
   }
 
   async function onAccept(id: string) {
+    setAcceptError(null);
     try {
       await apiPost(`/me/service-requests/${id}/accept`);
-      await loadRequests();
-    } catch {
-      // Left as-is - the list still shows the true state on next load.
+    } catch (err) {
+      setAcceptError(err instanceof ApiClientError ? err.message : "Couldn't accept that quote. Try again.");
     }
+    // Reload either way: a failure is usually the request having moved on.
+    await loadRequests();
   }
 
   return (
@@ -220,6 +223,11 @@ export function Towing(): JSX.Element {
       {requests !== null && requests.length > 0 && (
         <Section tint>
           <Body>Your service requests</Body>
+          {acceptError && (
+            <p role="alert" style={{ margin: "0 0 14px", font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#A50E22" }}>
+              {acceptError}
+            </p>
+          )}
           {requests.map((r) => (
             <Card key={r.id}>
               <div style={{ display: "flex", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>

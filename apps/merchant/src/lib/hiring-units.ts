@@ -10,3 +10,9 @@ export const HIRING_UNIT_LABELS: Record<HiringUnit, string> = {
   hour: "Per hour",
   trip: "Per trip",
 };
+
+/**
+ * What a merchant can pick today. `hour` is refused by the API until the
+ * customer booking flow has a time-of-day picker - see CLAUDE.md.
+ */
+export const SELECTABLE_UNITS: HiringUnit[] = ["day", "trip"];
