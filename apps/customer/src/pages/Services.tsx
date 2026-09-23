@@ -37,5 +37,60 @@ export function Services(): JSX.Element {
     path: "/services",
   });
 
-  return <VerticalPage def={DEF} onFindCar={() => navigate("/browse")} />;
+  return (
+    <div>
+      {/* Towing/recovery (owner's call, 2026-09-23) is real today, unlike
+          the garage/repair vertical below it - a plain banner rather than
+          folding it into the "opening soon" VerticalPage shared template,
+          which is deliberately built around a not-yet-real offering. */}
+      <div
+        style={{
+          margin: "0 auto",
+          maxWidth: 1140,
+          padding: "16px clamp(16px,4vw,40px) 0",
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+            flexWrap: "wrap",
+            background: "#FBF8F2",
+            border: "1px solid #E7DFD0",
+            borderRadius: 12,
+            padding: "16px 20px",
+          }}
+        >
+          <div>
+            <div style={{ font: "600 15px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 3 }}>
+              Broken down or been in an accident?
+            </div>
+            <p style={{ margin: 0, font: "400 13.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              Towing and recovery is live - quoted per km, or worked out on the call.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/services/towing")}
+            style={{
+              height: 44,
+              padding: "0 18px",
+              background: "#0F23A8",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: 8,
+              font: "600 14px/1 'Instrument Sans',sans-serif",
+              cursor: "pointer",
+              flex: "none",
+            }}
+          >
+            Request towing →
+          </button>
+        </div>
+      </div>
+      <VerticalPage def={DEF} onFindCar={() => navigate("/browse")} />
+    </div>
+  );
 }

@@ -13,6 +13,8 @@ import { Bookings } from "./pages/Bookings.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
 import { Settings } from "./pages/Settings.js";
 import { Communications } from "./pages/Communications.js";
+import { Queue as ServicesQueue } from "./pages/services/Queue.js";
+import { Case as ServiceCase } from "./pages/services/Case.js";
 
 /**
  * Vehicle review, the Merchants lens, the Renters queue, the Bookings
@@ -43,6 +45,8 @@ const router = createBrowserRouter([
           { path: "renters/:userId", element: <RenterFile /> },
           { path: "bookings", element: <Bookings /> },
           { path: "bookings/:id", element: <BookingDetail /> },
+          { path: "services", element: <ServicesQueue /> },
+          { path: "services/:id", element: <ServiceCase /> },
           { path: "payouts", element: <Placeholder title="Payouts" /> },
           { path: "invoicing", element: <Placeholder title="Invoicing" /> },
           { path: "disputes", element: <Placeholder title="Disputes" /> },

@@ -1,0 +1,230 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Customer Services API
+  version: "1.0.0"
+  description: >
+    The "Services" umbrella (owner's call, 2026-09-23). The first real
+    offering is towing/recovery - CRAL-run dispatch, not a vehicle-hire
+    booking, so it is not a `bookings` row.
+
+    **v1 is deliberately lead-capture, not transactional.** "Charged per km
+    or subject to discussion" means there is no fixed price at request
+    time. A renter files a request; an admin quotes it by hand (a figure,
+    or a note that it's subject to discussion); the renter accepts or
+    cancels. Nothing here touches the payment rail - dispatch and payment
+    are settled off-platform, the same footing car-hire bookings started
+    on before Daraja existed.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+  - url: https://api.staging.cral.co.ke/v1
+    description: Staging
+
+tags:
+  - name: services
+    description: Towing/recovery and (later) other CRAL-run services
+
+paths:
+  /services/towing:
+    post:
+      tags: [services]
+      summary: File a towing/recovery request
+      operationId: createTowingRequest
+      description: >
+        Creates a `requested` service request and emails CRAL's dispatch
+        inbox. No `Idempotency-Key` - this doesn't move money or complete
+        a handover, it files a lead for a human to quote.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason, pickup_location, contact_phone]
+              properties:
+                reason:
+                  type: string
+                  enum: [mechanical_breakdown, accident]
+                pickup_location: { type: string, maxLength: 300 }
+                destination_location: { type: string, maxLength: 300, nullable: true }
+                contact_phone:
+                  type: string
+                  description: Typed at request time - may differ from the account's own phone.
+                description: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        "201":
+          description: The request was filed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequest" }
+
+  /me/service-requests:
+    get:
+      tags: [services]
+      summary: My service requests
+      operationId: listMyServiceRequests
+      description: Cursor-paginated, newest first (spec §2 - no offset paging).
+      parameters:
+        - name: cursor
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 20 }
+      responses:
+        "200":
+          description: A page of the caller's service requests.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: "#/components/schemas/ServiceRequest" }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /me/service-requests/{id}:
+    get:
+      tags: [services]
+      summary: One of my service requests
+      operationId: getMyServiceRequest
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequest" }
+        "404":
+          description: Not a request on the caller's account.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /me/service-requests/{id}/cancel:
+    post:
+      tags: [services]
+      summary: Cancel my service request
+      operationId: cancelMyServiceRequest
+      description: Only while `requested` or `quoted`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, maxLength: 500 }
+      responses:
+        "200":
+          description: Cancelled.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequest" }
+        "409":
+          description: "`service_request_wrong_state` - already closed."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /me/service-requests/{id}/accept:
+    post:
+      tags: [services]
+      summary: Accept the quote on my service request
+      operationId: acceptMyServiceRequestQuote
+      description: Only while `quoted`. Dispatch is arranged by phone after this.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ServiceRequest" }
+        "409":
+          description: "`no_quote_to_accept` - there is no open quote on this request."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents. }
+        currency: { type: string, example: KES }
+
+    ServiceRequest:
+      type: object
+      required:
+        [
+          id,
+          reason,
+          pickup_location,
+          destination_location,
+          contact_phone,
+          description,
+          distance_km,
+          quoted_amount,
+          quote_note,
+          quoted_at,
+          status,
+          decline_reason,
+          cancel_reason,
+          created_at,
+          updated_at,
+        ]
+      properties:
+        id: { type: string, example: svc_01J... }
+        reason: { type: string, enum: [mechanical_breakdown, accident] }
+        pickup_location: { type: string }
+        destination_location: { type: string, nullable: true }
+        contact_phone: { type: string }
+        description: { type: string, nullable: true }
+        distance_km: { type: number, nullable: true }
+        quoted_amount:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+          description: Null means "subject to discussion", not "not yet quoted" - see `status`.
+        quote_note: { type: string, nullable: true }
+        quoted_at: { type: string, format: date-time, nullable: true }
+        status:
+          type: string
+          enum: [requested, quoted, accepted, declined, completed, cancelled]
+        decline_reason: { type: string, nullable: true }
+        cancel_reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string }
