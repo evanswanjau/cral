@@ -222,11 +222,19 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
     })
     .first();
   if (existing) {
+    // Say *which* one collided. "phone or email" left a caller re-typing
+    // an email that was never the problem - and this endpoint already
+    // discloses that the account exists, so naming the field leaks
+    // nothing further.
+    const onPhone = Boolean(phone) && existing.phone === phone;
     throw new ApiError({
       status: 409,
       type: "conflict",
       code: "account_exists",
-      message: "An account with this phone or email already exists.",
+      message: onPhone
+        ? "That phone number is already on a CRAL account."
+        : "That email already has a CRAL account.",
+      field: onPhone ? "phone" : "email",
     });
   }
 

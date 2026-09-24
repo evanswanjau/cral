@@ -125,7 +125,9 @@ describe("identity — golden path", () => {
     expect(registerRes.body.next).toBe("verify_phone");
     expect(registerRes.body.user.phone).toBe(phone);
 
-    // Duplicate registration is rejected without revealing which field collided.
+    // Duplicate registration is rejected, naming the field that collided -
+    // both here (same email and phone) and for a fresh email reusing the
+    // phone, which used to be reported as an email clash.
     const dupeRes = await request(app).post("/auth/register").send({
       full_name: "Test User",
       phone,
@@ -136,6 +138,18 @@ describe("identity — golden path", () => {
     });
     expect(dupeRes.status).toBe(409);
     expect(dupeRes.body.error.code).toBe("account_exists");
+
+    const phoneDupe = await request(app).post("/auth/register").send({
+      full_name: "Test User",
+      phone,
+      email: `dupe-${email}`,
+      password,
+      role: "customer",
+      accepted_terms_version: "2026-08-24",
+    });
+    expect(phoneDupe.status).toBe(409);
+    expect(phoneDupe.body.error.code).toBe("account_exists");
+    expect(phoneDupe.body.error.field).toBe("phone");
 
     const signupCode = extractCode(smsSpy.mock.calls[0]?.[0]?.body ?? "");
 
