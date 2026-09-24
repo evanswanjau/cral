@@ -107,6 +107,33 @@ describe("identity — email-first sign-up", () => {
     emailSpy.mockRestore();
     smsSpy.mockRestore();
   });
+
+  it("opens the reset link on the site that asked for it", async () => {
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+    const lastLink = () => /https?:\/\/[^\s]+\/reset-password\?token=[\w-]+/.exec(
+      emailSpy.mock.calls.at(-1)?.[0]?.text ?? "",
+    )?.[0];
+
+    const customer = await request(app)
+      .post("/auth/password/forgot")
+      .send({ identifier: emailOnly, app: "customer" });
+    expect(customer.status).toBe(202);
+    expect(lastLink()).toMatch(/^https:\/\/customer\.example\.test\/reset-password\?token=/);
+
+    // Left out, it is the merchant portal - its only caller before the
+    // customer site had a reset flow.
+    const merchant = await request(app).post("/auth/password/forgot").send({ identifier: emailOnly });
+    expect(merchant.status).toBe(202);
+    expect(lastLink()).toMatch(/^https:\/\/merchant\.example\.test\/reset-password\?token=/);
+
+    // A fixed choice, never a URL - anything else is refused.
+    const bogus = await request(app)
+      .post("/auth/password/forgot")
+      .send({ identifier: emailOnly, app: "https://evil.example" });
+    expect(bogus.status).toBe(422);
+
+    emailSpy.mockRestore();
+  });
 });
 
 describe("identity — golden path", () => {
@@ -125,7 +152,9 @@ describe("identity — golden path", () => {
     expect(registerRes.body.next).toBe("verify_phone");
     expect(registerRes.body.user.phone).toBe(phone);
 
-    // Duplicate registration is rejected without revealing which field collided.
+    // Duplicate registration is rejected, naming the field that collided -
+    // both here (same email and phone) and for a fresh email reusing the
+    // phone, which used to be reported as an email clash.
     const dupeRes = await request(app).post("/auth/register").send({
       full_name: "Test User",
       phone,
@@ -136,6 +165,18 @@ describe("identity — golden path", () => {
     });
     expect(dupeRes.status).toBe(409);
     expect(dupeRes.body.error.code).toBe("account_exists");
+
+    const phoneDupe = await request(app).post("/auth/register").send({
+      full_name: "Test User",
+      phone,
+      email: `dupe-${email}`,
+      password,
+      role: "customer",
+      accepted_terms_version: "2026-08-24",
+    });
+    expect(phoneDupe.status).toBe(409);
+    expect(phoneDupe.body.error.code).toBe("account_exists");
+    expect(phoneDupe.body.error.field).toBe("phone");
 
     const signupCode = extractCode(smsSpy.mock.calls[0]?.[0]?.body ?? "");
 

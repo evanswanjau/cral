@@ -36,8 +36,18 @@ export const LogoutSchema = z.object({
   all_devices: z.boolean().optional().default(false),
 });
 
+/**
+ * `app` says which site the reset link should open. It is a fixed choice,
+ * never a URL - a caller-supplied URL would let anyone send a real CRAL
+ * email pointing wherever they like. Defaults to the merchant portal, the
+ * only caller before the customer site had a reset flow of its own.
+ */
+export const RESET_LINK_APPS = ["customer", "merchant"] as const;
+export type ResetLinkApp = (typeof RESET_LINK_APPS)[number];
+
 export const ForgotPasswordSchema = z.object({
   identifier: z.string(),
+  app: z.enum(RESET_LINK_APPS).optional().default("merchant"),
 });
 
 // Reset is by emailed link only — the token from that link is the sole

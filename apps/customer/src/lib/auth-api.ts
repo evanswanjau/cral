@@ -68,15 +68,21 @@ export function revokeSession(id: string) {
   return apiDelete<void>(`/auth/sessions/${id}`);
 }
 
-export function forgotPassword(identifier: string) {
-  return apiPost<{ status: string; channel_hint: "email" | "sms"; masked: string; retry_after: number }>(
+/**
+ * Always emails a reset link. `app: "customer"` is what makes that link
+ * open this site rather than the merchant portal - the API defaults to the
+ * merchant portal when it is left out.
+ */
+export function forgotPassword(email: string) {
+  return apiPost<{ status: string; channel_hint: "email"; masked: string; retry_after: number }>(
     "/auth/password/forgot",
-    { identifier },
+    { identifier: email, app: "customer" },
     { auth: false },
   );
 }
 
-export function checkPasswordReset(input: { token?: string; phone?: string; code?: string }) {
+/** Reset is by emailed link only - the link's token is the sole credential. */
+export function checkPasswordReset(input: { token: string }) {
   return apiPost<{ valid: boolean; masked_identifier?: string | null }>(
     "/auth/password/reset/check",
     input,
@@ -84,12 +90,7 @@ export function checkPasswordReset(input: { token?: string; phone?: string; code
   );
 }
 
-export function resetPassword(input: {
-  token?: string;
-  phone?: string;
-  code?: string;
-  new_password: string;
-}) {
+export function resetPassword(input: { token: string; new_password: string }) {
   return apiPost<{ status: string; sessions_revoked: number }>("/auth/password/reset", input, {
     auth: false,
   });

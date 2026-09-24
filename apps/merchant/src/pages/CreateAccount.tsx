@@ -123,8 +123,9 @@ export function CreateAccount(): JSX.Element {
           <Field id="reg-code" label="SIX-DIGIT CODE">
             <CodeInput
               id="reg-code"
+              label="Six-digit code"
               value={code}
-              onChange={(e) => setCode(e.target.value)}
+              onChange={setCode}
               autoFocus
             />
           </Field>

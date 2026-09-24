@@ -27,6 +27,9 @@ afterAll(async () => {
   await db.destroy();
 });
 
+/** A licence upload must carry an expiry the reviewer can check against. */
+const FUTURE_EXPIRY = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
 async function renter() {
   const u = await createVerifiedTestUser();
   userIds.push(u.userId);
@@ -82,12 +85,51 @@ describe("renter documents", () => {
       .post("/me/documents")
       .set("Authorization", `Bearer ${accessToken}`)
       .field("kind", "driving_licence")
+      .field("expires_at", FUTURE_EXPIRY)
       .attach("file", Buffer.from("not a real pdf"), {
         filename: "x.pdf",
         contentType: "application/pdf",
       });
     expect(res.status).toBe(422);
     expect(res.body.error.code).toBe("file_content_mismatch");
+  });
+
+  it("a licence needs an expiry date, and it cannot be in the past", async () => {
+    const { accessToken } = await renter();
+
+    const noDate = await request(app)
+      .post("/me/documents")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .field("kind", "driving_licence")
+      .attach("file", testPdf("dl"), { filename: "dl.pdf", contentType: "application/pdf" });
+    expect(noDate.status).toBe(422);
+
+    const past = await request(app)
+      .post("/me/documents")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .field("kind", "driving_licence")
+      .field("expires_at", "2020-01-01")
+      .attach("file", testPdf("dl"), { filename: "dl.pdf", contentType: "application/pdf" });
+    expect(past.status).toBe(422);
+    expect(past.body.error.code).toBe("expiry_in_past");
+
+    // An ID has no expiry, and is accepted without one.
+    const id = await request(app)
+      .post("/me/documents")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .field("kind", "national_id")
+      .attach("file", testJpeg("id"), { filename: "id.jpg", contentType: "image/jpeg" });
+    expect(id.status).toBe(201);
+    expect(id.body.expires_at).toBeNull();
+
+    const ok = await request(app)
+      .post("/me/documents")
+      .set("Authorization", `Bearer ${accessToken}`)
+      .field("kind", "driving_licence")
+      .field("expires_at", FUTURE_EXPIRY)
+      .attach("file", testPdf("dl"), { filename: "dl.pdf", contentType: "application/pdf" });
+    expect(ok.status).toBe(201);
+    expect(ok.body.expires_at).toBe(FUTURE_EXPIRY);
   });
 
   it("another user's document id is a 404, not a 403", async () => {
@@ -97,6 +139,7 @@ describe("renter documents", () => {
       .post("/me/documents")
       .set("Authorization", `Bearer ${a.accessToken}`)
       .field("kind", "driving_licence")
+      .field("expires_at", FUTURE_EXPIRY)
       .attach("file", testPdf("dl"), { filename: "dl.pdf", contentType: "application/pdf" });
     expect(up.status).toBe(201);
 
@@ -109,11 +152,12 @@ describe("renter documents", () => {
   it("verified only when both documents are review_state = ok", async () => {
     const { userId, accessToken } = await renter();
     for (const kind of ["national_id", "driving_licence"] as const) {
-      await request(app)
+      const req = request(app)
         .post("/me/documents")
         .set("Authorization", `Bearer ${accessToken}`)
-        .field("kind", kind)
-        .attach("file", testPdf(kind), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+        .field("kind", kind);
+      if (kind === "driving_licence") req.field("expires_at", FUTURE_EXPIRY);
+      await req.attach("file", testPdf(kind), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
 
     let me = await request(app).get("/me").set("Authorization", `Bearer ${accessToken}`);

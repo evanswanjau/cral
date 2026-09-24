@@ -9,6 +9,9 @@ import {
   safeContentType,
   safeDisposition,
 } from "../../lib/uploads.js";
+import { z } from "zod";
+import { setUserPhone } from "../../lib/user-phone.js";
+import { validateBody } from "../../lib/validate.js";
 import * as service from "./service.js";
 import { UploadRenterDocumentSchema } from "./schemas.js";
 
@@ -43,6 +46,7 @@ customerAccountRouter.post(
     assertDeclaredTypeMatchesBytes(req.file.buffer, req.file.mimetype);
     const result = await service.uploadRenterDocument(req.auth!.sub, {
       kind: parsed.kind,
+      expiresAt: parsed.expires_at,
       file: {
         buffer: req.file.buffer,
         originalname: req.file.originalname,
@@ -78,5 +82,23 @@ customerAccountRouter.get(
       `${safeDisposition(doc.contentType)}; filename="${encodeURIComponent(doc.originalName)}"`,
     );
     res.status(200).send(doc.body);
+  }),
+);
+
+/**
+ * Correcting the contact number before verifying it. A renter types their
+ * phone once during the booking sign-up, so a typo has to be fixable
+ * without support - otherwise the verification SMS goes to a number they
+ * can't reach and the booking is stuck. `setUserPhone` clears
+ * `phone_verified`, so a changed number always has to be proven again.
+ */
+customerAccountRouter.patch(
+  "/me/phone",
+  authenticate(),
+  rateLimit({ bucket: "renter_phone_change", limit: 10, windowSeconds: 3600 }),
+  validateBody(z.object({ phone: z.string().min(9).max(20) })),
+  asyncHandler(async (req, res) => {
+    await setUserPhone(req.auth!.sub, req.body.phone);
+    res.status(200).json(await service.getRenterVerification(req.auth!.sub));
   }),
 );

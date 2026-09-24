@@ -365,7 +365,7 @@ authRouter.post(
   }),
   validateBody(ForgotPasswordSchema),
   asyncHandler(async (req, res) => {
-    const result = await authService.forgotPassword(req.body.identifier);
+    const result = await authService.forgotPassword(req.body.identifier, req.body.app);
     res.status(202).json(result);
   }),
 );

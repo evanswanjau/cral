@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
 import { useSeo } from "../lib/use-seo.js";
+import { merchantLandingUrl } from "../lib/merchant-app.js";
 import { PageHero, Section, SectionTitle, Body } from "../components/site/marketing.js";
 
 export function About(): JSX.Element {
@@ -44,9 +44,9 @@ export function About(): JSX.Element {
         <SectionTitle>Have a car of your own?</SectionTitle>
         <Body>
           Put it to work on the days you're not using it.{" "}
-          <Link to="/list-your-car" style={{ color: "#0F23A8" }}>
+          <a href={merchantLandingUrl()} style={{ color: "#0F23A8" }}>
             List your car
-          </Link>
+          </a>
           .
         </Body>
       </Section>

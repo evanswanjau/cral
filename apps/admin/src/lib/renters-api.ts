@@ -24,6 +24,8 @@ export interface RenterDocument {
   kind: RenterDocKind;
   state: RenterDocState;
   original_name: string | null;
+  /** `YYYY-MM-DD`, licence only. */
+  expires_at: string | null;
   review_note: string | null;
   reviewed_at: string | null;
 }

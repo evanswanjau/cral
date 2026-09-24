@@ -38,11 +38,12 @@ import keyHandoffPhoto from "../assets/keyhandoff.jpg";
  *    enforced server-side; the client just never mentions it.
  *  - The rate is fixed once agreed. Copy states plainly that the rate is
  *    agreed before booking and does not change afterwards.
- *  - The M-Pesa pay step. No Daraja integration exists; the flow is
- *    request -> confirm, money settled with the owner. The canvas's trust
- *    band assumes the STK flow is live ("the M-Pesa prompt only appears
- *    once they have accepted") - that clause is dropped/reworded below,
- *    same departure the file already documented before this pass.
+ *  - The M-Pesa pay step. Daraja STK push is real now (2026-09-22, see
+ *    docs/plans/payments-daraja.md) - the flow is request -> owner
+ *    accepts -> renter pays via the M-Pesa prompt -> confirmed. The
+ *    canvas's trust-band clause ("the M-Pesa prompt only appears once
+ *    they have accepted") is accurate again; this page's copy should
+ *    match it rather than the earlier no-Daraja departure.
  *  - The canvas's body-type tiles are a 7-way fixture taxonomy (Saloon,
  *    Hatchback, SUV, Large SUV, Double cab, Van, Executive) with no
  *    backing in our schema - `vehicles.category` is the real, fixed
@@ -655,11 +656,20 @@ export function Home(): JSX.Element {
           >
             {TRUST_COLS.map((t) => (
               <div key={t.n}>
+                {/*
+                 * The canvas sets this overline to #D81E32 (cruzRed) on
+                 * the #0B0F1A card. At 10px that is 3.7:1 - under AA - so
+                 * an earlier pass lightened it to #F28FA0, a colour in
+                 * neither the brand doc nor the canvas. This is the brand
+                 * doc's own light red (`status.rejected.border` in
+                 * packages/ui/src/tokens.ts) instead: 11.7:1, and back
+                 * inside the documented palette.
+                 */}
                 <div
                   style={{
                     font: "500 10px/1 'IBM Plex Mono',monospace",
                     letterSpacing: ".11em",
-                    color: "#F28FA0",
+                    color: "#F7BDC5",
                     marginBottom: 11,
                   }}
                 >

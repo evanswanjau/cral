@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { CodeInput } from "@cral/ui";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { P } from "../components/portal/styles.js";
@@ -390,14 +391,9 @@ function HandoverModal({ b, kind, onClose }: { b: BookingDetailData; kind: "pick
             <div style={{ display: "grid", gap: 14 }}>
               <div>
                 <label style={P.fieldLabel}>Code from the hirer</label>
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 4))}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  placeholder="0000"
-                  style={{ ...P.fieldInput, letterSpacing: ".3em", textAlign: "center", fontSize: 20 }}
-                />
+                <div style={{ maxWidth: 260 }}>
+                  <CodeInput length={4} label="Code from the hirer" value={code} onChange={setCode} autoFocus />
+                </div>
               </div>
               <div style={P.helperText}>There is no chat on CRAL - if the hirer can't find their code, call CRAL support.</div>
             </div>

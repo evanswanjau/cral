@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { CodeInput } from "@cral/ui";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
@@ -770,18 +771,10 @@ export function Booking(): JSX.Element {
                   </div>
                 ) : (
                   <>
-                    <label style={{ display: "block", marginBottom: 18 }}>
+                    <div style={{ marginBottom: 18 }}>
                       <span style={label}>The six-digit code</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        autoComplete="one-time-code"
-                        value={code}
-                        onChange={(e) => setCode(e.target.value)}
-                        placeholder="000000"
-                        style={{ ...monoField, letterSpacing: ".3em", fontSize: 18 }}
-                      />
-                    </label>
+                      <CodeInput label="The six-digit code" value={code} onChange={setCode} autoFocus />
+                    </div>
 
                     {error && <ErrorNote>{error.message}</ErrorNote>}
 

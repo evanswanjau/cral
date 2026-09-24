@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { CodeInput } from "@cral/ui";
 import { useNavigate } from "react-router-dom";
 import { adminLogin, adminVerifyTwoFactor } from "../lib/auth-api.js";
 import { setSession } from "../lib/auth.js";
@@ -144,17 +145,10 @@ export function SignIn(): JSX.Element {
               </p>
             </div>
 
-            <label style={S.field}>
+            <div style={S.field}>
               <span style={S.label}>SIGN-IN CODE</span>
-              <input
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                placeholder="123456"
-                style={{ ...S.input, ...S.codeInput }}
-              />
-            </label>
+              <CodeInput label="Sign-in code" value={code} onChange={setCode} autoFocus />
+            </div>
 
             {error && <div style={S.error}>{error}</div>}
 
@@ -233,12 +227,6 @@ const S = {
     borderRadius: "var(--r)",
     font: "400 15px/1 'Instrument Sans',sans-serif",
     color: "#1A1F2B",
-  },
-  codeInput: {
-    height: 54,
-    font: "600 24px/1 'IBM Plex Mono',monospace",
-    letterSpacing: ".3em",
-    textAlign: "center",
   },
   inlineBtn: {
     background: "none",
