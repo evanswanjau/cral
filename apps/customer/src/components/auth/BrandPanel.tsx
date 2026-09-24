@@ -81,10 +81,6 @@ export function BrandPanel({ variant, next }: { variant: BrandPanelVariant; next
       </div>
 
       <div style={S.middle}>
-        <div style={S.eyebrow}>
-          <span style={S.eyebrowRule} />
-          <span style={S.eyebrowText}>{booking ? "YOUR HIRE" : copy.eyebrow}</span>
-        </div>
         {booking ? (
           <HoldingForYou booking={booking} fallback={copy} />
         ) : (
@@ -105,9 +101,21 @@ export function BrandPanel({ variant, next }: { variant: BrandPanelVariant; next
   );
 }
 
+/** The eyebrow travels with what it heads, so a car that fails to load
+ * can't leave "YOUR HIRE" sitting over the generic pitch. */
+function Eyebrow({ children }: { children: string }): JSX.Element {
+  return (
+    <div style={S.eyebrow}>
+      <span style={S.eyebrowRule} />
+      <span style={S.eyebrowText}>{children}</span>
+    </div>
+  );
+}
+
 function Pitch({ copy }: { copy: (typeof COPY)[BrandPanelVariant] }): JSX.Element {
   return (
     <>
+      <Eyebrow>{copy.eyebrow}</Eyebrow>
       <h1 style={S.h1}>{copy.h1}</h1>
       <p style={S.lede}>{copy.lede}</p>
       <div style={S.proofList}>
@@ -154,6 +162,7 @@ function HoldingForYou({
 
   return (
     <>
+      <Eyebrow>YOUR HIRE</Eyebrow>
       <h1 style={S.h1}>Pick up where you left off.</h1>
       <p style={S.lede}>Finish here and you land straight back on this car, with these dates already filled in.</p>
       <div style={S.car}>
