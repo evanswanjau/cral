@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { CodeInput } from "@cral/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { P } from "../../components/portal/styles.js";
 import { DOC_STATE } from "../../components/portal/status.js";
 import { SaveBar } from "../../components/portal/SaveBar.js";
 import { useToast } from "../../components/portal/Toast.js";
-import { FormField, PrimaryButton, TextInput } from "../../components/onboarding/primitives.js";
+import { FormField, PrimaryButton } from "../../components/onboarding/primitives.js";
 import { O } from "../../components/onboarding/styles.js";
 import { ApiClientError, apiBlob } from "../../lib/api.js";
 import { confirmPhoneVerification, startPhoneVerification } from "../../lib/onboarding-draft.js";
@@ -513,12 +514,9 @@ function PhoneVerify({ phone }: { phone: string }): JSX.Element {
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           <FormField label={`6-digit code texted to ${masked}`}>
-            <TextInput
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              placeholder="123456"
-            />
+            <div style={{ maxWidth: 360 }}>
+              <CodeInput label="Verification code" value={code} onChange={setCode} autoFocus />
+            </div>
           </FormField>
           <PrimaryButton onClick={() => void confirm()} disabled={busy || code.length !== 6}>
             {busy ? "Checking…" : "Verify"}

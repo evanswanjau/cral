@@ -92,19 +92,6 @@ export const S = {
     font: "400 15px/1 'Instrument Sans',sans-serif",
     color: "#1A1F2B",
   },
-  /** The six-digit OTP field - deliberately larger and monospaced. */
-  codeInput: {
-    width: "100%",
-    height: 56,
-    padding: "0 16px",
-    background: "#FFFFFF",
-    border: "1px solid #CDD2DA",
-    borderRadius: "var(--r)",
-    font: "600 26px/1 'IBM Plex Mono',monospace",
-    letterSpacing: ".34em",
-    color: "#0B0F1A",
-    textAlign: "center",
-  },
   phonePrefix: {
     height: 48,
     padding: "0 13px",

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
-import { Checkbox, Field, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
+import { Checkbox, CodeInput, Field, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
 import {
   completeTwoFactorChallenge,
@@ -132,14 +132,7 @@ export function SignIn(): JSX.Element {
           }}
         >
           <Field id="code" label="SIGN-IN CODE">
-            <TextInput
-              id="code"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="123456"
-            />
+            <CodeInput id="code" label="Sign-in code" value={code} onChange={setCode} autoFocus />
           </Field>
           <PrimaryButton type="submit" disabled={busy || code.trim().length !== 6}>
             {busy ? "Checking…" : "Finish signing in"}
