@@ -2,6 +2,7 @@ import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
+import { assertNotPast } from "../../lib/dates.js";
 import type { DocumentRow } from "../merchant/db-types.js";
 import { RENTER_DOC_KINDS, type RenterDocKind } from "./schemas.js";
 
@@ -26,6 +27,8 @@ interface UploadedFile {
 interface UploadInput {
   kind: RenterDocKind;
   file: UploadedFile;
+  /** `YYYY-MM-DD`, required for a licence (see `UploadRenterDocumentSchema`). */
+  expiresAt?: string | undefined;
 }
 
 function buildStorageKey(userId: string, kind: RenterDocKind, name: string): string {
@@ -40,6 +43,7 @@ function serializeDocument(row: DocumentRow) {
     original_name: row.original_name,
     size_bytes: row.size_bytes,
     content_type: row.content_type,
+    expires_at: row.expires_at,
     // A renter's document is "PENDING REVIEW" until Ops accepts/rejects it,
     // exactly like the merchant side (DOC_STATE.pending). Nothing sets an
     // "actively reviewed" state - there's one decision, in the admin
@@ -52,6 +56,10 @@ function serializeDocument(row: DocumentRow) {
 
 /** Upload (or replace) one renter document. Single slot per kind. */
 export async function uploadRenterDocument(userId: string, input: UploadInput) {
+  // Same rule as a vehicle document: a date already gone by is not the
+  // current document's expiry, so it is a validation error, not a row.
+  if (input.expiresAt) assertNotPast(input.expiresAt, "expires_at");
+
   const key = buildStorageKey(userId, input.kind, input.file.originalname);
   await getStorageAdapter().putObject({
     key,
@@ -78,6 +86,7 @@ export async function uploadRenterDocument(userId: string, input: UploadInput) {
         size_bytes: input.file.size,
         content_type: input.file.mimetype,
         review_state: "pending",
+        expires_at: input.expiresAt ?? null,
       })
       .returning("*");
     if (!inserted) throw new Error("Failed to record document");
