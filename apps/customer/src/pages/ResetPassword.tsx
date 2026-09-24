@@ -1,127 +1,126 @@
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Button } from "@cral/ui";
-import { AuthShell } from "../components/AuthShell.js";
-import { FormField } from "../components/FormField.js";
+import { usePageTitle } from "../lib/use-page-title.js";
+import { AuthShell } from "../components/auth/AuthShell.js";
+import { PasswordField, PrimaryButton } from "../components/auth/primitives.js";
+import { S } from "../components/auth/styles.js";
 import { checkPasswordReset, resetPassword } from "../lib/auth-api.js";
 import { ApiClientError } from "../lib/api.js";
 
-interface FormValues {
-  phone: string;
-  code: string;
-  new_password: string;
-}
+type State = "checking" | "valid" | "expired";
 
-type CheckState = "checking" | "valid" | "expired" | "form";
-
+/**
+ * `/reset-password?token=...` - where the emailed link lands. The token is
+ * the only credential (reset is by emailed link only, 2026-08-24), so a
+ * bare visit with no token goes straight to the "ask for a new one"
+ * screen; there is no phone + code form any more.
+ *
+ * On success every session on the account has been revoked server-side,
+ * so this sends the renter to sign in again with a confirmation banner.
+ */
 export function ResetPassword(): JSX.Element {
+  usePageTitle("Choose a new password");
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get("token");
+  const [params] = useSearchParams();
+  const token = params.get("token");
 
-  const [state, setState] = useState<CheckState>(token ? "checking" : "form");
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
-
-  const {
-    register: field,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>();
+  const [state, setState] = useState<State>(token ? "checking" : "expired");
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!token) return;
+    let live = true;
     checkPasswordReset({ token })
-      .then((result) => setState(result.valid ? "valid" : "expired"))
-      .catch(() => setState("expired"));
+      .then((r) => live && setState(r.valid ? "valid" : "expired"))
+      .catch(() => live && setState("expired"));
+    return () => {
+      live = false;
+    };
   }, [token]);
 
-  async function onSubmit(values: FormValues) {
-    setServerError(null);
-    setSubmitting(true);
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (password.length < 10) {
+      setError("Your new password needs to be at least 10 characters.");
+      return;
+    }
+    if (password !== confirm) {
+      setError("The two passwords don't match.");
+      return;
+    }
+    setBusy(true);
     try {
-      await resetPassword(
-        token
-          ? { token, new_password: values.new_password }
-          : { phone: values.phone, code: values.code, new_password: values.new_password },
-      );
-      navigate("/sign-in", { state: { justReset: true } });
+      await resetPassword({ token: token!, new_password: password });
+      navigate("/sign-in", { replace: true, state: { justReset: true } });
     } catch (err) {
       if (err instanceof ApiClientError && err.code === "reset_token_expired") {
         setState("expired");
       } else if (err instanceof ApiClientError && err.code === "password_breached") {
-        setServerError(err.message);
+        setError(err.message);
       } else {
-        setServerError("Something went wrong. Please try again.");
+        setError("Something went wrong. Please try again.");
       }
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
   }
 
   if (state === "checking") {
     return (
-      <AuthShell title="Checking your link…">
-        <p className="text-sm text-slate-600">One moment.</p>
+      <AuthShell panel="recover" heading="Checking your link…" subheading="One moment.">
+        <div />
       </AuthShell>
     );
   }
 
-  // This is the "expired link/code handled gracefully instead of a dead
-  // end" screen the delivery plan calls out as missing from the original
-  // designs (spec §26, code reset_token_expired).
+  // The graceful end for an expired, used or missing link (spec §26,
+  // `reset_token_expired`) - never a dead end.
   if (state === "expired") {
     return (
-      <AuthShell title="This link has expired">
-        <p className="text-sm text-slate-600">
-          Reset links and codes only last a little while for your security. Request a new one and we'll
-          get you back in.
-        </p>
-        <Link to="/forgot-password">
-          <Button className="mt-4">Request a new link</Button>
+      <AuthShell
+        panel="recover"
+        heading="This link has expired"
+        subheading="Reset links work once and only last 30 minutes, for your security. Ask for a new one and we'll get you back in."
+        footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
+      >
+        <Link to="/forgot-password" style={{ ...S.primaryBtn, display: "grid", placeItems: "center", textDecoration: "none" }}>
+          Send me a new link
         </Link>
       </AuthShell>
     );
   }
 
   return (
-    <AuthShell title="Choose a new password">
-      <form className="flex flex-col gap-4" onSubmit={handleSubmit(onSubmit)}>
-        {!token && (
-          <>
-            <FormField
-              id="phone"
-              label="Phone number"
-              placeholder="+254722418903"
-              {...field("phone", { required: "Enter the phone number the code was sent to." })}
-              error={errors.phone}
-            />
-            <FormField
-              id="code"
-              label="Code"
-              inputMode="numeric"
-              maxLength={6}
-              {...field("code", { required: "Enter the 6-digit code." })}
-              error={errors.code}
-            />
-          </>
-        )}
-        <FormField
-          id="new_password"
-          label="New password"
-          type="password"
+    <AuthShell
+      panel="recover"
+      heading="Choose a new password"
+      subheading="Pick something you haven't used before. You'll be signed out everywhere and can sign in straight away."
+      error={error}
+    >
+      <form onSubmit={onSubmit} style={S.formStack} noValidate>
+        <PasswordField
+          id="new-password"
+          label="NEW PASSWORD"
           autoComplete="new-password"
-          {...field("new_password", {
-            required: "Choose a new password.",
-            minLength: { value: 10, message: "At least 10 characters." },
-          })}
-          error={errors.new_password}
+          value={password}
+          onChange={setPassword}
+          placeholder="At least 10 characters"
         />
-        {serverError && <p className="text-sm text-red-600">{serverError}</p>}
-        <Button type="submit" disabled={submitting}>
-          {submitting ? "Resetting…" : "Reset password"}
-        </Button>
+        <PasswordField
+          id="confirm-password"
+          label="TYPE IT AGAIN"
+          autoComplete="new-password"
+          value={confirm}
+          onChange={setConfirm}
+          placeholder="The same password"
+        />
+        <PrimaryButton type="submit" disabled={busy}>
+          {busy ? "Saving…" : "Save new password"}
+        </PrimaryButton>
       </form>
     </AuthShell>
   );
