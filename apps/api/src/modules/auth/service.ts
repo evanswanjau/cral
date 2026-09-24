@@ -26,6 +26,7 @@ import type {
   TwoFactorChallengeRow,
   UserRow,
 } from "./db-types.js";
+import type { ResetLinkApp } from "./schemas.js";
 
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
@@ -44,6 +45,16 @@ const TWO_FACTOR_MAX_ATTEMPTS = 5;
  */
 function merchantAppUrl(): string {
   return (process.env.MERCHANT_APP_URL ?? "http://localhost:5174").replace(/\/+$/, "");
+}
+
+/**
+ * The customer site's origin, for a renter's reset link - same footing as
+ * `merchantAppUrl`. Deliberately not `CUSTOMER_SITE_URL` (the sitemap's
+ * setting), which defaults to the production host: a local reset link
+ * must open the local app, not cral.co.ke.
+ */
+function customerAppUrl(): string {
+  return (process.env.CUSTOMER_APP_URL ?? "http://localhost:5173").replace(/\/+$/, "");
 }
 
 type OtpPurpose =
@@ -1455,7 +1466,7 @@ export async function getTwoFactorState(userId: string) {
 // §6 Forgot and reset password
 // ---------------------------------------------------------------------
 
-export async function forgotPassword(identifier: string) {
+export async function forgotPassword(identifier: string, app: ResetLinkApp = "merchant") {
   const resolved = resolveIdentifier(identifier);
   const user = resolved ? await findUserByIdentifier(resolved.identifier) : undefined;
 
@@ -1477,7 +1488,11 @@ export async function forgotPassword(identifier: string) {
       token_hash: hashToken(rawToken),
       expires_at: new Date(Date.now() + RESET_TOKEN_TTL_MINUTES * 60 * 1000),
     });
-    const link = `${merchantAppUrl()}/reset-password?token=${rawToken}`;
+    // The link opens the site the request came from. It used to be the
+    // merchant portal for everyone, so a renter landed on a sign-in for an
+    // app they had never used.
+    const origin = app === "customer" ? customerAppUrl() : merchantAppUrl();
+    const link = `${origin}/reset-password?token=${rawToken}`;
     await emailAdapter.send({
       to: user.email,
       subject: "Reset your CRAL password",

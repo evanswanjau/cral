@@ -107,6 +107,33 @@ describe("identity — email-first sign-up", () => {
     emailSpy.mockRestore();
     smsSpy.mockRestore();
   });
+
+  it("opens the reset link on the site that asked for it", async () => {
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+    const lastLink = () => /https?:\/\/[^\s]+\/reset-password\?token=[\w-]+/.exec(
+      emailSpy.mock.calls.at(-1)?.[0]?.text ?? "",
+    )?.[0];
+
+    const customer = await request(app)
+      .post("/auth/password/forgot")
+      .send({ identifier: emailOnly, app: "customer" });
+    expect(customer.status).toBe(202);
+    expect(lastLink()).toMatch(/^https:\/\/customer\.example\.test\/reset-password\?token=/);
+
+    // Left out, it is the merchant portal - its only caller before the
+    // customer site had a reset flow.
+    const merchant = await request(app).post("/auth/password/forgot").send({ identifier: emailOnly });
+    expect(merchant.status).toBe(202);
+    expect(lastLink()).toMatch(/^https:\/\/merchant\.example\.test\/reset-password\?token=/);
+
+    // A fixed choice, never a URL - anything else is refused.
+    const bogus = await request(app)
+      .post("/auth/password/forgot")
+      .send({ identifier: emailOnly, app: "https://evil.example" });
+    expect(bogus.status).toBe(422);
+
+    emailSpy.mockRestore();
+  });
 });
 
 describe("identity — golden path", () => {
