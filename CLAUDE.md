@@ -951,7 +951,8 @@ in `apps/api/src/__tests__/security.test.ts`, one block per finding.
   every state change on the platform (actor ids, IPs, before/after JSONB).
   An audit reader for humans belongs in the Phase-3 admin surface behind an
   `aud: "ops"` token. **Don't re-add a reader anywhere public.**
-- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind Railway is the
+- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind the proxy (Railway
+  then, nginx on the VPS now) is the
   edge's address for every visitor, so every IP-keyed `rateLimit` bucket was
   one platform-wide bucket — five OTP requests an hour for all users
   combined. Deliberately `1`, not `true`: trusting the whole
@@ -1469,31 +1470,41 @@ recorded deviation from contract-first; the module shipped without one).
 - **The dev settler (`devSettlePayment`/`/bookings/:id/payment/dev-settle`
   and the `DEMO_MODE` env flag that re-mounted it on a deployed
   environment) was removed 2026-09-22** once the real STK push flow was
-  confirmed working end to end, including on the Railway demo - a
+  confirmed working end to end, including on the deployed demo - a
   "mark my own booking paid" endpoint has no reason to exist once the real
   rail is trusted. If a sandbox callback ever proves unreliable again on a
   live demo, that is a reason to fix the callback path, not to bring this
   back.
 - **Where the callback lands differs per environment.** Local needs a
   tunnel (the ngrok one from the Co-op work serves both rails; its URL
-  rotates). The Vercel demo calls the **Railway** API, not the VPS, so
-  Railway is where the callback is registered.
+  rotates). The Vercel demo calls the dev API (`dev.api.cral.co.ke`), whose
+  `DARAJA_CALLBACK_URL` points back at itself with basic-auth credentials
+  embedded. The URL travels with each STK push, so there is nothing to
+  register on Safaricom's side.
 - **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
   because a silent success would mark a booking refunded while the money
   sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
-  called only from `dev-seed.ts`/`seed-demo.ts`**, so no payout run is
+  called only from `seed-demo.ts`** (the dev-seed endpoints were deleted
+  2026-09-23), so no payout run is
   ever originated in production either. That is the larger half of the
   payouts slice.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
-the primary one at `cral.co.ke` on the VPS. Same production API
-(`api.cral.co.ke`) — this is not a second backend, just a second front
-door. `CORS_ORIGINS` on the VPS `.env` includes `https://app-cral.vercel.app`
-(no `www`/preview-subdomain wildcard — only the one origin asked for).
+the primary one at `cral.co.ke` on the VPS. It talks to the **dev API,
+`dev.api.cral.co.ke`**, not production: a second API instance on the same
+VPS, running `develop` (`/srv/cral-dev`, port 4200, its own `cral_dev`
+database, Redis db 1, sandbox Daraja). It replaced a Railway deployment on
+2026-09-24 (Railway ran out of credit). Its `CORS_ORIGINS` is
+`https://app-cral.vercel.app` only (no `www`/preview-subdomain wildcard).
+
+**Deploying the dev API is manual:** after pushing or merging to `develop`,
+run `ssh cral@46.202.128.68 '~/redeploy-dev.sh'` (fetch `develop`, `npm ci`,
+build, **migrate `cral_dev`**, restart `cral-api-dev`, health check). A push
+alone redeploys only the Vercel frontend, so the two can briefly disagree.
 
 **It tracks `develop`, not `main`.** Push or merge to `develop` and
-Vercel auto-builds and deploys; `main`/the VPS are untouched by that.
+Vercel auto-builds and deploys; `main` and the production API are untouched by that.
 This makes `develop` a real staging branch for the customer portal:
 preview work there before it reaches `main` and the VPS. Set via the
 Vercel dashboard, Project → Settings → Environments → Production →
