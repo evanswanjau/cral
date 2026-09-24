@@ -5,6 +5,7 @@ import { getMe, logout } from "../../lib/auth-api.js";
 import { setSession } from "../../lib/auth.js";
 import { listMyNotifications } from "../../lib/notifications-api.js";
 import { listMyBookings } from "../../lib/bookings-api.js";
+import { merchantLandingUrl } from "../../lib/merchant-app.js";
 
 /**
  * The masthead's account avatar + dropdown, pulled from
@@ -130,6 +131,10 @@ export function AccountMenu(): JSX.Element {
     close();
     navigate(path);
   };
+  const goExternal = (url: string) => () => {
+    close();
+    window.location.assign(url);
+  };
 
   const hiringLinks: LinkRowDef[] = [
     {
@@ -143,7 +148,7 @@ export function AccountMenu(): JSX.Element {
     { label: "My documents", go: goTo("/documents"), tag: docTag, tagColor: verified ? "#1B8A5A" : "#C77400" },
   ];
   const listingLinks: LinkRowDef[] = [
-    { label: "List your car", go: goTo("/list-your-car"), tag: "FREE", tagColor: "#1B8A5A" },
+    { label: "List your car", go: goExternal(merchantLandingUrl()), tag: "FREE", tagColor: "#1B8A5A" },
     { label: "What CRAL checks first", go: goTo("/how-we-protect-you"), tag: "" },
     { label: "Sell a car", go: null, tag: "SOON" },
   ];
