@@ -229,6 +229,55 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
 
+  /payments/coopbank/ipn:
+    post:
+      tags: [callbacks]
+      summary: Co-op Bank account-event notification (B2B IPN)
+      description: >
+        Co-op's Core Banking Event Notification Specification v1.1: one POST
+        per debit or credit on CRAL's Co-op account, as it posts. Not a
+        payment we asked for - a bank-statement line pushed in real time.
+        Recorded in `bank_account_events`; nothing reconciles it against a
+        booking yet.
+
+        Authenticated by **HTTP Basic** (`COOPBANK_IPN_USER`/
+        `COOPBANK_IPN_PASSWORD`, given to Co-op at registration). In
+        production the endpoint answers 503 until both are set.
+
+        Co-op redelivers on any non-2xx, so the same `TransactionId` can
+        arrive more than once: it is stored once and every repeat gets a
+        200. Responses use Co-op's own `{MessageCode, Message}` shape.
+      operationId: coopBankIpn
+      security: [{ callbackBasicAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CoopBankIpnEvent" }
+      responses:
+        "200":
+          description: Recorded, or already recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoopBankIpnAck" }
+        "400":
+          description: >
+            A body missing or garbling `TransactionId`, `AcctNo`,
+            `EventType`, `Amount` or `Currency`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoopBankIpnAck" }
+        "401":
+          description: Basic credentials missing or wrong.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoopBankIpnAck" }
+        "503":
+          description: Production, with the credentials not configured.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CoopBankIpnAck" }
+
   /payments/coopbank/callback:
     post:
       tags: [callbacks]
@@ -294,6 +343,36 @@ components:
       schema: { type: string, maxLength: 255 }
 
   schemas:
+    CoopBankIpnEvent:
+      type: object
+      description: >
+        As Co-op sends it - every value a string. Amounts are decimals
+        ("22459.0"), converted to integer cents on receipt; balances may be
+        masked ("xx.9") and are then stored as null. Dates carry an offset
+        and no time ("2023-11-06+03:00").
+      required: [TransactionId, AcctNo, EventType, Amount, Currency]
+      properties:
+        AcctNo: { type: string, example: "01134248358600" }
+        Amount: { type: string, example: "22459.0" }
+        BookedBalance: { type: string }
+        ClearedBalance: { type: string }
+        Currency: { type: string, example: KES }
+        CustMemoLine1: { type: string }
+        CustMemoLine2: { type: string }
+        CustMemoLine3: { type: string }
+        EventType: { type: string, enum: [DEBIT, CREDIT] }
+        ExchangeRate: { type: string }
+        Narration: { type: string }
+        PaymentRef: { type: string, example: "06112023_153977988" }
+        PostingDate: { type: string, example: "2023-11-06+03:00" }
+        ValueDate: { type: string, example: "2023-11-06+03:00" }
+        TransactionDate: { type: string, example: "2023-11-06+03:00" }
+        TransactionId: { type: string, example: CB0045889_06112023 }
+    CoopBankIpnAck:
+      type: object
+      properties:
+        MessageCode: { type: string, example: "200" }
+        Message: { type: string, example: Successfully received data }
     Money:
       type: object
       required: [amount, currency]
