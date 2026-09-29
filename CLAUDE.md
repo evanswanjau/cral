@@ -1481,6 +1481,16 @@ recorded deviation from contract-first; the module shipped without one).
   `DARAJA_CALLBACK_URL` points back at itself with basic-auth credentials
   embedded. The URL travels with each STK push, so there is nothing to
   register on Safaricom's side.
+- **Co-op's account-event IPN ("B2B IPN") is received and stored**
+  (2026-09-29). `POST /payments/coopbank/ipn` records every debit/credit
+  Co-op pushes about CRAL's account into `bank_account_events` (`bae_`,
+  migration `20260929090000`), deduped on their `TransactionId`, answering
+  in their `{MessageCode, Message}` shape. HTTP Basic via
+  `COOPBANK_IPN_USER`/`_PASSWORD`; in production it 503s until both are
+  set (it doesn't block boot - nothing acts on these yet). **This is not
+  the STK push spec** and nothing reconciles an event to a booking: their
+  doc doesn't say which field would carry a renter's reference. Amounts
+  are bank decimals converted to `bigint` cents by string arithmetic.
 - **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
   because a silent success would mark a booking refunded while the money
   sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
