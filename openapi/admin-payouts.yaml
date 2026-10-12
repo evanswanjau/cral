@@ -1,0 +1,249 @@
+openapi: 3.0.3
+info:
+  title: CRAL Ops - Payouts
+  version: 0.1.0
+  description: >
+    Finance's view of merchant payout runs, and the Pay action.
+
+    Owner's call (2026-10-11): a daily job cuts runs on each merchant's
+    schedule (M-Pesa weekly on Monday or monthly on the 1st; bank always
+    the 1st) and an `admin_finance` user approves each one here before any
+    money moves. Paying hands the run to the disbursement rail
+    (`lib/disbursements.ts`): Pesalink to another bank, internal transfer to
+    a Co-op account, Send to M-Pesa to a phone.
+
+    Co-op's transfer APIs take whole shillings, so `sendable` is the run's
+    net rounded down to the shilling; the remainder is recorded on the
+    attempt, never rounded up.
+
+    Every route needs an ops-audience token with role `admin_finance`
+    (`admin_super` passes every role check).
+servers:
+  - url: https://admin.cral.co.ke/api
+security:
+  - opsBearer: []
+
+paths:
+  /admin/payout-runs:
+    get:
+      summary: Payout runs, with whole-set counts per status
+      operationId: listPayoutRuns
+      parameters:
+        - name: status
+          in: query
+          description: >
+            `open` (default) = `scheduled` + `failed`, oldest first - what
+            Finance has to act on. `paid` and `all` read newest first.
+          schema: { type: string, enum: [open, scheduled, processing, paid, failed, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: One page, plus counts for the whole table.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more, counts]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/PayoutRunItem" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    properties:
+                      scheduled: { type: integer }
+                      processing: { type: integer }
+                      paid: { type: integer }
+                      failed: { type: integer }
+        "403": { $ref: "#/components/responses/Error" }
+    post:
+      summary: Cut a run for one merchant now
+      description: >
+        Same rules as the scheduled cut (`cutPayoutRun`), dated today,
+        without waiting for the merchant's payout day. Does not pay it.
+      operationId: cutPayoutRun
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [merchant_id]
+              properties:
+                merchant_id: { type: string, example: mer_01J8QM0000000000000000000 }
+      responses:
+        "201":
+          description: The new run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutRunDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "`nothing_payable` - no completed, cleared hires waiting."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`payout_phone_unverified` / `bank_details_missing` - nowhere valid to pay."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /admin/payout-runs/{id}:
+    get:
+      summary: One run, its lines and every payment attempt
+      operationId: getPayoutRun
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The run.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutRunDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /admin/payout-runs/{id}/pay:
+    post:
+      summary: Pay a scheduled or failed run
+      description: >
+        Writes a payment attempt and moves the run to `processing` in one
+        audited transaction (`payout_run.pay`, actor = the admin), then
+        sends. The answer reflects whatever is known by the time the send
+        returns: `paid`/`failed` if the rail answered at once, otherwise
+        `processing` until Co-op's callback or the Transaction Status sweep.
+        At most one live attempt per run - a database constraint, not just
+        this check.
+      operationId: payPayoutRun
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: The run after the attempt.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutRunDetail" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "`payout_run_not_payable` - the run is processing or already paid."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "422":
+          description: "`bank_code_unknown` / `payout_phone_invalid` / `bank_details_missing` / `payout_amount_zero`."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: "`payout_rail_unconfigured` - production with `DISBURSEMENT_ADAPTER=console`. Nothing was sent; the run is unchanged."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+components:
+  securitySchemes:
+    opsBearer: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 255 }
+  responses:
+    Error:
+      description: Error envelope.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents. }
+        currency: { type: string, example: KES }
+    Attempt:
+      type: object
+      properties:
+        id: { type: string, example: dsb_01J8QM0000000000000000000 }
+        status: { type: string, enum: [pending, processing, success, failed] }
+        channel: { type: string, enum: [pesalink, internal, mpesa] }
+        destination: { type: string }
+        bank_name: { type: string, nullable: true }
+        bank_code: { type: string, nullable: true }
+        sent: { $ref: "#/components/schemas/Money" }
+        provider_transaction_id: { type: string, nullable: true }
+        failure_reason: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        sent_at: { type: string, format: date-time, nullable: true }
+        settled_at: { type: string, format: date-time, nullable: true }
+    PayoutRunItem:
+      type: object
+      properties:
+        id: { type: string, example: pot_01J8QM0000000000000000000 }
+        ref: { type: string }
+        status: { type: string, enum: [scheduled, processing, paid, failed] }
+        run_date: { type: string, format: date }
+        merchant:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+        net: { $ref: "#/components/schemas/Money" }
+        sendable: { $ref: "#/components/schemas/Money" }
+        destination:
+          type: object
+          properties:
+            method: { type: string, enum: [mpesa, bank] }
+            detail: { type: string }
+            account_name: { type: string }
+        hires: { type: integer }
+        provider_code: { type: string, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        last_attempt:
+          allOf: [{ $ref: "#/components/schemas/Attempt" }]
+          nullable: true
+    PayoutRunDetail:
+      allOf:
+        - $ref: "#/components/schemas/PayoutRunItem"
+        - type: object
+          properties:
+            lines:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  booking_id: { type: string, nullable: true }
+                  booking_ref: { type: string }
+                  hirer_name: { type: string }
+                  vehicle_registration: { type: string }
+                  pickup_at: { type: string, format: date-time }
+                  dropoff_at: { type: string, format: date-time }
+                  gross: { $ref: "#/components/schemas/Money" }
+                  commission: { $ref: "#/components/schemas/Money" }
+                  net: { $ref: "#/components/schemas/Money" }
+            attempts:
+              type: array
+              items: { $ref: "#/components/schemas/Attempt" }
+            can_pay:
+              type: boolean
+              description: False when Pay would be refused (wrong status, or no real rail in production).
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string }
+            message: { type: string }
+            field: { type: string }
+            doc_url: { type: string }
+            request_id: { type: string, nullable: true }
