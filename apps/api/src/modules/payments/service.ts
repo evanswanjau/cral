@@ -227,8 +227,12 @@ export async function initiatePayment(
  * - or from the rail that is no longer configured - must be ignored, not
  * made to 500 and invite a retry loop.
  */
-export async function handleCallback(rawBody: unknown, ctx: RequestContext): Promise<void> {
-  const parsed = paymentAdapter.parseCallback(rawBody);
+export async function handleCallback(
+  rawBody: unknown,
+  ctx: RequestContext,
+  parse: (body: unknown) => ParsedCallback | null = (body) => paymentAdapter.parseCallback(body),
+): Promise<void> {
+  const parsed = parse(rawBody);
   if (!parsed) {
     throw new ApiError({
       status: 422,

@@ -1464,8 +1464,9 @@ recorded deviation from contract-first; the module shipped without one).
 - **The Daraja callback IS authenticated** - HTTP Basic, via credentials
   embedded in the URL registered with Safaricom
   (`DARAJA_CALLBACK_USER`/`_PASSWORD`). **The API refuses to boot in
-  production without them.** Co-op's remains unauthenticated and still
-  unanswered.
+  production without them.** Co-op's is HTTP Basic too
+  (`COOPBANK_CALLBACK_USER`/`_PASSWORD`, 503 in production until set) -
+  see the Co-op Connect entry below.
 - **The dev settler (`devSettlePayment`/`/bookings/:id/payment/dev-settle`
   and the `DEMO_MODE` env flag that re-mounted it on a deployed
   environment) was removed 2026-09-22** once the real STK push flow was
@@ -1478,22 +1479,33 @@ recorded deviation from contract-first; the module shipped without one).
   tunnel (the ngrok one from the Co-op work serves both rails; its URL
   rotates). The Vercel demo calls the **Railway** API, not the VPS, so
   Railway is where the callback is registered.
-- **Co-op's account-event IPN ("B2B IPN") is received and stored**
-  (2026-09-29). `POST /payments/coopbank/ipn` records every debit/credit
-  Co-op pushes about CRAL's account into `bank_account_events` (`bae_`,
-  migration `20260929090000`), deduped on their `TransactionId`, answering
-  in their `{MessageCode, Message}` shape. HTTP Basic via
-  `COOPBANK_IPN_USER`/`_PASSWORD`; in production it 503s until both are
-  set (it doesn't block boot - nothing acts on these yet). **This is not
-  the STK push spec** and nothing reconciles an event to a booking: their
-  doc doesn't say which field would carry a renter's reference. Amounts
-  are bank decimals converted to `bigint` cents by string arithmetic.
 - **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
   because a silent success would mark a booking refunded while the money
   sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
   called only from `dev-seed.ts`/`seed-demo.ts`**, so no payout run is
   ever originated in production either. That is the larger half of the
   payouts slice.
+
+**Co-op Connect - STK, Transaction Status, Pesalink, Send to M-Pesa
+(owner's call, 2026-10-11).** Plan, phases and blockers:
+[`docs/plans/coopbank-integration.md`](./docs/plans/coopbank-integration.md).
+Linear project "CRAL - Co-op Bank integration" (COD-89..93).
+
+- **The B2B IPN was the wrong route.** Co-op (2026-10-02) wants their
+  public Co-op Connect APIs, results returned on a per-request callback
+  URL. The IPN endpoint shipped 2026-09-29 is removed and its table
+  dropped (migration `20261012090000`).
+- **Specs are public**: `GET https://developer.co-opbank.co.ke/api/am/store/v1/apis`
+  lists them and `.../apis/{id}/swagger` returns each OpenAPI doc, no
+  login. Read those, not memory.
+- **The token URL is `/oauth2/token`**; the bare `/token` 302s to the
+  gateway's `/carbon/admin/login.jsp` since 2026-10.
+- **`POST /payments/coopbank/callback` is the one URL on the onboarding
+  form** (test `dev.api.cral.co.ke`, production `api.cral.co.ke`, public
+  IP `46.202.128.68`, port 443). HTTP Basic via
+  `COOPBANK_CALLBACK_USER`/`_PASSWORD` (503 in production until set),
+  and always parsed as Co-op's format whatever `PAYMENT_ADAPTER` is -
+  dev runs Daraja for the demo but is also Co-op's test URL.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
