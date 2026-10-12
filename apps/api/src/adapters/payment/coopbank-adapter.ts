@@ -32,14 +32,14 @@ import type {
  * `TransactionAmount` / `TransactionCompletedDateTime` /
  * `ReceiverPartyPublicName`.
  *
- * **What is still NOT confirmed: how the callback authenticates itself.**
- * The OpenAPI document has nothing on this — no signature header, no
- * shared secret, no published IP range. `routes.ts`'s callback endpoint
- * still trusts nothing but its own obscurity. `COOPBANK_STK_PATH_CONFIRMED`
- * only gates the request/response shape below being right — it is not a
- * green light to point real money at this. That needs a separate answer
- * (ask Co-op support / the relationship manager directly — it isn't
- * documented) before this ever leaves sandbox.
+ * **The callback is authenticated by HTTP Basic** (2026-10-12). The
+ * Co-op Connect onboarding form (section 3) has us give Co-op a callback
+ * URL plus a username and password "shared separately"; routes.ts checks
+ * them (`COOPBANK_CALLBACK_USER`/`_PASSWORD`) and answers 503 in
+ * production until they are set. `COOPBANK_STK_PATH_CONFIRMED` still
+ * gates the outbound call until a live sandbox push has worked - as of
+ * 2026-10-12 every sandbox API call 302s to the gateway's admin login
+ * (token issuance works), so that has not happened yet.
  */
 
 interface CachedToken {
@@ -58,7 +58,9 @@ function requireEnv(name: string): string {
 function tokenUrl(): string {
   // Sandbox and (once generated) production share this shape; only the
   // host differs, and that's what COOPBANK_TOKEN_URL configures per env.
-  return process.env.COOPBANK_TOKEN_URL ?? "https://openapi-sandbox.co-opbank.co.ke/token";
+  // `/oauth2/token`, not `/token`: since 2026-10 the bare `/token` path
+  // 302s to the gateway's `/carbon/admin/login.jsp` instead of issuing.
+  return process.env.COOPBANK_TOKEN_URL ?? "https://openapi-sandbox.co-opbank.co.ke/oauth2/token";
 }
 
 function apiBaseUrl(): string {
@@ -215,30 +217,40 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
    * landed (2026-09-22) - the settle rules stayed in the service, one
    * copy, and only the wire format is per-provider.
    *
-   * Still NOT confirmed: how the callback authenticates itself. Parsing
-   * it correctly does not make the endpoint safe to point real money at.
+   * The route checks HTTP Basic (`COOPBANK_CALLBACK_USER`/`_PASSWORD`)
+   * before this runs - see routes.ts.
    */
   parseCallback(rawBody: unknown): ParsedCallback | null {
-    const body = rawBody as {
-      MessageReference?: unknown;
-      MessageCode?: unknown;
-      MessageDescription?: unknown;
-      TransactionID?: unknown;
-      TransactionAmount?: unknown;
-    } | null;
-    if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
-      return null;
-    }
-    const succeeded = body.MessageCode === "0";
-    const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
-    // A string in Co-op's schema, same as on the way out.
-    const amount = Number(body.TransactionAmount);
-    return {
-      reference: body.MessageReference,
-      succeeded,
-      receipt: typeof body.TransactionID === "string" && body.TransactionID ? body.TransactionID : null,
-      failureReason: succeeded ? null : description,
-      amountShillings: Number.isFinite(amount) && amount > 0 ? amount : null,
-    };
+    return parseCoopBankStkCallback(rawBody);
   }
+}
+
+/**
+ * The STK result callback's wire format, outside the class so the
+ * `/payments/coopbank/callback` route can read Co-op's callbacks whatever
+ * `PAYMENT_ADAPTER` is. Dev runs Daraja for the demo and still has to
+ * accept Co-op's test callbacks on the URL registered with them.
+ */
+export function parseCoopBankStkCallback(rawBody: unknown): ParsedCallback | null {
+  const body = rawBody as {
+    MessageReference?: unknown;
+    MessageCode?: unknown;
+    MessageDescription?: unknown;
+    TransactionID?: unknown;
+    TransactionAmount?: unknown;
+  } | null;
+  if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
+    return null;
+  }
+  const succeeded = body.MessageCode === "0";
+  const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
+  // A string in Co-op's schema, same as on the way out.
+  const amount = Number(body.TransactionAmount);
+  return {
+    reference: body.MessageReference,
+    succeeded,
+    receipt: typeof body.TransactionID === "string" && body.TransactionID ? body.TransactionID : null,
+    failureReason: succeeded ? null : description,
+    amountShillings: Number.isFinite(amount) && amount > 0 ? amount : null,
+  };
 }

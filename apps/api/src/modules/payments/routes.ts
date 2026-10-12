@@ -4,9 +4,9 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { requireIdempotencyKey } from "../../middleware/idempotency.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import * as service from "./service.js";
-import { recordCoopBankIpn } from "./coopbank-ipn.js";
 import type { RequestContext } from "./service.js";
 import { InitiateStkPushSchema } from "./schemas.js";
+import { parseCoopBankStkCallback } from "../../adapters/payment/coopbank-adapter.js";
 
 export const paymentsRouter = Router();
 
@@ -29,55 +29,49 @@ function basicAuthMatches(req: Request, user: string, password: string): boolean
 }
 
 /**
- * HTTP Basic on the Daraja callback, checked only when configured. A
- * failure returns 401 with no detail - a caller that got this wrong is
- * not one we owe an explanation.
- */
-function requireCallbackBasicAuth(req: Request, res: Response, next: NextFunction): void {
-  const user = process.env.DARAJA_CALLBACK_USER;
-  const password = process.env.DARAJA_CALLBACK_PASSWORD;
-  if (!user || !password || basicAuthMatches(req, user, password)) {
-    next();
-    return;
-  }
-  res.status(401).json({
-    error: {
-      type: "authentication_error",
-      code: "callback_unauthenticated",
-      message: "Unauthenticated.",
-      request_id: req.requestId ?? null,
-    },
-  });
-}
-
-/**
- * HTTP Basic on Co-op's account-event IPN (`COOPBANK_IPN_USER`/
- * `_PASSWORD`, handed to Co-op when the URL is registered). Answers in
- * Co-op's own `{MessageCode, Message}` shape, which is what their sender
- * reads.
+ * HTTP Basic on a provider callback, checked only when its two env vars
+ * are set. A failure returns 401 with no detail - a caller that got this
+ * wrong is not one we owe an explanation.
  *
- * Unlike the Daraja callback this doesn't stop the API booting in
- * production when unset - nothing acts on these events yet, so a missing
- * credential shouldn't take the rest of the API down. Instead the
- * endpoint refuses everything (503) until it's configured: an open one
- * would let anyone write fake lines into our bank record.
+ * `closedWhenUnset` is for a callback that must never be open in
+ * production: with no credentials configured it answers 503 there rather
+ * than accepting anyone. The Daraja callback doesn't need it - the API
+ * refuses to boot in production without its pair (server.ts) - but the
+ * Co-op one is mounted whatever `PAYMENT_ADAPTER` is, so no boot guard
+ * covers it.
  */
-function requireIpnBasicAuth(req: Request, res: Response, next: NextFunction): void {
-  const user = process.env.COOPBANK_IPN_USER;
-  const password = process.env.COOPBANK_IPN_PASSWORD;
-  if (!user || !password) {
-    if (process.env.NODE_ENV === "production") {
-      res.status(503).json({ MessageCode: "503", Message: "Endpoint not configured." });
+function callbackBasicAuth(userEnv: string, passwordEnv: string, closedWhenUnset = false) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const user = process.env[userEnv];
+    const password = process.env[passwordEnv];
+    if (!user || !password) {
+      if (closedWhenUnset && process.env.NODE_ENV === "production") {
+        res.status(503).json({
+          error: {
+            type: "server_error",
+            code: "callback_not_configured",
+            message: "Callback not configured.",
+            request_id: req.requestId ?? null,
+          },
+        });
+        return;
+      }
+      next();
       return;
     }
-    next();
-    return;
-  }
-  if (!basicAuthMatches(req, user, password)) {
-    res.status(401).json({ MessageCode: "401", Message: "Unauthenticated." });
-    return;
-  }
-  next();
+    if (basicAuthMatches(req, user, password)) {
+      next();
+      return;
+    }
+    res.status(401).json({
+      error: {
+        type: "authentication_error",
+        code: "callback_unauthenticated",
+        message: "Unauthenticated.",
+        request_id: req.requestId ?? null,
+      },
+    });
+  };
 }
 
 /** Moves money (an STK prompt) — Idempotency-Key required per spec §2. */
@@ -110,23 +104,24 @@ paymentsRouter.get(
 );
 
 /**
- * Co-op Bank's async result callback. The request/response shape it sends
- * is confirmed against their OpenAPI document (see service.ts#handleCallback
- * and coopbank-adapter.ts's top comment) — what is NOT confirmed is how
- * this callback authenticates itself. Server-to-server, so no bearer
- * token; nothing documented about a signature, a shared secret, or a
- * published IP range either. This endpoint still trusts nothing but its
- * own obscurity, which is not a real control — do not point real money at
- * this without a separate answer from Co-op on that.
+ * Co-op Bank's async result callback - the URL given on the Co-op Connect
+ * onboarding form (section 3, "Call Back URL"). The shape is confirmed
+ * against their OpenAPI document; see coopbank-adapter.ts.
+ *
+ * Authenticated by HTTP Basic: the form has Co-op call us with a username
+ * and password "shared separately", which live in `COOPBANK_CALLBACK_USER`/
+ * `_PASSWORD`. Closed (503) in production until both are set.
+ *
+ * Always parsed as Co-op's format, whatever `PAYMENT_ADAPTER` is: dev runs
+ * Daraja for the demo but is also the test URL registered with Co-op.
  */
 paymentsRouter.post(
   "/payments/coopbank/callback",
+  callbackBasicAuth("COOPBANK_CALLBACK_USER", "COOPBANK_CALLBACK_PASSWORD", true),
   asyncHandler(async (req, res) => {
-    await service.handleCallback(req.body, ctxOf(req));
-    // The ack Co-op expects back on this URL isn't documented either -
-    // this is a reasonable guess in their own vocabulary (MessageCode/
-    // MessageDescription, as the STKPush resource itself uses), not a
-    // confirmed contract. A non-2xx would presumably make them retry.
+    await service.handleCallback(req.body, ctxOf(req), parseCoopBankStkCallback);
+    // Co-op documents no ack shape for the callback; this is their own
+    // vocabulary (MessageCode/MessageDescription). A non-2xx is a retry.
     res.status(200).json({ MessageCode: "0", MessageDescription: "Accepted" });
   }),
 );
@@ -150,7 +145,7 @@ paymentsRouter.post(
  */
 paymentsRouter.post(
   "/payments/daraja/callback",
-  requireCallbackBasicAuth,
+  callbackBasicAuth("DARAJA_CALLBACK_USER", "DARAJA_CALLBACK_PASSWORD"),
   asyncHandler(async (req, res) => {
     await service.handleCallback(req.body, ctxOf(req));
     // Daraja retries on a non-2xx, and documents this exact ack shape.
@@ -158,26 +153,3 @@ paymentsRouter.post(
   }),
 );
 
-/**
- * Co-op Bank's account-event notification ("B2B IPN"): one POST per debit
- * or credit on CRAL's account. Recorded in `bank_account_events`, deduped
- * on the bank's `TransactionId` - a redelivery is acknowledged, not
- * stored twice. See coopbank-ipn.ts.
- *
- * Co-op treats any non-2xx as a failure and redelivers, so a body we
- * can't read is a 400 (it's worth them retrying or raising it), and
- * anything we've already got is a 200.
- */
-paymentsRouter.post(
-  "/payments/coopbank/ipn",
-  requireIpnBasicAuth,
-  asyncHandler(async (req, res) => {
-    const result = await recordCoopBankIpn(req.body, ctxOf(req));
-    if (!result.ok) {
-      console.warn(`[payments] coopbank ipn rejected: ${result.message}`);
-      res.status(400).json({ MessageCode: "400", Message: result.message });
-      return;
-    }
-    res.status(200).json({ MessageCode: "200", Message: "Successfully received data" });
-  }),
-);
