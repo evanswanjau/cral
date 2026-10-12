@@ -10,6 +10,7 @@ import { TextSmsAdapter } from "./adapters/sms/index.js";
 import { scheduleRepeatable, startMerchantReminderWorker } from "./jobs/merchant-reminders.js";
 import { scheduleBookingExpirySweep, startBookingExpiryWorker } from "./jobs/booking-expiry.js";
 import { schedulePaymentStatusSweep, startPaymentStatusWorker } from "./jobs/payment-status.js";
+import { schedulePayoutCut, startPayoutCutWorker } from "./jobs/payout-cut.js";
 import { startNotificationDeliveryWorker } from "./jobs/notification-delivery.js";
 import { startCommsBulkSendWorker } from "./jobs/comms-bulk-send.js";
 import { workersEnabled } from "./jobs/queue.js";
@@ -36,6 +37,8 @@ if (process.env.NODE_ENV !== "test" && workersEnabled()) {
   workers.push(startBookingExpiryWorker());
   void schedulePaymentStatusSweep();
   workers.push(startPaymentStatusWorker());
+  void schedulePayoutCut();
+  workers.push(startPayoutCutWorker());
   workers.push(startNotificationDeliveryWorker());
   workers.push(startCommsBulkSendWorker());
 } else if (process.env.NODE_ENV !== "test") {
@@ -44,7 +47,7 @@ if (process.env.NODE_ENV !== "test" && workersEnabled()) {
   // where those jobs are broken.
   console.warn(
     "[api] WORKERS_ENABLED=false - background jobs are NOT running " +
-      "(reminders, booking expiry, payment status, notification delivery, bulk sends). HTTP is served normally.",
+      "(reminders, booking expiry, payment status, payout cuts, notification delivery, bulk sends). HTTP is served normally.",
   );
 }
 

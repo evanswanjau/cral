@@ -1542,6 +1542,27 @@ Linear project "CRAL - Co-op Bank integration" (COD-89..93).
     marked paid. `coopbank` needs `COOPBANK_SOURCE_ACCOUNT`.
   - `PaymentAdapter.refund` is gone; refunds no longer 501, they go out
     by Send to M-Pesa via `executeRefund`.
+- **Payout runs are cut on a schedule and paid by Finance in Ops** (PR D,
+  owner's call 2026-10-11). `modules/payouts/schedule.ts` +
+  `jobs/payout-cut.ts` (06:00 Nairobi daily) cut one run per approved,
+  active merchant with payable bookings whose day it is: M-Pesa `weekly`
+  = Monday, `monthly` = the 1st, bank always the 1st. Destination is
+  read then and frozen on the run (M-Pesa = verified `users.phone`; bank
+  = the merchant's account). A merchant with no valid destination is
+  skipped and logged, not cut. Cutting never moves money.
+  - `/admin/payout-runs` (`openapi/admin-payouts.yaml`,
+    `modules/admin-payouts/`, `admin_finance`): list with whole-set
+    counts, run detail with lines + every attempt, `POST .../{id}/pay`
+    (Idempotency-Key, audited `payout_run.pay`) and `POST
+    /admin/payout-runs {merchant_id}` to cut one now (API only - no UI).
+    Pay 503s `payout_rail_unconfigured` in production on the console
+    rail, leaving the run untouched.
+  - Ops screens `apps/admin/src/pages/payouts/{Queue,Run}.tsx`, Payouts
+    now `built` in `SideNav`. **Not from a canvas file** - the admin
+    bundle has no payouts screen; built in the Services idiom and console
+    tokens, flagged for a swap.
+  - Merchant-facing run copy said "M-Pesa" even for bank runs;
+    `destinationPhrase` fixes the footnote and the cut notification.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside

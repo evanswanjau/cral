@@ -1,6 +1,6 @@
 # Co-op Bank integration: STK, Transaction Status, Pesalink, Send to M-Pesa
 
-Status: PR A (#56) and PR B (#57) merged 2026-10-12; PR C in review.
+Status: PRs A (#56), B (#57), C (#58) merged 2026-10-12; PR D in review. Remaining blockers are Co-op/owner-side (Linear COD-93).
 
 ## Why this exists
 
