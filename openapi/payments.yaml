@@ -244,6 +244,13 @@ paths:
         this URL on the Co-op Connect onboarding form. Answers 503 in
         production until both are set. Always parsed as Co-op's format,
         whatever `PAYMENT_ADAPTER` is.
+
+        The same URL receives funds-transfer results (payouts and refunds
+        sent by Pesalink, internal transfer or Send to M-Pesa), recognised
+        by a `Destinations[]` array: `MessageReference`, `MessageCode`, and
+        per-leg `ResponseCode` / `ResponseDescription` / `TransactionID`.
+        A result that settles nothing yet is acknowledged and left for the
+        Transaction Status sweep.
       operationId: coopbankCallback
       security: [{ callbackBasicAuth: [] }]
       requestBody:

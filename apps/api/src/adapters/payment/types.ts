@@ -44,17 +44,6 @@ export interface PaymentAdapter {
   /** Prompts the payer's phone. The actual payment result arrives later via the provider's callback, not the return value. */
   initiateStkPush(input: StkPushInput): Promise<StkPushResult>;
   /**
-   * Sends a settled payment back to the payer.
-   *
-   * A renter pays after acceptance (2026-09-21), so the usual reason to
-   * refund is a merchant cancelling a booking they were already paid
-   * for - plus anything taken under the brief pay-first flow. An adapter
-   * that cannot do this must throw rather than resolve -
-   * a refund that silently no-ops is worse than one that fails loudly,
-   * because the booking row would record a refund that never happened.
-   */
-  refund(input: RefundInput): Promise<RefundResult>;
-  /**
    * Reduces this provider's callback body to `ParsedCallback`, or returns
    * null when the payload isn't one this adapter recognises. Null is not
    * an error: each provider has its own callback URL, and a body arriving
@@ -62,24 +51,6 @@ export interface PaymentAdapter {
    * rail) must be ignored, not made to throw.
    */
   parseCallback(body: unknown): ParsedCallback | null;
-}
-
-export interface RefundInput {
-  /** Our own correlator, same role as `StkPushInput.messageReference`. */
-  messageReference: string;
-  /** E.164 destination - the line the original payment came from. */
-  phone: string;
-  /** Integer cents. Never more than the original payment. */
-  amountCents: number;
-  /** Statement line, e.g. "Refund CB-2841". */
-  narration: string;
-  /** The provider's receipt for the payment being reversed, where we have one. */
-  originalReceipt: string | null;
-}
-
-export interface RefundResult {
-  providerRef: string;
-  responseDescription: string;
 }
 
 /**

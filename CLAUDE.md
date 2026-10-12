@@ -1519,6 +1519,29 @@ Linear project "CRAL - Co-op Bank integration" (COD-89..93).
   `coopbank-status-query`). `interpretStkStatus` settles success only on
   HTTP 200 + `MessageCode "0"` + a receipt, failure only when a leg's
   `ResponseCode` says so; 404/207/unknown stay pending.
+- **Money out goes through `lib/disbursements.ts`** (PR C, 2026-10-12) -
+  merchant payouts and renter refunds, one set of rules like
+  `applySettlement` is for money in. `disbursements` table (`dsb_`,
+  migration `20261012100000`), one row per attempt, written **before**
+  the send. Channels: `pesalink` (another bank, `BankCode` from
+  `lib/bank-codes.ts` - CBK codes, **unconfirmed** until Co-op's list
+  arrives; an unknown bank 422s `bank_code_unknown` rather than guess),
+  `internal` (a Co-op account, IFT A2A 2.0.0) and `mpesa` (Send to
+  M-Pesa). Whole shillings only - `sent_shillings = floor(cents/100)`,
+  the sub-shilling remainder visible on the row, never rounded up.
+  - A send with no usable answer stays `pending` (money may have moved)
+    for the sweep; an outright refusal is `failed`; `processing` waits
+    for the callback (same URL as STK, told apart by `Destinations[]`)
+    or Transaction Status. `settleDisbursement` is idempotent and moves
+    the payout run to `paid`/`failed` (+ merchant notification) or the
+    refund to `success`/`failed`.
+  - A partial unique index allows one live attempt per payout run /
+    refund; a `failed` one frees the slot for a retry.
+  - **`DISBURSEMENT_ADAPTER=console` is refused in production** - the
+    attempt is failed with "No payout rail is configured" and nothing is
+    marked paid. `coopbank` needs `COOPBANK_SOURCE_ACCOUNT`.
+  - `PaymentAdapter.refund` is gone; refunds no longer 501, they go out
+    by Send to M-Pesa via `executeRefund`.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
