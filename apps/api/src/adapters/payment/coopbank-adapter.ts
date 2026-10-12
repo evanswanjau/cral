@@ -7,6 +7,7 @@ import type {
   StkPushInput,
   StkPushResult,
 } from "./types.js";
+import { coopPost, requireCoopEnv } from "../coopbank/client.js";
 
 /**
  * Cooperative Bank's OpenAPI developer portal (developer.co-opbank.co.ke),
@@ -42,72 +43,6 @@ import type {
  * (token issuance works), so that has not happened yet.
  */
 
-interface CachedToken {
-  accessToken: string;
-  expiresAt: number; // epoch ms
-}
-
-let cachedToken: CachedToken | null = null;
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required when PAYMENT_ADAPTER=coopbank`);
-  return value;
-}
-
-function tokenUrl(): string {
-  // Sandbox and (once generated) production share this shape; only the
-  // host differs, and that's what COOPBANK_TOKEN_URL configures per env.
-  // `/oauth2/token`, not `/token`: since 2026-10 the bare `/token` path
-  // 302s to the gateway's `/carbon/admin/login.jsp` instead of issuing.
-  return process.env.COOPBANK_TOKEN_URL ?? "https://openapi-sandbox.co-opbank.co.ke/oauth2/token";
-}
-
-function apiBaseUrl(): string {
-  return process.env.COOPBANK_API_BASE_URL ?? "https://openapi-sandbox.co-opbank.co.ke";
-}
-
-/** WSO2 client-credentials grant. Standard, documented, safe to rely on. */
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
-    return cachedToken.accessToken;
-  }
-
-  const consumerKey = requireEnv("COOPBANK_CONSUMER_KEY");
-  const consumerSecret = requireEnv("COOPBANK_CONSUMER_SECRET");
-  const basic = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
-
-  const res = await fetch(tokenUrl(), {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(`Co-op Bank token request failed: ${res.status} ${res.statusText} — ${text}`);
-  }
-
-  let json: { access_token?: string; expires_in?: number };
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Co-op Bank token response unparseable: ${text}`);
-  }
-  if (!json.access_token) {
-    throw new Error(`Co-op Bank token response missing access_token: ${text}`);
-  }
-
-  cachedToken = {
-    accessToken: json.access_token,
-    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000,
-  };
-  return cachedToken.accessToken;
-}
-
 /** `+254712345678` -> `254712345678` (Co-op's `TargetMSISDN` wants no leading `+`, and is exactly 12 chars for a normalised Kenyan number). */
 function toMsisdn(e164: string): string {
   return e164.replace(/^\+/, "");
@@ -131,47 +66,29 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
       });
     }
 
-    const callbackUrl = requireEnv("COOPBANK_CALLBACK_URL");
-    const accessToken = await getAccessToken();
+    const callbackUrl = requireCoopEnv("COOPBANK_CALLBACK_URL");
 
-    // The confirmed request body — see this file's top comment. No
+    // The confirmed request body - see this file's top comment. No
     // shortcode/passkey/timestamp: Co-op's proxy resolves the receiving
     // account from the app's own registration, not from anything in this
     // payload.
-    const res = await fetch(`${apiBaseUrl()}/stkpush/safaricom/1.0.0`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        MessageReference: input.messageReference,
-        TargetMSISDN: toMsisdn(input.phone),
-        CallBackUrl: callbackUrl,
-        // TransactionAmount is a STRING per the confirmed schema (≤7 digits).
-        TransactionAmount: String(Math.round(input.amountCents / 100)),
-        TransactionNarration: input.narration.slice(0, 30),
-      }),
+    const res = await coopPost("/stkpush/safaricom/1.0.0", {
+      MessageReference: input.messageReference,
+      TargetMSISDN: toMsisdn(input.phone),
+      CallBackUrl: callbackUrl,
+      // TransactionAmount is a STRING per the confirmed schema (<=7 digits).
+      TransactionAmount: String(Math.round(input.amountCents / 100)),
+      TransactionNarration: input.narration.slice(0, 30),
     });
-
-    const text = await res.text().catch(() => "");
-    if (!res.ok) {
-      throw new Error(`Co-op Bank STK push failed: ${res.status} ${res.statusText} — ${text}`);
-    }
-
-    let json: {
-      MessageReference?: string;
+    const json = res.body as {
       MessageCode?: string;
       MessageDescription?: string;
       TelcoRef?: string;
     };
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new Error(`Co-op Bank STK response unparseable: ${text}`);
-    }
-    if (json.MessageCode !== "0") {
-      throw new Error(`Co-op Bank STK push rejected: ${json.MessageDescription ?? text}`);
+    if (res.status >= 400 || json.MessageCode !== "0") {
+      throw new Error(
+        `Co-op Bank STK push rejected (${res.status}): ${json.MessageDescription ?? JSON.stringify(res.body)}`,
+      );
     }
 
     return {
