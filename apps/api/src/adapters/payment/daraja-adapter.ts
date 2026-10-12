@@ -1,9 +1,6 @@
-import { ApiError } from "@cral/types";
 import type {
   ParsedCallback,
   PaymentAdapter,
-  RefundInput,
-  RefundResult,
   StkPushInput,
   StkPushResult,
 } from "./types.js";
@@ -23,7 +20,8 @@ import type {
  *
  * **Two Daraja products back this file**, both mapped to the same sandbox
  * app: "Lipa Na M-Pesa Sandbox" (STK push, below) and "M-Pesa Sandbox"
- * (B2C, for payouts and refunds - not built here, see `refund`).
+ * (B2C) is not used: payouts and refunds go out through
+ * `lib/disbursements.ts` (Co-op Connect).
  *
  * Shapes below are Daraja's documented ones:
  *
@@ -250,29 +248,4 @@ export class DarajaPaymentAdapter implements PaymentAdapter {
     };
   }
 
-  /**
-   * NOT IMPLEMENTED YET, and deliberately throwing rather than resolving.
-   *
-   * Unlike Co-op, Daraja *does* have a rail for this - B2C
-   * (`/mpesa/b2c/v1/paymentrequest`, under the "M-Pesa Sandbox" product)
-   * and Reversal. Neither is wired up: both need an `InitiatorName` and a
-   * `SecurityCredential` (the initiator password RSA-encrypted with
-   * Safaricom's published certificate) that the STK credentials do not
-   * cover, plus their own result/timeout callbacks. That is the payouts
-   * slice, not this one.
-   *
-   * It throws so the failure is loud and the refund row is left `failed`
-   * for a human to settle by hand. A silent success would mark a booking
-   * refunded while the renter's money sat with us.
-   */
-  async refund(_input: RefundInput): Promise<RefundResult> {
-    throw new ApiError({
-      status: 501,
-      type: "server_error",
-      code: "daraja_refund_unavailable",
-      message:
-        "Daraja B2C is not wired up yet - it ships with the merchant-payouts slice. " +
-        "This refund must be settled manually; the refund row records what is owed.",
-    });
-  }
 }

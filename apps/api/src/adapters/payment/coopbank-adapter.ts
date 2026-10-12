@@ -2,8 +2,6 @@ import { ApiError } from "@cral/types";
 import type {
   ParsedCallback,
   PaymentAdapter,
-  RefundInput,
-  RefundResult,
   StkPushInput,
   StkPushResult,
 } from "./types.js";
@@ -95,31 +93,6 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
       providerRef: json.TelcoRef ?? "",
       responseDescription: json.MessageDescription ?? "Accepted",
     };
-  }
-
-  /**
-   * NOT IMPLEMENTED, and deliberately throwing rather than resolving.
-   *
-   * A renter pays only after the owner accepts (2026-09-21), so CRAL no
-   * longer holds money against an undecided request - but a merchant who
-   * cancels a booking they were already paid for still owes it back.
-   * Co-op's portal exposes no reversal API we have confirmed - the same "unconfirmed resource path" problem that
-   * still gates the STK push above, only with worse consequences if
-   * guessed at.
-   *
-   * It throws so the failure is loud and the refund row is marked
-   * `failed` for a human to settle by hand. A silent success here would
-   * mark a booking refunded while the renter's money sat with us.
-   */
-  async refund(_input: RefundInput): Promise<RefundResult> {
-    throw new ApiError({
-      status: 501,
-      type: "server_error",
-      code: "coopbank_refund_unavailable",
-      message:
-        "Co-op Bank refunds are not wired up - no confirmed reversal endpoint. " +
-        "This refund must be settled manually; the refund row records what is owed.",
-    });
   }
 
   /**

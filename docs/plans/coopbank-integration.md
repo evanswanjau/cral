@@ -1,6 +1,6 @@
 # Co-op Bank integration: STK, Transaction Status, Pesalink, Send to M-Pesa
 
-Status: PR A merged (#56, 2026-10-12); PR B in review.
+Status: PR A (#56) and PR B (#57) merged 2026-10-12; PR C in review.
 
 ## Why this exists
 

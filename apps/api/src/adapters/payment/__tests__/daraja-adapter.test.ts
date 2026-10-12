@@ -123,19 +123,3 @@ describe("DarajaPaymentAdapter.parseCallback", () => {
     expect(adapter.parseCallback({ Body: { stkCallback: { ResultCode: 0 } } })).toBeNull();
   });
 });
-
-describe("DarajaPaymentAdapter.refund", () => {
-  it("throws rather than resolving, so a refund is never recorded as done", () => {
-    // B2C ships with the payouts slice. A silent success here would mark
-    // a booking refunded while the renter's money sat with us.
-    return expect(
-      adapter.refund({
-        messageReference: "x",
-        phone: "+254712345678",
-        amountCents: 100,
-        narration: "Refund",
-        originalReceipt: null,
-      }),
-    ).rejects.toMatchObject({ status: 501, code: "daraja_refund_unavailable" });
-  });
-});

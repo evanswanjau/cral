@@ -76,6 +76,10 @@ export const ID_PREFIXES = {
   // entity rather than a `bookings` row. Internal entity, no prefix named
   // in the spec's own identifier list.
   serviceRequest: "svc",
+  // Money CRAL sends out through a bank rail - a merchant payout or a
+  // renter refund. One row per attempt; the payout run or refund it pays
+  // keeps its own record. Internal entity.
+  disbursement: "dsb",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

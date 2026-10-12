@@ -7,6 +7,8 @@ import * as service from "./service.js";
 import type { RequestContext } from "./service.js";
 import { InitiateStkPushSchema } from "./schemas.js";
 import { parseCoopBankStkCallback } from "../../adapters/payment/coopbank-adapter.js";
+import { isFundsTransferBody, readFundsTransferResult } from "../../adapters/disbursement/coopbank-adapter.js";
+import { settleDisbursement } from "../../lib/disbursements.js";
 
 export const paymentsRouter = Router();
 
@@ -114,12 +116,23 @@ paymentsRouter.get(
  *
  * Always parsed as Co-op's format, whatever `PAYMENT_ADAPTER` is: dev runs
  * Daraja for the demo but is also the test URL registered with Co-op.
+ *
+ * Two kinds of result land here, because every Co-op request carries the
+ * same `CallBackUrl`: an STK result (money in) and a funds-transfer result
+ * (a payout or refund going out, recognisable by its `Destinations[]`). A
+ * transfer result that doesn't settle anything yet is acknowledged and
+ * left for the status sweep.
  */
 paymentsRouter.post(
   "/payments/coopbank/callback",
   callbackBasicAuth("COOPBANK_CALLBACK_USER", "COOPBANK_CALLBACK_PASSWORD", true),
   asyncHandler(async (req, res) => {
-    await service.handleCallback(req.body, ctxOf(req), parseCoopBankStkCallback);
+    if (isFundsTransferBody(req.body)) {
+      const result = readFundsTransferResult(req.body);
+      if (result) await settleDisbursement(result, req.body, "callback");
+    } else {
+      await service.handleCallback(req.body, ctxOf(req), parseCoopBankStkCallback);
+    }
     // Co-op documents no ack shape for the callback; this is their own
     // vocabulary (MessageCode/MessageDescription). A non-2xx is a retry.
     res.status(200).json({ MessageCode: "0", MessageDescription: "Accepted" });
