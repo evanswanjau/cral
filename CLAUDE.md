@@ -1506,6 +1506,19 @@ Linear project "CRAL - Co-op Bank integration" (COD-89..93).
   `COOPBANK_CALLBACK_USER`/`_PASSWORD` (503 in production until set),
   and always parsed as Co-op's format whatever `PAYMENT_ADAPTER` is -
   dev runs Daraja for the demo but is also Co-op's test URL.
+- **`adapters/coopbank/client.ts` is the one copy of Co-op's token +
+  POST.** `coopPost` returns `{status, body}` for any JSON answer
+  (Co-op's statuses carry meaning: 207 partial, 404 unknown reference)
+  and throws only when there's no usable answer - a redirect (the
+  gateway's "can't route this") or a non-JSON body. A throw means "we
+  don't know", never "the payment failed".
+- **Lost STK callbacks are recovered by Transaction Status**
+  (`modules/payments/status-sweep.ts`, BullMQ every 5 min). Asks about
+  `coopbank` rows still `pending` 2 min to 24 h after creation and feeds
+  the answer through `applySettlement` (audit actor
+  `coopbank-status-query`). `interpretStkStatus` settles success only on
+  HTTP 200 + `MessageCode "0"` + a receipt, failure only when a leg's
+  `ResponseCode` says so; 404/207/unknown stay pending.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
