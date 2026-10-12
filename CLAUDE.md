@@ -1465,8 +1465,9 @@ recorded deviation from contract-first; the module shipped without one).
 - **The Daraja callback IS authenticated** - HTTP Basic, via credentials
   embedded in the URL registered with Safaricom
   (`DARAJA_CALLBACK_USER`/`_PASSWORD`). **The API refuses to boot in
-  production without them.** Co-op's remains unauthenticated and still
-  unanswered.
+  production without them.** Co-op's is HTTP Basic too
+  (`COOPBANK_CALLBACK_USER`/`_PASSWORD`, 503 in production until set) -
+  see the Co-op Connect entry below.
 - **The dev settler (`devSettlePayment`/`/bookings/:id/payment/dev-settle`
   and the `DEMO_MODE` env flag that re-mounted it on a deployed
   environment) was removed 2026-09-22** once the real STK push flow was
@@ -1481,16 +1482,6 @@ recorded deviation from contract-first; the module shipped without one).
   `DARAJA_CALLBACK_URL` points back at itself with basic-auth credentials
   embedded. The URL travels with each STK push, so there is nothing to
   register on Safaricom's side.
-- **Co-op's account-event IPN ("B2B IPN") is received and stored**
-  (2026-09-29). `POST /payments/coopbank/ipn` records every debit/credit
-  Co-op pushes about CRAL's account into `bank_account_events` (`bae_`,
-  migration `20260929090000`), deduped on their `TransactionId`, answering
-  in their `{MessageCode, Message}` shape. HTTP Basic via
-  `COOPBANK_IPN_USER`/`_PASSWORD`; in production it 503s until both are
-  set (it doesn't block boot - nothing acts on these yet). **This is not
-  the STK push spec** and nothing reconciles an event to a booking: their
-  doc doesn't say which field would carry a renter's reference. Amounts
-  are bank decimals converted to `bigint` cents by string arithmetic.
 - **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
   because a silent success would mark a booking refunded while the money
   sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
@@ -1498,6 +1489,84 @@ recorded deviation from contract-first; the module shipped without one).
   2026-09-23), so no payout run is
   ever originated in production either. That is the larger half of the
   payouts slice.
+
+**Co-op Connect - STK, Transaction Status, Pesalink, Send to M-Pesa
+(owner's call, 2026-10-11).** Plan, phases and blockers:
+[`docs/plans/coopbank-integration.md`](./docs/plans/coopbank-integration.md).
+Linear project "CRAL - Co-op Bank integration" (COD-89..93).
+
+- **The B2B IPN was the wrong route.** Co-op (2026-10-02) wants their
+  public Co-op Connect APIs, results returned on a per-request callback
+  URL. The IPN endpoint shipped 2026-09-29 is removed and its table
+  dropped (migration `20261012090000`).
+- **Specs are public**: `GET https://developer.co-opbank.co.ke/api/am/store/v1/apis`
+  lists them and `.../apis/{id}/swagger` returns each OpenAPI doc, no
+  login. Read those, not memory.
+- **The token URL is `/oauth2/token`**; the bare `/token` 302s to the
+  gateway's `/carbon/admin/login.jsp` since 2026-10.
+- **`POST /payments/coopbank/callback` is the one URL on the onboarding
+  form** (test `dev.api.cral.co.ke`, production `api.cral.co.ke`, public
+  IP `46.202.128.68`, port 443). HTTP Basic via
+  `COOPBANK_CALLBACK_USER`/`_PASSWORD` (503 in production until set),
+  and always parsed as Co-op's format whatever `PAYMENT_ADAPTER` is -
+  dev runs Daraja for the demo but is also Co-op's test URL.
+- **`adapters/coopbank/client.ts` is the one copy of Co-op's token +
+  POST.** `coopPost` returns `{status, body}` for any JSON answer
+  (Co-op's statuses carry meaning: 207 partial, 404 unknown reference)
+  and throws only when there's no usable answer - a redirect (the
+  gateway's "can't route this") or a non-JSON body. A throw means "we
+  don't know", never "the payment failed".
+- **Lost STK callbacks are recovered by Transaction Status**
+  (`modules/payments/status-sweep.ts`, BullMQ every 5 min). Asks about
+  `coopbank` rows still `pending` 2 min to 24 h after creation and feeds
+  the answer through `applySettlement` (audit actor
+  `coopbank-status-query`). `interpretStkStatus` settles success only on
+  HTTP 200 + `MessageCode "0"` + a receipt, failure only when a leg's
+  `ResponseCode` says so; 404/207/unknown stay pending.
+- **Money out goes through `lib/disbursements.ts`** (PR C, 2026-10-12) -
+  merchant payouts and renter refunds, one set of rules like
+  `applySettlement` is for money in. `disbursements` table (`dsb_`,
+  migration `20261012100000`), one row per attempt, written **before**
+  the send. Channels: `pesalink` (another bank, `BankCode` from
+  `lib/bank-codes.ts` - CBK codes, **unconfirmed** until Co-op's list
+  arrives; an unknown bank 422s `bank_code_unknown` rather than guess),
+  `internal` (a Co-op account, IFT A2A 2.0.0) and `mpesa` (Send to
+  M-Pesa). Whole shillings only - `sent_shillings = floor(cents/100)`,
+  the sub-shilling remainder visible on the row, never rounded up.
+  - A send with no usable answer stays `pending` (money may have moved)
+    for the sweep; an outright refusal is `failed`; `processing` waits
+    for the callback (same URL as STK, told apart by `Destinations[]`)
+    or Transaction Status. `settleDisbursement` is idempotent and moves
+    the payout run to `paid`/`failed` (+ merchant notification) or the
+    refund to `success`/`failed`.
+  - A partial unique index allows one live attempt per payout run /
+    refund; a `failed` one frees the slot for a retry.
+  - **`DISBURSEMENT_ADAPTER=console` is refused in production** - the
+    attempt is failed with "No payout rail is configured" and nothing is
+    marked paid. `coopbank` needs `COOPBANK_SOURCE_ACCOUNT`.
+  - `PaymentAdapter.refund` is gone; refunds no longer 501, they go out
+    by Send to M-Pesa via `executeRefund`.
+- **Payout runs are cut on a schedule and paid by Finance in Ops** (PR D,
+  owner's call 2026-10-11). `modules/payouts/schedule.ts` +
+  `jobs/payout-cut.ts` (06:00 Nairobi daily) cut one run per approved,
+  active merchant with payable bookings whose day it is: M-Pesa `weekly`
+  = Monday, `monthly` = the 1st, bank always the 1st. Destination is
+  read then and frozen on the run (M-Pesa = verified `users.phone`; bank
+  = the merchant's account). A merchant with no valid destination is
+  skipped and logged, not cut. Cutting never moves money.
+  - `/admin/payout-runs` (`openapi/admin-payouts.yaml`,
+    `modules/admin-payouts/`, `admin_finance`): list with whole-set
+    counts, run detail with lines + every attempt, `POST .../{id}/pay`
+    (Idempotency-Key, audited `payout_run.pay`) and `POST
+    /admin/payout-runs {merchant_id}` to cut one now (API only - no UI).
+    Pay 503s `payout_rail_unconfigured` in production on the console
+    rail, leaving the run untouched.
+  - Ops screens `apps/admin/src/pages/payouts/{Queue,Run}.tsx`, Payouts
+    now `built` in `SideNav`. **Not from a canvas file** - the admin
+    bundle has no payouts screen; built in the Services idiom and console
+    tokens, flagged for a swap.
+  - Merchant-facing run copy said "M-Pesa" even for bank runs;
+    `destinationPhrase` fixes the footnote and the cut notification.
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside

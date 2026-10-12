@@ -2,8 +2,6 @@ import { ulid } from "ulid";
 import type {
   ParsedCallback,
   PaymentAdapter,
-  RefundInput,
-  RefundResult,
   StkPushInput,
   StkPushResult,
 } from "./types.js";
@@ -20,15 +18,6 @@ export class ConsolePaymentAdapter implements PaymentAdapter {
       `[payment:console] STK push to=${input.phone} amount=KES${(input.amountCents / 100).toFixed(2)} narration=${input.narration} messageReference=${input.messageReference} providerRef=${providerRef}`,
     );
     return { providerRef, responseDescription: "Success. Request accepted for processing (console)" };
-  }
-
-  async refund(input: RefundInput): Promise<RefundResult> {
-    const providerRef = `console_refund_${ulid()}`;
-    // eslint-disable-next-line no-console
-    console.log(
-      `[payment:console] refund to=${input.phone} amount=KES${(input.amountCents / 100).toFixed(2)} narration=${input.narration} originalReceipt=${input.originalReceipt ?? "-"} messageReference=${input.messageReference} providerRef=${providerRef}`,
-    );
-    return { providerRef, responseDescription: "Refund accepted for processing (console)" };
   }
 
   /**

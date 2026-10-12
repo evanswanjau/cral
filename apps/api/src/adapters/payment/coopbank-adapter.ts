@@ -2,11 +2,10 @@ import { ApiError } from "@cral/types";
 import type {
   ParsedCallback,
   PaymentAdapter,
-  RefundInput,
-  RefundResult,
   StkPushInput,
   StkPushResult,
 } from "./types.js";
+import { coopPost, requireCoopEnv } from "../coopbank/client.js";
 
 /**
  * Cooperative Bank's OpenAPI developer portal (developer.co-opbank.co.ke),
@@ -32,79 +31,15 @@ import type {
  * `TransactionAmount` / `TransactionCompletedDateTime` /
  * `ReceiverPartyPublicName`.
  *
- * **What is still NOT confirmed: how the callback authenticates itself.**
- * The OpenAPI document has nothing on this — no signature header, no
- * shared secret, no published IP range. `routes.ts`'s callback endpoint
- * still trusts nothing but its own obscurity. `COOPBANK_STK_PATH_CONFIRMED`
- * only gates the request/response shape below being right — it is not a
- * green light to point real money at this. That needs a separate answer
- * (ask Co-op support / the relationship manager directly — it isn't
- * documented) before this ever leaves sandbox.
+ * **The callback is authenticated by HTTP Basic** (2026-10-12). The
+ * Co-op Connect onboarding form (section 3) has us give Co-op a callback
+ * URL plus a username and password "shared separately"; routes.ts checks
+ * them (`COOPBANK_CALLBACK_USER`/`_PASSWORD`) and answers 503 in
+ * production until they are set. `COOPBANK_STK_PATH_CONFIRMED` still
+ * gates the outbound call until a live sandbox push has worked - as of
+ * 2026-10-12 every sandbox API call 302s to the gateway's admin login
+ * (token issuance works), so that has not happened yet.
  */
-
-interface CachedToken {
-  accessToken: string;
-  expiresAt: number; // epoch ms
-}
-
-let cachedToken: CachedToken | null = null;
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required when PAYMENT_ADAPTER=coopbank`);
-  return value;
-}
-
-function tokenUrl(): string {
-  // Sandbox and (once generated) production share this shape; only the
-  // host differs, and that's what COOPBANK_TOKEN_URL configures per env.
-  return process.env.COOPBANK_TOKEN_URL ?? "https://openapi-sandbox.co-opbank.co.ke/token";
-}
-
-function apiBaseUrl(): string {
-  return process.env.COOPBANK_API_BASE_URL ?? "https://openapi-sandbox.co-opbank.co.ke";
-}
-
-/** WSO2 client-credentials grant. Standard, documented, safe to rely on. */
-async function getAccessToken(): Promise<string> {
-  if (cachedToken && cachedToken.expiresAt > Date.now() + 30_000) {
-    return cachedToken.accessToken;
-  }
-
-  const consumerKey = requireEnv("COOPBANK_CONSUMER_KEY");
-  const consumerSecret = requireEnv("COOPBANK_CONSUMER_SECRET");
-  const basic = Buffer.from(`${consumerKey}:${consumerSecret}`).toString("base64");
-
-  const res = await fetch(tokenUrl(), {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${basic}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new Error(`Co-op Bank token request failed: ${res.status} ${res.statusText} — ${text}`);
-  }
-
-  let json: { access_token?: string; expires_in?: number };
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`Co-op Bank token response unparseable: ${text}`);
-  }
-  if (!json.access_token) {
-    throw new Error(`Co-op Bank token response missing access_token: ${text}`);
-  }
-
-  cachedToken = {
-    accessToken: json.access_token,
-    expiresAt: Date.now() + (json.expires_in ?? 3600) * 1000,
-  };
-  return cachedToken.accessToken;
-}
 
 /** `+254712345678` -> `254712345678` (Co-op's `TargetMSISDN` wants no leading `+`, and is exactly 12 chars for a normalised Kenyan number). */
 function toMsisdn(e164: string): string {
@@ -129,78 +64,35 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
       });
     }
 
-    const callbackUrl = requireEnv("COOPBANK_CALLBACK_URL");
-    const accessToken = await getAccessToken();
+    const callbackUrl = requireCoopEnv("COOPBANK_CALLBACK_URL");
 
-    // The confirmed request body — see this file's top comment. No
+    // The confirmed request body - see this file's top comment. No
     // shortcode/passkey/timestamp: Co-op's proxy resolves the receiving
     // account from the app's own registration, not from anything in this
     // payload.
-    const res = await fetch(`${apiBaseUrl()}/stkpush/safaricom/1.0.0`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        MessageReference: input.messageReference,
-        TargetMSISDN: toMsisdn(input.phone),
-        CallBackUrl: callbackUrl,
-        // TransactionAmount is a STRING per the confirmed schema (≤7 digits).
-        TransactionAmount: String(Math.round(input.amountCents / 100)),
-        TransactionNarration: input.narration.slice(0, 30),
-      }),
+    const res = await coopPost("/stkpush/safaricom/1.0.0", {
+      MessageReference: input.messageReference,
+      TargetMSISDN: toMsisdn(input.phone),
+      CallBackUrl: callbackUrl,
+      // TransactionAmount is a STRING per the confirmed schema (<=7 digits).
+      TransactionAmount: String(Math.round(input.amountCents / 100)),
+      TransactionNarration: input.narration.slice(0, 30),
     });
-
-    const text = await res.text().catch(() => "");
-    if (!res.ok) {
-      throw new Error(`Co-op Bank STK push failed: ${res.status} ${res.statusText} — ${text}`);
-    }
-
-    let json: {
-      MessageReference?: string;
+    const json = res.body as {
       MessageCode?: string;
       MessageDescription?: string;
       TelcoRef?: string;
     };
-    try {
-      json = JSON.parse(text);
-    } catch {
-      throw new Error(`Co-op Bank STK response unparseable: ${text}`);
-    }
-    if (json.MessageCode !== "0") {
-      throw new Error(`Co-op Bank STK push rejected: ${json.MessageDescription ?? text}`);
+    if (res.status >= 400 || json.MessageCode !== "0") {
+      throw new Error(
+        `Co-op Bank STK push rejected (${res.status}): ${json.MessageDescription ?? JSON.stringify(res.body)}`,
+      );
     }
 
     return {
       providerRef: json.TelcoRef ?? "",
       responseDescription: json.MessageDescription ?? "Accepted",
     };
-  }
-
-  /**
-   * NOT IMPLEMENTED, and deliberately throwing rather than resolving.
-   *
-   * A renter pays only after the owner accepts (2026-09-21), so CRAL no
-   * longer holds money against an undecided request - but a merchant who
-   * cancels a booking they were already paid for still owes it back.
-   * Co-op's portal exposes no reversal API we have confirmed - the same "unconfirmed resource path" problem that
-   * still gates the STK push above, only with worse consequences if
-   * guessed at.
-   *
-   * It throws so the failure is loud and the refund row is marked
-   * `failed` for a human to settle by hand. A silent success here would
-   * mark a booking refunded while the renter's money sat with us.
-   */
-  async refund(_input: RefundInput): Promise<RefundResult> {
-    throw new ApiError({
-      status: 501,
-      type: "server_error",
-      code: "coopbank_refund_unavailable",
-      message:
-        "Co-op Bank refunds are not wired up - no confirmed reversal endpoint. " +
-        "This refund must be settled manually; the refund row records what is owed.",
-    });
   }
 
   /**
@@ -215,30 +107,40 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
    * landed (2026-09-22) - the settle rules stayed in the service, one
    * copy, and only the wire format is per-provider.
    *
-   * Still NOT confirmed: how the callback authenticates itself. Parsing
-   * it correctly does not make the endpoint safe to point real money at.
+   * The route checks HTTP Basic (`COOPBANK_CALLBACK_USER`/`_PASSWORD`)
+   * before this runs - see routes.ts.
    */
   parseCallback(rawBody: unknown): ParsedCallback | null {
-    const body = rawBody as {
-      MessageReference?: unknown;
-      MessageCode?: unknown;
-      MessageDescription?: unknown;
-      TransactionID?: unknown;
-      TransactionAmount?: unknown;
-    } | null;
-    if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
-      return null;
-    }
-    const succeeded = body.MessageCode === "0";
-    const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
-    // A string in Co-op's schema, same as on the way out.
-    const amount = Number(body.TransactionAmount);
-    return {
-      reference: body.MessageReference,
-      succeeded,
-      receipt: typeof body.TransactionID === "string" && body.TransactionID ? body.TransactionID : null,
-      failureReason: succeeded ? null : description,
-      amountShillings: Number.isFinite(amount) && amount > 0 ? amount : null,
-    };
+    return parseCoopBankStkCallback(rawBody);
   }
+}
+
+/**
+ * The STK result callback's wire format, outside the class so the
+ * `/payments/coopbank/callback` route can read Co-op's callbacks whatever
+ * `PAYMENT_ADAPTER` is. Dev runs Daraja for the demo and still has to
+ * accept Co-op's test callbacks on the URL registered with them.
+ */
+export function parseCoopBankStkCallback(rawBody: unknown): ParsedCallback | null {
+  const body = rawBody as {
+    MessageReference?: unknown;
+    MessageCode?: unknown;
+    MessageDescription?: unknown;
+    TransactionID?: unknown;
+    TransactionAmount?: unknown;
+  } | null;
+  if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
+    return null;
+  }
+  const succeeded = body.MessageCode === "0";
+  const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
+  // A string in Co-op's schema, same as on the way out.
+  const amount = Number(body.TransactionAmount);
+  return {
+    reference: body.MessageReference,
+    succeeded,
+    receipt: typeof body.TransactionID === "string" && body.TransactionID ? body.TransactionID : null,
+    failureReason: succeeded ? null : description,
+    amountShillings: Number.isFinite(amount) && amount > 0 ? amount : null,
+  };
 }

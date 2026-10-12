@@ -121,3 +121,83 @@ export function testFile(mimetype: AllowedUploadMimeType, label = ""): Buffer {
 /** Shorthand for the two types the upload tests actually use. */
 export const testPdf = (label = ""): Buffer => testFile("application/pdf", label);
 export const testJpeg = (label = ""): Buffer => testFile("image/jpeg", label);
+
+/**
+ * A merchant (owned by a fresh verified user) with one live vehicle, and a
+ * confirmed booking on it for `hirerId`. `bookings.merchant_id` and
+ * `.vehicle_id` are real foreign keys, so money tests need real rows
+ * behind them. Push the returned ids onto your own cleanup lists.
+ */
+export async function createTestBooking(
+  hirerId: string,
+  overrides: Record<string, unknown> = {},
+  merchantOverrides: Record<string, unknown> = {},
+): Promise<{ bookingId: string; merchantId: string; vehicleId: string; ownerUserId: string }> {
+  const owner = await createVerifiedTestUser();
+  const merchantId = generateId("merchant");
+  await db("merchants").insert({
+    id: merchantId,
+    user_id: owner.userId,
+    owner_type: "individual",
+    first_name: "Test",
+    surname: "Merchant",
+    payout_method: "mpesa",
+    payout_same: true,
+    onboarding_step: 5,
+    onboarding_max_step: 5,
+    onboarding_screen: "done",
+    onboarding_submitted: true,
+    approved_at: new Date(),
+    ...merchantOverrides,
+  });
+
+  const vehicleId = generateId("vehicle");
+  await db("vehicles").insert({
+    id: vehicleId,
+    merchant_id: merchantId,
+    type: "sedan",
+    make: "Toyota",
+    model: "Axio",
+    year: "2019",
+    registration: `KT${ulid().slice(-6)}`,
+    transmission: "Automatic",
+    fuel: "Petrol",
+    seats: 5,
+    county: "Nairobi",
+    daily_rate_amount: 500_000,
+    daily_rate_currency: "KES",
+    minimum_hire_days: 1,
+    chauffeured: false,
+    status: "live",
+  });
+
+  const bookingId = generateId("booking");
+  await db("bookings").insert({
+    id: bookingId,
+    ref: `CB-TEST-${bookingId.slice(-6)}`,
+    merchant_id: merchantId,
+    vehicle_id: vehicleId,
+    hirer_id: hirerId,
+    status: "confirmed",
+    pickup_at: new Date(),
+    dropoff_at: new Date(Date.now() + 86_400_000),
+    pickup_location: "Nairobi",
+    dropoff_location: "Nairobi",
+    gross_amount: 500_000,
+    gross_currency: "KES",
+    commission_amount: 50_000,
+    commission_currency: "KES",
+    merchant_net_amount: 450_000,
+    merchant_net_currency: "KES",
+    deposit_amount: 75_000,
+    deposit_currency: "KES",
+    payout_method: "mpesa",
+    payout_detail: "0700000000",
+    payout_account_name: "Test Merchant",
+    has_pickup_condition_photos: false,
+    deposit_released: false,
+    ...overrides,
+  });
+
+  return { bookingId, merchantId, vehicleId, ownerUserId: owner.userId };
+}

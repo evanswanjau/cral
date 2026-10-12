@@ -2,7 +2,7 @@ import type { Knex } from "knex";
 import { db } from "../db/client.js";
 import { generateId } from "./ids.js";
 import { writeAuditEntry } from "./audit.js";
-import { paymentAdapter } from "./adapters.js";
+import { createRefundDisbursement, sendDisbursement } from "./disbursements.js";
 
 /**
  * Sending a renter's money back.
@@ -115,34 +115,24 @@ export async function recordRefund(
 }
 
 /**
- * Attempts the send, after the caller's transaction has committed.
+ * Sends the refund, after the caller's transaction has committed, by Send
+ * to M-Pesa through `lib/disbursements.ts` - the same rail as merchant
+ * payouts. The refund row stays `pending` until that attempt settles; the
+ * disbursement's callback / status lookup moves it to `success` or
+ * `failed`.
  *
- * Never throws. A failed refund is a `failed` row carrying the reason,
- * for a human to settle by hand - and today that is the *expected*
- * outcome in production, because the Co-op adapter has no confirmed
- * reversal endpoint and throws on purpose. Letting this bubble would
- * turn "we owe you money" into a 500 on the merchant's decline button,
- * which helps nobody and loses the record.
+ * Never throws. A refund that can't be started (no usable phone on the
+ * payment) is marked `failed` with the reason, for a human to settle by
+ * hand - letting it bubble would turn "we owe you money" into a 500 on the
+ * merchant's decline button, which helps nobody and loses the record.
  */
 export async function executeRefund(refundId: string, bookingRef: string): Promise<void> {
   const refund = (await db("refunds").where({ id: refundId }).first()) as RefundRow | undefined;
   if (!refund || refund.status !== "pending") return;
 
-  const original = (await db("payment_requests")
-    .where({ id: refund.payment_request_id })
-    .first()) as { provider_receipt: string | null } | undefined;
-
+  let disbursementId: string;
   try {
-    const result = await paymentAdapter.refund({
-      messageReference: refund.id,
-      phone: refund.phone,
-      amountCents: refund.amount_amount,
-      narration: `Refund ${bookingRef}`.slice(0, 30),
-      originalReceipt: original?.provider_receipt ?? null,
-    });
-    await db("refunds")
-      .where({ id: refund.id })
-      .update({ status: "success", provider_ref: result.providerRef, updated_at: new Date() });
+    disbursementId = await db.transaction((trx) => createRefundDisbursement(trx, refund.id));
   } catch (err) {
     await db("refunds")
       .where({ id: refund.id })
@@ -151,5 +141,7 @@ export async function executeRefund(refundId: string, bookingRef: string): Promi
         failure_reason: err instanceof Error ? err.message : String(err),
         updated_at: new Date(),
       });
+    return;
   }
+  await sendDisbursement(disbursementId, `Refund ${bookingRef}`);
 }

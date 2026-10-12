@@ -227,8 +227,12 @@ export async function initiatePayment(
  * - or from the rail that is no longer configured - must be ignored, not
  * made to 500 and invite a retry loop.
  */
-export async function handleCallback(rawBody: unknown, ctx: RequestContext): Promise<void> {
-  const parsed = paymentAdapter.parseCallback(rawBody);
+export async function handleCallback(
+  rawBody: unknown,
+  ctx: RequestContext,
+  parse: (body: unknown) => ParsedCallback | null = (body) => paymentAdapter.parseCallback(body),
+): Promise<void> {
+  const parsed = parse(rawBody);
   if (!parsed) {
     throw new ApiError({
       status: 422,
@@ -254,10 +258,12 @@ export async function handleCallback(rawBody: unknown, ctx: RequestContext): Pro
  * It had a second caller, `devSettlePayment`, until that was removed on
  * 2026-09-22 with the rest of the dev settler - see CLAUDE.md.
  */
-async function applySettlement(
+export async function applySettlement(
   parsed: ParsedCallback,
   rawBody: unknown,
   ctx: RequestContext,
+  /** Who decided, for the audit row: the provider's callback, or our own status lookup. */
+  via: "callback" | "status-query" = "callback",
 ): Promise<void> {
   await db.transaction(async (trx) => {
     const existing = await trx<PaymentRequestRow>("payment_requests")
@@ -313,7 +319,7 @@ async function applySettlement(
 
     await writeAuditEntry(trx, {
       actorType: "system",
-      actorId: `${existing.provider}-callback`,
+      actorId: `${existing.provider}-${via}`,
       action: amountMismatch
         ? "payment.amount_mismatch"
         : succeeded

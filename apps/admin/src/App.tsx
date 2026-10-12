@@ -15,6 +15,8 @@ import { Settings } from "./pages/Settings.js";
 import { Communications } from "./pages/Communications.js";
 import { Queue as ServicesQueue } from "./pages/services/Queue.js";
 import { Case as ServiceCase } from "./pages/services/Case.js";
+import { Queue as PayoutsQueue } from "./pages/payouts/Queue.js";
+import { Run as PayoutRun } from "./pages/payouts/Run.js";
 
 /**
  * Vehicle review, the Merchants lens, the Renters queue, the Bookings
@@ -47,7 +49,8 @@ const router = createBrowserRouter([
           { path: "bookings/:id", element: <BookingDetail /> },
           { path: "services", element: <ServicesQueue /> },
           { path: "services/:id", element: <ServiceCase /> },
-          { path: "payouts", element: <Placeholder title="Payouts" /> },
+          { path: "payouts", element: <PayoutsQueue /> },
+          { path: "payouts/:id", element: <PayoutRun /> },
           { path: "invoicing", element: <Placeholder title="Invoicing" /> },
           { path: "disputes", element: <Placeholder title="Disputes" /> },
           { path: "communications", element: <Communications /> },

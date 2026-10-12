@@ -16,6 +16,7 @@ import { adminBookingsRouter } from "./modules/admin-bookings/routes.js";
 import { adminTeamRouter } from "./modules/admin-team/routes.js";
 import { adminCommsRouter } from "./modules/admin-comms/routes.js";
 import { adminServiceRequestsRouter } from "./modules/admin-service-requests/routes.js";
+import { adminPayoutsRouter } from "./modules/admin-payouts/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { catalogRouter } from "./modules/catalog/routes.js";
@@ -117,6 +118,7 @@ export function createApp(): Express {
   app.use(adminTeamRouter);
   app.use(adminCommsRouter);
   app.use(adminServiceRequestsRouter);
+  app.use(adminPayoutsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
   app.use(catalogRouter);

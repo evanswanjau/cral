@@ -40,7 +40,7 @@ const ITEMS: Item[] = [
   { kind: "leaf", to: "/renters", label: "Renters", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/bookings", label: "Bookings", roles: ["admin_support"], built: true },
   { kind: "leaf", to: "/services", label: "Services", roles: ["admin_support", "admin_reviewer"], built: true },
-  { kind: "leaf", to: "/payouts", label: "Payouts", roles: ["admin_finance"], built: false },
+  { kind: "leaf", to: "/payouts", label: "Payouts", roles: ["admin_finance"], built: true },
   { kind: "leaf", to: "/invoicing", label: "Invoicing", roles: ["admin_finance"], built: false },
   { kind: "leaf", to: "/disputes", label: "Disputes", roles: ["admin_support"], built: false },
   // `admin_super`-only, same reach as Team/Settings — real money, every

@@ -150,15 +150,24 @@ function weekdayOf(day: string): string {
  * merchant reads is the same wording support sees when they pull the run —
  * a footnote assembled in the client would drift between the two.
  */
+/**
+ * Where a run goes, in the words the merchant reads: "M-Pesa 0712 345 678"
+ * or "your bank account ending 7890". Runs used to be M-Pesa only, and
+ * every sentence said so even for a bank run.
+ */
+export function destinationPhrase(method: string, detail: string): string {
+  return method === "bank" ? `your bank account ending ${detail.slice(-4)}` : `M-Pesa ${detail}`;
+}
+
 function composeFootnote(run: PayoutRunRow, lineCount: number): string {
   const hires = `${lineCount} completed ${lineCount === 1 ? "hire" : "hires"}`;
   switch (run.status) {
     case "paid":
       return run.paid_at
-        ? `Sent to M-Pesa ${run.destination_detail} at ${formatNairobiTime(run.paid_at)}. ${hires} in one run.`
-        : `Sent to M-Pesa ${run.destination_detail}. ${hires} in one run.`;
+        ? `Sent to ${destinationPhrase(run.destination_method, run.destination_detail)} at ${formatNairobiTime(run.paid_at)}. ${hires} in one run.`
+        : `Sent to ${destinationPhrase(run.destination_method, run.destination_detail)}. ${hires} in one run.`;
     case "processing":
-      return `On its way to M-Pesa ${run.destination_detail}. Safaricom usually confirms within a few minutes.`;
+      return `On its way to ${destinationPhrase(run.destination_method, run.destination_detail)}. The bank usually confirms within a few minutes.`;
     case "failed":
       return `This run did not go through. CRAL support is looking into it. Raise a query below if you need an update.`;
     case "scheduled":
@@ -258,11 +267,9 @@ export async function cutPayoutRun(
     .returning("*");
 
   // Same transaction as the run itself, per lib/notifications.ts. Delivery
-  // (SMS/email) is not enqueued here — `cutPayoutRun` takes a `trx`, not a
-  // post-commit hook, and today its only caller is the dev-seed. The real
-  // caller is a Daraja B2C callback that doesn't exist yet; that is where
-  // `enqueueNotificationDelivery` gets wired, alongside the `paid`
-  // transition. The in-app feed row is written now regardless.
+  // (SMS/email) is the caller's to enqueue after commit - `cutPayoutRun`
+  // takes a `trx`, not a post-commit hook. The "payout sent" message is
+  // written by lib/disbursements.ts when the money actually settles.
   await notify(trx, {
     merchantId: merchantId,
     category: "payout",
@@ -270,8 +277,8 @@ export async function cutPayoutRun(
       ? `${run!.ref} · payout sent · KES ${formatAmount(net)}`
       : `${run!.ref} · payout scheduled · KES ${formatAmount(net)}`,
     body: options.markPaid
-      ? `${bookings.length} finished ${bookings.length === 1 ? "hire" : "hires"} cleared to M-Pesa ${destination.detail}. Safaricom code ${options.markPaid.providerCode}.`
-      : `Goes out ${weekdayOf(runDate)} to M-Pesa ${destination.detail}. Anything returned and cleared before then joins it.`,
+      ? `${bookings.length} finished ${bookings.length === 1 ? "hire" : "hires"} cleared to ${destinationPhrase(destination.method, destination.detail)}. Reference ${options.markPaid.providerCode}.`
+      : `Goes out ${weekdayOf(runDate)} to ${destinationPhrase(destination.method, destination.detail)}. Anything returned and cleared before then joins it.`,
     ref: run!.ref,
     subjectType: "payout_run",
     subjectId: runId,
