@@ -187,9 +187,26 @@ describe("merchant payouts", () => {
     const vehicle = await newVehicle(merchant.merchantId);
     const hirer = await newHirer();
     const booking = await payableBooking(merchant.merchantId, vehicle.id, hirer.id);
-    await db("bookings").where({ id: booking.id }).update({ deposit_released: false });
+    await db("bookings")
+      .where({ id: booking.id })
+      .update({ deposit_released: false, deposit_release_at: new Date(Date.now() + 2 * 60 * 60 * 1000) });
 
     expect(await cut(merchant.merchantId)).toBeNull();
+  });
+
+  it("pays out once the hold's release time passes, with no flag flipped", async () => {
+    // Nothing in production sets deposit_released, so the release time
+    // alone has to make a booking payable.
+    const merchant = await newMerchant();
+    const vehicle = await newVehicle(merchant.merchantId);
+    const hirer = await newHirer();
+    const booking = await payableBooking(merchant.merchantId, vehicle.id, hirer.id);
+    await db("bookings")
+      .where({ id: booking.id })
+      .update({ deposit_released: false, deposit_release_at: new Date(Date.now() - 60 * 1000) });
+
+    const run = await cut(merchant.merchantId);
+    expect(run).not.toBeNull();
   });
 
   it("lists only the caller's own runs", async () => {

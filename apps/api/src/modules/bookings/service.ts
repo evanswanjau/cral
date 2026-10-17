@@ -42,12 +42,11 @@ const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
+// The post-return hold before a booking becomes payable. No deposit is
+// held today (suspended 2026-10-17), but the 24h gap still stands between
+// a return and the payout run. A claim used to extend it to 48h; claims
+// are paused, so that second clock is gone with them.
 const DEPOSIT_HOLD_HOURS = 24;
-// Filing a claim extends the hold while CRAL reviews it — the design's
-// return-modal copy ("CRAL holds the deposit for 48 hours while a claim
-// is reviewed") is a second clock, not a conflict with the 24h normal
-// release; see returned_at's migration comment.
-const CLAIM_DEPOSIT_HOLD_HOURS = 48;
 const RATING_WINDOW_DAYS = 14;
 const REPORT_WINDOW_DAYS = 14;
 
@@ -1052,30 +1051,24 @@ function reportWindowOk(booking: BookingRow): boolean {
   return Date.now() <= booking.returned_at.getTime() + REPORT_WINDOW_DAYS * 24 * 60 * 60 * 1000;
 }
 
-function claimableNow(booking: BookingRow): boolean {
-  return booking.status === "completed" && !booking.deposit_released && !!booking.deposit_release_at && Date.now() < booking.deposit_release_at.getTime();
-}
-
 export async function createBookingReport(userId: string, bookingId: string, input: CreateBookingReportInput, ctx: RequestContext) {
   const { merchant, booking } = await requireOwnBooking(userId, bookingId);
 
-  if (!reportWindowOk(booking)) {
-    conflict("report_window_closed", "Reports can only be filed while a booking is on hire or within 14 days of its return.");
-  }
-  if (input.category === "damage" && !booking.has_pickup_condition_photos) {
-    unprocessable("photos_required", "No pickup condition photos are on file for this booking, so a damage claim can't be filed.");
+  // Cost claims are paused (owner's call, 2026-10-17): CRAL holds no
+  // deposit, so every claim would escalate straight to a dispute, and
+  // disputes are not open to merchants or renters yet. A conduct report
+  // moves no money and still goes through. The capped-claim and
+  // dispute-escalation path lives in git history (before 2026-10-17) for
+  // when deposits and disputes come back.
+  if (input.kind === "claim") {
+    conflict(
+      "claims_paused",
+      "Cost claims are paused for now. File a conduct report, or email support@cral.co.ke about the cost.",
+    );
   }
 
-  let amount: Money | null = null;
-  let escalatedDisputeId: string | null = null;
-  if (input.kind === "claim") {
-    if (!claimableNow(booking)) {
-      conflict("claim_window_closed", "The window to file a cost claim for this hire has closed. You can still file a conduct report.");
-    }
-    const requested = input.amount!;
-    const cap = booking.deposit_amount;
-    amount = kes(Math.min(requested, cap));
-    if (requested > cap) escalatedDisputeId = generateId("dispute");
+  if (!reportWindowOk(booking)) {
+    conflict("report_window_closed", "Reports can only be filed while a booking is on hire or within 14 days of its return.");
   }
 
   const report = await db.transaction(async (trx) => {
@@ -1087,34 +1080,20 @@ export async function createBookingReport(userId: string, bookingId: string, inp
         kind: input.kind,
         category: input.category,
         description: input.description,
-        amount_amount: amount?.amount ?? null,
-        amount_currency: amount?.currency ?? null,
+        amount_amount: null,
+        amount_currency: null,
         evidence_document_ids: input.evidence_document_ids ?? [],
-        escalated_dispute_id: escalatedDisputeId,
+        escalated_dispute_id: null,
       })
       .returning("*");
     if (!row) throw new Error("Failed to file report");
 
-    if (input.kind === "claim" && booking.returned_at) {
-      const extendedRelease = new Date(booking.returned_at.getTime() + CLAIM_DEPOSIT_HOLD_HOURS * 60 * 60 * 1000);
-      await trx<BookingRow>("bookings").where({ id: booking.id }).update({ deposit_release_at: extendedRelease });
-      await appendBookingEvent(trx, {
-        bookingId: booking.id,
-        merchantId: merchant.id,
-        kind: "claim_under_review",
-        tone: "amber",
-        label: "Claim under review",
-        body: "CRAL is reviewing your claim. This usually takes up to 48 hours.",
-        actorType: "system",
-      });
-    }
-
     await appendBookingEvent(trx, {
       bookingId: booking.id,
       merchantId: merchant.id,
-      kind: input.kind === "claim" ? "claim_filed" : "conduct_reported",
+      kind: "conduct_reported",
       tone: "amber",
-      label: input.kind === "claim" ? "Claim filed" : "Conduct reported",
+      label: "Conduct reported",
       body: input.description,
       actorType: "merchant",
     });
@@ -1124,7 +1103,7 @@ export async function createBookingReport(userId: string, bookingId: string, inp
       action: "booking.report_filed",
       entityType: "booking",
       entityId: booking.id,
-      after: { kind: input.kind, category: input.category, amount },
+      after: { kind: input.kind, category: input.category },
       requestId: ctx.requestId,
       ip: ctx.ip,
     });

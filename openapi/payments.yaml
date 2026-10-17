@@ -28,8 +28,11 @@ info:
 
     **Money never comes from the client.** The amount charged is read from
     the booking row server-side; the request body names only *which*
-    figure (`deposit` or `full`) and the phone to prompt. Display
-    formatting is a client concern (spec §2).
+    figure (`full`) and the phone to prompt. Display formatting is a
+    client concern (spec §2).
+
+    **No deposit is collected** (owner's call, 2026-10-17). `purpose:
+    deposit` is no longer accepted; CRAL takes the hire only.
   license:
     name: Proprietary — Cruz Ride Auto Limited
 servers:
@@ -79,9 +82,10 @@ paths:
               properties:
                 purpose:
                   type: string
-                  enum: [deposit, full]
+                  enum: [full]
                   description: >
-                    Which of the booking's own figures to charge. The
+                    Which of the booking's own figures to charge. Only
+                    `full` while deposits are suspended (2026-10-17). The
                     amount itself is never taken from the client.
                 phone:
                   type: string

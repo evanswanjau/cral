@@ -7,6 +7,7 @@ import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { Modal } from "../components/portal/Modal.js";
 import { useToast } from "../components/portal/Toast.js";
 import { ApiClientError } from "../lib/api.js";
+import { SUPPORT_EMAIL } from "../lib/support.js";
 import {
   useBookingDetail,
   useCancelBooking,
@@ -23,7 +24,6 @@ import {
   useVerifyHandoverOtp,
   type BookingDetail as BookingDetailData,
   type BookingReportCategory,
-  type BookingReportKind,
   type DeclineBookingInput,
   type Handover,
 } from "../lib/bookings-api.js";
@@ -495,35 +495,26 @@ const REPORT_CATEGORIES: { value: BookingReportCategory; label: string }[] = [
 function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void }): JSX.Element {
   const flash = useToast();
   const create = useCreateBookingReport(b.id);
-  const [kind, setKind] = useState<BookingReportKind>("claim");
   const [category, setCategory] = useState<BookingReportCategory>("damage");
   const [description, setDescription] = useState("");
-  const [amount, setAmount] = useState("");
 
-  // The merchant states what the issue cost to put right. What CRAL can
-  // actually settle, and how, is decided server-side and never surfaces here.
-  const amountNum = (parseInt(amount.replace(/\D/g, ""), 10) || 0) * 100;
-  const photosBlocked = category === "damage" && !b.has_pickup_condition_photos;
-
+  // Conduct reports only. Cost claims are paused (owner's call,
+  // 2026-10-17) - CRAL holds no deposit and disputes aren't open yet - so a
+  // cost goes to support by email instead.
   return (
     <Modal
       title="Report an issue"
-      sub="CRAL reviews reports like this and follows up with the hirer."
+      sub="This goes on the hirer's record. CRAL reviews reports like this and follows up."
       onClose={onClose}
       ctaLabel={create.isPending ? "Filing…" : "File report"}
-      ctaDisabled={create.isPending || !description.trim() || (kind === "claim" && !amount) || photosBlocked}
+      ctaDisabled={create.isPending || !description.trim()}
       onConfirm={() =>
         create.mutate(
-          {
-            kind,
-            category,
-            description: description.trim(),
-            ...(kind === "claim" ? { amount: amountNum } : {}),
-          },
+          { kind: "conduct", category, description: description.trim() },
           {
             onSuccess: () => {
               onClose();
-              flash(kind === "claim" ? "Claim filed. CRAL is reviewing it." : "Reported. This is added to the hirer's record.");
+              flash("Reported. This is added to the hirer's record.");
             },
             onError: (err) => flash(err instanceof ApiClientError ? err.message : "Couldn't file that. Try again.", "#FF8A8A"),
           },
@@ -531,24 +522,6 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
       }
     >
       <div style={{ display: "grid", gap: 16 }}>
-        <div style={P.toggleRow}>
-          <div>
-            <div style={P.toggleRowTitle}>Are you claiming the cost of repair or loss?</div>
-            <div style={P.toggleRowSub}>
-              {kind === "claim"
-                ? "CRAL reviews it and follows up with the hirer."
-                : "No claim - this just goes on their record."}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setKind((k) => (k === "claim" ? "conduct" : "claim"))}
-            style={{ ...P.toggleTrack, background: kind === "claim" ? "#0F23A8" : "#CDD2DA", justifyContent: kind === "claim" ? "flex-end" : "flex-start" }}
-          >
-            <span style={P.toggleThumb} />
-          </button>
-        </div>
-
         <div>
           <label style={P.fieldLabel}>Category</label>
           <select value={category} onChange={(e) => setCategory(e.target.value as BookingReportCategory)} style={{ ...P.fieldInputText, fontFamily: "'Instrument Sans',sans-serif" }}>
@@ -558,23 +531,16 @@ function ReportModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
           </select>
         </div>
 
-        {kind === "claim" && (
-          <div>
-            <label style={P.fieldLabel}>What did it cost to put right? (KES)</label>
-            <input value={amount} onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))} style={P.fieldInput} placeholder="0" />
-          </div>
-        )}
-
         <div>
           <label style={P.fieldLabel}>What happened</label>
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} style={P.textarea} />
         </div>
 
-        {category === "damage" && !b.has_pickup_condition_photos && (
-          <div style={P.deleteWarn}>
-            <div style={P.deleteBody}>No pickup condition photos are on file for this booking, so a damage claim can't be filed.</div>
-          </div>
-        )}
+        <div style={P.toggleRowSub}>
+          Claiming the cost of repair or loss? Email{" "}
+          <a href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Cost on booking ${b.ref}`)}`}>{SUPPORT_EMAIL}</a>{" "}
+          with the booking ref and what it cost.
+        </div>
       </div>
     </Modal>
   );
@@ -834,11 +800,6 @@ export function BookingDetail(): JSX.Element {
               <div style={{ padding: "0 18px 18px" }}>
                 <div style={P.specKey}>NOTE FROM THE HIRER</div>
                 <div style={{ font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#333B4A" }}>{b.note_from_hirer}</div>
-              </div>
-            )}
-            {(b.status === "active" || b.status === "completed") && !b.has_pickup_condition_photos && (
-              <div style={{ padding: "0 18px 18px" }}>
-                <div style={{ ...P.helperText, color: "#8A5200" }}>No condition photos on file from pick-up - a damage claim can't be filed on this booking.</div>
               </div>
             )}
           </div>
