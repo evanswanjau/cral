@@ -185,6 +185,7 @@ async function serializeDetail(merchant: MerchantRow, vehicle: VehicleRow) {
     colour: vehicle.colour,
     minimum_hire_days: vehicle.minimum_hire_days,
     chauffeured: vehicle.chauffeured,
+    offers_delivery: vehicle.offers_delivery,
     rate_mode: vehicle.rate_mode === "net" ? "net" : "list",
     verification_badge_expires_at: vehicle.verification_badge_expires_at
       ? vehicle.verification_badge_expires_at.toISOString()
@@ -374,6 +375,7 @@ export async function duplicateVehicle(userId: string, vehicleId: string, ctx: R
         daily_rate_amount: vehicle.daily_rate_amount,
         minimum_hire_days: vehicle.minimum_hire_days,
         chauffeured: vehicle.chauffeured,
+        offers_delivery: vehicle.offers_delivery,
         status: "draft",
         listing_ref: listingRef,
       })
@@ -509,6 +511,7 @@ export async function updatePriceAvailability(
   if (input.county !== undefined) update.county = input.county;
   if (input.pickup_address !== undefined) update.pickup_address = input.pickup_address;
   if (input.chauffeured !== undefined) update.chauffeured = input.chauffeured;
+  if (input.offers_delivery !== undefined) update.offers_delivery = input.offers_delivery;
 
   // Per-hour pricing stays switched off until the customer booking flow
   // has a real time-of-day picker. Today it only collects dates, and

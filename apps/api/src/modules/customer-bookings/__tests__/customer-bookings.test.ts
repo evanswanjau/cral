@@ -99,6 +99,7 @@ async function listing(
     hiringUnit?: "day" | "hour" | "trip";
     hourlyRate?: number;
     tripRate?: number;
+    offersDelivery?: boolean;
   } = {},
 ) {
   const owner = await createVerifiedTestUser();
@@ -140,6 +141,7 @@ async function listing(
     daily_rate_currency: "KES",
     minimum_hire_days: opts.minDays ?? 1,
     chauffeured: false,
+    offers_delivery: opts.offersDelivery ?? false,
     status: opts.status ?? "live",
     hiring_unit: opts.hiringUnit ?? "day",
     ...(opts.hourlyRate !== undefined
@@ -229,6 +231,85 @@ describe("requesting a car", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.gross.amount).toBe(computeBookingPricing(900_000, 3).gross.amount);
+  });
+});
+
+describe("delivery (owner opts in, CRAL sets the fee)", () => {
+  it("defaults to collecting from the owner, with no fee", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ rate: 420_000, offersDelivery: true });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(201);
+    expect(res.body.handover).toMatchObject({ option: "collect", address: null, fee: { amount: 0 } });
+    expect(res.body.gross.amount).toBe(computeBookingPricing(420_000, 2).gross.amount);
+  });
+
+  it("adds the airport fee to what the renter pays, commission on the hire only", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ rate: 420_000, offersDelivery: true });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId, handover: { option: "jkia" } });
+
+    expect(res.status).toBe(201);
+    expect(res.body.handover).toMatchObject({ option: "jkia", label: "JKIA arrivals", fee: { amount: 150_000 } });
+    expect(res.body.pickup_location).toBe("JKIA arrivals");
+    expect(res.body.gross.amount).toBe(840_000 + 150_000);
+    expect(res.body.total_due.amount).toBe(840_000 + 150_000);
+
+    const stored = await db("bookings").where({ id: res.body.id }).first();
+    expect(stored.commission_amount).toBe(84_000);
+    expect(stored.merchant_net_amount).toBe(840_000 + 150_000 - 84_000);
+    expect(stored.delivery_fee_amount).toBe(150_000);
+  });
+
+  it("takes the renter's address for an address delivery, and needs one", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ offersDelivery: true });
+
+    const missing = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId, handover: { option: "address" } });
+    expect(missing.status).toBe(422);
+    expect(missing.body.error.code).toBe("delivery_address_required");
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({
+        ...dates(3, 1),
+        vehicle_id: vehicleId,
+        handover: { option: "address", address: "Lavington Mall, James Gichuru Road" },
+      });
+    expect(res.status).toBe(201);
+    expect(res.body.handover).toMatchObject({ option: "address", address: "Lavington Mall, James Gichuru Road", fee: { amount: 100_000 } });
+    expect(res.body.pickup_location).toBe("Lavington Mall, James Gichuru Road");
+    expect(res.body.dropoff_location).toBe("Lavington Mall, James Gichuru Road");
+  });
+
+  it("refuses delivery on a car whose owner doesn't deliver", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing();
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId, handover: { option: "wilson" } });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("delivery_not_offered");
   });
 });
 

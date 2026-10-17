@@ -255,6 +255,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   const [county, setCounty] = useState(v.county ?? "");
   const [loc, setLoc] = useState(v.pickup_address ?? "");
   const [driver, setDriver] = useState(v.chauffeured);
+  const [delivers, setDelivers] = useState(v.offers_delivery);
   // Per-hour can't be chosen yet (the API refuses it until the customer
   // booking flow has a time picker), so a listing only ever opens on day or trip.
   const [unit, setUnit] = useState<HiringUnit>(v.hiring_unit === "trip" ? "trip" : "day");
@@ -282,6 +283,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             county,
             pickup_address: loc,
             chauffeured: driver,
+            offers_delivery: delivers,
           },
           {
             onSuccess: () => {
@@ -364,6 +366,23 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             type="button"
             onClick={() => setDriver((d) => !d)}
             style={{ ...P.toggleTrack, background: driver ? "#0F23A8" : "#CDD2DA", justifyContent: driver ? "flex-end" : "flex-start" }}
+          >
+            <span style={P.toggleThumb} />
+          </button>
+        </div>
+        <div style={P.toggleRow}>
+          <div>
+            <div style={P.toggleRowTitle}>I can deliver</div>
+            <div style={P.toggleRowSub}>
+              {delivers
+                ? "Hirers can ask you to bring the car to their address, JKIA or Wilson Airport, and collect it from there at the end. CRAL sets the delivery fee and it is paid to you in full."
+                : "Hirers collect the car from your pick-up address."}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setDelivers((d) => !d)}
+            style={{ ...P.toggleTrack, background: delivers ? "#0F23A8" : "#CDD2DA", justifyContent: delivers ? "flex-end" : "flex-start" }}
           >
             <span style={P.toggleThumb} />
           </button>
@@ -1031,12 +1050,14 @@ export function VehicleDetail(): JSX.Element {
                   ? [
                       ["Trip rate", v.trip_rate ? `KES ${money(v.trip_rate.amount)}` : "Not set"],
                       ["Driver", v.chauffeured ? "Included" : "Self-drive"],
+                      ["Delivery", v.offers_delivery ? "Offered" : "Collect only"],
                       ["You keep per trip", v.trip_rate ? `KES ${money(Math.round(v.trip_rate.amount * 0.9))}` : " - "],
                     ]
                   : [
                       ["Daily rate", v.daily_rate ? `KES ${money(v.daily_rate.amount)}` : "Not set"],
                       ["Minimum hire", `${v.minimum_hire_days} ${v.minimum_hire_days === 1 ? "day" : "days"}`],
                       ["Driver", v.chauffeured ? "Included" : "Self-drive"],
+                      ["Delivery", v.offers_delivery ? "Offered" : "Collect only"],
                       ["You keep per day", v.daily_rate ? `KES ${money(Math.round(v.daily_rate.amount * 0.9))}` : " - "],
                     ]),
               ].map(([k, val]) => (

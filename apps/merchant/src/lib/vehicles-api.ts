@@ -67,6 +67,8 @@ export interface VehicleDetail extends VehicleSummary {
   colour: string | null;
   minimum_hire_days: number;
   chauffeured: boolean;
+  /** The owner brings the car to the renter (address or airport) for CRAL's set fee. */
+  offers_delivery: boolean;
   rate_mode: "list" | "net";
   verification_badge_expires_at: string | null;
   reviewer_note: string | null;
@@ -138,6 +140,7 @@ export interface PriceAvailabilityInput {
   county?: string;
   pickup_address?: string;
   chauffeured?: boolean;
+  offers_delivery?: boolean;
 }
 
 export function updatePriceAvailability(id: string, input: PriceAvailabilityInput) {

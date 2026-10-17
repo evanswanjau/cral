@@ -69,6 +69,8 @@ export const PriceAvailabilitySchema = z.object({
   county: z.string().optional(),
   pickup_address: z.string().optional(),
   chauffeured: z.boolean().optional(),
+  /** The owner will bring the car to the renter (address or airport) for CRAL's flat fee. */
+  offers_delivery: z.boolean().optional(),
 });
 export type PriceAvailabilityInput = z.infer<typeof PriceAvailabilitySchema>;
 

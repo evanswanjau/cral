@@ -18,18 +18,69 @@ export { COMMISSION_RATE };
 export const DEPOSIT_RATE = 0.15;
 export const LATE_CANCELLATION_FEE_RATE = 0.25;
 
+/**
+ * Where the car changes hands (owner's call, 2026-10-17). `collect` is the
+ * owner's own place, free. The other three are CRAL-set flat fees from the
+ * design's booking review step ("Delivery to my address for KES 1,000",
+ * "JKIA arrivals for KES 1,500", "Wilson Airport for KES 1,200"), offered
+ * only on cars whose owner switched delivery on. One fee covers taking the
+ * car there and collecting it back from the same place.
+ *
+ * The fee is the merchant's - they do the driving - so CRAL's commission is
+ * on the hire only, never on the fee.
+ */
+export const HANDOVER_OPTIONS = ["collect", "address", "jkia", "wilson"] as const;
+export type HandoverOption = (typeof HANDOVER_OPTIONS)[number];
+export type DeliveryOption = Exclude<HandoverOption, "collect">;
+
+export const DELIVERY_FEES: Record<DeliveryOption, number> = {
+  address: 100_000,
+  jkia: 150_000,
+  wilson: 120_000,
+};
+
+export const HANDOVER_LABELS: Record<HandoverOption, string> = {
+  collect: "Collect from the owner",
+  address: "Delivery to my address",
+  jkia: "JKIA arrivals",
+  wilson: "Wilson Airport",
+};
+
+export function deliveryFeeFor(option: HandoverOption): number {
+  return option === "collect" ? 0 : DELIVERY_FEES[option];
+}
+
+/** The handover choice as both the renter and the owner see it on a booking. */
+export function serializeHandoverChoice(b: {
+  handover_option: string;
+  delivery_address: string | null;
+  delivery_fee_amount: number;
+}): { option: HandoverOption; label: string; address: string | null; fee: Money } {
+  const option = (HANDOVER_OPTIONS as readonly string[]).includes(b.handover_option)
+    ? (b.handover_option as HandoverOption)
+    : "collect";
+  return { option, label: HANDOVER_LABELS[option], address: b.delivery_address, fee: kes(b.delivery_fee_amount) };
+}
+
 export interface BookingPricing {
+  /** The hire alone - what commission is taken on. */
+  hire: Money;
+  deliveryFee: Money;
+  /** What the renter pays: hire + delivery fee. */
   gross: Money;
   commission: Money;
   merchantNet: Money;
   deposit: Money;
 }
 
-export function computeBookingPricing(dailyRateAmountCents: number, days: number): BookingPricing {
-  const grossAmount = Math.round(dailyRateAmountCents * days);
-  const commissionAmount = commissionOn(grossAmount);
-  const depositAmount = Math.round(grossAmount * DEPOSIT_RATE);
+export function computeBookingPricing(rateAmountCents: number, quantity: number, deliveryFeeCents = 0): BookingPricing {
+  const hireAmount = Math.round(rateAmountCents * quantity);
+  const grossAmount = hireAmount + deliveryFeeCents;
+  const commissionAmount = commissionOn(hireAmount);
+  const depositAmount = Math.round(hireAmount * DEPOSIT_RATE);
   return {
+    hire: kes(hireAmount),
+    deliveryFee: kes(deliveryFeeCents),
     gross: kes(grossAmount),
     commission: kes(commissionAmount),
     merchantNet: kes(grossAmount - commissionAmount),

@@ -830,6 +830,15 @@ export function BookingDetail(): JSX.Element {
                 <div style={{ ...P.rowMeta, marginTop: 4 }}>{b.dropoff_location}</div>
               </div>
             </div>
+            {b.handover.option !== "collect" && (
+              <div style={{ padding: "0 18px 18px" }}>
+                <div style={P.specKey}>DELIVERY</div>
+                <div style={{ font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#333B4A" }}>
+                  The hirer asked you to bring the car to {b.handover.option === "address" ? "their address" : b.handover.label} and
+                  collect it from there at the end. Delivery fee KES {money(b.handover.fee.amount)}, paid to you in full.
+                </div>
+              </div>
+            )}
             {b.note_from_hirer && (
               <div style={{ padding: "0 18px 18px" }}>
                 <div style={P.specKey}>NOTE FROM THE HIRER</div>

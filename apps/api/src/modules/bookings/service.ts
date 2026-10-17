@@ -9,7 +9,7 @@ import { maskIdentifier } from "../../lib/mask.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailCode, emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
-import { computeLateCancellationFee } from "../../lib/booking-pricing.js";
+import { computeLateCancellationFee, serializeHandoverChoice } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
 import { executeRefund, recordRefund } from "../../lib/refunds.js";
@@ -220,6 +220,7 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
     refund: money(booking.refund_amount, booking.refund_currency),
     pickup_location: booking.pickup_location,
     dropoff_location: booking.dropoff_location,
+    handover: serializeHandoverChoice(booking),
     note_from_hirer: booking.note_from_hirer,
     payout_method: booking.payout_method,
     payout_detail: booking.payout_detail,

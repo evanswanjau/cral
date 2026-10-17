@@ -87,6 +87,18 @@ paths:
                   maxLength: 1000
                   nullable: true
                   description: The design's "Anything {owner} should know".
+                handover:
+                  type: object
+                  description: >
+                    Where the car changes hands. Omitted means `collect`.
+                    Anything else needs a car whose owner delivers (422
+                    `delivery_not_offered`); `address` needs the address
+                    (422 `delivery_address_required`). The fee is set by
+                    CRAL, never sent by the client.
+                  required: [option]
+                  properties:
+                    option: { type: string, enum: [collect, address, jkia, wilson] }
+                    address: { type: string, minLength: 5, maxLength: 300 }
       responses:
         "201":
           description: The request was created and the owner notified.
@@ -281,11 +293,31 @@ components:
         vehicle: { $ref: "#/components/schemas/BookingVehicle" }
         created_at: { type: string, format: date-time }
 
+    HandoverChoice:
+      type: object
+      description: >
+        Where the car changes hands (owner's call, 2026-10-17). `collect`
+        is the owner's own place, free. `address`, `jkia` and `wilson` are
+        deliveries at CRAL-set flat fees (KES 1,000 / 1,500 / 1,200),
+        offered only on cars whose owner switched delivery on. One fee
+        covers taking the car there and collecting it back. `fee` is
+        already inside `gross`; CRAL takes no commission on it - it is the
+        owner's in full.
+      required: [option, label, address, fee]
+      properties:
+        option: { type: string, enum: [collect, address, jkia, wilson] }
+        label: { type: string, example: JKIA arrivals }
+        address:
+          type: string
+          nullable: true
+          description: Only for `address`.
+        fee: { $ref: "#/components/schemas/Money" }
+
     BookingDetail:
       allOf:
         - $ref: "#/components/schemas/BookingSummary"
         - type: object
-          required: [deposit, pickup_location, dropoff_location]
+          required: [deposit, handover, pickup_location, dropoff_location]
           properties:
             deposit:
               allOf: [{ $ref: "#/components/schemas/Money" }]
@@ -299,8 +331,14 @@ components:
               description: >
                 What the renter is asked for once the owner accepts. CRAL
                 charges no booking fee and takes no deposit, so this is
-                exactly the hire.
-            pickup_location: { type: string }
+                the hire plus any delivery fee.
+            handover: { $ref: "#/components/schemas/HandoverChoice" }
+            pickup_location:
+              type: string
+              description: >
+                The county for `collect` (the exact address is withheld
+                until confirmed), the renter's address or the airport for a
+                delivery. The car goes back from the same place.
             dropoff_location: { type: string }
             note_from_hirer: { type: string, nullable: true }
             response_due_at:

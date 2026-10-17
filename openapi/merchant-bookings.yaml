@@ -842,6 +842,19 @@ components:
               allOf: [{ $ref: "#/components/schemas/Money" }]
               type: object
               nullable: true
+            handover:
+              type: object
+              description: >
+                Where the car changes hands (2026-10-17). `collect` is the
+                owner's own place; `address`/`jkia`/`wilson` are deliveries
+                at CRAL-set flat fees. `fee` is inside `gross`, carries no
+                commission, and is the owner's in full.
+              required: [option, label, address, fee]
+              properties:
+                option: { type: string, enum: [collect, address, jkia, wilson] }
+                label: { type: string }
+                address: { type: string, nullable: true }
+                fee: { $ref: "#/components/schemas/Money" }
             pickup_location: { type: string }
             dropoff_location: { type: string }
             note_from_hirer: { type: string, nullable: true }

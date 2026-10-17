@@ -170,6 +170,19 @@ describe("vehicles — price & availability", () => {
     expect(audit.actor_id).toBe(userId);
   });
 
+  it("lets the owner switch delivery on, off by default", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KDL 300D");
+    expect(created.body.offers_delivery).toBe(false);
+
+    const on = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}`)
+      .set(auth(accessToken))
+      .send({ offers_delivery: true });
+    expect(on.status).toBe(200);
+    expect(on.body.offers_delivery).toBe(true);
+  });
+
   it("remembers rate_mode without changing what daily_rate stores", async () => {
     const { accessToken } = await newMerchant();
     const created = await createVehicle(accessToken, "KRM 100M", {

@@ -946,7 +946,13 @@ export function TripDetail(): JSX.Element {
             <Row label="Status" value={booking.status.replace(/_/g, " ")} />
             <Row label="Pickup" value={dayLabel(booking.pickup_at)} />
             <Row label="Return" value={dayLabel(booking.dropoff_at)} />
-            <Row label="Where" value={booking.pickup_location} />
+            <Row
+              label={booking.handover.option === "collect" ? "Where" : "Delivered to"}
+              value={booking.pickup_location}
+            />
+            {booking.handover.option !== "collect" && (
+              <Row label="Delivery fee" value={formatMoney(booking.handover.fee)} />
+            )}
             {booking.note_from_hirer && <Row label="Your note" value={booking.note_from_hirer} />}
             <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
               <Row bold label="Total" value={formatMoney(booking.total_due)} />

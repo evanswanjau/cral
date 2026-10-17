@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "r
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
-import { getCatalogVehicle, formatMoney, photoSrc } from "../lib/catalog-api.js";
+import { getCatalogVehicle, formatMoney, photoSrc, type HandoverOption } from "../lib/catalog-api.js";
 import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { createBooking, listMyBookings } from "../lib/bookings-api.js";
 import {
@@ -241,6 +241,11 @@ export function Booking(): JSX.Element {
 
   const [accountExists, setAccountExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // Where the car changes hands. Only cars whose owner delivers offer
+  // anything but `collect`; the fee comes from the catalog response, the
+  // same figure the server prices the booking at.
+  const [handover, setHandover] = useState<HandoverOption>("collect");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
 
   const { data: car, isLoading } = useQuery({
@@ -306,7 +311,10 @@ export function Booking(): JSX.Element {
   // Same rule as CarDetail.tsx: day and trip totals are knowable from the
   // dates; the server computes the real figure either way.
   const isDayUnit = car.hiring_unit === "day";
-  const total = quoteTotal(car, days);
+  const hireTotal = quoteTotal(car, days);
+  const delivery = car.delivery_options.find((o) => o.option === handover) ?? null;
+  const total = hireTotal === null ? null : hireTotal + (delivery?.fee.amount ?? 0);
+  const needsAddress = handover === "address" && deliveryAddress.trim().length < 5;
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
   // rather than at the end of the flow - the car page now blocks it at
@@ -472,6 +480,9 @@ export function Booking(): JSX.Element {
         vehicle_id: car.id,
         ...hireInstants(from, to),
         ...(note ? { note_from_hirer: note } : {}),
+        ...(handover === "collect"
+          ? {}
+          : { handover: { option: handover, ...(handover === "address" ? { address: deliveryAddress.trim() } : {}) } }),
       });
       writeDraft(key, "");
       // The booking now owns the URL. Everything from here - waiting,
@@ -936,12 +947,13 @@ export function Booking(): JSX.Element {
                     action={editingDates ? undefined : { text: "Change", onClick: openDateEditor }}
                   />
                   <Row label="Return" value={formatHireDate(to)} />
-                  {total !== null ? (
+                  {total !== null && hireTotal !== null ? (
                     <>
                       <Row
                         label={isDayUnit ? `${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}` : "Flat trip rate"}
-                        value={formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                        value={formatMoney({ amount: hireTotal, currency: car.daily_rate.currency })}
                       />
+                      {delivery && <Row label={`Delivery: ${delivery.label}`} value={formatMoney(delivery.fee)} />}
                       <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
                         <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
                       </div>
@@ -953,6 +965,70 @@ export function Booking(): JSX.Element {
                     />
                   )}
                 </div>
+
+                {car.delivery_options.length > 0 && (
+                  <fieldset style={{ border: "none", padding: 0, margin: "0 0 22px" }}>
+                    <legend style={label}>Where do you want the car?</legend>
+                    <div style={{ display: "grid", gap: 8 }}>
+                      {[
+                        {
+                          option: "collect" as HandoverOption,
+                          label: `Collect from ${car.owner.display_name}${car.county ? ` in ${car.county}` : ""}`,
+                          fee: null,
+                        },
+                        ...car.delivery_options,
+                      ].map((o) => {
+                        const on = handover === o.option;
+                        return (
+                          <label
+                            key={o.option}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: 11,
+                              padding: "12px 14px",
+                              border: `1px solid ${on ? "#0F23A8" : "#CDD2DA"}`,
+                              background: on ? "#F3F5FD" : "#FFFFFF",
+                              borderRadius: 8,
+                              cursor: "pointer",
+                            }}
+                          >
+                            <input
+                              type="radio"
+                              name="handover"
+                              checked={on}
+                              onChange={() => setHandover(o.option)}
+                              style={{ accentColor: "#0F23A8", margin: 0 }}
+                            />
+                            <span style={{ flex: 1, font: "500 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
+                              {o.label}
+                            </span>
+                            <span style={{ font: "500 13.5px/1 'Instrument Sans',sans-serif", color: "#5A6373", fontVariantNumeric: "tabular-nums" }}>
+                              {o.fee ? `+ ${formatMoney(o.fee)}` : "Free"}
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    {handover === "address" && (
+                      <label style={{ display: "block", marginTop: 12 }}>
+                        <span style={label}>Delivery address</span>
+                        <input
+                          value={deliveryAddress}
+                          onChange={(e) => setDeliveryAddress(e.target.value)}
+                          maxLength={300}
+                          placeholder="Building, street and area, e.g. Lavington Mall, James Gichuru Road"
+                          style={field}
+                        />
+                      </label>
+                    )}
+                    {handover !== "collect" && (
+                      <p style={{ margin: "10px 0 0", font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                        {car.owner.display_name} brings the car to you and collects it from the same place when the hire ends.
+                      </p>
+                    )}
+                  </fieldset>
+                )}
 
                 <label style={{ display: "block", marginBottom: 22 }}>
                   <span style={label}>Anything {car.owner.display_name} should know</span>
@@ -1031,8 +1107,8 @@ export function Booking(): JSX.Element {
                 <button
                   type="button"
                   onClick={submitRequest}
-                  disabled={submitting || belowMinimum}
-                  style={{ ...primaryButton, opacity: submitting || belowMinimum ? 0.7 : 1 }}
+                  disabled={submitting || belowMinimum || needsAddress}
+                  style={{ ...primaryButton, opacity: submitting || belowMinimum || needsAddress ? 0.7 : 1 }}
                 >
                   {submitting ? "Sending…" : "Send request"}
                 </button>

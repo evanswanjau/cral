@@ -379,9 +379,23 @@ components:
       allOf:
         - $ref: "#/components/schemas/CatalogVehicleSummary"
         - type: object
-          required: [minimum_hire_days, photo_urls, documents_cleared, owner_rating, rating, reviews]
+          required: [minimum_hire_days, delivery_options, photo_urls, documents_cleared, owner_rating, rating, reviews]
           properties:
             minimum_hire_days: { type: integer }
+            delivery_options:
+              type: array
+              description: >
+                Where the owner will bring the car, at CRAL's flat fees
+                (owner's call, 2026-10-17). Empty when the owner doesn't
+                deliver - collecting from them is then the only way. The
+                fee here is the one a booking is priced at.
+              items:
+                type: object
+                required: [option, label, fee]
+                properties:
+                  option: { type: string, enum: [address, jkia, wilson] }
+                  label: { type: string, example: Wilson Airport }
+                  fee: { $ref: "#/components/schemas/Money" }
             photo_urls:
               type: array
               items: { type: string }

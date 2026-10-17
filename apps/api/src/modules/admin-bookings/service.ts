@@ -1,4 +1,5 @@
 import { ApiError, kes, type Money } from "@cral/types";
+import { serializeHandoverChoice } from "../../lib/booking-pricing.js";
 import { db } from "../../db/client.js";
 import { applyCursor, toPaginatedResult } from "../../lib/pagination.js";
 import type { BookingRow, BookingStatus } from "../bookings/db-types.js";
@@ -115,6 +116,7 @@ export async function getAdminBooking(id: string) {
     vehicle_id: booking.vehicle_id,
     pickup_location: booking.pickup_location,
     dropoff_location: booking.dropoff_location,
+    handover: serializeHandoverChoice(booking),
     note_from_hirer: booking.note_from_hirer,
     commission: kes(booking.commission_amount) as Money,
     merchant_net: kes(booking.merchant_net_amount) as Money,
