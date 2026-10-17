@@ -247,7 +247,8 @@ describe("merchant dashboard", () => {
       dropoffAt,
       status: "completed",
       returned_at: dropoffAt,
-      deposit_release_at: new Date(dropoffAt.getTime() + DAY_MS),
+      // Still inside the hold: the release time, not the flag, decides.
+      deposit_release_at: new Date(Date.now() + 2 * 60 * 60 * 1000),
       deposit_released: false,
     });
 

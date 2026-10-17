@@ -471,13 +471,13 @@ paths:
       operationId: createBookingReport
         Filable while `on_hire` and for 14 days after `completed`. A
         `conduct` report never involves money and is always filable
-        within the 14-day window. A `claim` states what an issue cost to
-        put right; it can only be filed for a limited window after
-        return (409 `claim_window_closed` after that — a `conduct`
-        report is still allowed). What CRAL can settle directly is capped
-        and decided server-side: past the cap, `escalated_dispute_id` is
-        set on the response and the rest becomes a Dispute. The cap, and
-        the deposit it derives from, are never returned or shown.
+        within the 14-day window.
+
+        **Cost claims are paused** (owner's call, 2026-10-17). CRAL holds
+        no deposit and disputes are not open to merchants or renters yet,
+        so `kind: claim` returns 409 `claims_paused` and nothing is
+        written. A cost goes to support@cral.co.ke instead. While paused,
+        `amount` and `escalated_dispute_id` are always null.
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
@@ -491,15 +491,10 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/BookingReport" }
-        "422":
-          description: >
-            `photos_required` — a `damage` claim was filed but no pickup
-            condition photos are on file for this booking.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
         "409":
-          description: Outside the reportable or claimable window
+          description: >
+            `report_window_closed` — outside the reportable window;
+            `claims_paused` — a `claim` was filed while claims are paused.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }

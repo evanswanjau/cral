@@ -614,7 +614,7 @@ describe("bookings — reports", () => {
     return db("bookings").where({ id: booking.id }).first();
   }
 
-  it("caps a claim at the deposit held and escalates the overflow", async () => {
+  it("refuses a cost claim while claims are paused", async () => {
     const { accessToken, userId } = await newMerchant();
     const booking = await completedBookingWithPhotos(accessToken, userId, "KDA 108A");
 
@@ -622,18 +622,17 @@ describe("bookings — reports", () => {
       .post(`/merchant/bookings/${booking.id}/reports`)
       .set(auth(accessToken))
       .set(idem())
-      .send({ kind: "claim", category: "damage", description: "Cracked windscreen", amount: booking.deposit_amount * 10 });
-    expect(res.status).toBe(201);
-    expect(res.body.amount.amount).toBe(booking.deposit_amount);
-    expect(res.body.escalated_dispute_id).toMatch(/^dsp_/);
+      .send({ kind: "claim", category: "damage", description: "Cracked windscreen", amount: 500_000 });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe("claims_paused");
 
-    // Filing the claim should extend the deposit hold from 24h to 48h from `returned_at`.
-    const afterClaim = await db("bookings").where({ id: booking.id }).first();
-    const expectedRelease = new Date(booking.returned_at.getTime() + 48 * 60 * 60 * 1000).getTime();
-    expect(afterClaim.deposit_release_at.getTime()).toBe(expectedRelease);
+    const reports = await db("booking_reports").where({ booking_id: booking.id });
+    expect(reports).toHaveLength(0);
+    const after = await db("bookings").where({ id: booking.id }).first();
+    expect(after.deposit_release_at.getTime()).toBe(booking.deposit_release_at.getTime());
   });
 
-  it("blocks a damage claim with no pickup condition photos on file", async () => {
+  it("takes a damage conduct report with no pickup photos on file", async () => {
     const { accessToken, userId } = await newMerchant();
     const vehicle = await newVehicle(accessToken, "KDA 109A");
     const hirer = await newHirer();
@@ -653,9 +652,9 @@ describe("bookings — reports", () => {
       .post(`/merchant/bookings/${booking.id}/reports`)
       .set(auth(accessToken))
       .set(idem())
-      .send({ kind: "claim", category: "damage", description: "Scratch", amount: 500 });
-    expect(res.status).toBe(422);
-    expect(res.body.error.code).toBe("photos_required");
+      .send({ kind: "conduct", category: "damage", description: "Scratch on the rear door" });
+    expect(res.status).toBe(201);
+    expect(res.body.escalated_dispute_id).toBeNull();
   });
 
   it("never moves money for a conduct report", async () => {

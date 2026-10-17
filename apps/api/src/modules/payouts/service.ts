@@ -181,8 +181,27 @@ function composeFootnote(run: PayoutRunRow, lineCount: number): string {
 // ---------------------------------------------------------------------
 
 /**
+ * A completed booking's post-return hold is over: either it was released
+ * explicitly, or `deposit_release_at` (set by the return handover, 24h out)
+ * has passed. Derived at read time because nothing ever flips
+ * `deposit_released` - before this, no real booking ever became payable.
+ * `holdStillRunning` is the exact complement, for the "clearing" figure.
+ */
+export function holdLapsed(q: Knex.QueryBuilder, table = "bookings"): void {
+  void q.where((w) =>
+    w.where(`${table}.deposit_released`, true).orWhere(`${table}.deposit_release_at`, "<=", db.fn.now()),
+  );
+}
+
+export function holdStillRunning(q: Knex.QueryBuilder, table = "bookings"): void {
+  void q
+    .where(`${table}.deposit_released`, false)
+    .where((w) => w.whereNull(`${table}.deposit_release_at`).orWhere(`${table}.deposit_release_at`, ">", db.fn.now()));
+}
+
+/**
  * Bookings that are payable but not yet on any run: completed, and the
- * deposit hold has been released so nothing can still be claimed against
+ * post-return hold has lapsed so nothing can still be claimed against
  * them. The `payout_run_lines` left join is what makes a booking pay out
  * exactly once; the unique index on `booking_id` is what makes that true
  * under concurrency rather than just usually.
@@ -192,7 +211,7 @@ export async function payableBookings(trx: Knex.Transaction | Knex, merchantId: 
     .leftJoin("payout_run_lines", "payout_run_lines.booking_id", "bookings.id")
     .where("bookings.merchant_id", merchantId)
     .where("bookings.status", "completed")
-    .where("bookings.deposit_released", true)
+    .modify(holdLapsed)
     .whereNull("payout_run_lines.id")
     .orderBy("bookings.dropoff_at", "asc")
     .select("bookings.*");
@@ -382,7 +401,7 @@ export async function payoutPosition(merchantId: string, now: Date = new Date())
     .where((q) =>
       q
         .whereIn("status", ["confirmed", "active"])
-        .orWhere((inner) => inner.where("status", "completed").where("deposit_released", false)),
+        .orWhere((inner) => inner.where("status", "completed").modify(holdStillRunning)),
     )
     .orderBy("dropoff_at", "asc")
     .select("*");

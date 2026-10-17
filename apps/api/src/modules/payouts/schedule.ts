@@ -4,7 +4,7 @@ import { db } from "../../db/client.js";
 import { merchantDisplayName } from "../../lib/merchant-display.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import type { MerchantRow } from "../merchant/db-types.js";
-import { cutPayoutRun, nairobiDay, payableBookings } from "./service.js";
+import { cutPayoutRun, holdLapsed, nairobiDay, payableBookings } from "./service.js";
 import type { PayoutRunRow } from "./db-types.js";
 
 /**
@@ -135,7 +135,7 @@ export async function cutDuePayoutRuns(
         .leftJoin("payout_run_lines as l", "l.booking_id", "b.id")
         .whereRaw("b.merchant_id = m.id")
         .where("b.status", "completed")
-        .where("b.deposit_released", true)
+        .modify((q) => holdLapsed(q, "b"))
         .whereNull("l.id");
     })
     .select("m.id", "m.payout_method", "m.payout_schedule")) as Array<{
