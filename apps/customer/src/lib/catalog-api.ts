@@ -66,8 +66,20 @@ export interface VehicleReview {
   when: string;
 }
 
+/** Where the renter can ask the owner to bring the car, at CRAL's flat fee. */
+export type DeliveryOption = "address" | "jkia" | "wilson";
+export type HandoverOption = "collect" | DeliveryOption;
+
+export interface DeliveryOptionQuote {
+  option: DeliveryOption;
+  label: string;
+  fee: Money;
+}
+
 export interface CatalogVehicleDetail extends CatalogVehicleSummary {
   minimum_hire_days: number;
+  /** Empty when the owner doesn't deliver - collecting is then the only way. */
+  delivery_options: DeliveryOptionQuote[];
   photo_urls: string[];
   documents_cleared: DocumentCleared[];
   /** The owner's whole-account score, across every car they list. */

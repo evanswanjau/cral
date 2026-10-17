@@ -17,6 +17,11 @@ export interface BookingRow {
   pickup_at: Date;
   dropoff_at: Date;
   pickup_location: string;
+  /** collect | address | jkia | wilson */
+  handover_option: string;
+  delivery_address: string | null;
+  delivery_fee_amount: number;
+  delivery_fee_currency: string;
   dropoff_location: string;
   note_from_hirer: string | null;
   gross_amount: number;

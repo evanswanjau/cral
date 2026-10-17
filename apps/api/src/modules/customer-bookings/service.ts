@@ -3,7 +3,13 @@ import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
 import { nextBookingRef } from "../../lib/booking-ref.js";
 import { writeAuditEntry } from "../../lib/audit.js";
-import { computeBookingPricing } from "../../lib/booking-pricing.js";
+import {
+  computeBookingPricing,
+  deliveryFeeFor,
+  HANDOVER_LABELS,
+  serializeHandoverChoice,
+  type HandoverOption,
+} from "../../lib/booking-pricing.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { notify } from "../../lib/notifications.js";
 import { recordRefund, executeRefund } from "../../lib/refunds.js";
@@ -57,6 +63,7 @@ interface PublicVehicleForBooking {
   seats: number;
   transmission: string;
   chauffeured: boolean;
+  offers_delivery: boolean;
   county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;
@@ -95,6 +102,7 @@ async function requirePublicVehicle(vehicleId: string): Promise<PublicVehicleFor
       "v.seats",
       "v.transmission",
       "v.chauffeured",
+      "v.offers_delivery",
       "v.county",
       "v.pickup_address",
       "v.daily_rate_amount",
@@ -334,6 +342,7 @@ function serializeDetail(
     total_due: kes(b.gross_amount + b.deposit_amount) as Money,
     pickup_location: b.pickup_location,
     dropoff_location: b.dropoff_location,
+    handover: serializeHandoverChoice(b),
     note_from_hirer: b.note_from_hirer,
     response_due_at: b.response_due_at ? b.response_due_at.toISOString() : null,
     decline_reason_code: b.decline_reason_code,
@@ -407,6 +416,27 @@ export async function createBooking(
 
   const { unit, quantity, rateAmountCents } = unitPricingBasis(vehicle, pickupAt, dropoffAt);
 
+  const handoverOption: HandoverOption = input.handover?.option ?? "collect";
+  if (handoverOption !== "collect" && !vehicle.offers_delivery) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "delivery_not_offered",
+      message: "The owner doesn't deliver this car. Collect it from them instead.",
+      field: "handover",
+    });
+  }
+  const deliveryAddress = handoverOption === "address" ? (input.handover?.address ?? null) : null;
+  if (handoverOption === "address" && !deliveryAddress) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "delivery_address_required",
+      message: "Tell the owner where to bring the car.",
+      field: "handover.address",
+    });
+  }
+
   // A reachable, proven phone before the request goes out (owner's call,
   // 2026-09-19). This is the same "verify where the reason is
   // self-evident" call the merchant side made for the payout number: the
@@ -468,11 +498,16 @@ export async function createBooking(
   }
 
   // Every figure is computed here, from the vehicle's own stored rate.
-  const pricing = computeBookingPricing(rateAmountCents, quantity);
+  const pricing = computeBookingPricing(rateAmountCents, quantity, deliveryFeeFor(handoverOption));
 
   const hirer = await db("users").where({ id: userId }).first("full_name", "phone");
   const merchantUser = await db("users").where({ id: vehicle.m_user_id }).first("phone");
-  const location = vehicle.county ?? "To be agreed with the owner";
+  // Delivered cars change hands where the renter asked; the car is collected
+  // back from the same place.
+  const location =
+    handoverOption === "collect"
+      ? (vehicle.county ?? "To be agreed with the owner")
+      : (deliveryAddress ?? HANDOVER_LABELS[handoverOption]);
 
   const { booking, notificationId } = await db.transaction(async (trx) => {
     const [inserted] = await trx<BookingRow>("bookings")
@@ -491,6 +526,10 @@ export async function createBooking(
         // confirmed; the county is what the renter has seen all along.
         pickup_location: location,
         dropoff_location: location,
+        handover_option: handoverOption,
+        delivery_address: deliveryAddress,
+        delivery_fee_amount: pricing.deliveryFee.amount,
+        delivery_fee_currency: pricing.deliveryFee.currency,
         note_from_hirer: input.note_from_hirer ?? null,
         gross_amount: pricing.gross.amount,
         gross_currency: pricing.gross.currency,
@@ -524,7 +563,9 @@ export async function createBooking(
       merchantId: vehicle.merchant_id,
       category: "booking",
       title: "New booking request",
-      body: `${hirer?.full_name ?? "A renter"} asked for ${vehicle.make} ${vehicle.model} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
+      body:
+        `${hirer?.full_name ?? "A renter"} asked for ${vehicle.make} ${vehicle.model} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.` +
+        (handoverOption === "collect" ? "" : ` Delivery to ${location}.`),
       ref: inserted.ref,
       subjectType: "booking",
       subjectId: inserted.id,
@@ -543,6 +584,8 @@ export async function createBooking(
         dropoff_at: dropoffAt.toISOString(),
         gross_amount: pricing.gross.amount,
         deposit_amount: 0,
+        handover_option: handoverOption,
+        delivery_fee_amount: pricing.deliveryFee.amount,
       },
       ip: ctx.ip,
       requestId: ctx.requestId,

@@ -4,6 +4,7 @@ import { db } from "../../db/client.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
+import { DELIVERY_FEES, HANDOVER_LABELS, type DeliveryOption } from "../../lib/booking-pricing.js";
 import { ratingSummaries, vehicleReviews, type RatingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
 
@@ -42,6 +43,7 @@ interface CatalogRow {
   colour: string | null;
   seats: number;
   chauffeured: boolean;
+  offers_delivery: boolean;
   county: string | null;
   daily_rate_amount: number;
   daily_rate_currency: string;
@@ -73,6 +75,7 @@ const CATALOG_COLUMNS = [
   "v.colour",
   "v.seats",
   "v.chauffeured",
+  "v.offers_delivery",
   "v.county",
   "v.daily_rate_amount",
   "v.daily_rate_currency",
@@ -409,6 +412,17 @@ export async function getCatalogVehicle(id: string) {
   return {
     ...serializeSummary(row, aux),
     minimum_hire_days: row.minimum_hire_days,
+    // Where the owner will bring the car, at CRAL's flat fees. Empty when
+    // the owner hasn't switched delivery on - collecting from them is then
+    // the only way. The fees come from the server so the quote the renter
+    // sees is the one the booking is priced at.
+    delivery_options: row.offers_delivery
+      ? (Object.keys(DELIVERY_FEES) as DeliveryOption[]).map((option) => ({
+          option,
+          label: HANDOVER_LABELS[option],
+          fee: kes(DELIVERY_FEES[option]) as Money,
+        }))
+      : [],
     photo_urls: photoIds.map((pid) => photoPath(row.id, pid)),
     documents_cleared: documentsCleared,
     owner_rating: ownerRating,

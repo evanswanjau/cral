@@ -1,5 +1,5 @@
 import { apiGet, apiPost } from "./api.js";
-import type { Money } from "./catalog-api.js";
+import type { HandoverOption, Money } from "./catalog-api.js";
 
 /** Typed client for `openapi/customer-bookings.yaml`. */
 
@@ -61,9 +61,18 @@ export interface HandoverStatus {
   completed_at: string | null;
 }
 
+/** Where the car changes hands. `fee` is already inside `gross`. */
+export interface HandoverChoice {
+  option: HandoverOption;
+  label: string;
+  address: string | null;
+  fee: Money;
+}
+
 export interface BookingDetail extends BookingSummary {
   deposit: Money;
   total_due: Money;
+  handover: HandoverChoice;
   pickup_location: string;
   dropoff_location: string;
   note_from_hirer: string | null;
@@ -89,6 +98,7 @@ export function createBooking(input: {
   pickup_at: string;
   dropoff_at: string;
   note_from_hirer?: string;
+  handover?: { option: HandoverOption; address?: string };
 }) {
   return apiPost<BookingDetail>("/bookings", input, {
     headers: { "Idempotency-Key": idempotencyKey() },

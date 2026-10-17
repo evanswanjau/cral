@@ -58,6 +58,7 @@ interface VehicleSpec {
   transmission?: string;
   seats?: number;
   chauffeured?: boolean;
+  offers_delivery?: boolean;
   daily_rate_amount?: number;
   verification_badge?: string;
 }
@@ -131,6 +132,7 @@ async function addVehicle(merchantId: string, spec: VehicleSpec = {}): Promise<s
       daily_rate_currency: "KES",
       minimum_hire_days: spec.minimum_hire_days ?? 1,
       chauffeured: spec.chauffeured ?? false,
+      offers_delivery: spec.offers_delivery ?? false,
       status: spec.status ?? "live",
       verification_badge: spec.verification_badge ?? "none",
       listing_ref: `H${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 900 + 100)}`,
@@ -250,6 +252,22 @@ describe("the two gates decide what is public", () => {
     const res = await request(app).get(`/catalog/vehicles/${hiddenId}`);
     expect(res.status).toBe(404);
     expect(res.body.error.code).toBe("vehicle_not_found");
+  });
+
+  it("quotes CRAL's delivery fees only on a car whose owner delivers", async () => {
+    const owner = await makeMerchant({ approved: true });
+    const collectOnly = await addVehicle(owner.merchantId);
+    const delivers = await addVehicle(owner.merchantId, { offers_delivery: true });
+
+    const none = await request(app).get(`/catalog/vehicles/${collectOnly}`);
+    expect(none.body.delivery_options).toEqual([]);
+
+    const some = await request(app).get(`/catalog/vehicles/${delivers}`);
+    expect(some.body.delivery_options).toEqual([
+      { option: "address", label: "Delivery to my address", fee: { amount: 100_000, currency: "KES" } },
+      { option: "jkia", label: "JKIA arrivals", fee: { amount: 150_000, currency: "KES" } },
+      { option: "wilson", label: "Wilson Airport", fee: { amount: 120_000, currency: "KES" } },
+    ]);
   });
 });
 

@@ -39,6 +39,13 @@ export interface AdminBookingDetail extends AdminBookingSummary {
   hirer_id_verified: boolean;
   merchant_id: string;
   vehicle_id: string;
+  /** Where the car changes hands. A delivery `fee` is inside `gross`, commission-free, and the owner's. */
+  handover: {
+    option: "collect" | "address" | "jkia" | "wilson";
+    label: string;
+    address: string | null;
+    fee: Money;
+  };
   pickup_location: string;
   dropoff_location: string;
   note_from_hirer: string | null;

@@ -58,6 +58,13 @@ export interface BookingDetail extends BookingSummary {
   commission: Money;
   cancellation_fee: Money | null;
   refund: Money | null;
+  /** Where the car changes hands. A delivery `fee` is inside `gross` and is the merchant's in full. */
+  handover: {
+    option: "collect" | "address" | "jkia" | "wilson";
+    label: string;
+    address: string | null;
+    fee: Money;
+  };
   pickup_location: string;
   dropoff_location: string;
   note_from_hirer: string | null;

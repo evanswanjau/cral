@@ -76,6 +76,7 @@ export interface VehicleRow {
   seats: number;
   minimum_hire_days: number;
   chauffeured: boolean;
+  offers_delivery: boolean;
   submitted_at: Date | null;
   verification_badge: VerificationBadgeState;
   verification_badge_expires_at: Date | null;
