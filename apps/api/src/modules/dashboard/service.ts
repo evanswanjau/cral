@@ -100,7 +100,7 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
   const [user, vehicles, ownerDocs, position, earnings] = await Promise.all([
     db("users").where({ id: merchant.user_id }).first("full_name", "phone"),
     db<VehicleRow>("vehicles").where({ merchant_id: merchant.id }).orderBy("created_at", "desc").select("*"),
-    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null }).select("*"),
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }).select("*"),
     payoutPosition(merchant.id, now),
     payoutMonthlyNet(merchant.id, 6, now),
   ]);

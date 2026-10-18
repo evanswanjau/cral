@@ -111,6 +111,8 @@ export interface OnboardingDraft {
   bankAccountNumber: string;
   termsAccepted: boolean;
   ownerDocs: OwnerDocs;
+  /** No car - this merchant only lists drivers (owner's call, 2026-10-18). */
+  driversOnly: boolean;
   vehicles: DraftVehicle[];
   editingVehicleId: string | null;
   vehicleDraft: DraftVehicle | null;
@@ -158,6 +160,7 @@ export function emptyDraft(): OnboardingDraft {
       companyKraPin: null,
       cr12: null,
     },
+    driversOnly: false,
     vehicles: [],
     editingVehicleId: null,
     vehicleDraft: null,
@@ -210,11 +213,12 @@ export function clearDraft(): void {
 /**
  * Whether this merchant is allowed past onboarding into the dashboard. A
  * submitted draft always has at least one vehicle (the Vehicles step won't
- * advance without one), but both are checked so a hand-edited or partially
- * migrated draft can't unlock an empty dashboard.
+ * advance without one) - unless the merchant only lists drivers - but both
+ * are checked so a hand-edited or partially migrated draft can't unlock an
+ * empty dashboard.
  */
 export function isOnboardingComplete(draft: OnboardingDraft): boolean {
-  return draft.submitted && draft.vehicles.length > 0;
+  return draft.submitted && (draft.vehicles.length > 0 || draft.driversOnly);
 }
 
 // --- server sync ---------------------------------------------------------
@@ -284,6 +288,7 @@ interface WireOnboardingState {
     company_kra_pin: WireDocSlot | null;
     cr12: WireDocSlot | null;
   };
+  drivers_only?: boolean;
   vehicles: WireVehicle[];
   submitted: boolean;
   last_activity_at: string;
@@ -373,6 +378,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
       companyKraPin: toDraftDoc(state.owner_docs.company_kra_pin ?? null),
       cr12: toDraftDoc(state.owner_docs.cr12 ?? null),
     },
+    driversOnly: state.drivers_only ?? false,
     vehicles: state.vehicles.map(toDraftVehicle),
     editingVehicleId: null,
     vehicleDraft: null,
@@ -426,6 +432,7 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "bankAccountName",
   "bankAccountNumber",
   "termsAccepted",
+  "driversOnly",
 ];
 
 const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
@@ -448,6 +455,7 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
   bankAccountName: "bank_account_name",
   bankAccountNumber: "bank_account_number",
   termsAccepted: "terms_accepted",
+  driversOnly: "drivers_only",
 };
 
 /** Maps a partial draft patch to the PATCH /merchant/onboarding wire shape and sends it. Debounced by callers. */

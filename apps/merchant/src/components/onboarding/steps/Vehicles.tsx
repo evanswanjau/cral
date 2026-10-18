@@ -14,6 +14,7 @@ import {
   PrimaryButton,
   Select,
   TextInput,
+  Toggle,
 } from "../primitives.js";
 import {
   createVehicleOnServer,
@@ -138,9 +139,22 @@ export function Vehicles({
         {draft.vehicles.length === 0 ? "+ Add your first vehicle" : "+ Add another vehicle"}
       </button>
 
+      {draft.vehicles.length === 0 && (
+        // Someone with no car can still join to drive (owner's call,
+        // 2026-10-18). They add their drivers - themself included - from
+        // the portal once onboarding is in.
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0 18px" }}>
+          <Toggle on={draft.driversOnly} onToggle={() => onChange({ driversOnly: !draft.driversOnly })} />
+          <div>
+            <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>I don't have a vehicle - I only drive</div>
+            <div style={O.helper}>You'll add yourself or your drivers from the portal after this.</div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
         <BackButton onClick={onBack}>← Back</BackButton>
-        <PrimaryButton disabled={draft.vehicles.length === 0} onClick={onContinue}>
+        <PrimaryButton disabled={draft.vehicles.length === 0 && !draft.driversOnly} onClick={onContinue}>
           Continue to documents
         </PrimaryButton>
       </div>

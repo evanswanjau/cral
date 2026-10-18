@@ -62,6 +62,8 @@ function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null 
       return row.subject_id ? { cta: "Open booking", cta_href: bookingHref(row.subject_id) } : null;
     case "vehicle":
       return row.subject_id ? { cta: "Open vehicle", cta_href: `/vehicles/${row.subject_id}` } : null;
+    case "driver":
+      return row.subject_id ? { cta: "Open driver", cta_href: `/drivers/${row.subject_id}` } : null;
     case "payout_run":
       return row.subject_id ? { cta: "Open payout", cta_href: `/payouts/${row.subject_id}` } : null;
     case "merchant":

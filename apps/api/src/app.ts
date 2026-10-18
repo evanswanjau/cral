@@ -19,6 +19,7 @@ import { adminServiceRequestsRouter } from "./modules/admin-service-requests/rou
 import { adminPayoutsRouter } from "./modules/admin-payouts/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
+import { driversRouter } from "./modules/drivers/routes.js";
 import { catalogRouter } from "./modules/catalog/routes.js";
 import { customerAccountRouter } from "./modules/customer-account/routes.js";
 import { customerBookingsRouter } from "./modules/customer-bookings/routes.js";
@@ -121,6 +122,7 @@ export function createApp(): Express {
   app.use(adminPayoutsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
+  app.use(driversRouter);
   app.use(catalogRouter);
   app.use(customerAccountRouter);
   app.use(customerBookingsRouter);

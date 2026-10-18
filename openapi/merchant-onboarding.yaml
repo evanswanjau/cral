@@ -350,6 +350,9 @@ components:
         bank_account_name: { type: string }
         bank_account_number: { type: string }
         terms_accepted: { type: boolean }
+        drivers_only:
+          type: boolean
+          description: No car - this merchant only lists drivers, so submission needs no vehicle (docs/plans/drivers.md).
 
     OnboardingState:
       type: object
@@ -384,6 +387,9 @@ components:
         bank_account_name: { type: string, nullable: true }
         bank_account_number: { type: string, nullable: true }
         terms_accepted: { type: boolean }
+        drivers_only:
+          type: boolean
+          description: No car - this merchant only lists drivers, so submission needs no vehicle (docs/plans/drivers.md).
         owner_docs:
           # "Your documents" = national_id + kra_pin (individual and the
           # contact person of a company). certificate_of_incorporation +

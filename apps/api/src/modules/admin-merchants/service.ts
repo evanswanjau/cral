@@ -195,7 +195,7 @@ export async function getMerchantFile(merchantId: string) {
   const [user, vehicles, ownerDocs, checklist, docSets] = await Promise.all([
     db<{ id: string; phone: string | null }>("users").where({ id: merchant.user_id }).first(),
     db<VehicleRow>("vehicles").where({ merchant_id: merchant.id }).whereIn("status", [...QUEUE_STATUSES]),
-    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null }),
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
     merchantChecklist(merchant),
     getMerchantApprovalDocs(),
   ]);
@@ -345,7 +345,7 @@ export async function decideMerchantDocument(
   }
 
   const doc = await db<DocumentRow>("documents")
-    .where({ merchant_id: merchant.id, vehicle_id: null, kind: kind as DocumentRow["kind"] })
+    .where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null, kind: kind as DocumentRow["kind"] })
     .first();
   if (!doc) {
     throw new ApiError({
@@ -433,7 +433,7 @@ export async function approveMerchant(merchantId: string, admin: AdminCtx) {
   if (merchant.approved_at !== null) return getMerchantFile(merchantId);
 
   const [ownerDocs, checklist, docSets] = await Promise.all([
-    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null }),
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
     merchantChecklist(merchant),
     getMerchantApprovalDocs(),
   ]);
@@ -519,7 +519,7 @@ function storage() {
 
 export async function readBusinessDocument(merchantId: string, documentId: string) {
   const doc = await db<DocumentRow>("documents")
-    .where({ id: documentId, merchant_id: merchantId, vehicle_id: null })
+    .where({ id: documentId, merchant_id: merchantId, vehicle_id: null, driver_id: null })
     .first();
   if (!doc) {
     throw new ApiError({

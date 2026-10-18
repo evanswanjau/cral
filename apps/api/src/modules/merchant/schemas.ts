@@ -25,6 +25,8 @@ export const PatchOnboardingSchema = z.object({
   bank_account_name: z.string().optional(),
   bank_account_number: z.string().optional(),
   terms_accepted: z.boolean().optional(),
+  /** No car - this merchant only lists drivers (20261018090000). */
+  drivers_only: z.boolean().optional(),
 });
 export type PatchOnboardingInput = z.infer<typeof PatchOnboardingSchema>;
 
