@@ -38,7 +38,8 @@ export interface AdminBookingDetail extends AdminBookingSummary {
   hirer_email: string;
   hirer_id_verified: boolean;
   merchant_id: string;
-  vehicle_id: string;
+  vehicle_id: string | null;
+  driver_id: string | null;
   pickup_location: string;
   dropoff_location: string;
   note_from_hirer: string | null;

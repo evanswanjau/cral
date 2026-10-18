@@ -224,6 +224,60 @@ paths:
                     type: array
                     items: { $ref: "#/components/schemas/CatalogCollection" }
 
+  /catalog/drivers:
+    get:
+      tags: [catalog]
+      summary: Drivers for hire (docs/plans/drivers.md)
+      operationId: listCatalogDrivers
+      security: []
+      description: >
+        Live drivers with a licence in date, on an approved merchant. Thin
+        public projection - first name and surname initial, county, rates
+        and who they drive for. Never the ID, KRA PIN, licence or phone.
+      parameters:
+        - { name: county, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of drivers.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/CatalogDriver" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /catalog/drivers/{id}:
+    get:
+      tags: [catalog]
+      summary: One driver for hire
+      operationId: getCatalogDriver
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CatalogDriver" }
+        "404": { description: "`driver_not_found` - not live, licence lapsed, or merchant not approved." }
+
+  /catalog/vehicles/{id}/drivers:
+    get:
+      tags: [catalog]
+      summary: The drivers a renter can add to this car - its own merchant's
+      operationId: getCatalogVehicleDrivers
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: "`{ data: CatalogDriver[] }` - empty when the car has none, or isn't listed."
+
   /catalog/counties:
     get:
       tags: [catalog]
@@ -259,6 +313,21 @@ paths:
 
 components:
   schemas:
+    CatalogDriver:
+      type: object
+      properties:
+        id: { type: string }
+        display_name: { type: string, example: Peter K. }
+        county: { type: string }
+        rates:
+          type: object
+          properties:
+            day: { $ref: "#/components/schemas/Money", nullable: true }
+            hour: { $ref: "#/components/schemas/Money", nullable: true }
+            trip: { $ref: "#/components/schemas/Money", nullable: true }
+        merchant_id: { type: string }
+        merchant_name: { type: string }
+
     Money:
       type: object
       required: [amount, currency]

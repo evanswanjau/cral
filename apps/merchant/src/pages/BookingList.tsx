@@ -117,7 +117,7 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
 
   return (
     <div className="m-trow" style={{ ...P.row, gridTemplateColumns: "minmax(96px,1fr) minmax(min(100%,200px),2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
-      <span style={P.plateBadge}>{b.vehicle_registration}</span>
+      <span style={P.plateBadge}>{b.vehicle_registration ?? "DRIVER"}</span>
       <div style={P.rowTitleWrap}>
         <div style={P.rowTitleLine}>
           <span style={P.rowTitle}>{b.hirer_name}</span>
@@ -126,7 +126,10 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
           )}
           {b.hirer_rating && <RatingBadge rating={b.hirer_rating} />}
         </div>
-        <div style={P.rowMeta}>{b.vehicle_make} {b.vehicle_model} · {dateRange}</div>
+        <div style={P.rowMeta}>
+          {b.vehicle_registration ? `${b.vehicle_make} ${b.vehicle_model}` : `${b.driver?.full_name ?? "Driver"} · hirer's own car`}
+          {b.vehicle_registration && b.driver ? ` · with ${b.driver.full_name}` : ""} · {dateRange}
+        </div>
       </div>
       <div style={{ textAlign: "right" }}>
         <div style={P.rateLabel}>KES {money(b.merchant_net.amount)}</div>
@@ -183,7 +186,7 @@ export function BookingList(): JSX.Element {
                 </div>
                 <div style={{ font: "600 17px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>{b.hirer_name}</div>
                 <div style={{ ...P.rowMeta, marginTop: 2 }}>
-                  {b.vehicle_registration} · {b.vehicle_make} {b.vehicle_model}
+                  {b.subject_label}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -211,7 +214,7 @@ export function BookingList(): JSX.Element {
                 * accepts (2026-09-21), and this row has no payment state
                 * to read anyway - the booking screen reports the real one.
                 */}
-              {firstRequest.hirer_name} · {firstRequest.vehicle_registration} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)}.
+              {firstRequest.hirer_name} · {firstRequest.vehicle_registration ?? firstRequest.driver?.full_name ?? "Driver"} · {formatDate(firstRequest.pickup_at)} → {formatDate(firstRequest.dropoff_at)}.
             </div>
           </div>
           <button type="button" style={{ ...P.bannerBtn, background: "#0F23A8" }} onClick={() => navigate(`/bookings/${firstRequest.id}`)}>

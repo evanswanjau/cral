@@ -23,13 +23,20 @@ export interface BookingSummary {
    *  `null` (not 0) until at least one rating exists. */
   hirer_rating: RatingSummary | null;
   hirer_is_corporate: boolean;
-  vehicle_registration: string;
-  vehicle_make: string;
-  vehicle_model: string;
-  vehicle_type: string;
-  vehicle_year: string;
+  /** The vehicle fields are null on a driver-only booking - the renter's own car (docs/plans/drivers.md). */
+  vehicle_registration: string | null;
+  vehicle_make: string | null;
+  vehicle_model: string | null;
+  vehicle_type: string | null;
+  vehicle_year: string | null;
   vehicle_chauffeured: boolean;
   vehicle_pickup_address: string | null;
+  /** One of your drivers, when the hirer booked one. */
+  driver: { id: string; full_name: string } | null;
+  /** Driver-only: the car the hirer described. */
+  hire_car_details: string | null;
+  /** "Toyota Axio · KDL 442N", "... with driver Peter Kamau", or "Driver Peter Kamau · renter's own car". */
+  subject_label: string;
   pickup_at: string;
   dropoff_at: string;
   merchant_net: Money;

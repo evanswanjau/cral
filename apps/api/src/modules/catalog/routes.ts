@@ -4,6 +4,9 @@ import { rateLimit } from "../../middleware/rate-limit.js";
 import { safeContentType, safeDisposition } from "../../lib/uploads.js";
 import { CatalogSearchQuerySchema } from "./schemas.js";
 import * as catalog from "./service.js";
+import * as drivers from "./drivers.js";
+import { z } from "zod";
+import { PaginationQuerySchema } from "@cral/types";
 
 export const catalogRouter = Router();
 
@@ -65,5 +68,37 @@ catalogRouter.get(
       `${safeDisposition(photo.contentType)}; filename="${encodeURIComponent(photo.originalName)}"`,
     );
     res.status(200).send(photo.body);
+  }),
+);
+
+// Drivers for hire (docs/plans/drivers.md) - same public bucket as cars.
+const DriverSearchQuerySchema = PaginationQuerySchema.extend({ county: z.string().min(1).optional() });
+
+catalogRouter.get(
+  "/catalog/drivers",
+  browse,
+  asyncHandler(async (req, res) => {
+    const q = DriverSearchQuerySchema.parse(req.query);
+    res.status(200).json(await drivers.listPublicDrivers({ county: q.county, cursor: q.cursor, limit: q.limit }));
+  }),
+);
+
+catalogRouter.get(
+  "/catalog/drivers/:id",
+  browse,
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await drivers.getPublicDriver(req.params.id as string));
+  }),
+);
+
+// The drivers a renter can add to this car - its own merchant's live drivers.
+catalogRouter.get(
+  "/catalog/vehicles/:id/drivers",
+  browse,
+  asyncHandler(async (req, res) => {
+    const vehicle = (await catalog.baseCatalogQuery().where("v.id", req.params.id as string).first("v.merchant_id")) as
+      | { merchant_id: string }
+      | undefined;
+    res.status(200).json({ data: vehicle ? await drivers.driversForMerchant(vehicle.merchant_id) : [] });
   }),
 );

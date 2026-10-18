@@ -621,13 +621,30 @@ components:
           description: >
             The hirer's aggregate score across every merchant who has
             rated them. `null` (not 0) until at least one rating exists.
-        vehicle_registration: { type: string }
-        vehicle_make: { type: string }
-        vehicle_model: { type: string }
-        vehicle_type: { type: string }
-        vehicle_year: { type: string }
-        vehicle_chauffeured: { type: boolean }
+        vehicle_registration:
+          type: string
+          nullable: true
+          description: The vehicle fields are null on a driver-only booking - the renter's own car (docs/plans/drivers.md).
+        vehicle_make: { type: string, nullable: true }
+        vehicle_model: { type: string, nullable: true }
+        vehicle_type: { type: string, nullable: true }
+        vehicle_year: { type: string, nullable: true }
+        vehicle_chauffeured: { type: boolean, description: True when the car is chauffeured or a driver is on the booking. }
         vehicle_pickup_address: { type: string, nullable: true }
+        driver:
+          type: object
+          nullable: true
+          description: The merchant's driver on this booking.
+          properties:
+            id: { type: string }
+            full_name: { type: string }
+        hire_car_details:
+          type: string
+          nullable: true
+          description: Driver-only - the car the renter described.
+        subject_label:
+          type: string
+          description: '"Toyota Axio · KDL 442N", "... with driver Peter Kamau", or "Driver Peter Kamau · renter''s own car".'
         pickup_at: { type: string, format: date-time }
         dropoff_at: { type: string, format: date-time }
         merchant_net: { $ref: "#/components/schemas/Money" }

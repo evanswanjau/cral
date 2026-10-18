@@ -95,7 +95,7 @@ function AcceptModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
         <div style={P.breakdown}>
           {[
             ["Hirer", b.hirer_name],
-            ["Vehicle", `${b.vehicle_registration} · ${b.vehicle_make} ${b.vehicle_model}`],
+            [b.vehicle_registration ? "Vehicle" : "Driver", b.subject_label],
             ["Dates", `${fmtDate(b.pickup_at)} → ${fmtDate(b.dropoff_at)} · ${days} days`],
             ["You keep", `KES ${money(b.merchant_net.amount)}`],
           ].map(([k, v]) => (
@@ -582,7 +582,7 @@ export function BookingDetail(): JSX.Element {
               <h1 style={P.mastH1}>{b.hirer_name}</h1>
               {b.hirer_rating && <RatingBadge rating={b.hirer_rating} style={{ fontSize: 13 }} />}
             </div>
-            <div style={P.mastSub}>{b.vehicle_registration} · {b.vehicle_make} {b.vehicle_model} · {fmtDate(b.pickup_at)} → {fmtDate(b.dropoff_at)} · {days} days</div>
+            <div style={P.mastSub}>{b.subject_label} · {fmtDate(b.pickup_at)} → {fmtDate(b.dropoff_at)} · {days} days</div>
           </div>
           <div style={{ textAlign: "right" }}>
             <div style={P.mastRefLabel}>REQUESTED</div>
@@ -730,6 +730,23 @@ export function BookingDetail(): JSX.Element {
         </div>
 
         <div style={P.detailSide}>
+          {b.driver && (
+            <div style={P.card}>
+              <div style={P.cardHead}>
+                <span style={P.cardTitle}>Driver</span>
+              </div>
+              <div style={{ padding: 18 }}>
+                <div style={{ font: "600 15px/1.3 Archivo,sans-serif", color: "#0B0F1A" }}>{b.driver.full_name}</div>
+                <div style={{ ...P.rowMeta, whiteSpace: "normal" }}>
+                  {b.vehicle_registration
+                    ? "Drives your car for the whole hire."
+                    : `Driving the hirer's own car${b.hire_car_details ? `: ${b.hire_car_details}` : "."}`}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {b.vehicle_registration && (
           <div style={P.card}>
             <div style={P.cardHead}>
               <span style={P.cardTitle}>Vehicle</span>
@@ -750,6 +767,7 @@ export function BookingDetail(): JSX.Element {
                 : "Self-drive. The hirer drives; their licence is on file above."}
             </div>
           </div>
+          )}
 
           <div style={P.sideCard}>
             <div style={P.sideCardLabel}>WHAT THIS BOOKING PAYS</div>
