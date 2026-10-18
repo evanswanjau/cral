@@ -10,6 +10,7 @@ import { sitemapRouter } from "./routes/sitemap.js";
 import { authRouter } from "./modules/auth/routes.js";
 import { adminAuthRouter } from "./modules/admin-auth/routes.js";
 import { adminVehiclesRouter } from "./modules/admin-vehicles/routes.js";
+import { adminDriversRouter } from "./modules/admin-drivers/routes.js";
 import { adminMerchantsRouter } from "./modules/admin-merchants/routes.js";
 import { adminRentersRouter } from "./modules/admin-renters/routes.js";
 import { adminBookingsRouter } from "./modules/admin-bookings/routes.js";
@@ -113,6 +114,7 @@ export function createApp(): Express {
   app.use(authRouter);
   app.use(adminAuthRouter);
   app.use(adminVehiclesRouter);
+  app.use(adminDriversRouter);
   app.use(adminMerchantsRouter);
   app.use(adminRentersRouter);
   app.use(adminBookingsRouter);

@@ -236,6 +236,7 @@ components:
         joined: { type: string, format: date-time }
         towns: { type: array, items: { type: string }, description: Distinct counties across the merchant's fleet }
         fleet: { type: integer, description: Whole-set submitted-vehicle count }
+        drivers: { type: integer, description: Whole-set submitted-driver count. A merchant with drivers and no car is listed too. }
         live: { type: integer }
         waiting: { type: integer, description: "`pending` + `review`" }
 
@@ -287,6 +288,16 @@ components:
             id: { type: string }
             registration: { type: string }
         fleet: { type: array, items: { $ref: "#/components/schemas/FleetRow" } }
+        drivers:
+          type: array
+          description: The merchant's submitted drivers, each its own case on /admin/drivers (docs/plans/drivers.md).
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              full_name: { type: string }
+              status: { type: string }
+              county: { type: string }
         fleet_summary: { type: string }
         can_approve:
           type: boolean

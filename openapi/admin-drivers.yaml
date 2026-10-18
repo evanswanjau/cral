@@ -1,0 +1,125 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Driver Review API
+  version: "1.0.0"
+  description: >
+    Ops review of the drivers merchants list (owner's call, 2026-10-18 -
+    docs/plans/drivers.md). `admin_reviewer` on the `drivers` queue;
+    `admin_super` bypasses both checks.
+
+    Lighter than the vehicle case on purpose - no checklist. Three
+    documents (driving licence, national ID, KRA PIN) to accept or reject,
+    then one decision. Approve needs the merchant's account approved
+    (422 `merchant_not_approved`), every document accepted
+    (`documents_not_all_accepted`) and a licence in date
+    (`licence_expired`). For the account holder the ID and KRA PIN are the
+    account's own documents, decided on the merchant file
+    (422 `account_document` here).
+
+    Every decision writes `audit_log` in the same transaction. A document
+    rejection and every driver decision notify the merchant
+    (`subject_type: driver`); a document accept is silent.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /admin/drivers:
+    get:
+      summary: The driver review queue, oldest submission first
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [open, changes_sent, approved, rejected, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of drivers. `total` is whole-set for the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        full_name: { type: string }
+                        county: { type: string }
+                        status: { type: string }
+                        merchant_id: { type: string }
+                        merchant_name: { type: string }
+                        merchant_approved: { type: boolean }
+                        docs_accepted: { type: integer, description: 0-3 }
+                        licence_expired: { type: boolean }
+                        submitted_at: { type: string, format: date-time, nullable: true }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+
+  /admin/drivers/{driverId}:
+    get:
+      summary: One driver's case
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: >
+            The driver's details, rates, the merchant (`approved`), and
+            `documents[]` - `{ kind, label, document_id, original_name,
+            state (missing|pending|ok|expiring|rejected), review_note,
+            expires_at, from_account }`.
+
+  /admin/drivers/{driverId}/documents/{documentId}:
+    get:
+      summary: A document's bytes (nosniff, allowlisted content type)
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The file. }
+
+  /admin/drivers/{driverId}/documents/{kind}/decision:
+    post:
+      summary: Accept or reject one document
+      description: Requires `Idempotency-Key`. A reject needs a `note` (422 `reason_required`). Working a pending case claims it (`review`).
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+        - { name: kind, in: path, required: true, schema: { type: string, enum: [driving_licence, national_id, kra_pin] } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [accept, reject] }
+                note: { type: string }
+      responses:
+        "200": { description: The case. }
+
+  /admin/drivers/{driverId}/decision:
+    post:
+      summary: Approve, request changes, or reject
+      description: Requires `Idempotency-Key`. `request_changes` / `reject` need a `note`, shown to the merchant.
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, request_changes, reject] }
+                note: { type: string }
+      responses:
+        "200": { description: "The case - `live`, `action` or `rejected`." }

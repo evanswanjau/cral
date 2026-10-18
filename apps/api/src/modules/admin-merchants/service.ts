@@ -15,7 +15,7 @@ import {
 } from "../../lib/review-checklist.js";
 import { effectiveDocState } from "../vehicles/service.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
-import type { DocumentRow, MerchantRow, VehicleRow } from "../merchant/db-types.js";
+import type { DocumentRow, DriverRow, MerchantRow, VehicleRow } from "../merchant/db-types.js";
 
 export interface AdminCtx {
   adminId: string;
@@ -62,14 +62,17 @@ interface MerchantAggregate {
   waiting: number;
   rejected: number;
   towns: string[];
+  /** Submitted drivers (docs/plans/drivers.md) - a merchant with drivers and no car still needs its account approved. */
+  drivers: number;
 }
 
-/** Loads every merchant that has at least one submitted vehicle, with its tallies. */
+/** Loads every merchant that has at least one submitted vehicle or driver, with its tallies. */
 async function loadAggregates(): Promise<MerchantAggregate[]> {
   const vehicles = await db<VehicleRow>("vehicles").whereIn("status", [...QUEUE_STATUSES]);
-  if (vehicles.length === 0) return [];
+  const drivers = await db<DriverRow>("drivers").whereNot("status", "draft").select("merchant_id", "status", "county");
+  if (vehicles.length === 0 && drivers.length === 0) return [];
 
-  const merchantIds = [...new Set(vehicles.map((v) => v.merchant_id))];
+  const merchantIds = [...new Set([...vehicles.map((v) => v.merchant_id), ...drivers.map((d) => d.merchant_id)])];
   const merchants = await db<MerchantRow>("merchants").whereIn("id", merchantIds);
   const users = await db<{ id: string; phone: string | null }>("users").whereIn(
     "id",
@@ -85,14 +88,18 @@ async function loadAggregates(): Promise<MerchantAggregate[]> {
 
   return merchants.map((merchant) => {
     const fleet = byMerchant.get(merchant.id) ?? [];
+    const crew = drivers.filter((d) => d.merchant_id === merchant.id);
     return {
       merchant,
       phone: phoneByUser.get(merchant.user_id) ?? null,
       fleet: fleet.length,
       live: fleet.filter((v) => v.status === "live").length,
-      waiting: fleet.filter((v) => (OPEN_STATUSES as readonly string[]).includes(v.status)).length,
+      waiting:
+        fleet.filter((v) => (OPEN_STATUSES as readonly string[]).includes(v.status)).length +
+        crew.filter((d) => (OPEN_STATUSES as readonly string[]).includes(d.status)).length,
       rejected: fleet.filter((v) => v.status === "rejected").length,
-      towns: [...new Set(fleet.map((v) => v.county).filter((c): c is string => !!c))],
+      towns: [...new Set([...fleet.map((v) => v.county), ...crew.map((d) => d.county)].filter((c): c is string => !!c))],
+      drivers: crew.length,
     };
   });
 }
@@ -158,6 +165,7 @@ export async function listMerchants(query: ListMerchantsQuery) {
         joined: a.merchant.created_at.toISOString(),
         towns: a.towns,
         fleet: a.fleet,
+        drivers: a.drivers,
         live: a.live,
         waiting: a.waiting,
       };
@@ -228,6 +236,14 @@ export async function getMerchantFile(merchantId: string) {
     docsByVehicle.set(d.vehicle_id, list);
   }
 
+  // The merchant's submitted drivers (docs/plans/drivers.md) - each is its
+  // own case on the drivers queue; listed here so Ops sees the whole account.
+  const drivers = await db<DriverRow>("drivers")
+    .where({ merchant_id: merchant.id })
+    .whereNot("status", "draft")
+    .orderBy("created_at", "asc")
+    .select("id", "full_name", "status", "county");
+
   const agg = {
     fleet: vehicles.length,
     live: vehicles.filter((v) => v.status === "live").length,
@@ -279,6 +295,7 @@ export async function getMerchantFile(merchantId: string) {
       rejected: agg.rejected,
     },
     review_next: nextCase ? { id: nextCase.id, registration: nextCase.registration } : null,
+    drivers: drivers.map((d) => ({ id: d.id, full_name: d.full_name, status: d.status, county: d.county })),
     fleet: vehicles
       .slice()
       .sort((a, b) => (b.submitted_at ?? b.created_at).getTime() - (a.submitted_at ?? a.created_at).getTime())

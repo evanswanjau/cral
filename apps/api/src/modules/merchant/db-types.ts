@@ -153,7 +153,6 @@ export interface DriverRow {
   review_assignee: string | null;
   submitted_at: Date | null;
   decided_at: Date | null;
-  expiry_notified_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

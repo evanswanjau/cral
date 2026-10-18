@@ -45,8 +45,6 @@ export async function up(knex: Knex): Promise<void> {
     table.string("review_assignee", 34).nullable().references("id").inTable("admin_users").onDelete("SET NULL");
     table.timestamp("submitted_at", { useTz: true }).nullable();
     table.timestamp("decided_at", { useTz: true }).nullable();
-    // Last licence-expiry reminder sent, so the daily sweep doesn't repeat it.
-    table.timestamp("expiry_notified_at", { useTz: true }).nullable();
 
     addTimestamps(knex, table);
     table.index(["merchant_id", "created_at"]);
