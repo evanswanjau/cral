@@ -27,3 +27,33 @@ export function rethrowRegistrationConflict(err: unknown): never {
   }
   throw err;
 }
+
+export const DRIVER_NATIONAL_ID_UNIQUE_INDEX = "drivers_national_id_norm_unique";
+export const DRIVER_LICENCE_UNIQUE_INDEX = "drivers_licence_norm_unique";
+
+/**
+ * A driver belongs to one merchant only (owner's call, 2026-10-18), so the
+ * same national ID or licence number can't be listed twice anywhere on
+ * CRAL. Same shape as `rethrowRegistrationConflict`.
+ */
+export function rethrowDriverConflict(err: unknown): never {
+  if (isUniqueViolation(err, DRIVER_NATIONAL_ID_UNIQUE_INDEX)) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "driver_taken",
+      message: "A driver with that national ID is already listed on CRAL.",
+      field: "national_id",
+    });
+  }
+  if (isUniqueViolation(err, DRIVER_LICENCE_UNIQUE_INDEX)) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "driver_taken",
+      message: "A driver with that licence number is already listed on CRAL.",
+      field: "licence_number",
+    });
+  }
+  throw err;
+}

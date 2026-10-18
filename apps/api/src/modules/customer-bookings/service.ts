@@ -14,6 +14,9 @@ import {
 } from "../../lib/dates.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { baseCatalogQuery } from "../catalog/service.js";
+import { driverPublicName, requirePublicDriver } from "../catalog/drivers.js";
+import { subjectOf } from "../../lib/booking-subject.js";
+import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
 import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
 import type { CancelBookingInput, CreateBookingInput, ListMyBookingsQuery } from "./schemas.js";
@@ -198,6 +201,39 @@ function unitPricingBasis(
   return { unit: "day", quantity: days, rateAmountCents: vehicle.daily_rate_amount };
 }
 
+/**
+ * The driver's part of a booking (docs/plans/drivers.md): one of their
+ * three rates, on the same quantity rules as a car - inclusive Nairobi days,
+ * hours rounded up, or a flat trip. A car + driver booking defaults to the
+ * car's own unit so the two legs count the same span.
+ */
+function driverPricingBasis(
+  driver: DriverRow,
+  requested: string | undefined,
+  pickupAt: Date,
+  dropoffAt: Date,
+): { unit: string; quantity: number; rateAmountCents: number } {
+  const rates: Record<string, number | null> = {
+    day: driver.daily_rate_amount,
+    hour: driver.hourly_rate_amount,
+    trip: driver.trip_rate_amount,
+  };
+  const unit = requested ?? (["day", "hour", "trip"].find((u) => rates[u]) as string);
+  const rate = rates[unit];
+  if (!rate) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "driver_rate_unavailable",
+      message: `This driver doesn't offer a ${unit === "day" ? "daily" : unit === "hour" ? "hourly" : "per-trip"} rate.`,
+      field: "driver_unit",
+    });
+  }
+  const quantity =
+    unit === "hour" ? hoursBetween(pickupAt, dropoffAt) : unit === "trip" ? 1 : daysBetween(pickupAt, dropoffAt);
+  return { unit, quantity, rateAmountCents: rate };
+}
+
 // ---------------------------------------------------------------------
 // Serialization - the same public projection the catalog uses
 // ---------------------------------------------------------------------
@@ -277,7 +313,38 @@ async function vehicleFactsFor(vehicleIds: string[]): Promise<Map<string, Vehicl
   return out;
 }
 
-function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined) {
+interface DriverFacts {
+  id: string;
+  display_name: string;
+  /** Who the driver drives for - the same public owner name a car shows. */
+  merchant_name: string;
+}
+
+async function driverFactsFor(driverIds: (string | null)[]): Promise<Map<string, DriverFacts>> {
+  const ids = [...new Set(driverIds.filter((d): d is string => !!d))];
+  if (!ids.length) return new Map();
+  const rows = (await db("drivers as d")
+    .join("merchants as m", "m.id", "d.merchant_id")
+    .whereIn("d.id", ids)
+    .select("d.id", "d.full_name", "m.owner_type", "m.company_name", "m.trading_name", "m.first_name")) as Array<
+    Pick<DriverRow, "id" | "full_name"> & Pick<MerchantRow, "owner_type" | "company_name" | "trading_name" | "first_name">
+  >;
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        id: r.id,
+        display_name: driverPublicName(r.full_name),
+        merchant_name:
+          r.owner_type === "company"
+            ? r.trading_name || r.company_name || "(no name on file)"
+            : r.first_name || "(no name on file)",
+      },
+    ]),
+  );
+}
+
+function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined, driver: DriverFacts | undefined = undefined) {
   return {
     id: b.id,
     ref: b.ref,
@@ -289,6 +356,13 @@ function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined) {
     rate_quantity: b.rate_quantity,
     gross: kes(b.gross_amount) as Money,
     vehicle: vehicle ?? null,
+    // Set when a driver is on the booking; `vehicle` is null on a
+    // driver-only booking (the renter's own car, `hire_car_details`).
+    driver: driver ?? null,
+    driver_amount: b.driver_amount === null ? null : (kes(b.driver_amount) as Money),
+    driver_rate_unit: b.driver_rate_unit,
+    driver_rate_quantity: b.driver_rate_quantity,
+    hire_car_details: b.hire_car_details,
     created_at: b.created_at.toISOString(),
   };
 }
@@ -320,10 +394,11 @@ async function handoversForHirer(bookingId: string) {
 function serializeDetail(
   b: BookingRow,
   vehicle: VehicleFacts | undefined,
+  driver: DriverFacts | undefined,
   handovers: ReturnType<typeof serializeHandoverForHirer>[],
 ) {
   return {
-    ...serializeSummary(b, vehicle),
+    ...serializeSummary(b, vehicle, driver),
     // Zero on a customer-created booking - CRAL takes no deposit for now
     // (owner's call, 2026-09-11). Kept in the shape so the field does not
     // appear and disappear if that changes.
@@ -343,11 +418,17 @@ function serializeDetail(
 }
 
 async function detailOf(b: BookingRow) {
-  const [facts, handovers] = await Promise.all([
-    vehicleFactsFor([b.vehicle_id]),
+  const [facts, drivers, handovers] = await Promise.all([
+    vehicleFactsFor(b.vehicle_id ? [b.vehicle_id] : []),
+    driverFactsFor([b.driver_id]),
     handoversForHirer(b.id),
   ]);
-  return serializeDetail(b, facts.get(b.vehicle_id), handovers);
+  return serializeDetail(
+    b,
+    b.vehicle_id ? facts.get(b.vehicle_id) : undefined,
+    b.driver_id ? drivers.get(b.driver_id) : undefined,
+    handovers,
+  );
 }
 
 // ---------------------------------------------------------------------
@@ -403,9 +484,54 @@ export async function createBooking(
     });
   }
 
-  const vehicle = await requirePublicVehicle(input.vehicle_id);
+  const vehicle = input.vehicle_id ? await requirePublicVehicle(input.vehicle_id) : null;
+  const driver = input.driver_id ? await requirePublicDriver(input.driver_id) : null;
+  // A driver comes with their own merchant's cars only - one booking, one
+  // payee (owner's call, 2026-10-18).
+  if (vehicle && driver && driver.merchant_id !== vehicle.merchant_id) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "driver_not_for_this_car",
+      message: "That driver doesn't drive for this car's owner.",
+      field: "driver_id",
+    });
+  }
+  const carDetails = input.hire_car_details?.trim() || null;
+  if (!vehicle && !carDetails) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "hire_car_details_required",
+      message: "Tell the driver what car they'll be driving.",
+      field: "hire_car_details",
+    });
+  }
 
-  const { unit, quantity, rateAmountCents } = unitPricingBasis(vehicle, pickupAt, dropoffAt);
+  const carLeg = vehicle ? unitPricingBasis(vehicle, pickupAt, dropoffAt) : null;
+  const driverLeg = driver ? driverPricingBasis(driver, input.driver_unit ?? carLeg?.unit, pickupAt, dropoffAt) : null;
+  const merchantId = (vehicle?.merchant_id ?? driver?.merchant_id) as string;
+  const payoutMerchant = vehicle
+    ? {
+        user_id: vehicle.m_user_id,
+        payout_method: vehicle.m_payout_method,
+        payout_same: vehicle.m_payout_same,
+        payout_detail: vehicle.m_payout_detail,
+        displayName: ownerDisplayName(vehicle),
+      }
+    : await db<MerchantRow>("merchants")
+        .where({ id: merchantId })
+        .first()
+        .then((m) => ({
+          user_id: m!.user_id,
+          payout_method: m!.payout_method,
+          payout_same: m!.payout_same,
+          payout_detail: m!.payout_detail,
+          displayName:
+            m!.owner_type === "company"
+              ? m!.trading_name || m!.company_name || "(no name on file)"
+              : m!.first_name || "(no name on file)",
+        }));
 
   // A reachable, proven phone before the request goes out (owner's call,
   // 2026-09-19). This is the same "verify where the reason is
@@ -438,7 +564,11 @@ export async function createBooking(
   // a request while their licence is still being read, and that only the
   // keys wait for it.
   const verification = await getRenterVerification(userId);
-  const notUploaded = verification.documents.filter((d) => d.state === "missing");
+  // Someone hiring a driver for their own car isn't driving one of ours,
+  // so only their ID is asked for, not their licence.
+  const notUploaded = verification.documents.filter(
+    (d) => d.state === "missing" && (vehicle || d.kind !== "driving_licence"),
+  );
   if (notUploaded.length > 0) {
     throw new ApiError({
       status: 422,
@@ -452,12 +582,14 @@ export async function createBooking(
   // Only a confirmed or active hire holds dates. A renter's own pending
   // requests deliberately do not - the design allows requesting two cars
   // for the same dates, since only one of them can ever be confirmed.
-  const clash = await db<BookingRow>("bookings")
-    .where({ vehicle_id: vehicle.id })
-    .whereIn("status", ["confirmed", "active"])
-    .where("pickup_at", "<", dropoffAt)
-    .where("dropoff_at", ">", pickupAt)
-    .first();
+  const clash = vehicle
+    ? await db<BookingRow>("bookings")
+        .where({ vehicle_id: vehicle.id })
+        .whereIn("status", ["confirmed", "active"])
+        .where("pickup_at", "<", dropoffAt)
+        .where("dropoff_at", ">", pickupAt)
+        .first()
+    : null;
   if (clash) {
     throw new ApiError({
       status: 409,
@@ -467,20 +599,56 @@ export async function createBooking(
     });
   }
 
-  // Every figure is computed here, from the vehicle's own stored rate.
-  const pricing = computeBookingPricing(rateAmountCents, quantity);
+  // Same rule for the driver: one driver, one job at a time.
+  if (driver) {
+    const driverClash = await db<BookingRow>("bookings")
+      .where({ driver_id: driver.id })
+      .whereIn("status", ["confirmed", "active"])
+      .where("pickup_at", "<", dropoffAt)
+      .where("dropoff_at", ">", pickupAt)
+      .first();
+    if (driverClash) {
+      throw new ApiError({
+        status: 409,
+        type: "conflict",
+        code: "driver_unavailable",
+        message: "That driver is already booked for those dates.",
+      });
+    }
+  }
+
+  // Every figure is computed here, from the stored rates - one leg per
+  // thing hired, summed, the same commission on each.
+  const carPricing = carLeg ? computeBookingPricing(carLeg.rateAmountCents, carLeg.quantity) : null;
+  const driverPricing = driverLeg ? computeBookingPricing(driverLeg.rateAmountCents, driverLeg.quantity) : null;
+  const sum = (pick: (p: ReturnType<typeof computeBookingPricing>) => Money) =>
+    (carPricing ? pick(carPricing).amount : 0) + (driverPricing ? pick(driverPricing).amount : 0);
+  const pricing = {
+    gross: kes(sum((p) => p.gross)),
+    commission: kes(sum((p) => p.commission)),
+    merchantNet: kes(sum((p) => p.merchantNet)),
+    deposit: kes(0),
+  };
+  const unit = carLeg?.unit ?? driverLeg!.unit;
+  const quantity = carLeg?.quantity ?? driverLeg!.quantity;
 
   const hirer = await db("users").where({ id: userId }).first("full_name", "phone");
-  const merchantUser = await db("users").where({ id: vehicle.m_user_id }).first("phone");
-  const location = vehicle.county ?? "To be agreed with the owner";
+  const merchantUser = await db("users").where({ id: payoutMerchant.user_id }).first("phone");
+  const location = vehicle?.county ?? driver?.county ?? "To be agreed with the owner";
 
   const { booking, notificationId } = await db.transaction(async (trx) => {
     const [inserted] = await trx<BookingRow>("bookings")
       .insert({
         id: generateId("booking"),
         ref: await nextBookingRef(trx),
-        merchant_id: vehicle.merchant_id,
-        vehicle_id: vehicle.id,
+        merchant_id: merchantId,
+        vehicle_id: vehicle?.id ?? null,
+        driver_id: driver?.id ?? null,
+        driver_amount: driverPricing ? driverPricing.gross.amount : null,
+        driver_currency: driverPricing ? driverPricing.gross.currency : null,
+        driver_rate_unit: driverLeg?.unit ?? null,
+        driver_rate_quantity: driverLeg?.quantity ?? null,
+        hire_car_details: vehicle ? null : carDetails,
         hirer_id: userId,
         status: "requested",
         pickup_at: pickupAt,
@@ -512,19 +680,20 @@ export async function createBooking(
         deposit_currency: pricing.deposit.currency,
         // Snapshot of where the merchant is paid, taken now so a later
         // payout-settings change can't rewrite an existing booking.
-        payout_method: vehicle.m_payout_method,
-        payout_detail: (vehicle.m_payout_same ? merchantUser?.phone : vehicle.m_payout_detail) ?? "",
-        payout_account_name: ownerDisplayName(vehicle),
+        payout_method: payoutMerchant.payout_method,
+        payout_detail: (payoutMerchant.payout_same ? merchantUser?.phone : payoutMerchant.payout_detail) ?? "",
+        payout_account_name: payoutMerchant.displayName,
         response_due_at: new Date(Date.now() + RESPONSE_WINDOW_HOURS * 60 * 60 * 1000),
       })
       .returning("*");
     if (!inserted) throw new Error("Failed to create booking");
 
+    const subject = await subjectOf(inserted);
     const notificationId = await notify(trx, {
-      merchantId: vehicle.merchant_id,
+      merchantId,
       category: "booking",
       title: "New booking request",
-      body: `${hirer?.full_name ?? "A renter"} asked for ${vehicle.make} ${vehicle.model} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
+      body: `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
       ref: inserted.ref,
       subjectType: "booking",
       subjectId: inserted.id,
@@ -537,8 +706,9 @@ export async function createBooking(
       entityType: "booking",
       entityId: inserted.id,
       after: {
-        vehicle_id: vehicle.id,
-        merchant_id: vehicle.merchant_id,
+        vehicle_id: vehicle?.id ?? null,
+        driver_id: driver?.id ?? null,
+        merchant_id: merchantId,
         pickup_at: pickupAt.toISOString(),
         dropoff_at: dropoffAt.toISOString(),
         gross_amount: pricing.gross.amount,
@@ -553,7 +723,7 @@ export async function createBooking(
 
   // After the commit, never inside it: a failed SMS or email must not
   // roll back the booking the renter just made.
-  await enqueueNotificationDelivery(vehicle.merchant_id, [notificationId]);
+  await enqueueNotificationDelivery(merchantId, [notificationId]);
 
   return detailOf(booking);
 }
@@ -605,11 +775,18 @@ export async function listMyBookings(userId: string, query: ListMyBookingsQuery)
 
   const hasMore = fetched.length > query.limit;
   const rows = hasMore ? fetched.slice(0, query.limit) : fetched;
-  const facts = await vehicleFactsFor([...new Set(rows.map((r) => r.vehicle_id))]);
+  const facts = await vehicleFactsFor([...new Set(rows.map((r) => r.vehicle_id).filter((v): v is string => !!v))]);
+  const drivers = await driverFactsFor(rows.map((r) => r.driver_id));
   const last = rows[rows.length - 1];
 
   return {
-    data: rows.map((r) => serializeSummary(r, facts.get(r.vehicle_id))),
+    data: rows.map((r) =>
+      serializeSummary(
+        r,
+        r.vehicle_id ? facts.get(r.vehicle_id) : undefined,
+        r.driver_id ? drivers.get(r.driver_id) : undefined,
+      ),
+    ),
     next_cursor:
       hasMore && last ? encodeCursor({ v: last.created_at.toISOString(), id: last.id }) : null,
     has_more: hasMore,

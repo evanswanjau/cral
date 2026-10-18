@@ -6,6 +6,9 @@ import { Dashboard } from "./pages/Dashboard.js";
 import { VehicleList } from "./pages/VehicleList.js";
 import { VehicleDetail } from "./pages/VehicleDetail.js";
 import { AddVehicle } from "./pages/AddVehicle.js";
+import { DriverList } from "./pages/DriverList.js";
+import { DriverDetail } from "./pages/DriverDetail.js";
+import { AddDriver } from "./pages/AddDriver.js";
 import { BookingList } from "./pages/BookingList.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
 import { PayoutList } from "./pages/PayoutList.js";
@@ -42,6 +45,9 @@ const router = createBrowserRouter([
               { path: "vehicles", element: <VehicleList /> },
               { path: "vehicles/new", element: <AddVehicle /> },
               { path: "vehicles/:vehicleId", element: <VehicleDetail /> },
+              { path: "drivers", element: <DriverList /> },
+              { path: "drivers/new", element: <AddDriver /> },
+              { path: "drivers/:driverId", element: <DriverDetail /> },
               { path: "bookings", element: <BookingList /> },
               { path: "bookings/:bookingId", element: <BookingDetail /> },
               { path: "payouts", element: <PayoutList /> },

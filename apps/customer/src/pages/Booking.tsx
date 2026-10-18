@@ -6,6 +6,7 @@ import { usePageTitle } from "../lib/use-page-title.js";
 import { getCatalogVehicle, formatMoney, photoSrc } from "../lib/catalog-api.js";
 import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { createBooking, listMyBookings } from "../lib/bookings-api.js";
+import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 import {
   register as registerAccount,
   login,
@@ -262,6 +263,22 @@ export function Booking(): JSX.Element {
     retry: false,
   });
 
+  // The car's own merchant's drivers, offered as an add-on (owner's call,
+  // 2026-10-18 - docs/plans/drivers.md). `?driver=` preselects one.
+  const { data: carDrivers } = useQuery({
+    queryKey: ["catalog", "vehicle-drivers", id],
+    queryFn: () => driversForCar(id!),
+    enabled: !!id,
+    retry: false,
+  });
+  const driverId = params.get("driver") ?? "";
+  const setDriverId = (next: string) => {
+    const p = new URLSearchParams(params);
+    if (next) p.set("driver", next);
+    else p.delete("driver");
+    setParams(p, { replace: true });
+  };
+
   usePageTitle(car ? `Book ${car.make} ${car.model}` : "Book a car");
 
   useEffect(() => writeDraft(key, note), [key, note]);
@@ -273,7 +290,7 @@ export function Booking(): JSX.Element {
   useEffect(() => {
     if (!mine || !id) return;
     const existing = mine.data.find(
-      (b) => b.vehicle.id === id && (b.status === "requested" || b.status === "confirmed"),
+      (b) => b.vehicle?.id === id && (b.status === "requested" || b.status === "confirmed"),
     );
     if (existing) navigate(`/bookings/${existing.id}`, { replace: true });
   }, [mine, id, navigate]);
@@ -307,7 +324,11 @@ export function Booking(): JSX.Element {
   // Same rule as CarDetail.tsx: day and trip totals are knowable from the
   // dates; the server computes the real figure either way.
   const isDayUnit = car.hiring_unit === "day";
-  const total = quoteTotal(car, days);
+  const carTotal = quoteTotal(car, days);
+  const driver = carDrivers?.data.find((d) => d.id === driverId) ?? null;
+  // The driver is priced on the car's own unit, so the two legs count the same span.
+  const driverTotal = driver ? driverQuote(driver, car.hiring_unit, days, 0) : null;
+  const total = carTotal === null ? null : driver ? (driverTotal === null ? null : carTotal + driverTotal) : carTotal;
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
   // rather than at the end of the flow - the car page now blocks it at
@@ -471,6 +492,7 @@ export function Booking(): JSX.Element {
     try {
       const result = await createBooking({
         vehicle_id: car.id,
+        ...(driver ? { driver_id: driver.id } : {}),
         ...hireInstants(from, to),
         ...(note ? { note_from_hirer: note } : {}),
       });
@@ -933,8 +955,11 @@ export function Booking(): JSX.Element {
                     <>
                       <Row
                         label={isDayUnit ? `${days} day${days > 1 ? "s" : ""} × ${formatMoney(car.daily_rate)}` : "Flat trip rate"}
-                        value={formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                        value={formatMoney({ amount: carTotal ?? 0, currency: car.daily_rate.currency })}
                       />
+                      {driver && driverTotal !== null && (
+                        <Row label={`Driver ${driver.display_name}`} value={formatMoney({ amount: driverTotal, currency: car.daily_rate.currency })} />
+                      )}
                       <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
                         <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
                       </div>
@@ -946,6 +971,38 @@ export function Booking(): JSX.Element {
                     />
                   )}
                 </div>
+
+                {carDrivers && carDrivers.data.length > 0 && (
+                  <label style={{ display: "block", marginBottom: 22 }}>
+                    <span style={label}>Add a driver</span>
+                    <select
+                      value={driverId}
+                      onChange={(e) => setDriverId(e.target.value)}
+                      style={{
+                        width: "100%",
+                        height: 44,
+                        padding: "0 12px",
+                        border: "1px solid #CDD2DA",
+                        borderRadius: 8,
+                        background: "#FFFFFF",
+                        font: "400 14px/1 'Instrument Sans',sans-serif",
+                        color: "#0B0F1A",
+                      }}
+                    >
+                      <option value="">No driver - I'll drive</option>
+                      {carDrivers.data.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.display_name} · {rateLine(d)}
+                        </option>
+                      ))}
+                    </select>
+                    {driver && driverTotal === null && (
+                      <span style={{ display: "block", marginTop: 6, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
+                        This driver doesn't offer a per-{car.hiring_unit} rate for this car. Pick another, or go without.
+                      </span>
+                    )}
+                  </label>
+                )}
 
                 <label style={{ display: "block", marginBottom: 22 }}>
                   <span style={label}>Anything {car.owner.display_name} should know</span>
@@ -1130,8 +1187,11 @@ export function Booking(): JSX.Element {
                 <>
                   <Row
                     label={isDayUnit ? `${formatMoney(car.daily_rate)} × ${days}` : "Flat trip rate"}
-                    value={formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                    value={formatMoney({ amount: carTotal ?? 0, currency: car.daily_rate.currency })}
                   />
+                  {driver && driverTotal !== null && (
+                    <Row label={`Driver ${driver.display_name}`} value={formatMoney({ amount: driverTotal, currency: car.daily_rate.currency })} />
+                  )}
                   <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
                     <Row bold label="Total to pay" value={formatMoney({ amount: total, currency: car.daily_rate.currency })} />
                   </div>

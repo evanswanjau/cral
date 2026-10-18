@@ -187,7 +187,7 @@ components:
         subject_type:
           type: string
           nullable: true
-          enum: [booking, vehicle, payout_run, merchant]
+          enum: [booking, vehicle, payout_run, merchant, driver]
         subject_id:
           type: string
           nullable: true

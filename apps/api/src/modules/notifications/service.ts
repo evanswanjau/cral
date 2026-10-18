@@ -13,7 +13,7 @@ import {
 } from "../../lib/notifications.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { EXPIRING_WITHIN_DAYS } from "../vehicles/service.js";
-import type { VehicleRow } from "../merchant/db-types.js";
+import type { DriverRow, VehicleRow } from "../merchant/db-types.js";
 import type {
   NotificationCategory,
   NotificationKind,
@@ -62,6 +62,8 @@ function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null 
       return row.subject_id ? { cta: "Open booking", cta_href: bookingHref(row.subject_id) } : null;
     case "vehicle":
       return row.subject_id ? { cta: "Open vehicle", cta_href: `/vehicles/${row.subject_id}` } : null;
+    case "driver":
+      return row.subject_id ? { cta: "Open driver", cta_href: `/drivers/${row.subject_id}` } : null;
     case "payout_run":
       return row.subject_id ? { cta: "Open payout", cta_href: `/payouts/${row.subject_id}` } : null;
     case "merchant":
@@ -386,6 +388,41 @@ export async function runExpiryNotificationSweep(now: Date = new Date()): Promis
       ...(writtenByMerchant.get(vehicle.merchant_id) ?? []),
       id,
     ]);
+  }
+
+  // Drivers' licences, on the same horizon and the same once-per-30-days
+  // rule (owner's call, 2026-10-18 - docs/plans/drivers.md). An expired
+  // licence is already unbookable (the catalog filters on it); this is the
+  // warning before that happens.
+  const drivers = await db<DriverRow>("drivers")
+    .whereIn("status", ["live", "paused"])
+    .where("licence_expiry", ">=", today)
+    .where("licence_expiry", "<=", horizon)
+    .select("*");
+  for (const driver of drivers) {
+    const already = await db<NotificationRow>("notifications")
+      .where({ merchant_id: driver.merchant_id, category: "expiry", subject_id: driver.id })
+      .where("occurred_at", ">=", new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000))
+      .first();
+    if (already) continue;
+
+    const expiry = String(driver.licence_expiry).slice(0, 10);
+    const days = Math.max(
+      0,
+      Math.round((Date.parse(`${expiry}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000),
+    );
+    const id = await db.transaction(async (trx) =>
+      notify(trx, {
+        merchantId: driver.merchant_id,
+        category: "expiry",
+        title: `Driving licence expires in ${days} ${days === 1 ? "day" : "days"} · ${driver.full_name}`,
+        body: "Upload the renewed licence and update its expiry date, or this driver stops taking bookings when it lapses.",
+        ref: driver.full_name,
+        subjectType: "driver",
+        subjectId: driver.id,
+      }),
+    );
+    writtenByMerchant.set(driver.merchant_id, [...(writtenByMerchant.get(driver.merchant_id) ?? []), id]);
   }
 
   // Enqueue after the writes are committed, per lib/notifications.ts.

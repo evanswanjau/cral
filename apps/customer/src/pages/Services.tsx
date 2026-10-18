@@ -89,6 +89,48 @@ export function Services(): JSX.Element {
             Request towing →
           </button>
         </div>
+        {/* Drivers (owner's call, 2026-10-18 - docs/plans/drivers.md) are
+            real too: a checked driver for the renter's own car. */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 14,
+            flexWrap: "wrap",
+            background: "#F4F6FE",
+            border: "1px solid #DCE1FA",
+            borderRadius: 12,
+            padding: "16px 20px",
+            marginTop: 12,
+          }}
+        >
+          <div>
+            <div style={{ font: "600 15px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 3 }}>
+              Need someone to drive your car?
+            </div>
+            <p style={{ margin: 0, font: "400 13.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              Hire a checked driver by the day, the hour or the trip.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate("/drivers")}
+            style={{
+              height: 44,
+              padding: "0 18px",
+              background: "#0F23A8",
+              color: "#FFFFFF",
+              border: "none",
+              borderRadius: 8,
+              font: "600 14px/1 'Instrument Sans',sans-serif",
+              cursor: "pointer",
+              flex: "none",
+            }}
+          >
+            Hire a driver →
+          </button>
+        </div>
       </div>
       <VerticalPage def={DEF} onFindCar={() => navigate("/browse")} />
     </div>

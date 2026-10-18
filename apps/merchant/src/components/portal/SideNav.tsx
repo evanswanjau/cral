@@ -24,11 +24,14 @@ import { P } from "./styles.js";
  */
 export function SideNav({
   vehicleCount,
+  driverActionCount = 0,
   bookingCount,
   notificationUnread,
   footer,
 }: {
   vehicleCount: number;
+  /** Drivers sent back by a reviewer - the only driver count worth a badge. */
+  driverActionCount?: number;
   bookingCount: number;
   notificationUnread: number;
   /** Hangs below the links. Only the dashboard passes one (its status card). */
@@ -61,6 +64,17 @@ export function SideNav({
             <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
             <span style={P.navLabel}>Vehicles</span>
             <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{vehicleCount}</span>
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/drivers" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
+        {({ isActive }) => (
+          <>
+            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+            <span style={P.navLabel}>Drivers</span>
+            {driverActionCount > 0 && (
+              <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{driverActionCount}</span>
+            )}
           </>
         )}
       </NavLink>

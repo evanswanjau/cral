@@ -158,7 +158,7 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
 async function serializeDetail(merchant: MerchantRow, vehicle: VehicleRow) {
   const [vehicleDocs, ownerDocs, events, user] = await Promise.all([
     db<DocumentRow>("documents").where({ vehicle_id: vehicle.id }),
-    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null }),
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
     db<VehicleEventRow>("vehicle_events").where({ vehicle_id: vehicle.id }).orderBy("occurred_at", "desc"),
     db("users").where({ id: merchant.user_id }).first(),
   ]);

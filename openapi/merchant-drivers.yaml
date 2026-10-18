@@ -1,0 +1,264 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Merchant Drivers API
+  version: "1.0.0"
+  description: >
+    Drivers a merchant lists for hire (owner's call, 2026-10-18 -
+    docs/plans/drivers.md). A merchant can have many drivers; a driver
+    belongs to one merchant only - the same national ID or licence number
+    can't be listed twice anywhere on CRAL (409 `driver_taken`).
+
+    Three documents per driver: `driving_licence`, `national_id`,
+    `kra_pin`. For the account holder ("This is me", `is_account_holder`)
+    the ID and KRA PIN are the account's own documents and only the licence
+    is uploaded.
+
+    A driver is reviewed by Ops before it can be booked (see
+    `admin-drivers.yaml`). Statuses reuse the vehicle listing set:
+    `draft / pending / review / action / rejected / live / paused`.
+    Money is integer cents; rates are entered in whole shillings as
+    strings, the same as the vehicle forms.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+
+tags:
+  - name: drivers
+
+paths:
+  /merchant/drivers:
+    get:
+      tags: [drivers]
+      summary: List this merchant's drivers
+      operationId: listDrivers
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: A page of drivers, newest first. `counts` is whole-set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Driver" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    properties:
+                      all: { type: integer }
+                      needs_action: { type: integer }
+                      live: { type: integer }
+    post:
+      tags: [drivers]
+      summary: Add a driver (as a draft)
+      operationId: createDriver
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DriverInput" }
+      responses:
+        "201":
+          description: The draft driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "409": { description: "`driver_taken` - national ID or licence number already listed." }
+        "422": { description: "`invalid_phone`, `expiry_in_past`, validation errors." }
+
+  /merchant/drivers/{driverId}:
+    parameters:
+      - { name: driverId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [drivers]
+      summary: One driver
+      operationId: getDriver
+      responses:
+        "200":
+          description: The driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "404": { description: "`driver_not_found`" }
+    patch:
+      tags: [drivers]
+      summary: Edit a driver
+      operationId: updateDriver
+      description: >
+        Rates and county can change at any time. The identity fields
+        (name, phone, national ID, KRA PIN, licence number and expiry) only
+        while `draft`, `action` or `rejected` - otherwise 409
+        `driver_locked`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DriverPatch" }
+      responses:
+        "200":
+          description: The driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+    delete:
+      tags: [drivers]
+      summary: Remove a driver
+      operationId: deleteDriver
+      description: Refused with 409 `driver_has_bookings` once any booking names this driver.
+      responses:
+        "204": { description: Removed. }
+
+  /merchant/drivers/{driverId}/documents:
+    parameters:
+      - { name: driverId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [drivers]
+      summary: Attach one of the driver's three documents
+      operationId: uploadDriverDocument
+      description: >
+        Replaces any earlier file of the same kind. For the licence,
+        `expires_at` also updates the driver's `licence_expiry`. The
+        account holder can't upload `national_id` / `kra_pin` here
+        (422 `account_document`) - those are the account's documents.
+        A re-upload on a sent-back driver puts it back in review.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind: { type: string, enum: [driving_licence, national_id, kra_pin] }
+                expires_at: { type: string, format: date }
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: The driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+
+  /merchant/drivers/{driverId}/submit:
+    post:
+      tags: [drivers]
+      summary: Send a draft driver for review
+      operationId: submitDriver
+      description: >
+        422 `driver_rate_required` (no rate set), `documents_incomplete`,
+        `licence_expired`.
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The driver, now `pending`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+
+  /merchant/drivers/{driverId}/pause:
+    post:
+      tags: [drivers]
+      summary: Stop taking bookings for a live driver
+      operationId: pauseDriver
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The driver, now `paused`. }
+
+  /merchant/drivers/{driverId}/resume:
+    post:
+      tags: [drivers]
+      summary: Take bookings again
+      operationId: resumeDriver
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The driver, now `live`. }
+
+  /merchant/onboarding:
+    patch:
+      tags: [drivers]
+      summary: (addition) `drivers_only`
+      description: >
+        `merchant-onboarding.yaml`'s PATCH gains `drivers_only: boolean`.
+        When true, submission no longer needs a vehicle - the merchant lists
+        drivers from the portal instead. Reported back on GET.
+      responses:
+        "200": { description: See merchant-onboarding.yaml. }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, enum: [KES] }
+
+    DriverInput:
+      type: object
+      required: [full_name, phone, national_id, kra_pin, licence_number, licence_expiry, county]
+      properties:
+        full_name: { type: string }
+        phone: { type: string, description: Normalised to E.164. }
+        national_id: { type: string }
+        kra_pin: { type: string }
+        licence_number: { type: string }
+        licence_expiry: { type: string, format: date }
+        county: { type: string }
+        is_account_holder: { type: boolean, default: false }
+        daily_rate: { type: string, description: Whole shillings. Empty clears. }
+        hourly_rate: { type: string }
+        trip_rate: { type: string }
+
+    DriverPatch:
+      type: object
+      description: Any subset of DriverInput except `is_account_holder`.
+
+    DocumentSlot:
+      type: object
+      nullable: true
+      properties:
+        document_id: { type: string }
+        original_name: { type: string }
+        review_state: { type: string, enum: [pending, ok, expiring, rejected] }
+        review_note: { type: string, nullable: true }
+        expires_at: { type: string, format: date, nullable: true }
+        from_account: { type: boolean, description: True for the account holder's own ID / KRA PIN. }
+
+    Driver:
+      type: object
+      properties:
+        id: { type: string, example: drv_01J... }
+        full_name: { type: string }
+        phone: { type: string }
+        national_id: { type: string }
+        kra_pin: { type: string }
+        licence_number: { type: string }
+        licence_expiry: { type: string, format: date }
+        licence_expired: { type: boolean }
+        county: { type: string }
+        is_account_holder: { type: boolean }
+        rates:
+          type: object
+          properties:
+            day: { $ref: "#/components/schemas/Money", nullable: true }
+            hour: { $ref: "#/components/schemas/Money", nullable: true }
+            trip: { $ref: "#/components/schemas/Money", nullable: true }
+        status: { type: string, enum: [draft, pending, review, action, rejected, live, paused] }
+        reviewer_note: { type: string, nullable: true }
+        documents:
+          type: object
+          properties:
+            driving_licence: { $ref: "#/components/schemas/DocumentSlot" }
+            national_id: { $ref: "#/components/schemas/DocumentSlot" }
+            kra_pin: { $ref: "#/components/schemas/DocumentSlot" }
+        doc_count: { type: integer, description: Documents on file, 0-3. }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }

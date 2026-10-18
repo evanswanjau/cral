@@ -18,7 +18,8 @@ import {
   enqueueRenterNotificationDelivery,
 } from "../../jobs/notification-delivery.js";
 import { ratingSummaries, ratingSummary, type RatingSummary } from "../../lib/ratings.js";
-import type { DocumentRow, VehicleRow } from "../merchant/db-types.js";
+import { subjectOf, subjectsFor, type BookingSubject } from "../../lib/booking-subject.js";
+import type { DocumentRow } from "../merchant/db-types.js";
 import type {
   BookingEventRow,
   BookingReportRow,
@@ -135,7 +136,7 @@ interface HirerInfo {
 
 function serializeSummary(
   booking: BookingRow,
-  vehicle: VehicleRow,
+  subject: BookingSubject,
   hirer: HirerInfo,
   hirerRating: RatingSummary | null = null,
 ) {
@@ -151,13 +152,17 @@ function serializeSummary(
     // flag for the customer role) — the design's "CORP" badge on Safiri
     // Tours Ltd has nothing to key off in this phase. Always false.
     hirer_is_corporate: false,
-    vehicle_registration: vehicle.registration,
-    vehicle_make: vehicle.make,
-    vehicle_model: vehicle.model,
-    vehicle_type: vehicle.type,
-    vehicle_year: vehicle.year,
-    vehicle_chauffeured: vehicle.chauffeured,
-    vehicle_pickup_address: vehicle.pickup_address,
+    // Null on a driver-only booking - the renter's own car (docs/plans/drivers.md).
+    vehicle_registration: subject.vehicle?.registration ?? null,
+    vehicle_make: subject.vehicle?.make ?? null,
+    vehicle_model: subject.vehicle?.model ?? null,
+    vehicle_type: subject.vehicle?.type ?? null,
+    vehicle_year: subject.vehicle?.year ?? null,
+    vehicle_chauffeured: subject.vehicle ? subject.vehicle.chauffeured || !!subject.driver : true,
+    vehicle_pickup_address: subject.vehicle?.pickup_address ?? null,
+    driver: subject.driver ? { id: subject.driver.id, full_name: subject.driver.full_name } : null,
+    hire_car_details: booking.hire_car_details,
+    subject_label: subject.long,
     pickup_at: booking.pickup_at.toISOString(),
     dropoff_at: booking.dropoff_at.toISOString(),
     merchant_net: kes(booking.merchant_net_amount),
@@ -205,7 +210,7 @@ async function paymentStateFor(bookingId: string): Promise<"paid" | "pending" | 
   return "unpaid";
 }
 
-async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: HirerInfo) {
+async function serializeDetail(booking: BookingRow, subject: BookingSubject, hirer: HirerInfo) {
   const [events, hirerRating, paymentState] = await Promise.all([
     db<BookingEventRow>("booking_events").where({ booking_id: booking.id }).orderBy("occurred_at", "desc"),
     ratingSummary(booking.hirer_id, "hirer"),
@@ -213,9 +218,13 @@ async function serializeDetail(booking: BookingRow, vehicle: VehicleRow, hirer: 
   ]);
 
   return {
-    ...serializeSummary(booking, vehicle, hirer, hirerRating),
+    ...serializeSummary(booking, subject, hirer, hirerRating),
     payment_state: paymentState,
     gross: kes(booking.gross_amount),
+    // The driver's share of `gross`, when a driver is on the booking.
+    driver_amount: money(booking.driver_amount, booking.driver_currency),
+    driver_rate_unit: booking.driver_rate_unit,
+    driver_rate_quantity: booking.driver_rate_quantity,
     commission: kes(booking.commission_amount),
     merchant_net: kes(booking.merchant_net_amount),
     cancellation_fee: money(booking.cancellation_fee_amount, booking.cancellation_fee_currency),
@@ -262,11 +271,6 @@ async function hirerInfoOf(hirerId: string): Promise<HirerInfo> {
   return { full_name: user?.full_name ?? "Hirer", email: user?.email ?? "" };
 }
 
-async function vehicleOf(vehicleId: string): Promise<VehicleRow> {
-  const vehicle = await db<VehicleRow>("vehicles").where({ id: vehicleId }).first();
-  if (!vehicle) throw new Error(`Booking references a missing vehicle ${vehicleId}`);
-  return vehicle;
-}
 
 // ---------------------------------------------------------------------
 // List / detail
@@ -299,13 +303,11 @@ export async function listBookings(userId: string, query: ListBookingsQuery) {
   });
   const paged: PaginatedResult<(typeof rows)[number]> = toPaginatedResult(rows, query.limit, "created_at");
 
-  const vehicleIds = [...new Set(paged.data.map((b) => b.vehicle_id))];
   const hirerIds = [...new Set(paged.data.map((b) => b.hirer_id))];
-  const [vehicles, hirers] = await Promise.all([
-    vehicleIds.length ? db<VehicleRow>("vehicles").whereIn("id", vehicleIds) : [],
+  const [subjects, hirers] = await Promise.all([
+    subjectsFor(paged.data),
     hirerIds.length ? db("users").whereIn("id", hirerIds) : [],
   ]);
-  const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
   const hirerById = new Map(hirers.map((h) => [h.id, h]));
   const ratingByHirer = await ratingSummaries(hirerIds, "hirer");
 
@@ -313,7 +315,7 @@ export async function listBookings(userId: string, query: ListBookingsQuery) {
     data: paged.data.map((b) =>
       serializeSummary(
         b,
-        vehicleById.get(b.vehicle_id)!,
+        subjects.get(b)!,
         {
           full_name: hirerById.get(b.hirer_id)?.full_name ?? "Hirer",
           email: hirerById.get(b.hirer_id)?.email ?? "",
@@ -329,8 +331,8 @@ export async function listBookings(userId: string, query: ListBookingsQuery) {
 
 export async function getBookingDetail(userId: string, bookingId: string) {
   const { booking } = await requireOwnBooking(userId, bookingId);
-  const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
-  return serializeDetail(booking, vehicle, hirer);
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
+  return serializeDetail(booking, subject, hirer);
 }
 
 // ---------------------------------------------------------------------
@@ -370,7 +372,7 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
     conflict("response_window_closed", "The 12-hour response window for this request has closed.");
   }
 
-  const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
 
   const { row: updated, renterNotificationId } = await db.transaction(async (trx) => {
     const [row] = await trx<BookingRow>("bookings")
@@ -408,7 +410,7 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
       userId: booking.hirer_id,
       category: "booking",
       title: `${booking.ref} accepted`,
-      body: `${vehicle.make} ${vehicle.model} · ${vehicle.registration}. Open the booking to pay by M-Pesa and lock in your dates.`,
+      body: `${subject.long}. Open the booking to pay by M-Pesa and lock in your dates.`,
       ref: booking.ref,
       subjectType: "booking",
       subjectId: booking.id,
@@ -423,27 +425,27 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
   if (hirer.email) {
     await emailAdapter.send({
       to: hirer.email,
-      subject: `${booking.ref} confirmed · ${vehicle.registration}`,
+      subject: `${booking.ref} confirmed · ${subject.short}`,
       html: emailLayout({
-        preheader: `Your booking with ${vehicle.registration} is confirmed`,
+        preheader: `Your booking with ${subject.short} is confirmed`,
         bodyHtml: [
           emailHeading("Your booking is confirmed"),
-          emailParagraph(`${booking.ref} · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`),
+          emailParagraph(`${booking.ref} · ${subject.long}`),
           emailMuted("You'll get a pickup code closer to your pickup time."),
         ].join(""),
       }),
-      text: `${booking.ref} confirmed · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`,
+      text: `${booking.ref} confirmed · ${subject.long}`,
     });
   }
 
-  return serializeDetail(updated, vehicle, hirer);
+  return serializeDetail(updated, subject, hirer);
 }
 
 export async function declineBooking(userId: string, bookingId: string, input: DeclineBookingInput, ctx: RequestContext) {
   const { merchant, booking } = await requireOwnBooking(userId, bookingId);
   if (booking.status !== "requested") conflict("already_answered", "This request has already been answered.");
 
-  const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
 
   const { row: updated, renterNotificationId, refundId } = await db.transaction(async (trx) => {
     const [row] = await trx<BookingRow>("bookings")
@@ -518,21 +520,21 @@ export async function declineBooking(userId: string, bookingId: string, input: D
   if (hirer.email) {
     await emailAdapter.send({
       to: hirer.email,
-      subject: `${booking.ref} declined · ${vehicle.registration}`,
+      subject: `${booking.ref} declined · ${subject.short}`,
       html: emailLayout({
-        preheader: `Your request for ${vehicle.registration} was declined`,
+        preheader: `Your request for ${subject.short} was declined`,
         bodyHtml: [
           emailHeading("The owner declined this request"),
-          emailParagraph(`${booking.ref} · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`),
+          emailParagraph(`${booking.ref} · ${subject.long}`),
           input.note ? emailParagraph(input.note) : "",
           emailMuted("Nothing was charged - CRAL never takes a booking fee."),
         ].join(""),
       }),
-      text: `${booking.ref} declined · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}${input.note ? `\n\n${input.note}` : ""}`,
+      text: `${booking.ref} declined · ${subject.long}${input.note ? `\n\n${input.note}` : ""}`,
     });
   }
 
-  return serializeDetail(updated, vehicle, hirer);
+  return serializeDetail(updated, subject, hirer);
 }
 
 export async function cancelBooking(userId: string, bookingId: string, input: CancelBookingInput, ctx: RequestContext) {
@@ -541,7 +543,7 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
     conflict("booking_not_cancellable", "Only a confirmed or active booking can be cancelled.");
   }
 
-  const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
   const isLate = Date.now() >= booking.pickup_at.getTime();
 
   const update: Partial<BookingRow> = { status: "cancelled", cancel_reason: input.reason };
@@ -624,20 +626,20 @@ export async function cancelBooking(userId: string, bookingId: string, input: Ca
   if (hirer.email) {
     await emailAdapter.send({
       to: hirer.email,
-      subject: `${booking.ref} cancelled · ${vehicle.registration}`,
+      subject: `${booking.ref} cancelled · ${subject.short}`,
       html: emailLayout({
-        preheader: `Your booking for ${vehicle.registration} was cancelled by the owner`,
+        preheader: `Your booking for ${subject.short} was cancelled by the owner`,
         bodyHtml: [
           emailHeading("The owner cancelled this booking"),
-          emailParagraph(`${booking.ref} · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}`),
+          emailParagraph(`${booking.ref} · ${subject.long}`),
           emailParagraph(input.reason),
         ].join(""),
       }),
-      text: `${booking.ref} cancelled · ${vehicle.make} ${vehicle.model} · ${vehicle.registration}\n\n${input.reason}`,
+      text: `${booking.ref} cancelled · ${subject.long}\n\n${input.reason}`,
     });
   }
 
-  return serializeDetail(updated, vehicle, hirer);
+  return serializeDetail(updated, subject, hirer);
 }
 
 // ---------------------------------------------------------------------
@@ -654,7 +656,7 @@ export async function createHandover(userId: string, bookingId: string, input: C
   }
 
   const hirer = await hirerInfoOf(booking.hirer_id);
-  const vehicle = await vehicleOf(booking.vehicle_id);
+  const subject = await subjectOf(booking);
   // The return leg has nobody to authenticate — the merchant is taking
   // their own vehicle back — so it opens straight at the condition step
   // with no code generated and no email sent (owner's call, 2026-09-05).
@@ -708,10 +710,14 @@ export async function createHandover(userId: string, bookingId: string, input: C
       to: hirer.email,
       subject: `Your ${booking.ref} pickup code`,
       html: emailLayout({
-        preheader: `Your pickup code for ${vehicle.registration}`,
+        preheader: `Your pickup code for ${subject.short}`,
         bodyHtml: [
           emailHeading("Your pickup code"),
-          emailParagraph(`Read this code to the owner at ${vehicle.registration} to start the hire.`),
+          emailParagraph(
+            subject.vehicle
+              ? `Read this code to the owner at ${subject.short} to start the hire.`
+              : `Read this code to your driver, ${subject.short}, to start the job.`,
+          ),
           emailCode(code),
           emailMuted("Only share this code in person, with the owner handing you the vehicle."),
         ].join(""),
@@ -736,7 +742,7 @@ export async function uploadHandoverPhoto(userId: string, handoverId: string, in
   const { merchant, booking } = await requireOwnHandover(userId, handoverId);
 
   const safeName = input.file.originalname.replace(/[^A-Za-z0-9_.-]/g, "_").slice(-100);
-  const key = `merchant/${merchant.id}/${booking.vehicle_id}/handover/${generateId("document")}-${safeName}`;
+  const key = `merchant/${merchant.id}/${booking.vehicle_id ?? booking.driver_id}/handover/${generateId("document")}-${safeName}`;
   await getStorageAdapter().putObject({ key, body: input.file.buffer, contentType: input.file.mimetype });
 
   const [doc] = await db("documents")
@@ -744,6 +750,9 @@ export async function uploadHandoverPhoto(userId: string, handoverId: string, in
       id: generateId("document"),
       merchant_id: merchant.id,
       vehicle_id: booking.vehicle_id,
+      // A driver-only booking has no car of ours; tie the photo to the
+      // driver so it is never mistaken for an account document.
+      driver_id: booking.vehicle_id ? null : booking.driver_id,
       booking_id: booking.id,
       kind: "handover_photo",
       storage_key: key,
@@ -1001,8 +1010,8 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
 
   await enqueueNotificationDelivery(merchant.id, notificationIds);
 
-  const [vehicle, hirer] = await Promise.all([vehicleOf(updatedBooking.vehicle_id), hirerInfoOf(updatedBooking.hirer_id)]);
-  return { booking: await serializeDetail(updatedBooking, vehicle, hirer), handover: serializeHandover(updatedHandover) };
+  const [subject, hirer] = await Promise.all([subjectOf(updatedBooking), hirerInfoOf(updatedBooking.hirer_id)]);
+  return { booking: await serializeDetail(updatedBooking, subject, hirer), handover: serializeHandover(updatedHandover) };
 }
 
 // ---------------------------------------------------------------------
@@ -1177,7 +1186,7 @@ export async function rateHirer(userId: string, bookingId: string, input: RateHi
   const existing = await db<BookingEventRow>("booking_events").where({ booking_id: booking.id, kind: "rated" }).first();
   if (existing) conflict("already_rated", "You've already rated this hirer for this booking.");
 
-  const [vehicle, hirer] = await Promise.all([vehicleOf(booking.vehicle_id), hirerInfoOf(booking.hirer_id)]);
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
 
   await db.transaction(async (trx) => {
     await trx("ratings").insert({
@@ -1210,7 +1219,7 @@ export async function rateHirer(userId: string, bookingId: string, input: RateHi
     });
   });
 
-  return serializeDetail(booking, vehicle, hirer);
+  return serializeDetail(booking, subject, hirer);
 }
 
 // ---------------------------------------------------------------------
