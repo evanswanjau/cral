@@ -18,7 +18,11 @@ const app = createApp();
 const userIds: string[] = [];
 
 afterAll(async () => {
-  if (userIds.length) await db("users").whereIn("id", userIds).delete();
+  if (userIds.length) {
+    // Bookings first - they hold RESTRICT keys on the renter, the merchant and the driver.
+    await db("bookings").whereIn("hirer_id", userIds).delete();
+    await db("users").whereIn("id", userIds).delete();
+  }
   await db.destroy();
 });
 

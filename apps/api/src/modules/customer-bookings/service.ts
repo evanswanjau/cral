@@ -316,13 +316,32 @@ async function vehicleFactsFor(vehicleIds: string[]): Promise<Map<string, Vehicl
 interface DriverFacts {
   id: string;
   display_name: string;
+  /** Who the driver drives for - the same public owner name a car shows. */
+  merchant_name: string;
 }
 
 async function driverFactsFor(driverIds: (string | null)[]): Promise<Map<string, DriverFacts>> {
   const ids = [...new Set(driverIds.filter((d): d is string => !!d))];
   if (!ids.length) return new Map();
-  const rows = await db<DriverRow>("drivers").whereIn("id", ids).select("id", "full_name");
-  return new Map(rows.map((r) => [r.id, { id: r.id, display_name: driverPublicName(r.full_name) }]));
+  const rows = (await db("drivers as d")
+    .join("merchants as m", "m.id", "d.merchant_id")
+    .whereIn("d.id", ids)
+    .select("d.id", "d.full_name", "m.owner_type", "m.company_name", "m.trading_name", "m.first_name")) as Array<
+    Pick<DriverRow, "id" | "full_name"> & Pick<MerchantRow, "owner_type" | "company_name" | "trading_name" | "first_name">
+  >;
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      {
+        id: r.id,
+        display_name: driverPublicName(r.full_name),
+        merchant_name:
+          r.owner_type === "company"
+            ? r.trading_name || r.company_name || "(no name on file)"
+            : r.first_name || "(no name on file)",
+      },
+    ]),
+  );
 }
 
 function serializeSummary(b: BookingRow, vehicle: VehicleFacts | undefined, driver: DriverFacts | undefined = undefined) {

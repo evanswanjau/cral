@@ -34,6 +34,7 @@ const NAV: Array<{ label: string; to: string; activeOn: (pathname: string) => bo
     to: "/browse",
     activeOn: (p) => p === "/browse" || p.startsWith("/cars/") || p.startsWith("/book/"),
   },
+  { label: "Hire a driver", to: "/drivers", activeOn: (p) => p.startsWith("/drivers") },
   { label: "Find parts", to: "/parts", activeOn: (p) => p === "/parts" },
   { label: "Find services", to: "/services", activeOn: (p) => p === "/services" },
 ];

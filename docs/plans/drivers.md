@@ -1,7 +1,9 @@
 # Drivers - feature review and plan
 
-Status: **plan only, nothing built** (2026-10-18). Drivers go first; car
-sales is parked in [`car-sales.md`](./car-sales.md).
+Status: **built** (2026-10-18, branch `feature/drivers`, merged to
+`develop`; Linear project "CRAL - Drivers", COD-103 to COD-106). See
+"9. What shipped, and where it differs" at the end. Car sales is parked
+in [`car-sales.md`](./car-sales.md).
 
 This is a **deliberate deviation from `road-to-transactable.md` /
 `pr-delivery-plan.md`**, which don't list drivers. It needs its own
@@ -189,4 +191,40 @@ tests, build) on each.
 
 ## 8. Open questions
 
-None - all answered 2026-10-18. Ready for D1.
+None - all answered 2026-10-18.
+
+## 9. What shipped, and where it differs from the plan above
+
+Built as four commits on `feature/drivers` (D1 to D4). Contracts:
+`openapi/merchant-drivers.yaml`, `openapi/admin-drivers.yaml`, plus
+additions to `customer-bookings`, `customer-catalog`, `merchant-bookings`,
+`merchant-onboarding`, `admin-merchants` and both notifications contracts
+(`subject_type: driver`). Migrations `20261018090000_create_drivers` and
+`20261018100000_bookings_with_driver`.
+
+- **No `merchants.offers` column.** A merchant "drives" by having drivers,
+  the way they "rent cars" by having vehicles. The only onboarding change
+  is `merchants.drivers_only`: a toggle on the Vehicles step ("I don't
+  have a vehicle - I only drive") that waives "at least one vehicle".
+- **Ops review has no checklist** - three documents to accept or reject,
+  then approve / request changes / reject. Lighter than the vehicle case,
+  per "keep it light". Queue slug `drivers` (added to Team's queue picker).
+- **Driver-only merchants show in the Merchants directory** - it used to
+  list only merchants with a submitted vehicle, so their account could
+  never have been approved, and a driver can't go live without that.
+- **One booking-subject helper** (`apps/api/src/lib/booking-subject.ts`)
+  names every booking - car, car with driver, or driver alone - for the
+  merchant's Bookings, the emails, payout lines (`DRIVER` in the plate
+  column), the dashboard and Ops bookings.
+- **Hourly is live for drivers only.** The driver booking page has date +
+  start/end time pickers; vehicles keep `hour` switched off because the
+  car booking flow is still date-only.
+- **The handover is not reversed yet.** Driver jobs use the existing
+  pickup code (the renter reads it to the driver). Proving the driver to
+  the renter with a code is a follow-up.
+- **No driver ratings.** There is no renter-side rating flow at all yet
+  (nothing writes `ratee_type = 'merchant'` either), so a rating shown on a
+  driver would be "null forever". Add both together.
+- **The car booking page offers the car's own merchant's drivers** as an
+  "Add a driver" select (`?driver=` preselects). The car listing page
+  itself does not advertise drivers yet.

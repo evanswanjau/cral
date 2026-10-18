@@ -1779,6 +1779,34 @@ matching parts of the Bookings / Notifications / Payouts notes above.
 - **Mobile layout**: grids and columns shrink via `min(100%, …)`; the nav
   strip and table rows use `m-*` classes in `apps/merchant/src/responsive.css`.
 
+**Drivers (owner's call, 2026-10-18 - a deliberate deviation from
+`road-to-transactable.md`/`pr-delivery-plan.md`, which don't list them).**
+Plan and what shipped: [`docs/plans/drivers.md`](./docs/plans/drivers.md).
+Linear project "CRAL - Drivers" (COD-103 to COD-106).
+- **A driver is a record a merchant uploads, like a vehicle** (`drivers`,
+  `drv_`, migration `20261018090000`). A merchant can have many; a driver
+  belongs to one merchant only - normalised national ID and licence number
+  are globally unique (409 `driver_taken`). "This is me" (individuals) reuses
+  the account's own ID and KRA PIN documents.
+- **Three documents, nothing else**: `driving_licence`, `national_id`,
+  `kra_pin` (`documents.driver_id`). Account-document queries must filter
+  `driver_id: null` as well as `vehicle_id: null` - a driver's ID has
+  `vehicle_id` null too, and an unfiltered query reads it as the account's.
+- **Gates**: account approved -> driver approved (Ops `drivers` queue) ->
+  bookable. A lapsed licence is unbookable (derived, never stored); the
+  daily expiry sweep warns 30 days ahead. `merchants.drivers_only` lets
+  someone with no car finish onboarding.
+- **Bookings**: `vehicle_id` is nullable, `driver_id` added (CHECK one
+  set, migration `20261018100000`). Car + driver = two legs priced and
+  summed, same commission; driver-only = the renter's own car
+  (`hire_car_details`) and only their ID is required. A driver only comes
+  with their own merchant's cars, so **a booking still has one payee** and
+  payouts didn't change. Every reader names a booking through
+  `lib/booking-subject.ts` - don't add another "booking has a car" read.
+- **Money goes through CRAL** (Daraja), the merchant is paid out at the
+  usual commission, never the driver directly. Day, hour and trip rates;
+  hourly is live for drivers only (the driver page has time pickers).
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

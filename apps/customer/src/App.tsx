@@ -5,6 +5,8 @@ import { Browse } from "./pages/Browse.js";
 import { Parts } from "./pages/Parts.js";
 import { Services } from "./pages/Services.js";
 import { Towing } from "./pages/Towing.js";
+import { Drivers } from "./pages/Drivers.js";
+import { DriverBook } from "./pages/DriverBook.js";
 import { CarDetail } from "./pages/CarDetail.js";
 import { Booking } from "./pages/Booking.js";
 import { Documents } from "./pages/Documents.js";
@@ -55,6 +57,7 @@ const router = createBrowserRouter([
       { path: "/parts", element: <Parts /> },
       { path: "/services", element: <Services /> },
       { path: "/cars/:id", element: <CarDetail /> },
+      { path: "/drivers", element: <Drivers /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
       { path: "/corporate", element: <Corporate /> },
@@ -71,6 +74,7 @@ const router = createBrowserRouter([
         element: <RequireAuth />,
         children: [
           { path: "/services/towing", element: <Towing /> },
+          { path: "/drivers/:id", element: <DriverBook /> },
           { path: "/documents", element: <Documents /> },
           { path: "/bookings", element: <Trips /> },
           { path: "/bookings/:id", element: <TripDetail /> },
