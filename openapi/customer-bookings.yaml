@@ -79,7 +79,14 @@ paths:
                 A car, a car with one of its merchant's drivers, or a driver
                 alone for the renter's own car (docs/plans/drivers.md) - at
                 least one of `vehicle_id` / `driver_id`. A driver only comes
-                with their own merchant's cars (422 `driver_not_for_this_car`).
+                with their own merchant's cars when that merchant lists drivers
+                (422 `owner_driver_first`); when the car's owner has none, any
+                checked driver can be added and the request becomes two linked
+                bookings - the car with its owner, the driver with theirs - each
+                accepted and paid on its own. The response is the car booking,
+                with `linked_booking: { id, ref, status, gross }` (owner's call,
+                2026-10-19). A chauffeured car takes no extra driver
+                (422 `driver_not_for_this_car`).
                 Priced one leg per thing hired, summed, same commission on
                 each. A driver-only booking needs `hire_car_details`
                 (422 `hire_car_details_required`) and only the renter's

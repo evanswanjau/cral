@@ -996,6 +996,12 @@ export function Booking(): JSX.Element {
                         </option>
                       ))}
                     </select>
+                    {carDrivers.source === "other_owners" && (
+                      <span style={{ display: "block", marginTop: 6, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                        {car.owner.display_name} has no drivers of their own, so a driver from another owner is sent as a
+                        second request - accepted and paid on its own.
+                      </span>
+                    )}
                     {driver && driverTotal === null && (
                       <span style={{ display: "block", marginTop: 6, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
                         This driver doesn't offer a per-{car.hiring_unit} rate for this car. Pick another, or go without.

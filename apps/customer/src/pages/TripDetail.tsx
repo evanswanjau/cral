@@ -684,6 +684,26 @@ export function TripDetail(): JSX.Element {
         {ownerName(booking)}
       </p>
 
+      {booking.linked_booking && (
+        <Link
+          to={`/bookings/${booking.linked_booking.id}`}
+          style={{
+            display: "block",
+            margin: "-10px 0 20px",
+            padding: "12px 14px",
+            background: "#F4F6FE",
+            border: "1px solid #DCE1FA",
+            borderRadius: 10,
+            textDecoration: "none",
+            font: "400 13.5px/1.5 'Instrument Sans',sans-serif",
+            color: "#333B4A",
+          }}
+        >
+          Booked together with {booking.linked_booking.ref} ({booking.vehicle ? "your driver" : "the car"}) - that
+          one is accepted and paid on its own. <span style={{ color: "#0F23A8", fontWeight: 600 }}>Open it →</span>
+        </Link>
+      )}
+
       {/*
        * The same rail `/book/:vehicleId` shows, continued. The booking
        * moved to its own URL so a reload cannot lose it (2026-09-19),

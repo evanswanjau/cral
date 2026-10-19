@@ -276,7 +276,12 @@ paths:
         - { name: id, in: path, required: true, schema: { type: string } }
       responses:
         "200":
-          description: "`{ data: CatalogDriver[] }` - empty when the car has none, or isn't listed."
+          description: >
+            `{ source, data: CatalogDriver[] }`. `source: owner` - the car's
+            own owner's drivers, listed first whenever there are any.
+            `source: other_owners` - only when the owner has none: other
+            owners' drivers in the car's county, else anywhere. Empty for a
+            chauffeured car or one that isn't listed.
 
   /catalog/counties:
     get:
@@ -317,7 +322,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        display_name: { type: string, example: Peter K. }
+        display_name: { type: string, example: Peter Kamau Njoroge, description: "The driver's full name (owner's call, 2026-10-19)." }
         county: { type: string }
         rates:
           type: object

@@ -14,7 +14,7 @@ import {
 } from "../../lib/dates.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { baseCatalogQuery } from "../catalog/service.js";
-import { driverPublicName, requirePublicDriver } from "../catalog/drivers.js";
+import { basePublicDriverQuery, driverPublicName, requirePublicDriver } from "../catalog/drivers.js";
 import { subjectOf } from "../../lib/booking-subject.js";
 import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
@@ -418,17 +418,26 @@ function serializeDetail(
 }
 
 async function detailOf(b: BookingRow) {
+  const linked = b.linked_booking_id
+    ? await db<BookingRow>("bookings").where({ id: b.linked_booking_id }).first("id", "ref", "status", "gross_amount")
+    : undefined;
   const [facts, drivers, handovers] = await Promise.all([
     vehicleFactsFor(b.vehicle_id ? [b.vehicle_id] : []),
     driverFactsFor([b.driver_id]),
     handoversForHirer(b.id),
   ]);
-  return serializeDetail(
-    b,
-    b.vehicle_id ? facts.get(b.vehicle_id) : undefined,
-    b.driver_id ? drivers.get(b.driver_id) : undefined,
-    handovers,
-  );
+  return {
+    ...serializeDetail(
+      b,
+      b.vehicle_id ? facts.get(b.vehicle_id) : undefined,
+      b.driver_id ? drivers.get(b.driver_id) : undefined,
+      handovers,
+    ),
+    // The other half of a car + another owner's driver request.
+    linked_booking: linked
+      ? { id: linked.id, ref: linked.ref, status: linked.status, gross: kes(linked.gross_amount) as Money }
+      : null,
+  };
 }
 
 // ---------------------------------------------------------------------
@@ -486,16 +495,31 @@ export async function createBooking(
 
   const vehicle = input.vehicle_id ? await requirePublicVehicle(input.vehicle_id) : null;
   const driver = input.driver_id ? await requirePublicDriver(input.driver_id) : null;
-  // A driver comes with their own merchant's cars only - one booking, one
-  // payee (owner's call, 2026-10-18).
-  if (vehicle && driver && driver.merchant_id !== vehicle.merchant_id) {
+  // The car's owner's own drivers come first (owner's call, 2026-10-19).
+  // Only when they have none can the renter add another owner's driver -
+  // and then the request is split into two linked bookings, one per
+  // owner, so every booking still pays out once, to one merchant.
+  const otherOwnersDriver = !!(vehicle && driver && driver.merchant_id !== vehicle.merchant_id);
+  if (vehicle && driver && vehicle.chauffeured && otherOwnersDriver) {
     throw new ApiError({
       status: 422,
       type: "validation_error",
       code: "driver_not_for_this_car",
-      message: "That driver doesn't drive for this car's owner.",
+      message: "This car already comes with a driver.",
       field: "driver_id",
     });
+  }
+  if (otherOwnersDriver) {
+    const ownerDriver = await basePublicDriverQuery().where("d.merchant_id", vehicle!.merchant_id).first("d.id");
+    if (ownerDriver) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "owner_driver_first",
+        message: "This car's owner has their own drivers - pick one of them.",
+        field: "driver_id",
+      });
+    }
   }
   const carDetails = input.hire_car_details?.trim() || null;
   if (!vehicle && !carDetails) {
@@ -510,28 +534,39 @@ export async function createBooking(
 
   const carLeg = vehicle ? unitPricingBasis(vehicle, pickupAt, dropoffAt) : null;
   const driverLeg = driver ? driverPricingBasis(driver, input.driver_unit ?? carLeg?.unit, pickupAt, dropoffAt) : null;
-  const merchantId = (vehicle?.merchant_id ?? driver?.merchant_id) as string;
-  const payoutMerchant = vehicle
-    ? {
-        user_id: vehicle.m_user_id,
-        payout_method: vehicle.m_payout_method,
-        payout_same: vehicle.m_payout_same,
-        payout_detail: vehicle.m_payout_detail,
-        displayName: ownerDisplayName(vehicle),
-      }
-    : await db<MerchantRow>("merchants")
-        .where({ id: merchantId })
-        .first()
-        .then((m) => ({
-          user_id: m!.user_id,
-          payout_method: m!.payout_method,
-          payout_same: m!.payout_same,
-          payout_detail: m!.payout_detail,
-          displayName:
-            m!.owner_type === "company"
-              ? m!.trading_name || m!.company_name || "(no name on file)"
-              : m!.first_name || "(no name on file)",
-        }));
+
+  // What gets booked, one row per owner: normally one; two when the driver
+  // is another owner's (see the owner-first rule above).
+  interface Part {
+    merchantId: string;
+    vehicle: PublicVehicleForBooking | null;
+    driver: Awaited<ReturnType<typeof requirePublicDriver>> | null;
+    carLeg: typeof carLeg;
+    driverLeg: typeof driverLeg;
+    carDetails: string | null;
+  }
+  const parts: Part[] = otherOwnersDriver
+    ? [
+        { merchantId: vehicle!.merchant_id, vehicle, driver: null, carLeg, driverLeg: null, carDetails: null },
+        {
+          merchantId: driver!.merchant_id,
+          vehicle: null,
+          driver,
+          carLeg: null,
+          driverLeg,
+          carDetails: `${vehicle!.make} ${vehicle!.model} ${vehicle!.registration}, hired on CRAL from ${ownerDisplayName(vehicle!)}`.slice(0, 200),
+        },
+      ]
+    : [
+        {
+          merchantId: (vehicle?.merchant_id ?? driver?.merchant_id) as string,
+          vehicle,
+          driver,
+          carLeg,
+          driverLeg,
+          carDetails: vehicle ? null : carDetails,
+        },
+      ];
 
   // A reachable, proven phone before the request goes out (owner's call,
   // 2026-09-19). This is the same "verify where the reason is
@@ -617,115 +652,136 @@ export async function createBooking(
     }
   }
 
-  // Every figure is computed here, from the stored rates - one leg per
-  // thing hired, summed, the same commission on each.
-  const carPricing = carLeg ? computeBookingPricing(carLeg.rateAmountCents, carLeg.quantity) : null;
-  const driverPricing = driverLeg ? computeBookingPricing(driverLeg.rateAmountCents, driverLeg.quantity) : null;
-  const sum = (pick: (p: ReturnType<typeof computeBookingPricing>) => Money) =>
-    (carPricing ? pick(carPricing).amount : 0) + (driverPricing ? pick(driverPricing).amount : 0);
-  const pricing = {
-    gross: kes(sum((p) => p.gross)),
-    commission: kes(sum((p) => p.commission)),
-    merchantNet: kes(sum((p) => p.merchantNet)),
-    deposit: kes(0),
-  };
-  const unit = carLeg?.unit ?? driverLeg!.unit;
-  const quantity = carLeg?.quantity ?? driverLeg!.quantity;
-
   const hirer = await db("users").where({ id: userId }).first("full_name", "phone");
-  const merchantUser = await db("users").where({ id: payoutMerchant.user_id }).first("phone");
-  const location = vehicle?.county ?? driver?.county ?? "To be agreed with the owner";
 
-  const { booking, notificationId } = await db.transaction(async (trx) => {
-    const [inserted] = await trx<BookingRow>("bookings")
-      .insert({
-        id: generateId("booking"),
-        ref: await nextBookingRef(trx),
-        merchant_id: merchantId,
-        vehicle_id: vehicle?.id ?? null,
-        driver_id: driver?.id ?? null,
-        driver_amount: driverPricing ? driverPricing.gross.amount : null,
-        driver_currency: driverPricing ? driverPricing.gross.currency : null,
-        driver_rate_unit: driverLeg?.unit ?? null,
-        driver_rate_quantity: driverLeg?.quantity ?? null,
-        hire_car_details: vehicle ? null : carDetails,
-        hirer_id: userId,
-        status: "requested",
-        pickup_at: pickupAt,
-        dropoff_at: dropoffAt,
-        rate_unit: unit,
-        rate_quantity: quantity,
-        // The exact pickup address is withheld until the booking is
-        // confirmed; the county is what the renter has seen all along.
-        pickup_location: location,
-        dropoff_location: location,
-        note_from_hirer: input.note_from_hirer ?? null,
-        gross_amount: pricing.gross.amount,
-        gross_currency: pricing.gross.currency,
-        commission_amount: pricing.commission.amount,
-        commission_currency: pricing.commission.currency,
-        merchant_net_amount: pricing.merchantNet.amount,
-        merchant_net_currency: pricing.merchantNet.currency,
-        // CRAL takes no deposit for now (owner's call, 2026-09-11). There
-        // is no disbursement rail, so a deposit could be collected and not
-        // returned - and a stored figure nobody holds is exactly the kind
-        // of fiction the hardcoded `id_verified` badge was removed for.
-        //
-        // CONSEQUENCE, flagged: the merchant claim flow caps a claim at
-        // `deposit_amount`, so on a customer-created booking every claim
-        // exceeds the cap and escalates straight to a dispute. That is
-        // truthful (there is no deposit to claim against) but it means the
-        // claim path is effectively dispute-only until a deposit exists.
-        deposit_amount: 0,
-        deposit_currency: pricing.deposit.currency,
-        // Snapshot of where the merchant is paid, taken now so a later
-        // payout-settings change can't rewrite an existing booking.
-        payout_method: payoutMerchant.payout_method,
-        payout_detail: (payoutMerchant.payout_same ? merchantUser?.phone : payoutMerchant.payout_detail) ?? "",
-        payout_account_name: payoutMerchant.displayName,
-        response_due_at: new Date(Date.now() + RESPONSE_WINDOW_HOURS * 60 * 60 * 1000),
-      })
-      .returning("*");
-    if (!inserted) throw new Error("Failed to create booking");
+  const created = await db.transaction(async (trx) => {
+    const rows: { booking: BookingRow; notificationId: string }[] = [];
+    for (const part of parts) {
+      // Every figure is computed here, from the stored rates - one leg per
+      // thing hired, summed, the same commission on each.
+      const carPricing = part.carLeg ? computeBookingPricing(part.carLeg.rateAmountCents, part.carLeg.quantity) : null;
+      const driverPricing = part.driverLeg
+        ? computeBookingPricing(part.driverLeg.rateAmountCents, part.driverLeg.quantity)
+        : null;
+      const sum = (pick: (p: ReturnType<typeof computeBookingPricing>) => Money) =>
+        (carPricing ? pick(carPricing).amount : 0) + (driverPricing ? pick(driverPricing).amount : 0);
+      const pricing = {
+        gross: kes(sum((p) => p.gross)),
+        commission: kes(sum((p) => p.commission)),
+        merchantNet: kes(sum((p) => p.merchantNet)),
+      };
+      const unit = part.carLeg?.unit ?? part.driverLeg!.unit;
+      const quantity = part.carLeg?.quantity ?? part.driverLeg!.quantity;
 
-    const subject = await subjectOf(inserted);
-    const notificationId = await notify(trx, {
-      merchantId,
-      category: "booking",
-      title: "New booking request",
-      body: `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
-      ref: inserted.ref,
-      subjectType: "booking",
-      subjectId: inserted.id,
-    });
+      // Snapshot of where the merchant is paid, taken now so a later
+      // payout-settings change can't rewrite an existing booking.
+      const m = (await trx<MerchantRow>("merchants").where({ id: part.merchantId }).first())!;
+      const merchantUser = await trx("users").where({ id: m.user_id }).first("phone");
+      const location = part.vehicle?.county ?? vehicle?.county ?? part.driver?.county ?? "To be agreed with the owner";
 
-    await writeAuditEntry(trx, {
-      actorType: "user",
-      actorId: userId,
-      action: "booking.requested",
-      entityType: "booking",
-      entityId: inserted.id,
-      after: {
-        vehicle_id: vehicle?.id ?? null,
-        driver_id: driver?.id ?? null,
-        merchant_id: merchantId,
-        pickup_at: pickupAt.toISOString(),
-        dropoff_at: dropoffAt.toISOString(),
-        gross_amount: pricing.gross.amount,
-        deposit_amount: 0,
-      },
-      ip: ctx.ip,
-      requestId: ctx.requestId,
-    });
+      const [inserted] = await trx<BookingRow>("bookings")
+        .insert({
+          id: generateId("booking"),
+          ref: await nextBookingRef(trx),
+          merchant_id: part.merchantId,
+          vehicle_id: part.vehicle?.id ?? null,
+          driver_id: part.driver?.id ?? null,
+          driver_amount: driverPricing ? driverPricing.gross.amount : null,
+          driver_currency: driverPricing ? driverPricing.gross.currency : null,
+          driver_rate_unit: part.driverLeg?.unit ?? null,
+          driver_rate_quantity: part.driverLeg?.quantity ?? null,
+          hire_car_details: part.carDetails,
+          linked_booking_id: rows[0]?.booking.id ?? null,
+          hirer_id: userId,
+          status: "requested",
+          pickup_at: pickupAt,
+          dropoff_at: dropoffAt,
+          rate_unit: unit,
+          rate_quantity: quantity,
+          // The exact pickup address is withheld until the booking is
+          // confirmed; the county is what the renter has seen all along.
+          pickup_location: location,
+          dropoff_location: location,
+          note_from_hirer: input.note_from_hirer ?? null,
+          gross_amount: pricing.gross.amount,
+          gross_currency: pricing.gross.currency,
+          commission_amount: pricing.commission.amount,
+          commission_currency: pricing.commission.currency,
+          merchant_net_amount: pricing.merchantNet.amount,
+          merchant_net_currency: pricing.merchantNet.currency,
+          // CRAL takes no deposit for now (owner's call, 2026-09-11). There
+          // is no disbursement rail, so a deposit could be collected and not
+          // returned - and a stored figure nobody holds is exactly the kind
+          // of fiction the hardcoded `id_verified` badge was removed for.
+          //
+          // CONSEQUENCE, flagged: the merchant claim flow caps a claim at
+          // `deposit_amount`, so on a customer-created booking every claim
+          // exceeds the cap and escalates straight to a dispute. That is
+          // truthful (there is no deposit to claim against) but it means the
+          // claim path is effectively dispute-only until a deposit exists.
+          deposit_amount: 0,
+          deposit_currency: "KES",
+          payout_method: m.payout_method,
+          payout_detail: (m.payout_same ? merchantUser?.phone : m.payout_detail) ?? "",
+          payout_account_name:
+            m.owner_type === "company"
+              ? m.trading_name || m.company_name || "(no name on file)"
+              : m.first_name || "(no name on file)",
+          response_due_at: new Date(Date.now() + RESPONSE_WINDOW_HOURS * 60 * 60 * 1000),
+        })
+        .returning("*");
+      if (!inserted) throw new Error("Failed to create booking");
 
-    return { booking: inserted, notificationId };
+      const subject = await subjectOf(inserted);
+      const notificationId = await notify(trx, {
+        merchantId: part.merchantId,
+        category: "booking",
+        title: "New booking request",
+        body: `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
+        ref: inserted.ref,
+        subjectType: "booking",
+        subjectId: inserted.id,
+      });
+
+      await writeAuditEntry(trx, {
+        actorType: "user",
+        actorId: userId,
+        action: "booking.requested",
+        entityType: "booking",
+        entityId: inserted.id,
+        after: {
+          vehicle_id: part.vehicle?.id ?? null,
+          driver_id: part.driver?.id ?? null,
+          merchant_id: part.merchantId,
+          linked_booking_id: inserted.linked_booking_id,
+          pickup_at: pickupAt.toISOString(),
+          dropoff_at: dropoffAt.toISOString(),
+          gross_amount: pricing.gross.amount,
+          deposit_amount: 0,
+        },
+        ip: ctx.ip,
+        requestId: ctx.requestId,
+      });
+      rows.push({ booking: inserted, notificationId });
+    }
+    // Point the first at the second too, so either side finds its pair.
+    if (rows.length === 2) {
+      const [first] = await trx<BookingRow>("bookings")
+        .where({ id: rows[0]!.booking.id })
+        .update({ linked_booking_id: rows[1]!.booking.id })
+        .returning("*");
+      rows[0]!.booking = first!;
+    }
+    return rows;
   });
 
   // After the commit, never inside it: a failed SMS or email must not
   // roll back the booking the renter just made.
-  await enqueueNotificationDelivery(merchantId, [notificationId]);
+  for (const { booking, notificationId } of created) {
+    await enqueueNotificationDelivery(booking.merchant_id, [notificationId]);
+  }
 
-  return detailOf(booking);
+  return detailOf(created[0]!.booking);
 }
 
 // ---------------------------------------------------------------------

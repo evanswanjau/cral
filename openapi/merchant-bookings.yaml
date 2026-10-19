@@ -642,6 +642,9 @@ components:
           type: string
           nullable: true
           description: Driver-only - the car the renter described.
+        has_linked_booking:
+          type: boolean
+          description: The hirer booked this together with another owner's car or driver - two linked bookings, one per owner.
         subject_label:
           type: string
           description: '"Toyota Axio · KDL 442N", "... with driver Peter Kamau", or "Driver Peter Kamau · renter''s own car".'

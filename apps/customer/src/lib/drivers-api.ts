@@ -28,8 +28,13 @@ export function getDriver(id: string) {
   return apiGet<PublicDriver>(`/catalog/drivers/${id}`);
 }
 
+/**
+ * Drivers for a self-drive car: `owner` - the car's own owner's, shown
+ * whenever there are any; `other_owners` - only when the owner has none,
+ * and booking one sends a second, linked request to that driver's owner.
+ */
 export function driversForCar(vehicleId: string) {
-  return apiGet<{ data: PublicDriver[] }>(`/catalog/vehicles/${vehicleId}/drivers`);
+  return apiGet<{ source: "owner" | "other_owners"; data: PublicDriver[] }>(`/catalog/vehicles/${vehicleId}/drivers`);
 }
 
 export const UNIT_WORD: Record<DriverUnit, string> = { day: "day", hour: "hour", trip: "trip" };

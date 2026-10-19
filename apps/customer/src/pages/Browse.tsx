@@ -8,6 +8,7 @@ import { Dropdown, PIN_ICON, type DropdownOption } from "../components/site/Drop
 import { Popover, PopoverGroup, ChoiceRow } from "../components/site/Popover.js";
 import { Skeleton, VehicleCardSkeletonGrid } from "../components/site/Skeleton.js";
 import { VEHICLE_CATEGORIES, type VehicleCategory } from "../lib/vehicle-categories.js";
+import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import { earliestPickupDay } from "../lib/hire-dates.js";
 
 /**
@@ -389,6 +390,10 @@ export function Browse(): JSX.Element {
           <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
             Every car here is reviewed by CRAL before it's listed.
           </p>
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <HireDriverBanner compact />
         </div>
 
         {/* ---- filters, on top ---- */}
