@@ -213,8 +213,8 @@ components:
       description: >
         What channel preferences key off. `booking`/`return` render as the
         `hire` kind, `review`/`expiry` as `doc`, `payout` as `money`,
-        `rating` as `rate`.
-      enum: [booking, payout, review, expiry, return, rating]
+        `rating` as `rate`, `enquiry` (a buyer asking about a car for sale) as `hire`.
+      enum: [booking, payout, review, expiry, return, rating, enquiry]
 
     Notification:
       type: object

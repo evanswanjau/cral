@@ -82,6 +82,8 @@ export interface VehicleRow {
   reviewer_note_resolved: boolean;
   /** The admin (admin_users.id) this review case is assigned to, or null (PR 2). */
   review_assignee: string | null;
+  /** Set when the car was sold through a CRAL sale listing - off hire for good. */
+  sold_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -99,7 +101,12 @@ export type DocumentKind =
   | "handover_photo"
   // Renter documents (customer-portal slice). A row with one of these
   // kinds has `user_id` set and `merchant_id` null.
-  | "driving_licence";
+  | "driving_licence"
+  // Car-sale documents (20261020090000). A row with one of these kinds has
+  // `sale_listing_id` set and neither `merchant_id` nor `user_id`.
+  | "sale_photo"
+  | "bank_clearance_letter"
+  | "ntsa_search";
 
 export type DocumentReviewState = "ok" | "pending" | "expiring" | "rejected";
 
@@ -112,6 +119,10 @@ export interface DocumentRow {
   vehicle_id: string | null;
   /** Set for a driver's licence / ID / KRA PIN (20261018090000). */
   driver_id: string | null;
+  /** Set for a car-sale document (20261020090000) - then it is the row's only owner. */
+  sale_listing_id: string | null;
+  /** Which of the eight required photos a `sale_photo` row is. */
+  slot: string | null;
   kind: DocumentKind;
   storage_key: string;
   original_name: string;

@@ -134,6 +134,8 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
   return {
     id: vehicle.id,
     listing_ref: vehicle.listing_ref,
+    // Sold through a CRAL sale listing - off hire for good (car sales, 2026-10-19).
+    sold_at: vehicle.sold_at ? vehicle.sold_at.toISOString() : null,
     registration: vehicle.registration,
     make: vehicle.make,
     model: vehicle.model,
@@ -690,6 +692,7 @@ async function setPause(userId: string, vehicleId: string, ctx: RequestContext, 
   const { merchant, vehicle } = await requireOwnVehicle(userId, vehicleId);
   if (pausing && vehicle.status !== "live") conflict("not_live", "Only a live listing can be taken down.");
   if (!pausing && vehicle.status !== "paused") conflict("not_paused", "Only a paused listing can be put back on the market.");
+  if (!pausing && vehicle.sold_at) conflict("vehicle_sold", "This car was sold, so it can't be hired out again.");
 
   const nextStatus: VehicleStatus = pausing ? "paused" : "live";
   const updated = await db.transaction(async (trx) => {
