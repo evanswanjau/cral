@@ -90,7 +90,8 @@ export function PhotoUpload({
   const [, forceUpdate] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  // How many files are in flight - they fill the first empty slots, so only those show "uploading".
+  const [uploadingCount, setUploadingCount] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function addFiles(fileList: FileList | File[]) {
@@ -127,7 +128,7 @@ export function PhotoUpload({
     setError(rejectionMessage);
     if (toUpload.length === 0) return;
 
-    setUploading(true);
+    setUploadingCount(toUpload.length);
     // Accumulated outside the try: a file that uploaded before a later one
     // failed is already stored server-side, and dropping it here is how the
     // screen ends up showing fewer photos than the server will accept -
@@ -140,17 +141,16 @@ export function PhotoUpload({
           const photo = await uploadVehiclePhoto(vehicleId, file);
           setPhotoPreview(photo.id, URL.createObjectURL(file));
           uploaded.push(photo);
+          onChange([...photos, ...uploaded]);
+          setUploadingCount((n) => Math.max(0, n - 1));
         } catch (err) {
           setError(uploadErrorMessage(err, file, uploaded.length));
           break;
         }
       }
     } finally {
-      if (uploaded.length > 0) {
-        onChange([...photos, ...uploaded]);
-        forceUpdate((n) => n + 1);
-      }
-      setUploading(false);
+      if (uploaded.length > 0) forceUpdate((n) => n + 1);
+      setUploadingCount(0);
     }
   }
 
@@ -207,15 +207,16 @@ export function PhotoUpload({
 
         {Array.from({ length: MAX_PHOTOS - photos.length }).map((_, slot) => {
           const captionIndex = photos.length + slot;
+          const slotUploading = slot < uploadingCount;
           return (
             <button
               key={`empty-${slot}`}
               type="button"
-              disabled={uploading || !vehicleId}
+              disabled={uploadingCount > 0 || !vehicleId}
               style={{ ...O.photoTileEmpty, ...(dragOver ? O.photoTileEmptyActive : {}) }}
               onClick={() => inputRef.current?.click()}
             >
-              <span style={O.photoTileAddLabel}>{uploading ? "UPLOADING…" : "+ ADD PHOTO"}</span>
+              <span style={O.photoTileAddLabel}>{slotUploading ? "UPLOADING…" : "+ ADD PHOTO"}</span>
               <span style={O.photoTileCaption}>{CAPTIONS[captionIndex] ?? "Any angle"}</span>
             </button>
           );

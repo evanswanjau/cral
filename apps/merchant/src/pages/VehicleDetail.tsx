@@ -52,9 +52,9 @@ function isPriceLocked(status: VehicleStatus): boolean {
   return status === "pending";
 }
 
-/** Nothing to discuss with a reviewer who hasn't looked at the listing yet - draft (no reviewer assigned) or pending (not opened). */
-function isMessageLocked(status: VehicleStatus): boolean {
-  return status === "draft" || status === "pending";
+/** Only a listing the reviewer sent back or turned down has anything to discuss. */
+function canMessageReviewer(status: VehicleStatus): boolean {
+  return status === "action" || status === "rejected";
 }
 
 /** M-Pesa numbers are stored however the merchant typed them at onboarding - always show the full +254 form here, never the bare national digits. */
@@ -88,7 +88,7 @@ function DocRow({
   removing: boolean;
 }): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [expiry, setExpiry] = useState("");
+  const [expiry, setExpiry] = useState(info?.expires_at?.slice(0, 10) ?? "");
   const state = info?.review_state ?? "missing";
   const d = DOC_STATE[state];
   const label = docStateLabel(state, vehicleStatus);
@@ -103,11 +103,12 @@ function DocRow({
   const canManage = vehicleStatus === "draft";
   const needsBtn = canManage || state === "missing" || state === "rejected" || state === "expiring";
   const showExpiry = kind === "comprehensive_insurance" && (needsBtn || canManage);
+  const expiryMissing = showExpiry && !expiry;
 
   return (
     <div style={P.docRow}>
       <span style={{ ...P.docRowDot, background: d.core }} />
-      <div style={{ flex: 1, minWidth: 170 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,170px)" }}>
         <div style={P.docRowTitle}>{title}</div>
         <div style={{ ...P.docRowSub, color: state === "rejected" ? "#A50E22" : state === "expiring" ? "#8A5200" : "#838C9B" }}>{sub}</div>
         {showExpiry && (
@@ -124,7 +125,9 @@ function DocRow({
                 style={O.expiryInput}
               />
             </div>
-            <div style={O.expiryHelper}>We flag the listing before it runs out.</div>
+            <div style={{ ...O.expiryHelper, ...(expiryMissing ? { color: "#8A5200" } : {}) }}>
+              {expiryMissing ? "Pick the expiry date first, then upload." : "We flag the listing before it runs out."}
+            </div>
           </div>
         )}
       </div>
@@ -144,9 +147,11 @@ function DocRow({
           />
           <button
             type="button"
-            disabled={uploading || removing}
+            disabled={uploading || removing || expiryMissing}
             style={{
               ...P.docRowBtn,
+              opacity: expiryMissing ? 0.5 : 1,
+              cursor: expiryMissing ? "not-allowed" : "pointer",
               background: state === "rejected" ? "#D81E32" : "#FFFFFF",
               color: state === "rejected" ? "#FFFFFF" : "#0F23A8",
               borderColor: state === "rejected" ? "#D81E32" : "#CDD2DA",
@@ -181,7 +186,7 @@ function OwnerDocRow({ kind, info, vehicleStatus }: { kind: OwnerDocKind; info: 
   return (
     <div style={P.docRow}>
       <span style={{ ...P.docRowDot, background: d.core }} />
-      <div style={{ flex: 1, minWidth: 170 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,170px)" }}>
         <div style={P.docRowTitle}>{title}</div>
         <div style={{ ...P.docRowSub, color: state === "rejected" ? "#A50E22" : "#838C9B" }}>{sub}</div>
       </div>
@@ -646,13 +651,13 @@ export function VehicleDetail(): JSX.Element {
   const badgePending = v.verification_badge === "pending";
   const photoCount = v.photos.length;
   const priceLocked = isPriceLocked(v.status);
-  const messageLocked = isMessageLocked(v.status);
   const canManagePhotos = v.status === "draft";
 
   const submitBlockers: string[] = [];
   if (isPlaceholderRegistration(v.registration)) submitBlockers.push("this vehicle's registration");
   if (!v.daily_rate) submitBlockers.push("a daily rate");
   if (v.doc_count < 3 || v.doc_has_issue) submitBlockers.push("all three documents");
+  else if (!v.documents.comprehensive_insurance?.expires_at) submitBlockers.push("the insurance expiry date");
   if (photoCount < 3) submitBlockers.push("at least three photos");
   const canSubmit = v.status === "draft" && submitBlockers.length === 0;
 
@@ -761,24 +766,11 @@ export function VehicleDetail(): JSX.Element {
           >
             {v.status === "paused" ? "Put back on the market" : "Take listing down"}
           </button>
-          <button
-            type="button"
-            style={{ ...P.actionBtn, cursor: messageLocked ? "not-allowed" : "pointer", opacity: messageLocked ? 0.45 : 1 }}
-            onClick={() => {
-              if (messageLocked) {
-                flash(
-                  v.status === "draft"
-                    ? "There's no reviewer assigned until you submit this listing."
-                    : "This listing is with a reviewer - there's nothing to discuss until they've had a first look.",
-                  "#8C97A8",
-                );
-                return;
-              }
-              setModal("message");
-            }}
-          >
-            Message the reviewer
-          </button>
+          {canMessageReviewer(v.status) && (
+            <button type="button" style={P.actionBtn} onClick={() => setModal("message")}>
+              Message the reviewer
+            </button>
+          )}
           <button
             type="button"
             style={P.actionBtn}

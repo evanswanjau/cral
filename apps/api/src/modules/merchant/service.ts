@@ -139,7 +139,7 @@ function serializeState(
   phoneVerified: boolean,
 ) {
   const ownerDoc = (kind: DocumentKind) =>
-    docSlot(documents.find((d) => d.vehicle_id === null && d.kind === kind));
+    docSlot(documents.find((d) => d.vehicle_id === null && d.driver_id === null && d.kind === kind));
   const ownerDocs = {
     national_id: ownerDoc("national_id"),
     kra_pin: ownerDoc("kra_pin"),
@@ -176,6 +176,7 @@ function serializeState(
     bank_account_number: merchant.bank_account_number,
     terms_accepted: merchant.merchant_terms_accepted_version !== null,
     owner_docs: ownerDocs,
+    drivers_only: merchant.drivers_only,
     vehicles: vehicles.map((v) => serializeVehicle(v, documents)),
     submitted: merchant.onboarding_submitted,
     last_activity_at: merchant.last_activity_at.toISOString(),
@@ -345,7 +346,7 @@ function serializeProfile(
       // group only for a company.
       .filter(([, meta]) => meta.group === "personal" || merchant.owner_type === "company")
       .map(([kind, meta]) => {
-        const doc = documents.find((d) => d.vehicle_id === null && d.kind === kind);
+        const doc = documents.find((d) => d.vehicle_id === null && d.driver_id === null && d.kind === kind);
         return {
           kind,
           label: meta.label,
@@ -834,7 +835,7 @@ export async function uploadDocument(userId: string, input: UploadDocumentInput,
       } else {
         // Single-slot kind — replace whatever was there before.
         const superseded = await trx<DocumentRow>("documents")
-          .where({ merchant_id: merchant.id, vehicle_id: vehicle?.id ?? null, kind: input.kind })
+          .where({ merchant_id: merchant.id, vehicle_id: vehicle?.id ?? null, driver_id: null, kind: input.kind })
           .delete()
           .returning("storage_key");
         replacedKeys = superseded.map((d) => d.storage_key);
@@ -947,7 +948,7 @@ function outstandingDocumentCount(
   documents: DocumentRow[],
 ): number {
   const ownerMissing = OWNER_DOC_KINDS.filter(
-    (kind) => !documents.some((d) => d.vehicle_id === null && d.kind === kind),
+    (kind) => !documents.some((d) => d.vehicle_id === null && d.driver_id === null && d.kind === kind),
   ).length;
   const vehicleMissing = vehicles.reduce((sum, v) => {
     const missing = VEHICLE_DOC_KINDS.filter(
@@ -1004,7 +1005,9 @@ async function assertCompleteForSubmission(userId: string): Promise<{
         : merchant.payout_detail?.trim();
   if (!payoutFilled) fail("Payout details are incomplete.");
 
-  if (vehicles.length === 0) fail("Add at least one vehicle.");
+  // Someone with no car lists drivers from the portal instead (owner's
+  // call, 2026-10-18 - docs/plans/drivers.md).
+  if (vehicles.length === 0 && !merchant.drivers_only) fail("Add at least one vehicle.");
 
   for (const v of vehicles) {
     if (!v.county?.trim()) fail(`${v.registration || "A vehicle"} is missing its county.`);
@@ -1029,7 +1032,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
       ? [...OWNER_DOC_KINDS, "certificate_of_incorporation", "company_kra_pin", "cr12"]
       : OWNER_DOC_KINDS;
   for (const kind of requiredOwnerDocs) {
-    if (!documents.some((d) => d.vehicle_id === null && d.kind === kind)) {
+    if (!documents.some((d) => d.vehicle_id === null && d.driver_id === null && d.kind === kind)) {
       fail("Your account documents are incomplete.");
     }
   }

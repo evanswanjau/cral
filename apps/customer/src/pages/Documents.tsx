@@ -1,4 +1,5 @@
 import { useRef, useState, type ChangeEvent } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import {
@@ -43,13 +44,23 @@ function DocRow({ kind }: { kind: RenterDocKind }): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A licence upload carries its expiry; the API rejects one without it.
+  const needsExpiry = kind === "driving_licence";
+  const [expiry, setExpiry] = useState("");
 
   const { data } = useQuery({ queryKey: ["me", "documents"], queryFn: getRenterDocuments });
   const doc = data?.verification.documents.find((d) => d.kind === kind);
   const state = doc?.state ?? "missing";
   const chip = stateChip(state);
 
-  const onPick = () => inputRef.current?.click();
+  const onPick = () => {
+    if (needsExpiry && !expiry) {
+      setError("Enter the expiry date shown on your licence first.");
+      return;
+    }
+    setError(null);
+    inputRef.current?.click();
+  };
   const onChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -57,7 +68,7 @@ function DocRow({ kind }: { kind: RenterDocKind }): JSX.Element {
     setError(null);
     setUploading(true);
     try {
-      await uploadRenterDocument(kind, file);
+      await uploadRenterDocument(kind, file, needsExpiry ? expiry : undefined);
       await queryClient.invalidateQueries({ queryKey: ["me", "documents"] });
     } catch {
       setError("That upload didn't go through. Try again.");
@@ -84,6 +95,35 @@ function DocRow({ kind }: { kind: RenterDocKind }): JSX.Element {
           {meta.label}
         </div>
         <div style={{ font: "400 12.5px/1.45 'Instrument Sans',sans-serif", color: "#5A6373" }}>{meta.note}</div>
+        {needsExpiry && (
+          <label style={{ display: "block", marginTop: 8 }}>
+            <span
+              style={{
+                display: "block",
+                font: "600 11px/1 'Instrument Sans',sans-serif",
+                color: "#5A6373",
+                marginBottom: 5,
+              }}
+            >
+              Licence expiry date
+            </span>
+            <input
+              type="date"
+              min={new Date().toISOString().slice(0, 10)}
+              value={expiry}
+              onChange={(e) => setExpiry(e.target.value)}
+              style={{
+                height: 38,
+                padding: "0 11px",
+                border: "1px solid #CDD2DA",
+                borderRadius: 8,
+                font: "500 14px/1 'IBM Plex Mono',monospace",
+                color: "#0B0F1A",
+                background: "#FFFFFF",
+              }}
+            />
+          </label>
+        )}
         {state === "rejected" && doc?.review_note && (
           <div style={{ marginTop: 6, font: "500 12.5px/1.45 'Instrument Sans',sans-serif", color: "#A50E22" }}>
             {doc.review_note}
@@ -141,11 +181,61 @@ function DocRow({ kind }: { kind: RenterDocKind }): JSX.Element {
 
 export function Documents(): JSX.Element {
   usePageTitle("Your documents");
+  const [params] = useSearchParams();
   const { data } = useQuery({ queryKey: ["me", "documents"], queryFn: getRenterDocuments });
   const verified = data?.verification.verified ?? false;
 
+  // Arriving mid-booking, `next` is the booking that sent them here. It is
+  // only ever followed as a same-site path - an absolute URL in a query
+  // string is an open redirect, not a resume.
+  const rawNext = params.get("next") ?? "";
+  const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
+  const outstanding = data?.verification.outstanding ?? [];
+  const canResume = next && data && outstanding.length === 0;
+
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "clamp(28px,4vw,44px) 20px clamp(50px,7vw,80px)" }}>
+      {next && (
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            flexWrap: "wrap",
+            padding: "13px 16px",
+            background: "#EDEFFC",
+            border: "1px solid #DCE1FA",
+            borderRadius: 10,
+            marginBottom: 22,
+          }}
+        >
+          <span style={{ font: "400 13.5px/1.5 'Instrument Sans',sans-serif", color: "#0B1B85" }}>
+            {canResume
+              ? "That's both of them. Your booking is waiting where you left it."
+              : "Add these two and you'll go straight back to your booking - nothing you typed is lost."}
+          </span>
+          <Link
+            to={next}
+            style={{
+              flex: "none",
+              height: 38,
+              padding: "0 16px",
+              display: "inline-flex",
+              alignItems: "center",
+              background: canResume ? "#0F23A8" : "#FFFFFF",
+              color: canResume ? "#FFFFFF" : "#0B1B85",
+              border: canResume ? "none" : "1px solid #B6C0F4",
+              borderRadius: 8,
+              font: "600 13px/1 'Instrument Sans',sans-serif",
+              textDecoration: "none",
+            }}
+          >
+            {canResume ? "Continue your booking →" : "Back to your booking"}
+          </Link>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 14 }}>
         <span style={{ display: "block", width: 18, height: 5, background: "#D81E32", transform: "skewX(-14deg)" }} />
         <span style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".12em", color: "#838C9B" }}>

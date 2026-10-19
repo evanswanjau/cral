@@ -40,8 +40,9 @@ function idem() {
 }
 
 function extractCode(message: string): string {
-  const match = message.match(/\b(\d{6})\b/);
-  if (!match) throw new Error(`No 6-digit code found in message: ${message}`);
+  // The code is the message's last number - the booking ref can carry digits too.
+  const match = [...message.matchAll(/\b(\d{6}|\d{4})\b/g)].at(-1);
+  if (!match) throw new Error(`No code found in message: ${message}`);
   return match[1] as string;
 }
 
@@ -183,20 +184,6 @@ async function insertBooking(
     .returning("*");
   return booking;
 }
-
-describe("bookings — dev seed", () => {
-  it("seeds a fixture set across every status", async () => {
-    const { accessToken } = await newMerchant();
-    const res = await request(app).post("/merchant/bookings/dev-seed").set(auth(accessToken));
-    expect(res.status).toBe(201);
-    expect(res.body.seeded).toBeGreaterThan(0);
-
-    const list = await request(app).get("/merchant/bookings").set(auth(accessToken));
-    expect(list.status).toBe(200);
-    expect(list.body.counts.all).toBe(res.body.seeded);
-    expect(list.body.counts.requests).toBeGreaterThan(0);
-  });
-});
 
 describe("bookings — confirm / decline", () => {
   it("accepts a request and writes an event", async () => {

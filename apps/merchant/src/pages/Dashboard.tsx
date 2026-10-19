@@ -398,7 +398,7 @@ export function Dashboard(): JSX.Element {
       {needsAction.vehicle_count > 0 && (
         <div style={{ ...P.banner, marginBottom: 16 }}>
           <span style={P.bannerDot} />
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: "min(100%,200px)" }}>
             <div style={P.bannerTitle}>
               {plural(needsAction.vehicle_count, "vehicle")} need
               {needsAction.vehicle_count === 1 ? "s" : ""} something from you

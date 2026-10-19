@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { CodeInput } from "@cral/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import { P } from "../../components/portal/styles.js";
 import { DOC_STATE } from "../../components/portal/status.js";
 import { SaveBar } from "../../components/portal/SaveBar.js";
 import { useToast } from "../../components/portal/Toast.js";
-import { FormField, PrimaryButton, TextInput } from "../../components/onboarding/primitives.js";
+import { FormField, PrimaryButton } from "../../components/onboarding/primitives.js";
 import { O } from "../../components/onboarding/styles.js";
 import { ApiClientError, apiBlob } from "../../lib/api.js";
 import { confirmPhoneVerification, startPhoneVerification } from "../../lib/onboarding-draft.js";
@@ -169,7 +170,7 @@ export function BusinessTab(): JSX.Element {
       {pending && (
         <div style={{ ...P.banner, background: "#FFF3DB", borderColor: "#F5D9A3", marginBottom: 16 }}>
           <span style={{ ...P.bannerDot, background: "#C77400" }} />
-          <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ flex: 1, minWidth: "min(100%,220px)" }}>
             <div style={{ ...P.bannerTitle, color: "#8A5200" }}>A change is waiting for review</div>
             <div style={{ ...P.bannerBody, color: "#8A5200" }}>
               {Object.keys(pending.changes)
@@ -191,7 +192,7 @@ export function BusinessTab(): JSX.Element {
 
       {locked && !pending && !editing && (
         <div style={{ ...P.setInlineNote, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <span style={{ flex: 1, minWidth: 200 }}>
+          <span style={{ flex: 1, minWidth: "min(100%,200px)" }}>
             These details are locked after submission. A change needs a reviewer&rsquo;s approval and
             re-check.
           </span>
@@ -411,7 +412,7 @@ function DocRow({ doc, canEdit }: { doc: ProfileDocument; canEdit: boolean }): J
 
   return (
     <div style={P.setListRow}>
-      <div style={{ flex: 1, minWidth: 140 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,140px)" }}>
         <div style={P.setListName}>{doc.label}</div>
         <div style={P.setListMeta}>
           {doc.uploaded_at
@@ -513,12 +514,9 @@ function PhoneVerify({ phone }: { phone: string }): JSX.Element {
       ) : (
         <div style={{ display: "grid", gap: 10 }}>
           <FormField label={`6-digit code texted to ${masked}`}>
-            <TextInput
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              inputMode="numeric"
-              placeholder="123456"
-            />
+            <div style={{ maxWidth: 360 }}>
+              <CodeInput label="Verification code" value={code} onChange={setCode} autoFocus />
+            </div>
           </FormField>
           <PrimaryButton onClick={() => void confirm()} disabled={busy || code.length !== 6}>
             {busy ? "Checking…" : "Verify"}

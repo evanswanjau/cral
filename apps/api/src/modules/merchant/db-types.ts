@@ -35,10 +35,8 @@ export interface MerchantRow {
   onboarding_submitted: boolean;
   /** Set only once an admin approves the account — nothing does that yet in Phase 1 (no admin portal). */
   approved_at: Date | null;
-  /** Notification quiet hours — per-account, not per-category. "HH:MM" Nairobi wall-clock. */
-  quiet_hours_enabled: boolean;
-  quiet_from: string | null;
-  quiet_until: string | null;
+  /** Someone with no car who only lists drivers - waives onboarding's "at least one vehicle" (20261018090000). */
+  drivers_only: boolean;
   last_activity_at: Date;
   created_at: Date;
   updated_at: Date;
@@ -112,6 +110,8 @@ export interface DocumentRow {
   /** Set for renter documents; null for merchant/vehicle documents. Exactly one of the two is set. */
   user_id: string | null;
   vehicle_id: string | null;
+  /** Set for a driver's licence / ID / KRA PIN (20261018090000). */
+  driver_id: string | null;
   kind: DocumentKind;
   storage_key: string;
   original_name: string;
@@ -123,6 +123,36 @@ export interface DocumentRow {
   review_note: string | null;
   reviewed_by: string | null;
   reviewed_at: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+export type DriverStatus = VehicleStatus;
+
+/** A driver a merchant lists for hire (20261018090000, docs/plans/drivers.md). */
+export interface DriverRow {
+  id: string;
+  merchant_id: string;
+  full_name: string;
+  phone: string;
+  national_id: string;
+  kra_pin: string;
+  licence_number: string;
+  /** `date` column - node-pg returns it as a JS Date at local midnight. */
+  licence_expiry: Date | string;
+  county: string;
+  is_account_holder: boolean;
+  daily_rate_amount: number | null;
+  daily_rate_currency: string | null;
+  hourly_rate_amount: number | null;
+  hourly_rate_currency: string | null;
+  trip_rate_amount: number | null;
+  trip_rate_currency: string | null;
+  status: DriverStatus;
+  reviewer_note: string | null;
+  review_assignee: string | null;
+  submitted_at: Date | null;
+  decided_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import {
+  bookingTitle,
   cancelMyBooking,
   getMyBooking,
+  ownerName,
   type BookingDetail,
   type HandoverStatus,
 } from "../lib/bookings-api.js";
@@ -157,7 +159,7 @@ function Countdown({ dueAt }: { dueAt: string }): JSX.Element {
 
 /** Waiting on the owner - the stage a request sits in for up to twelve hours. */
 function WaitingCard({ booking }: { booking: BookingDetail }): JSX.Element {
-  const ownerFirst = booking.vehicle.owner_display_name.split(" ")[0] ?? "the owner";
+  const ownerFirst = ownerName(booking).split(" ")[0] ?? "the owner";
   return (
     <div style={CARD}>
       <Pill tone="amber">{"Waiting for " + ownerFirst}</Pill>
@@ -245,7 +247,7 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
   };
 
   if (payment?.status === "success") {
-    const ownerFirst = booking.vehicle.owner_display_name.split(" ")[0] ?? "the owner";
+    const ownerFirst = ownerName(booking).split(" ")[0] ?? "the owner";
     // Only reachable for a booking paid under the old pay-first flow
     // (2026-09-20 to 2026-09-21) whose owner never answered.
     const waitingOnOwner = booking.status === "requested";
@@ -259,8 +261,12 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
      * state).
      */
     const tips = [
-      `Match the plate on the car to ${booking.vehicle.registration} before anything else.`,
-      "Walk around the car together and make sure you're both happy with its condition before you drive off.",
+      ...(booking.vehicle
+        ? [
+            `Match the plate on the car to ${booking.vehicle.registration} before anything else.`,
+            "Walk around the car together and make sure you're both happy with its condition before you drive off.",
+          ]
+        : [`Your driver is ${booking.driver?.display_name ?? "named on this booking"}, from ${ownerName(booking)}. Check that's who turns up.`]),
       "We email you a pickup code when the handover starts - read it to the owner, and never send it to anyone who asks for it first.",
     ];
 
@@ -383,7 +389,7 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
         {live
           ? "Waiting for your PIN"
           : accepted
-            ? booking.vehicle.owner_display_name + " accepted"
+            ? ownerName(booking) + " accepted"
             : "Request sent"}
       </Pill>
       <div
@@ -403,7 +409,9 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
             " is on its way to " +
             (payment?.phone ?? "your phone") +
             ". Enter your M-Pesa PIN there and nowhere else."
-          : `${booking.vehicle.owner_display_name} has accepted. One prompt, the owner's rate for your dates, nothing on top - and the car is yours for them.`}
+          : booking.vehicle
+            ? `${ownerName(booking)} has accepted. One prompt, the owner's rate for your dates, nothing on top - and the car is yours for them.`
+            : `${ownerName(booking)} has accepted. One prompt, the driver's rate for your dates, nothing on top.`}
       </p>
 
       {/*
@@ -668,13 +676,33 @@ export function TripDetail(): JSX.Element {
             color: "#0B0F1A",
           }}
         >
-          {booking.vehicle.make} {booking.vehicle.model} {booking.vehicle.year}
+          {bookingTitle(booking)}
         </h1>
         <span style={{ font: "500 13px/1 'IBM Plex Mono',monospace", color: "#838C9B" }}>{booking.ref}</span>
       </div>
       <p style={{ margin: "0 0 22px", font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-        {booking.vehicle.owner_display_name}
+        {ownerName(booking)}
       </p>
+
+      {booking.linked_booking && (
+        <Link
+          to={`/bookings/${booking.linked_booking.id}`}
+          style={{
+            display: "block",
+            margin: "-10px 0 20px",
+            padding: "12px 14px",
+            background: "#F4F6FE",
+            border: "1px solid #DCE1FA",
+            borderRadius: 10,
+            textDecoration: "none",
+            font: "400 13.5px/1.5 'Instrument Sans',sans-serif",
+            color: "#333B4A",
+          }}
+        >
+          Booked together with {booking.linked_booking.ref} ({booking.vehicle ? "your driver" : "the car"}) - that
+          one is accepted and paid on its own. <span style={{ color: "#0F23A8", fontWeight: 600 }}>Open it →</span>
+        </Link>
+      )}
 
       {/*
        * The same rail `/book/:vehicleId` shows, continued. The booking
@@ -904,7 +932,7 @@ export function TripDetail(): JSX.Element {
               justifyContent: "center",
             }}
           >
-            {booking.vehicle.primary_photo_url ? (
+            {booking.vehicle?.primary_photo_url ? (
               <img
                 src={photoSrc(booking.vehicle.primary_photo_url)}
                 alt={`${booking.vehicle.make} ${booking.vehicle.model}`}
@@ -930,17 +958,25 @@ export function TripDetail(): JSX.Element {
             )}
           </div>
           <div style={{ font: "600 15px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 4 }}>
-            {booking.vehicle.make} {booking.vehicle.model} {booking.vehicle.year}
+            {bookingTitle(booking)}
           </div>
-          <div style={{ font: "500 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginBottom: 8 }}>
-            {booking.vehicle.registration} · {booking.vehicle.county ?? "Location on request"}
-          </div>
-          <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
-            {VEHICLE_CATEGORY_LABEL[booking.vehicle.category] ?? booking.vehicle.category} ·{" "}
-            {booking.vehicle.seats} seats ·{" "}
-            {booking.vehicle.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
-            {booking.vehicle.chauffeured ? "With driver" : "Self-drive"}
-          </div>
+          {booking.vehicle ? (
+            <>
+              <div style={{ font: "500 12px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginBottom: 8 }}>
+                {booking.vehicle.registration} · {booking.vehicle.county ?? "Location on request"}
+              </div>
+              <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
+                {VEHICLE_CATEGORY_LABEL[booking.vehicle.category] ?? booking.vehicle.category} ·{" "}
+                {booking.vehicle.seats} seats ·{" "}
+                {booking.vehicle.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
+                {booking.driver || booking.vehicle.chauffeured ? "With driver" : "Self-drive"}
+              </div>
+            </>
+          ) : (
+            <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
+              Driving your car{booking.hire_car_details ? `: ${booking.hire_car_details}` : ""} · drives for {ownerName(booking)}
+            </div>
+          )}
 
           <div style={{ display: "grid", gap: 9, paddingTop: 14, borderTop: "1px solid #F1F3F6" }}>
             <Row label="Status" value={booking.status.replace(/_/g, " ")} />
@@ -948,6 +984,7 @@ export function TripDetail(): JSX.Element {
             <Row label="Return" value={dayLabel(booking.dropoff_at)} />
             <Row label="Where" value={booking.pickup_location} />
             {booking.note_from_hirer && <Row label="Your note" value={booking.note_from_hirer} />}
+            {booking.driver_amount && <Row label="Driver" value={formatMoney(booking.driver_amount)} />}
             <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
               <Row bold label="Total" value={formatMoney(booking.total_due)} />
             </div>

@@ -5,7 +5,6 @@ import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import type { RequestContext } from "../merchant/service.js";
 import * as payoutsService from "./service.js";
-import { seedDevPayouts } from "./dev-seed.js";
 import { CreatePayoutQuerySchema, ListPayoutsQuerySchema, StatementQuerySchema } from "./schemas.js";
 
 export const payoutsRouter = Router();
@@ -110,20 +109,3 @@ payoutsRouter.post(
     res.status(201).json(result);
   }),
 );
-
-// ---------------------------------------------------------------------
-// Dev-only fixture seeding — there is no customer portal generating real
-// bookings and no payment rail settling real runs, so this is how the
-// Payouts screen gets history to render. Never available in production.
-// ---------------------------------------------------------------------
-
-if (process.env.NODE_ENV !== "production") {
-  payoutsRouter.post(
-    "/merchant/payouts/dev-seed",
-    authenticate(),
-    asyncHandler(async (req, res) => {
-      const result = await seedDevPayouts(req.auth!.sub);
-      res.status(201).json(result);
-    }),
-  );
-}

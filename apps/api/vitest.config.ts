@@ -23,6 +23,10 @@ export default defineConfig({
       // the same way EMAIL_ADAPTER/SMS_ADAPTER are pinned above, so the
       // document-upload tests always exercise the real local adapter.
       STORAGE_ADAPTER: "local",
+      // Fixed origins so the reset-link tests can assert which site a
+      // link opens without depending on a local .env.
+      MERCHANT_APP_URL: "https://merchant.example.test",
+      CUSTOMER_APP_URL: "https://customer.example.test",
     },
     setupFiles: ["./src/lib/load-env.ts"],
     globalSetup: ["./src/test/global-setup.ts"],

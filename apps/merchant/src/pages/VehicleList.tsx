@@ -32,7 +32,7 @@ function FilterPill({
 
 function TableHead(): JSX.Element {
   return (
-    <div style={P.tableHead}>
+    <div className="m-thead" style={P.tableHead}>
       <span style={P.tableHeadPlate}>REGISTRATION</span>
       <span style={P.tableHeadTitle}>VEHICLE</span>
       <span style={P.tableHeadStatus}>STATUS</span>
@@ -48,7 +48,7 @@ function TableHead(): JSX.Element {
 function SkeletonRow(): JSX.Element {
   const bar = (width: number, height = 12): CSSProperties => ({ ...P.skeletonBar, width, height });
   return (
-    <div style={P.skeletonRow}>
+    <div className="m-trow" style={P.skeletonRow}>
       <div className="cral-shimmer" style={{ ...bar(74, 26), borderRadius: 4 }} />
       <div style={{ minWidth: 0, display: "grid", gap: 6 }}>
         <div className="cral-shimmer" style={bar(160, 14)} />
@@ -106,7 +106,7 @@ function Row({ v, onOpen }: { v: VehicleSummary; onOpen: () => void }): JSX.Elem
   const meta = STATUS[v.status];
   const { rate, per } = listingRate(v);
   return (
-    <div style={P.row} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
+    <div className="m-trow" style={P.row} onClick={onOpen} onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")} onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}>
       <span style={P.plateBadge}>{v.registration}</span>
       <div style={P.rowTitleWrap}>
         <div style={P.rowTitleLine}>
@@ -161,7 +161,7 @@ export function VehicleList(): JSX.Element {
       {showBanner && first && (
         <div style={P.banner}>
           <span style={P.bannerDot} />
-          <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ flex: 1, minWidth: "min(100%,200px)" }}>
             <div style={P.bannerTitle}>
               {needsAction.length} {needsAction.length === 1 ? "vehicle needs" : "vehicles need"} something from you
             </div>

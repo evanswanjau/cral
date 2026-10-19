@@ -17,7 +17,7 @@ info:
     Scope note — there is no payment rail yet. Daraja/M-Pesa B2C is not
     integrated, and nothing in this API disburses money. A run is created in
     `scheduled` and only reaches `paid` when something outside this API says
-    so (today: the dev-seed, later: a Daraja callback). `provider_code` is
+    so (a Daraja callback, once the payout rail exists). `provider_code` is
     the Safaricom transaction code and stays null until then. The
     `PayoutStatus` values are shaped so the real rail slots in later without
     a schema change.
@@ -256,33 +256,6 @@ paths:
               schema: { $ref: "#/components/schemas/PayoutQuery" }
         "404":
           $ref: "#/components/responses/NotFound"
-
-  # ---------------------------------------------------------------------
-  # Dev-only fixture seeding
-  # ---------------------------------------------------------------------
-  /merchant/payouts/dev-seed:
-    post:
-      tags: [payouts]
-      summary: Seed fixture payout runs (non-production only)
-      operationId: devSeedPayouts
-      description: >
-        Documented because it is a real route, but guarded by
-        `NODE_ENV !== "production"` and absent from the production router —
-        the same arrangement as `/merchant/bookings/dev-seed`. There is no
-        customer portal and no payment rail, so this is how the Payouts
-        screen gets history to render.
-      responses:
-        "201":
-          description: Runs created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  created: { type: integer }
-                  refs:
-                    type: array
-                    items: { type: string }
 
 components:
   parameters:

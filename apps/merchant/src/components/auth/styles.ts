@@ -92,19 +92,6 @@ export const S = {
     font: "400 15px/1 'Instrument Sans',sans-serif",
     color: "#1A1F2B",
   },
-  /** The six-digit OTP field - deliberately larger and monospaced. */
-  codeInput: {
-    width: "100%",
-    height: 56,
-    padding: "0 16px",
-    background: "#FFFFFF",
-    border: "1px solid #CDD2DA",
-    borderRadius: "var(--r)",
-    font: "600 26px/1 'IBM Plex Mono',monospace",
-    letterSpacing: ".34em",
-    color: "#0B0F1A",
-    textAlign: "center",
-  },
   phonePrefix: {
     height: 48,
     padding: "0 13px",
@@ -173,7 +160,7 @@ export const S = {
     borderRadius: "var(--r)",
   },
   infoDot: { width: 8, height: 8, borderRadius: 999, background: "#0F23A8", flex: "none" },
-  infoText: { flex: 1, minWidth: 140, font: "600 13px/1.45 'Instrument Sans',sans-serif", color: "#0F23A8" },
+  infoText: { flex: 1, minWidth: "min(100%,140px)", font: "600 13px/1.45 'Instrument Sans',sans-serif", color: "#0F23A8" },
 
   errorBanner: {
     display: "flex",

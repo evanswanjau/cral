@@ -101,10 +101,6 @@ export function createPayoutQuery(id: string, message: string) {
   );
 }
 
-export function seedDevPayouts() {
-  return apiPost<{ created: number; refs: string[] }>("/merchant/payouts/dev-seed");
-}
-
 /**
  * Hands the browser a file. Goes through `apiBlob` rather than a bare link
  * because these endpoints need the bearer header (and the shared
@@ -170,16 +166,6 @@ export function useCreatePayoutQuery(id: string) {
       void queryClient.invalidateQueries({ queryKey: ["payout-queries", id] });
       // open_query_count lives on the detail payload.
       void queryClient.invalidateQueries({ queryKey: ["payout", id] });
-    },
-  });
-}
-
-export function useSeedDevPayouts() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: seedDevPayouts,
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["payouts"] });
     },
   });
 }

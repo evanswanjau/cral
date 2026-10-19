@@ -16,6 +16,7 @@ import type { CheckResult } from "../lib/vehicles-api.js";
 import { ApiClientError } from "../lib/api.js";
 import { ChecklistPanel } from "../components/console/ChecklistPanel.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { DRIVER_STATUS } from "./drivers/Queue.js";
 import { money, statusTone } from "../components/console/status.js";
 
 const BADGE: Record<string, { label: string; bg: string; border: string; fg: string }> = {
@@ -221,6 +222,33 @@ export function MerchantFile(): JSX.Element {
         ))}
         <div style={S.panelFoot}>{m.fleet_summary}</div>
       </div>
+
+      {m.drivers && m.drivers.length > 0 && (
+        <div style={{ ...S.panel, marginTop: 16 }}>
+          <div style={S.panelHead}>
+            <span style={{ font: "600 15px/1.2 Archivo,sans-serif", color: "#1A1F2B" }}>Their drivers</span>
+            <span style={{ font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B" }}>Each driver is its own case</span>
+          </div>
+          {m.drivers.map((d) => {
+            const s = DRIVER_STATUS[d.status as keyof typeof DRIVER_STATUS];
+            return (
+              <div
+                key={d.id}
+                onClick={() => navigate(`/drivers/${d.id}`)}
+                style={{ display: "flex", alignItems: "center", gap: 12, padding: "13px 18px", borderBottom: "1px solid #F1F3F6", cursor: "pointer" }}
+              >
+                <span style={{ flex: 1, font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{d.full_name}</span>
+                <span style={{ font: "400 13px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" }}>{d.county}</span>
+                {s && (
+                  <span style={{ padding: "2px 9px", border: `1px solid ${s.border}`, borderRadius: 999, background: s.bg, color: s.fg, font: "600 10px/1.5 'IBM Plex Mono',monospace" }}>
+                    {s.label}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {toast && (
         <div style={S.toast}>

@@ -49,7 +49,7 @@ async function makeSubmittable(accessToken: string, vehicleId: string) {
     await request(app)
       .post(`/merchant/vehicles/${vehicleId}/documents`)
       .set(auth(accessToken))
-      .field("kind", kind)
+      .field(kind === "comprehensive_insurance" ? { kind, expires_at: "2030-01-01" } : { kind })
       .attach("file", testPdf(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
   }
   for (let i = 0; i < 3; i++) {
@@ -409,7 +409,7 @@ describe("vehicles — submit", () => {
       await request(app)
         .post(`/merchant/vehicles/${created.body.id}/documents`)
         .set(auth(accessToken))
-        .field("kind", kind)
+        .field(kind === "comprehensive_insurance" ? { kind, expires_at: "2030-01-01" } : { kind })
         .attach("file", testPdf(`fake ${kind}`), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
 
@@ -479,10 +479,24 @@ describe("vehicles — message the reviewer", () => {
     expect(pendingRes.body.error.code).toBe("vehicle_pending_review");
   });
 
-  it("appends a review-history event once the reviewer has taken a look", async () => {
+  it("refuses to message about a listing the reviewer hasn't sent back or turned down", async () => {
+    const { accessToken } = await newMerchant();
+    for (const [plate, status] of [["KHH 710G", "review"], ["KHH 720G", "live"]] as const) {
+      const v = await createVehicle(accessToken, plate);
+      await db("vehicles").where({ id: v.body.id }).update({ status });
+      const res = await request(app)
+        .post(`/merchant/vehicles/${v.body.id}/messages`)
+        .set(auth(accessToken))
+        .send({ message: "Hello?" });
+      expect(res.status).toBe(409);
+      expect(res.body.error.code).toBe("nothing_to_discuss");
+    }
+  });
+
+  it("appends a review-history event once the reviewer has sent the listing back", async () => {
     const { accessToken } = await newMerchant();
     const created = await createVehicle(accessToken, "KHH 700G");
-    await db("vehicles").where({ id: created.body.id }).update({ status: "review" });
+    await db("vehicles").where({ id: created.body.id }).update({ status: "action" });
 
     const res = await request(app)
       .post(`/merchant/vehicles/${created.body.id}/messages`)

@@ -195,6 +195,9 @@ async function serializeFile(userId: string) {
         kind,
         state: doc?.review_state ?? "missing",
         original_name: doc?.original_name ?? null,
+        // Only a licence carries one - it is what the reviewer checks the
+        // card's printed date against (there is no OCR here).
+        expires_at: doc?.expires_at ?? null,
         review_note: doc?.review_note ?? null,
         reviewed_at: doc?.reviewed_at ? doc.reviewed_at.toISOString() : null,
       };

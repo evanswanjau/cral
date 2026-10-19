@@ -30,7 +30,7 @@ const FAQS: Array<{ q: string; a: string }> = [
   },
   {
     q: "I have a car. How do I list it?",
-    a: "Listing is free. Start from the list-your-car page - review usually takes about a working day.",
+    a: "Listing is free. Hit \"List your car\" from the menu to start in the merchant app - review usually takes about a working day.",
   },
 ];
 

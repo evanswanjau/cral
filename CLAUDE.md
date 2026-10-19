@@ -951,7 +951,8 @@ in `apps/api/src/__tests__/security.test.ts`, one block per finding.
   every state change on the platform (actor ids, IPs, before/after JSONB).
   An audit reader for humans belongs in the Phase-3 admin surface behind an
   `aud: "ops"` token. **Don't re-add a reader anywhere public.**
-- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind Railway is the
+- **`app.set("trust proxy", 1)`.** Without it `req.ip` behind the proxy (Railway
+  then, nginx on the VPS now) is the
   edge's address for every visitor, so every IP-keyed `rateLimit` bucket was
   one platform-wide bucket — five OTP requests an hour for all users
   combined. Deliberately `1`, not `true`: trusting the whole
@@ -1470,19 +1471,22 @@ recorded deviation from contract-first; the module shipped without one).
 - **The dev settler (`devSettlePayment`/`/bookings/:id/payment/dev-settle`
   and the `DEMO_MODE` env flag that re-mounted it on a deployed
   environment) was removed 2026-09-22** once the real STK push flow was
-  confirmed working end to end, including on the Railway demo - a
+  confirmed working end to end, including on the deployed demo - a
   "mark my own booking paid" endpoint has no reason to exist once the real
   rail is trusted. If a sandbox callback ever proves unreliable again on a
   live demo, that is a reason to fix the callback path, not to bring this
   back.
 - **Where the callback lands differs per environment.** Local needs a
   tunnel (the ngrok one from the Co-op work serves both rails; its URL
-  rotates). The Vercel demo calls the **Railway** API, not the VPS, so
-  Railway is where the callback is registered.
+  rotates). The Vercel demo calls the dev API (`dev.api.cral.co.ke`), whose
+  `DARAJA_CALLBACK_URL` points back at itself with basic-auth credentials
+  embedded. The URL travels with each STK push, so there is nothing to
+  register on Safaricom's side.
 - **No B2C, so no refunds**: `refund()` throws 501 rather than resolving,
   because a silent success would mark a booking refunded while the money
   sat with us. Worth noting beyond the missing rail - **`cutPayoutRun` is
-  called only from `dev-seed.ts`/`seed-demo.ts`**, so no payout run is
+  called only from `seed-demo.ts`** (the dev-seed endpoints were deleted
+  2026-09-23), so no payout run is
   ever originated in production either. That is the larger half of the
   payouts slice.
 
@@ -1566,13 +1570,20 @@ Linear project "CRAL - Co-op Bank integration" (COD-89..93).
 
 **A second, independent deployment of `apps/customer` exists on Vercel**
 (owner's call, 2026-09-17) — **https://app-cral.vercel.app**, alongside
-the primary one at `cral.co.ke` on the VPS. Same production API
-(`api.cral.co.ke`) — this is not a second backend, just a second front
-door. `CORS_ORIGINS` on the VPS `.env` includes `https://app-cral.vercel.app`
-(no `www`/preview-subdomain wildcard — only the one origin asked for).
+the primary one at `cral.co.ke` on the VPS. It talks to the **dev API,
+`dev.api.cral.co.ke`**, not production: a second API instance on the same
+VPS, running `develop` (`/srv/cral-dev`, port 4200, its own `cral_dev`
+database, Redis db 1, sandbox Daraja). It replaced a Railway deployment on
+2026-09-24 (Railway ran out of credit). Its `CORS_ORIGINS` is
+`https://app-cral.vercel.app` only (no `www`/preview-subdomain wildcard).
+
+**Deploying the dev API is manual:** after pushing or merging to `develop`,
+run `ssh cral@46.202.128.68 '~/redeploy-dev.sh'` (fetch `develop`, `npm ci`,
+build, **migrate `cral_dev`**, restart `cral-api-dev`, health check). A push
+alone redeploys only the Vercel frontend, so the two can briefly disagree.
 
 **It tracks `develop`, not `main`.** Push or merge to `develop` and
-Vercel auto-builds and deploys; `main`/the VPS are untouched by that.
+Vercel auto-builds and deploys; `main` and the production API are untouched by that.
 This makes `develop` a real staging branch for the customer portal:
 preview work there before it reaches `main` and the VPS. Set via the
 Vercel dashboard, Project → Settings → Environments → Production →
@@ -1746,6 +1757,65 @@ same pass prefixed every merchant page title with `Merchant:`
 brand panel with photos + Phosphor icons (no emojis), and moved the
 support line to `+254 735 656 066` (`apps/merchant/src/lib/support.ts` -
 use `whatsappLink()`, don't hand-write `wa.me` URLs).
+
+**Merchant portal trim (owner's call, 2026-09-23).** Supersedes the
+matching parts of the Bookings / Notifications / Payouts notes above.
+- **Handover asks for nothing.** No odometer, fuel or condition photos in
+  the merchant modal - just handover tips. The API still accepts those
+  fields; the UI no longer sends them.
+- **Pickup code is 4 digits** (`PICKUP_CODE_DIGITS`; sign-in/2FA codes stay
+  6). The hirer gets only the email carrying the code - the extra "your
+  code was emailed" notification is gone, on both legs.
+- **"Report an issue" is gone from the merchant UI**; issues go to
+  `support@cral.co.ke` (`SUPPORT_EMAIL` in `apps/merchant/src/lib/support.ts`).
+  The reports API is untouched.
+- **"Message the reviewer" only after `action` or `rejected`** - UI and API
+  (409 `nothing_to_discuss`).
+- **A vehicle can't be submitted without an insurance expiry date**
+  (422 `insurance_expiry_required`).
+- **Quiet hours are removed** (migration `20260923130000`) and **the
+  bookings/payouts/notifications dev-seed endpoints and `reset:demo` are
+  deleted.**
+- **Mobile layout**: grids and columns shrink via `min(100%, …)`; the nav
+  strip and table rows use `m-*` classes in `apps/merchant/src/responsive.css`.
+
+**Drivers (owner's call, 2026-10-18 - a deliberate deviation from
+`road-to-transactable.md`/`pr-delivery-plan.md`, which don't list them).**
+Plan and what shipped: [`docs/plans/drivers.md`](./docs/plans/drivers.md).
+Linear project "CRAL - Drivers" (COD-103 to COD-106).
+- **A driver is a record a merchant uploads, like a vehicle** (`drivers`,
+  `drv_`, migration `20261018090000`). A merchant can have many; a driver
+  belongs to one merchant only - normalised national ID and licence number
+  are globally unique (409 `driver_taken`). "This is me" (individuals) reuses
+  the account's own ID and KRA PIN documents.
+- **Three documents, nothing else**: `driving_licence`, `national_id`,
+  `kra_pin` (`documents.driver_id`). Account-document queries must filter
+  `driver_id: null` as well as `vehicle_id: null` - a driver's ID has
+  `vehicle_id` null too, and an unfiltered query reads it as the account's.
+- **Gates**: account approved -> driver approved (Ops `drivers` queue) ->
+  bookable. A lapsed licence is unbookable (derived, never stored); the
+  daily expiry sweep warns 30 days ahead. `merchants.drivers_only` lets
+  someone with no car finish onboarding.
+- **Bookings**: `vehicle_id` is nullable, `driver_id` added (CHECK one
+  set, migration `20261018100000`). Car + driver = two legs priced and
+  summed, same commission; driver-only = the renter's own car
+  (`hire_car_details`) and only their ID is required. Every reader names a
+  booking through `lib/booking-subject.ts` - don't add another "booking
+  has a car" read.
+- **A self-drive car offers a driver, the owner's own first** (owner's
+  call, 2026-10-19). `GET /catalog/vehicles/:id/drivers` returns the
+  owner's drivers (`source: owner`) whenever there are any; only when there
+  are none, other owners' (`source: other_owners`). Picking another owner's
+  driver splits the request into **two linked bookings**
+  (`bookings.linked_booking_id`, migration `20261019090000`) - the car with
+  its owner, the driver with theirs - each accepted, paid and paid out on
+  its own, so **a booking still has exactly one payee** and payouts didn't
+  change. Don't "simplify" this into one booking with two payees.
+- **Renters see the driver's full name** (owner's call, 2026-10-19) -
+  never the ID, KRA PIN, licence number or phone.
+- **Money goes through CRAL** (Daraja), the merchant is paid out at the
+  usual commission, never the driver directly. Day, hour and trip rates;
+  hourly is live for drivers only (the driver page has time pickers).
 
 ## What NOT to do
 

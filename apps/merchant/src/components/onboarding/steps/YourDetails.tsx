@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { CodeInput } from "@cral/ui";
 // Per-icon subpaths, not the package barrel - the barrel pulls in the whole
 // ~9,000-icon set and stalls Vite's dev optimiser.
 import { Buildings } from "@phosphor-icons/react/dist/ssr/Buildings";
@@ -498,13 +499,9 @@ function PhoneVerification({
             Enter the 6-digit code we texted to {masked}.
           </span>
           <div style={{ display: "flex", alignItems: "stretch", gap: 8, flexWrap: "wrap" }}>
-            <TextInput
-              value={code}
-              onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
-              placeholder="123456"
-              inputMode="numeric"
-              style={{ width: 132, flex: "none" }}
-            />
+            <div style={{ flex: "1 1 280px", maxWidth: 360 }}>
+              <CodeInput label="Verification code" value={code} onChange={setCode} autoFocus />
+            </div>
             <button
               type="button"
               style={{ ...O.primaryBtnSmall, height: 44, flex: "none" }}

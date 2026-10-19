@@ -80,6 +80,9 @@ export const ID_PREFIXES = {
   // renter refund. One row per attempt; the payout run or refund it pays
   // keeps its own record. Internal entity.
   disbursement: "dsb",
+  // A driver a merchant lists for hire (owner's call, 2026-10-18) - their
+  // own person or someone they employ. Belongs to exactly one merchant.
+  driver: "drv",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

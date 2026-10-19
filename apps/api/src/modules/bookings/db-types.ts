@@ -11,7 +11,19 @@ export interface BookingRow {
   id: string;
   ref: string;
   merchant_id: string;
-  vehicle_id: string;
+  /** Null for a driver-only booking - the renter's own car (20261018100000). */
+  vehicle_id: string | null;
+  /** The merchant's driver on this booking, if any. At least one of vehicle_id / driver_id is set. */
+  driver_id: string | null;
+  /** The driver's share of `gross`, its unit and quantity - display snapshots like rate_unit/rate_quantity. */
+  driver_amount: number | null;
+  driver_currency: string | null;
+  driver_rate_unit: string | null;
+  driver_rate_quantity: number | null;
+  /** Driver-only: the car the driver is coming to drive, as the renter described it. */
+  hire_car_details: string | null;
+  /** The other half of a car + another owner's driver request (20261019090000). */
+  linked_booking_id: string | null;
   hirer_id: string;
   status: BookingStatus;
   pickup_at: Date;

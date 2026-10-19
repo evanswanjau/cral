@@ -14,6 +14,7 @@ import {
   PrimaryButton,
   Select,
   TextInput,
+  Toggle,
 } from "../primitives.js";
 import {
   createVehicleOnServer,
@@ -96,7 +97,7 @@ export function Vehicles({
         {draft.vehicles.map((v) => (
           <div key={v.id} style={O.fleetRow}>
             <PlateBadge>{v.registration || "-"}</PlateBadge>
-            <div style={{ flex: "1 1 0%", minWidth: 160 }}>
+            <div style={{ flex: "1 1 0%", minWidth: "min(100%,160px)" }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
                 {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
@@ -138,9 +139,22 @@ export function Vehicles({
         {draft.vehicles.length === 0 ? "+ Add your first vehicle" : "+ Add another vehicle"}
       </button>
 
+      {draft.vehicles.length === 0 && (
+        // Someone with no car can still join to drive (owner's call,
+        // 2026-10-18). They add their drivers - themself included - from
+        // the portal once onboarding is in.
+        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0 18px" }}>
+          <Toggle on={draft.driversOnly} onToggle={() => onChange({ driversOnly: !draft.driversOnly })} />
+          <div>
+            <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>I don't have a vehicle - I only drive</div>
+            <div style={O.helper}>You'll add yourself or your drivers from the portal after this.</div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
         <BackButton onClick={onBack}>← Back</BackButton>
-        <PrimaryButton disabled={draft.vehicles.length === 0} onClick={onContinue}>
+        <PrimaryButton disabled={draft.vehicles.length === 0 && !draft.driversOnly} onClick={onContinue}>
           Continue to documents
         </PrimaryButton>
       </div>
@@ -313,14 +327,6 @@ function VehicleForm({
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
-              <div style={{ gridColumn: "1 / -1" }}>
-                <RateField
-                  grossValue={v.dailyRate}
-                  mode={v.rateMode}
-                  onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
-                  error={showErrors && !v.dailyRate.trim()}
-                />
-              </div>
               <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
                 <Select
                   value={v.chauffeured ? "chauffeured" : "self_drive"}
@@ -330,6 +336,14 @@ function VehicleForm({
                   <option value="self_drive">Self-drive</option>
                 </Select>
               </FormField>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <RateField
+                  grossValue={v.dailyRate}
+                  mode={v.rateMode}
+                  onChange={(g, m) => patch({ dailyRate: g, rateMode: m })}
+                  error={showErrors && !v.dailyRate.trim()}
+                />
+              </div>
             </div>
           </div>
 

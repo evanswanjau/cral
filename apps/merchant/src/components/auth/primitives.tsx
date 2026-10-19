@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode } from "react";
+import { CodeInput as SharedCodeInput, type CodeInputProps } from "@cral/ui";
 import { S } from "./styles.js";
 
 /** Mono uppercase field label, optionally with an action on the right (e.g. Show/Hide). */
@@ -40,10 +41,9 @@ export function TextInput(props: InputHTMLAttributes<HTMLInputElement>): JSX.Ele
   return <input style={{ ...S.input, ...style }} {...rest} />;
 }
 
-/** The large centred six-digit OTP input. */
-export function CodeInput(props: InputHTMLAttributes<HTMLInputElement>): JSX.Element {
-  const { style, ...rest } = props;
-  return <input inputMode="numeric" maxLength={6} placeholder="000000" style={{ ...S.codeInput, ...style }} {...rest} />;
+/** The six-digit code, one box per digit - the shared `@cral/ui` input. */
+export function CodeInput(props: CodeInputProps): JSX.Element {
+  return <SharedCodeInput {...props} />;
 }
 
 /** Kenyan phone entry - fixed +254 prefix, national part in the input. */

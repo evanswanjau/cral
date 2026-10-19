@@ -334,7 +334,7 @@ function StatementRow({
 
   return (
     <div style={P.setListRow}>
-      <span style={{ ...P.setListName, flex: 1, minWidth: 120 }}>{label}</span>
+      <span style={{ ...P.setListName, flex: 1, minWidth: "min(100%,120px)" }}>{label}</span>
       <span
         style={{
           font: "600 13px/1.3 'Instrument Sans',sans-serif",

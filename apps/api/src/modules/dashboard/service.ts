@@ -100,7 +100,7 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
   const [user, vehicles, ownerDocs, position, earnings] = await Promise.all([
     db("users").where({ id: merchant.user_id }).first("full_name", "phone"),
     db<VehicleRow>("vehicles").where({ merchant_id: merchant.id }).orderBy("created_at", "desc").select("*"),
-    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null }).select("*"),
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }).select("*"),
     payoutPosition(merchant.id, now),
     payoutMonthlyNet(merchant.id, 6, now),
   ]);
@@ -139,9 +139,14 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
   const hirers = hirerIds.length ? await db("users").whereIn("id", hirerIds).select("id", "full_name") : [];
   const hirerName = new Map<string, string>(hirers.map((h) => [h.id as string, (h.full_name as string) ?? "Hirer"]));
   const vehicleById = new Map(vehicles.map((v) => [v.id, v]));
+  // Driver jobs (docs/plans/drivers.md) - with one of the merchant's cars, or the renter's own.
+  const driverIds = [...new Set(weekRows.map((b) => b.driver_id).filter((v): v is string => !!v))];
+  const drivers = driverIds.length ? await db("drivers").whereIn("id", driverIds).select("id", "full_name") : [];
+  const driverName = new Map<string, string>(drivers.map((d) => [d.id as string, d.full_name as string]));
 
   const weekBookings = weekRows.map((b) => {
-    const vehicle = vehicleById.get(b.vehicle_id);
+    const vehicle = b.vehicle_id ? vehicleById.get(b.vehicle_id) : undefined;
+    const driver = b.driver_id ? driverName.get(b.driver_id) : undefined;
     return {
       id: b.id,
       ref: b.ref,
@@ -150,10 +155,16 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
       vehicle_id: b.vehicle_id,
       vehicle_registration: vehicle?.registration ?? "",
       vehicle_label: vehicle
-        ? [vehicleTitle(vehicle), vehicle.chauffeured ? "with driver" : "self-drive", b.pickup_location]
+        ? [
+            vehicleTitle(vehicle),
+            driver ? `with ${driver}` : vehicle.chauffeured ? "with driver" : "self-drive",
+            b.pickup_location,
+          ]
             .filter(Boolean)
             .join(" · ")
-        : b.pickup_location,
+        : driver
+          ? [`Driver ${driver}`, "renter's own car", b.pickup_location].join(" · ")
+          : b.pickup_location,
       pickup_at: b.pickup_at.toISOString(),
       dropoff_at: b.dropoff_at.toISOString(),
       hire_days: hireDays(b.pickup_at, b.dropoff_at),
@@ -217,7 +228,7 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
     booking_id: b.id,
     ref: b.ref,
     hirer_name: projectionHirerName.get(b.hirer_id) ?? "Hirer",
-    vehicle_registration: projectionVehicles.get(b.vehicle_id) ?? "",
+    vehicle_registration: b.vehicle_id ? (projectionVehicles.get(b.vehicle_id) ?? "") : "DRIVER",
     dropoff_at: b.dropoff_at.toISOString(),
     hire_days: hireDays(b.pickup_at, b.dropoff_at),
     net: kes(b.merchant_net_amount),

@@ -136,14 +136,9 @@ export const NOTIFICATION_CATEGORY_ORDER: NotificationCategory[] = [
   "rating",
 ];
 
-/** Categories that always send by SMS regardless of preference or quiet hours. */
+/** Categories that always send by SMS regardless of preference. */
 export function categoryLocksSms(category: NotificationCategory): boolean {
   return NOTIFICATION_CATEGORIES[category].locked.includes("sms");
-}
-
-/** Categories that ignore quiet hours entirely (per the design: payout + reviewer). */
-export function categoryBypassesQuietHours(category: NotificationCategory): boolean {
-  return category === "payout" || category === "review";
 }
 
 // ---------------------------------------------------------------------

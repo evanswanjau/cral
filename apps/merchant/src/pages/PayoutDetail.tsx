@@ -36,6 +36,7 @@ function LineRow({ line, onOpen }: { line: PayoutRunLine; onOpen: (line: PayoutR
       onClick={() => onOpen(line)}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
+      className="m-trow"
       style={{
         ...P.poLineRow,
         cursor: clickable ? "pointer" : "default",
@@ -204,7 +205,7 @@ export function PayoutDetail(): JSX.Element {
                   background: q.status === "answered" ? "#0B8A5B" : "#C77400",
                 }}
               />
-              <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ flex: 1, minWidth: "min(100%,200px)" }}>
                 <div style={P.docRowTitle}>{q.message}</div>
                 <div style={{ ...P.docRowSub, color: "#838C9B" }}>
                   {q.status === "answered" ? (q.response ?? "Answered by CRAL support.") : "With CRAL support."}

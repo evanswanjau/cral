@@ -26,12 +26,12 @@ import { ROLE_LABEL } from "../../components/console/styles.js";
  * own nav item — does come from the design (finding §6).
  *
  * Only the queue slugs real modules actually gate on today are offered —
- * `vehicles` / `merchants` / `renters` / `bookings`. The migration comment
+ * `vehicles` / `drivers` / `merchants` / `renters` / `bookings`. The migration comment
  * also reserves `disputes` / `invoices` / `payouts` / `comms` for slices
  * that don't exist yet; adding those here would let a super admin assign
  * a queue that gates nothing.
  */
-const QUEUES = ["vehicles", "merchants", "renters", "bookings"] as const;
+const QUEUES = ["vehicles", "drivers", "merchants", "renters", "bookings"] as const;
 const ROLES: AdminRole[] = ["admin_reviewer", "admin_finance", "admin_support", "admin_super"];
 
 type Modal =

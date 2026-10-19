@@ -28,7 +28,6 @@ const STATIC_PATHS: Array<{ path: string; changefreq: string; priority: string }
   { path: "/help", changefreq: "monthly", priority: "0.4" },
   { path: "/contact", changefreq: "monthly", priority: "0.3" },
   { path: "/legal", changefreq: "monthly", priority: "0.2" },
-  { path: "/list-your-car", changefreq: "monthly", priority: "0.5" },
 ];
 
 function xmlEscape(s: string): string {

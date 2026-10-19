@@ -10,7 +10,6 @@ import {
   useMarkNotificationRead,
   useNotificationList,
   useNotificationPreferences,
-  useSeedDevNotifications,
   type NotificationFilter,
   type NotificationRow,
 } from "../lib/notifications-api.js";
@@ -102,7 +101,6 @@ export function Notifications(): JSX.Element {
   const { data: prefs } = useNotificationPreferences();
   const markRead = useMarkNotificationRead();
   const markAll = useMarkAllNotificationsRead();
-  const seed = useSeedDevNotifications();
 
   const now = new Date();
   const todayKey = nairobiDay(now.toISOString());
@@ -139,7 +137,7 @@ export function Notifications(): JSX.Element {
 
   return (
     <div style={{ display: "flex", gap: "clamp(18px,2.6vw,30px)", alignItems: "flex-start", flexWrap: "wrap" }}>
-      <div style={{ flex: 1, minWidth: 300 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,300px)" }}>
         <div style={P.listHead}>
           <div>
             <h1 style={P.h1}>Notifications</h1>
@@ -160,7 +158,7 @@ export function Notifications(): JSX.Element {
         {data?.urgent && (
           <div style={P.ntUrgent}>
             <span style={P.ntUrgentDot} />
-            <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ flex: 1, minWidth: "min(100%,200px)" }}>
               <div style={P.ntUrgentTitle}>A booking request is waiting: {data.urgent.title}</div>
               <div style={P.ntUrgentBody}>{data.urgent.body}</div>
             </div>
@@ -207,11 +205,6 @@ export function Notifications(): JSX.Element {
                   ? "As bookings come in, money moves and documents are reviewed, you'll see it here."
                   : "No notifications match this filter."}
               </p>
-              {import.meta.env.DEV && filter === "all" && (
-                <button type="button" onClick={() => seed.mutate()} disabled={seed.isPending} style={P.actionBtn}>
-                  {seed.isPending ? "Seeding…" : "Seed demo notifications"}
-                </button>
-              )}
             </div>
           )}
 
@@ -234,7 +227,7 @@ export function Notifications(): JSX.Element {
         </div>
       </div>
 
-      <div style={{ flex: "0 0 240px", minWidth: 220 }}>
+      <div style={{ flex: "0 0 240px", minWidth: "min(100%,220px)" }}>
         <div style={P.ntSideCard}>
           <div style={P.ntSideLabel}>WHERE THESE GO</div>
           <div style={P.ntSideText}>{channelLine}</div>

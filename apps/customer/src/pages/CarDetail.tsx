@@ -9,6 +9,7 @@ import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
 import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../lib/hiring-units.js";
+import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 
 /**
  * `/cars/:id`, reproduced from the design's "detail" screen. Two things
@@ -62,6 +63,16 @@ export function CarDetail(): JSX.Element {
     enabled: !!id,
     retry: false,
   });
+
+  // A self-drive car offers a driver (owner's call, 2026-10-19): the
+  // owner's own drivers first, other owners' only when they have none.
+  const { data: carDrivers } = useQuery({
+    queryKey: ["catalog", "vehicle-drivers", id],
+    queryFn: () => driversForCar(id!),
+    enabled: !!id,
+    retry: false,
+  });
+  const [driverId, setDriverId] = useState(() => params.get("driver") ?? "");
 
   const carName = car ? `${car.make} ${car.model} ${car.year}` : null;
   useSeo({
@@ -169,7 +180,12 @@ export function CarDetail(): JSX.Element {
   // Day and trip totals are both knowable from dates alone (see
   // lib/hiring-units.ts#quoteTotal); the server still computes the real one.
   const isDayUnit = car.hiring_unit === "day";
-  const total = quoteTotal(car, days);
+  const carTotal = quoteTotal(car, days);
+  const driver = carDrivers?.data.find((d) => d.id === driverId) ?? null;
+  // Priced on the car's own unit, so both count the same span.
+  const driverTotal = driver ? driverQuote(driver, car.hiring_unit, days, 0) : null;
+  const total = carTotal === null ? null : driver ? (driverTotal === null ? null : carTotal + driverTotal) : carTotal;
+  const driverIsSeparate = carDrivers?.source === "other_owners";
   // The minimum is enforced *here*, where the dates are picked, not left
   // to the booking POST: a renter used to sign up, verify a phone, upload
   // two documents and only then be told the pair was never bookable.
@@ -182,7 +198,7 @@ export function CarDetail(): JSX.Element {
     if (!from || !to || belowMinimum) return;
     // No sign-in gate here - an unauthenticated visitor signs up inline on
     // the booking page itself as part of sending the request.
-    navigate(`/book/${car.id}?from=${from}&to=${to}`);
+    navigate(`/book/${car.id}?from=${from}&to=${to}${driver ? `&driver=${driver.id}` : ""}`);
   };
 
   return (
@@ -728,9 +744,20 @@ export function CarDetail(): JSX.Element {
                       : "Flat trip rate"}
                   </span>
                   <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
-                    {formatMoney({ amount: total, currency: car.daily_rate.currency })}
+                    {formatMoney({ amount: carTotal ?? 0, currency: car.daily_rate.currency })}
                   </span>
                 </div>
+                {driver && driverTotal !== null && (
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
+                    <span style={{ font: "400 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                      Driver {driver.display_name}
+                      {driverIsSeparate ? " (booked separately)" : ""}
+                    </span>
+                    <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
+                      {formatMoney({ amount: driverTotal, currency: car.daily_rate.currency })}
+                    </span>
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
                   <span style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>Total</span>
                   <span
@@ -758,6 +785,53 @@ export function CarDetail(): JSX.Element {
               >
                 Priced per {HIRING_UNIT_LABEL[car.hiring_unit]} - the exact total is worked out from
                 your pickup and return times once you send the request.
+              </div>
+            )}
+
+            {!car.chauffeured && carDrivers && carDrivers.data.length > 0 && (
+              <div
+                style={{
+                  marginBottom: 15,
+                  padding: "13px 14px",
+                  background: "#F4F6FE",
+                  border: "1px solid #DCE1FA",
+                  borderRadius: 10,
+                }}
+              >
+                <div style={{ font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 3 }}>
+                  Don't want to drive? Book a driver.
+                </div>
+                <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 9 }}>
+                  {driverIsSeparate
+                    ? `${car.owner.display_name} has no drivers of their own. These are checked drivers from other owners - booked and paid as a separate request.`
+                    : `Checked drivers from ${car.owner.display_name}, added to this booking.`}
+                </div>
+                <select
+                  value={driverId}
+                  onChange={(e) => setDriverId(e.target.value)}
+                  style={{
+                    width: "100%",
+                    height: 44,
+                    padding: "0 11px",
+                    border: "1px solid #CDD2DA",
+                    borderRadius: 8,
+                    font: "400 14px/1 'Instrument Sans',sans-serif",
+                    color: "#0B0F1A",
+                    background: "#FFFFFF",
+                  }}
+                >
+                  <option value="">No driver - I'll drive myself</option>
+                  {carDrivers.data.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.display_name} · {rateLine(d)}
+                    </option>
+                  ))}
+                </select>
+                {driver && days > 0 && driverTotal === null && (
+                  <div style={{ marginTop: 7, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
+                    {driver.display_name} doesn't offer a per-{car.hiring_unit} rate. Pick another driver, or go without.
+                  </div>
+                )}
               </div>
             )}
 
@@ -794,7 +868,7 @@ export function CarDetail(): JSX.Element {
                 marginBottom: 11,
               }}
             >
-              Request these dates
+              {driver ? "Request these dates with a driver" : "Request these dates"}
             </button>
           </div>
         </div>

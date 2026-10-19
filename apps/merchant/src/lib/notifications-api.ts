@@ -36,7 +36,7 @@ export interface NotificationRow {
   title: string;
   body: string;
   ref: string | null;
-  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | null;
+  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | null;
   subject_id: string | null;
   occurred_at: string;
   read: boolean;
@@ -73,15 +73,8 @@ export interface NotificationPreferenceRow {
   locked: Array<"sms" | "email">;
 }
 
-export interface QuietHours {
-  enabled: boolean;
-  from: string;
-  until: string;
-}
-
 export interface NotificationPreferences {
   categories: NotificationPreferenceRow[];
-  quiet_hours: QuietHours;
 }
 
 export const FILTER_ORDER: NotificationFilter[] = [
@@ -125,13 +118,8 @@ export function getNotificationPreferences() {
 
 export function updateNotificationPreferences(body: {
   categories: Array<{ category: NotificationCategory; sms: boolean; email: boolean }>;
-  quiet_hours: { enabled: boolean; from: string | null; until: string | null };
 }) {
   return apiPut<NotificationPreferences>("/merchant/notification-preferences", body);
-}
-
-export function seedDevNotifications() {
-  return apiPost<{ seeded: number }>("/merchant/notifications/dev-seed");
 }
 
 // ---------------------------------------------------------------------
@@ -193,13 +181,5 @@ export function useUpdateNotificationPreferences() {
     onSuccess: (data) => {
       queryClient.setQueryData(["notification-preferences"], data);
     },
-  });
-}
-
-export function useSeedDevNotifications() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: seedDevNotifications,
-    onSuccess: () => invalidateFeed(queryClient),
   });
 }

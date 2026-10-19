@@ -201,3 +201,48 @@ export async function createTestBooking(
 
   return { bookingId, merchantId, vehicleId, ownerUserId: owner.userId };
 }
+
+/**
+ * A driver on `merchantId`, inserted directly with its three documents
+ * (docs/plans/drivers.md). `docState` sets every document's review state;
+ * `live` + "ok" gives a bookable driver. National ID and licence number
+ * are random, since both are globally unique.
+ */
+export async function createTestDriver(
+  merchantId: string,
+  overrides: Record<string, unknown> = {},
+  docState: "pending" | "ok" = "ok",
+): Promise<string> {
+  const driverId = generateId("driver");
+  const n = ulid().slice(-8);
+  await db("drivers").insert({
+    id: driverId,
+    merchant_id: merchantId,
+    full_name: "Test Driver",
+    phone: "+254711000000",
+    national_id: `TID${n}`,
+    kra_pin: `A${n}Z`,
+    licence_number: `TDL${n}`,
+    licence_expiry: "2031-01-01",
+    county: "Nairobi",
+    daily_rate_amount: 300_000,
+    daily_rate_currency: "KES",
+    status: "live",
+    submitted_at: new Date(),
+    ...overrides,
+  });
+  for (const kind of ["driving_licence", "national_id", "kra_pin"]) {
+    await db("documents").insert({
+      id: generateId("document"),
+      merchant_id: merchantId,
+      driver_id: driverId,
+      kind,
+      storage_key: `test/driver/${driverId}/${kind}`,
+      original_name: `${kind}.pdf`,
+      size_bytes: 1024,
+      content_type: "application/pdf",
+      review_state: docState,
+    });
+  }
+  return driverId;
+}

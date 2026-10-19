@@ -124,6 +124,11 @@ function DocRow({
           <div style={{ font: "400 12px/1.4 'Instrument Sans',sans-serif", color: rejected ? "#D81E32" : accepted ? "#0B8A5B" : "#838C9B", marginTop: 2 }}>
             {rejected && line.review_note ? line.review_note : line.state === "missing" ? "Not uploaded" : accepted ? "Accepted" : "Not yet reviewed"}
           </div>
+          {line.expires_at && (
+            <div style={{ font: "500 11px/1.4 'IBM Plex Mono',monospace", color: "#838C9B", marginTop: 3 }}>
+              EXPIRES {line.expires_at}
+            </div>
+          )}
         </div>
         <button
           type="button"

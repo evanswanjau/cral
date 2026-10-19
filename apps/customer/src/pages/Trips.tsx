@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
-import { listMyBookings, type BookingStatus } from "../lib/bookings-api.js";
+import { bookingTitle, listMyBookings, type BookingStatus } from "../lib/bookings-api.js";
+import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import { formatMoney } from "../lib/catalog-api.js";
 
 /**
@@ -120,6 +121,9 @@ export function Trips(): JSX.Element {
           >
             Find a car
           </Link>
+          <div style={{ marginTop: 18, textAlign: "left" }}>
+            <HireDriverBanner compact />
+          </div>
         </div>
       )}
 
@@ -144,7 +148,7 @@ export function Trips(): JSX.Element {
             >
               <div style={{ flex: 1, minWidth: 220 }}>
                 <div style={{ font: "600 15px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 3 }}>
-                  {b.vehicle.make} {b.vehicle.model} {b.vehicle.year}
+                  {bookingTitle(b)}
                 </div>
                 <div style={{ font: "400 12.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
                   {b.ref} · {new Date(b.pickup_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })} -{" "}

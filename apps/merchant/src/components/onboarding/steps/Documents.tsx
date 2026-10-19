@@ -132,7 +132,7 @@ function DocRow({
         }}
       />
       <span style={doc ? O.docIconDone : O.docIconEmpty}>{doc ? "✓" : "+"}</span>
-      <div style={{ flex: 1, minWidth: 160 }}>
+      <div style={{ flex: 1, minWidth: "min(100%,160px)" }}>
         <div style={O.docTitle}>{title}</div>
         {doc ? (
           <div style={O.docFileRow}>

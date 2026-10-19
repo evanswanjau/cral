@@ -1,3 +1,4 @@
+export const SUPPORT_EMAIL = "support@cral.co.ke";
 export const SUPPORT_PHONE_DISPLAY = "0735 656 066";
 export const SUPPORT_PHONE_E164 = "+254735656066";
 

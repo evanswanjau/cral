@@ -203,6 +203,8 @@ components:
           type: string
           enum: [missing, pending, ok, rejected]
         original_name: { type: string, nullable: true }
+        # Licence only - a national ID does not expire.
+        expires_at: { type: string, format: date, nullable: true }
         review_note: { type: string, nullable: true }
         reviewed_at: { type: string, format: date-time, nullable: true }
 

@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import logo from "../../assets/cral-logo.png";
 import logoWhite from "../../assets/cral-white-logo.png";
 import { useIsAuthenticated } from "../../lib/auth.js";
+import { merchantLandingUrl } from "../../lib/merchant-app.js";
 import { AccountMenu } from "./AccountMenu.js";
 
 /**
@@ -33,13 +34,15 @@ const NAV: Array<{ label: string; to: string; activeOn: (pathname: string) => bo
     to: "/browse",
     activeOn: (p) => p === "/browse" || p.startsWith("/cars/") || p.startsWith("/book/"),
   },
+  { label: "Hire a driver", to: "/drivers", activeOn: (p) => p.startsWith("/drivers") },
   { label: "Find parts", to: "/parts", activeOn: (p) => p === "/parts" },
   { label: "Find services", to: "/services", activeOn: (p) => p === "/services" },
 ];
 
 export function Masthead(): JSX.Element {
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const isAuthenticated = useIsAuthenticated();
   const isHome = pathname === "/";
 
@@ -123,7 +126,12 @@ export function Masthead(): JSX.Element {
           ) : (
             <button
               type="button"
-              onClick={() => navigate("/sign-in")}
+              onClick={() => {
+                // Carry where they are, so signing in returns them here
+                // rather than dumping them on the home page.
+                const here = `${location.pathname}${location.search}`;
+                navigate(here === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(here)}`);
+              }}
               style={{
                 height: 38,
                 padding: "0 13px",
@@ -139,10 +147,11 @@ export function Masthead(): JSX.Element {
               Sign in
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => navigate("/list-your-car")}
+          <a
+            href={merchantLandingUrl()}
             style={{
+              display: "inline-flex",
+              alignItems: "center",
               height: 38,
               padding: "0 15px",
               background: "#0F23A8",
@@ -150,12 +159,12 @@ export function Masthead(): JSX.Element {
               border: "none",
               borderRadius: 8,
               font: "600 14px/1 'Instrument Sans',sans-serif",
-              cursor: "pointer",
+              textDecoration: "none",
               whiteSpace: "nowrap",
             }}
           >
             List your car
-          </button>
+          </a>
         </div>
       </div>
     </div>

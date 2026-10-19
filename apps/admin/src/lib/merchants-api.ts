@@ -71,6 +71,8 @@ export interface MerchantFile {
   review_next: { id: string; registration: string } | null;
   fleet: MerchantFleetRow[];
   fleet_summary: string;
+  /** Submitted drivers - each reviewed on its own case (docs/plans/drivers.md). */
+  drivers?: Array<{ id: string; full_name: string; status: string; county: string }>;
 }
 
 export function fetchMerchants(cursor?: string) {

@@ -28,7 +28,7 @@ interface NameLookup {
 async function lookupsFor(bookings: BookingRow[]): Promise<NameLookup> {
   const hirerIds = [...new Set(bookings.map((b) => b.hirer_id))];
   const merchantIds = [...new Set(bookings.map((b) => b.merchant_id))];
-  const vehicleIds = [...new Set(bookings.map((b) => b.vehicle_id))];
+  const vehicleIds = [...new Set(bookings.map((b) => b.vehicle_id).filter((v): v is string => !!v))];
 
   const [hirers, merchants, vehicles] = await Promise.all([
     db("users").whereIn("id", hirerIds).select("id", "full_name", "email"),
@@ -48,6 +48,15 @@ async function lookupsFor(bookings: BookingRow[]): Promise<NameLookup> {
   const vehicleLabels = new Map(
     vehicles.map((v) => [v.id, `${v.make} ${v.model} ${v.year} (${v.registration})`]),
   );
+  // Driver-only bookings have no car of ours (docs/plans/drivers.md).
+  const driverIds = [...new Set(bookings.map((b) => b.driver_id).filter((v): v is string => !!v))];
+  const drivers = driverIds.length ? await db("drivers").whereIn("id", driverIds).select("id", "full_name") : [];
+  for (const b of bookings) {
+    const driver = drivers.find((d) => d.id === b.driver_id);
+    if (!driver) continue;
+    const car = b.vehicle_id ? vehicleLabels.get(b.vehicle_id) : null;
+    vehicleLabels.set(b.id, car ? `${car} with driver ${driver.full_name}` : `Driver ${driver.full_name} (renter's own car)`);
+  }
 
   return { hirerNames, merchantNames, vehicleLabels };
 }
@@ -62,7 +71,11 @@ function serializeSummary(b: BookingRow, lookups: NameLookup) {
     gross: kes(b.gross_amount) as Money,
     hirer_name: lookups.hirerNames.get(b.hirer_id) ?? "(unknown)",
     merchant_name: lookups.merchantNames.get(b.merchant_id) ?? "(unknown)",
-    vehicle_label: lookups.vehicleLabels.get(b.vehicle_id) ?? "(vehicle no longer on file)",
+    vehicle_label:
+      lookups.vehicleLabels.get(b.id) ??
+      (b.vehicle_id ? lookups.vehicleLabels.get(b.vehicle_id) : null) ??
+      "(vehicle no longer on file)",
+    driver_id: b.driver_id,
     created_at: b.created_at.toISOString(),
   };
 }

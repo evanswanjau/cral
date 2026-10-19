@@ -17,7 +17,7 @@ export const O = {
     color: "#1A1F2B",
     display: "flex",
     flexDirection: "column",
-    minWidth: 360,
+    minWidth: "min(100%,360px)",
   },
 
   // --- top bar ----------------------------------------------------------
@@ -112,7 +112,7 @@ export const O = {
   wReview: { maxWidth: 1020 },
 
   // --- vehicle form: wide form column + sticky earnings aside -------------
-  formRow: { display: "flex", gap: 16, alignItems: "flex-start" },
+  formRow: { display: "flex", flexWrap: "wrap", gap: 16, alignItems: "flex-start" },
   formMain: { flex: "3 1 430px", minWidth: 0 },
   formCard: {
     background: "#FFFFFF",
@@ -120,7 +120,7 @@ export const O = {
     borderRadius: 12,
     padding: "clamp(18px,3vw,28px)",
   },
-  formFields: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 18 },
+  formFields: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,170px),1fr))", gap: 18 },
 
   earnAside: {
     flex: "1 1 250px",
@@ -170,7 +170,7 @@ export const O = {
   } as CSSProperties,
   twoCol: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fit,minmax(320px,1fr))",
+    gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,320px),1fr))",
     gap: "clamp(26px,4vw,48px)",
     alignItems: "start",
   },
@@ -349,8 +349,8 @@ export const O = {
   cardHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 16 },
 
   // --- form fields --------------------------------------------------------
-  formGrid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 18 },
-  formGrid3: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 18 },
+  formGrid2: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,220px),1fr))", gap: 18 },
+  formGrid3: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,170px),1fr))", gap: 18 },
   label: { display: "block", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", marginBottom: 7 },
   required: { color: "#D81E32" },
   input: {
@@ -461,7 +461,7 @@ export const O = {
   fieldError: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#D81E32", marginTop: 6 },
 
   // --- selectable option cards (individual / company, mpesa / bank) -------
-  optionGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 },
+  optionGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,220px),1fr))", gap: 14 },
   optionCard: {
     display: "flex",
     alignItems: "flex-start",
@@ -579,7 +579,7 @@ export const O = {
   demandRow: { padding: "16px 0", borderTop: "1px solid #E4E7EC" },
   demandLabel: { font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" },
   demandHint: { font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 2, marginBottom: 12 },
-  chipGroup: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 },
+  chipGroup: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,110px),1fr))", gap: 8 },
   chip: {
     height: 36,
     borderRadius: 8,
@@ -600,9 +600,10 @@ export const O = {
   sideRowValue: { font: "600 14px/1 'IBM Plex Mono',monospace", color: "#0B0F1A", fontFeatureSettings: "'tnum'" },
 
   // --- photos --------------------------------------------------------------
-  photoGrid: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 10 },
+  photoGrid: { display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 12, marginBottom: 10 },
   photoTileEmpty: {
     aspectRatio: "4 / 3",
+    minWidth: 0,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -617,13 +618,15 @@ export const O = {
   photoTileAddLabel: { font: "600 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#0F23A8" },
   photoTileCaption: { font: "400 11px/1.3 'Instrument Sans',sans-serif", color: "#9AA2B0", textAlign: "center", padding: "0 6px" },
   photoTileHint: { font: "400 10px/1.3 'Instrument Sans',sans-serif", color: "#CDD2DA", textAlign: "center" },
-  photoTileFilled: { display: "flex", flexDirection: "column", border: "1px solid #E4E7EC", borderRadius: 10, overflow: "hidden" },
+  /** Same 4:3 box as the empty tile, so a slot never resizes when it fills. */
+  photoTileFilled: { position: "relative", aspectRatio: "4 / 3", minWidth: 0, border: "1px solid #E4E7EC", borderRadius: 10, overflow: "hidden", background: "#F8F9FB" } as CSSProperties,
   /** Real preview once a file's been picked this session. */
-  photoThumbImage: { aspectRatio: "4 / 3", width: "100%", objectFit: "cover", display: "block" } as CSSProperties,
+  photoThumbImage: { position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" } as CSSProperties,
   /** Filled tile after a reload, when the file itself is gone but its
    *  metadata survived - no bytes to preview, so a plain icon stands in. */
   photoThumbFallback: {
-    aspectRatio: "4 / 3",
+    position: "absolute",
+    inset: 0,
     background: "#F8F9FB",
     display: "flex",
     flexDirection: "column",
@@ -631,8 +634,8 @@ export const O = {
     justifyContent: "center",
     gap: 4,
   } as CSSProperties,
-  photoFileRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px" },
-  photoFileName: { font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#5A6373", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } as CSSProperties,
+  photoFileRow: { position: "absolute", left: 0, right: 0, bottom: 0, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "6px 8px", background: "rgba(255,255,255,.92)", borderTop: "1px solid #E4E7EC" } as CSSProperties,
+  photoFileName: { font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#5A6373", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 } as CSSProperties,
   photoRemove: {
     width: 22,
     height: 22,
@@ -705,7 +708,7 @@ export const O = {
     color: "#838C9B",
     paddingBottom: 12,
     flex: "1 1 0%",
-    minWidth: 180,
+    minWidth: "min(100%,180px)",
   } as CSSProperties,
   docIconEmpty: {
     width: 36,
@@ -897,7 +900,7 @@ export const O = {
   },
 
   // --- review screen ----------------------------------------------------------
-  reviewGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 },
+  reviewGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,260px),1fr))", gap: 20 },
   // --- review-step summary cards: header band + body, not the flat O.card --
   reviewCard: {
     background: "#FFFFFF",

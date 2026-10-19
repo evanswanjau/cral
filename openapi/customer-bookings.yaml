@@ -74,9 +74,40 @@ paths:
           application/json:
             schema:
               type: object
-              required: [vehicle_id, pickup_at, dropoff_at]
+              required: [pickup_at, dropoff_at]
+              description: >
+                A car, a car with one of its merchant's drivers, or a driver
+                alone for the renter's own car (docs/plans/drivers.md) - at
+                least one of `vehicle_id` / `driver_id`. A driver only comes
+                with their own merchant's cars when that merchant lists drivers
+                (422 `owner_driver_first`); when the car's owner has none, any
+                checked driver can be added and the request becomes two linked
+                bookings - the car with its owner, the driver with theirs - each
+                accepted and paid on its own. The response is the car booking,
+                with `linked_booking: { id, ref, status, gross }` (owner's call,
+                2026-10-19). A chauffeured car takes no extra driver
+                (422 `driver_not_for_this_car`).
+                Priced one leg per thing hired, summed, same commission on
+                each. A driver-only booking needs `hire_car_details`
+                (422 `hire_car_details_required`) and only the renter's
+                national ID, not their licence. 409 `driver_unavailable`
+                when the driver has a confirmed job overlapping.
               properties:
                 vehicle_id: { type: string, example: veh_01J... }
+                driver_id: { type: string, example: drv_01J... }
+                driver_unit:
+                  type: string
+                  enum: [day, hour, trip]
+                  description: >
+                    Which of the driver's rates prices their part. Defaults to
+                    the car's unit, or the driver's first offered rate. 422
+                    `driver_rate_unavailable` if they don't offer it. `hour`
+                    bills the hours between pickup_at and dropoff_at, rounded up.
+                hire_car_details:
+                  type: string
+                  maxLength: 200
+                  nullable: true
+                  description: Driver-only - the car the driver is coming to drive.
                 pickup_at:
                   type: string
                   format: date-time

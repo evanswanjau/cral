@@ -5,6 +5,8 @@ import { Browse } from "./pages/Browse.js";
 import { Parts } from "./pages/Parts.js";
 import { Services } from "./pages/Services.js";
 import { Towing } from "./pages/Towing.js";
+import { Drivers } from "./pages/Drivers.js";
+import { DriverBook } from "./pages/DriverBook.js";
 import { CarDetail } from "./pages/CarDetail.js";
 import { Booking } from "./pages/Booking.js";
 import { Documents } from "./pages/Documents.js";
@@ -26,9 +28,8 @@ import { ResetPassword } from "./pages/ResetPassword.js";
 import { Sessions } from "./pages/Sessions.js";
 
 /**
- * Route map. Everything sits under `SiteShell` (masthead + footer) -
- * including the auth-gated pages, so a signed-out visitor redirected to
- * `/sign-in?next=...` and a signed-in one on `/bookings` see the same frame.
+ * Route map. Everything but the four auth screens sits under `SiteShell`
+ * (masthead + footer), including the auth-gated pages.
  * `RequireAuth` preserves the path it interrupted.
  *
  * The seven marketing pages are real now (C9) - see each page's own
@@ -56,6 +57,7 @@ const router = createBrowserRouter([
       { path: "/parts", element: <Parts /> },
       { path: "/services", element: <Services /> },
       { path: "/cars/:id", element: <CarDetail /> },
+      { path: "/drivers", element: <Drivers /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
       { path: "/corporate", element: <Corporate /> },
@@ -68,15 +70,11 @@ const router = createBrowserRouter([
       // the request - see Booking.tsx.
       { path: "/book/:id", element: <Booking /> },
 
-      { path: "/sign-in", element: <SignIn /> },
-      { path: "/create-account", element: <CreateAccount /> },
-      { path: "/forgot-password", element: <ForgotPassword /> },
-      { path: "/reset-password", element: <ResetPassword /> },
-
       {
         element: <RequireAuth />,
         children: [
           { path: "/services/towing", element: <Towing /> },
+          { path: "/drivers/:id", element: <DriverBook /> },
           { path: "/documents", element: <Documents /> },
           { path: "/bookings", element: <Trips /> },
           { path: "/bookings/:id", element: <TripDetail /> },
@@ -86,6 +84,13 @@ const router = createBrowserRouter([
       },
     ],
   },
+  // The auth screens are full-page, outside SiteShell: brand panel on the
+  // left, form on the right - the merchant portal's layout (owner's call,
+  // 2026-09-24). `?next=` carries the interrupted path through them.
+  { path: "/sign-in", element: <SignIn /> },
+  { path: "/create-account", element: <CreateAccount /> },
+  { path: "/forgot-password", element: <ForgotPassword /> },
+  { path: "/reset-password", element: <ResetPassword /> },
 ]);
 
 export function App(): JSX.Element {

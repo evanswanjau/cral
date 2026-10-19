@@ -36,6 +36,7 @@ type Item = Leaf | Group;
 const ITEMS: Item[] = [
   { kind: "leaf", to: "/", label: "Dashboard", roles: ["admin_reviewer", "admin_finance", "admin_support"], built: false },
   { kind: "leaf", to: "/vehicles", label: "Vehicles", roles: ["admin_reviewer"], built: true },
+  { kind: "leaf", to: "/drivers", label: "Drivers", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/merchants", label: "Merchants", roles: ["admin_reviewer", "admin_support"], built: true },
   { kind: "leaf", to: "/renters", label: "Renters", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/bookings", label: "Bookings", roles: ["admin_support"], built: true },

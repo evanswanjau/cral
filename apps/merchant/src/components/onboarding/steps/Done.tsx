@@ -65,7 +65,7 @@ export function Done({ draft, onAddAnother }: { draft: OnboardingDraft; onAddAno
                 }}
               >
                 <DoneVehicleCover photo={firstPhoto} />
-                <div style={{ flex: "1 1 0%", minWidth: 140 }}>
+                <div style={{ flex: "1 1 0%", minWidth: "min(100%,140px)" }}>
                   <div style={O.fleetName}>{v.make} {v.model}</div>
                   <div style={O.fleetSub}>
                     {v.type} · {v.year} · {v.photos.length} photo{v.photos.length === 1 ? "" : "s"}

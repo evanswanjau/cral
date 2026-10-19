@@ -230,7 +230,7 @@ export async function cutPayoutRun(
   if (bookings.length === 0) return null;
 
   const hirerIds = [...new Set(bookings.map((b) => b.hirer_id))];
-  const vehicleIds = [...new Set(bookings.map((b) => b.vehicle_id))];
+  const vehicleIds = [...new Set(bookings.map((b) => b.vehicle_id).filter((v): v is string => !!v))];
   const hirers = await trx("users").whereIn("id", hirerIds).select("id", "full_name");
   const vehicles = await trx("vehicles").whereIn("id", vehicleIds).select("id", "registration");
   const hirerName = new Map(hirers.map((h) => [h.id as string, (h.full_name as string | null) ?? "Hirer"]));
@@ -292,7 +292,8 @@ export async function cutPayoutRun(
       booking_id: b.id,
       booking_ref: b.ref,
       hirer_name: hirerName.get(b.hirer_id) ?? "Hirer",
-      vehicle_registration: registration.get(b.vehicle_id) ?? "—",
+      // A driver-only job has no plate (docs/plans/drivers.md).
+      vehicle_registration: b.vehicle_id ? (registration.get(b.vehicle_id) ?? "—") : "DRIVER",
       pickup_at: b.pickup_at,
       dropoff_at: b.dropoff_at,
       gross_amount: b.gross_amount,

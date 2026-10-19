@@ -11,6 +11,7 @@ import { ErrorBoundary } from "../components/ErrorBoundary.js";
 import { P } from "../components/portal/styles.js";
 import { useVehicleList } from "../lib/vehicles-api.js";
 import { useBookingList } from "../lib/bookings-api.js";
+import { useDriverList } from "../lib/drivers-api.js";
 import { useNotificationUnread } from "../lib/notifications-api.js";
 import { useProfile } from "../lib/settings-api.js";
 
@@ -22,6 +23,7 @@ export function AppLayout(): ReactNode {
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
   const { data: vehicles } = useVehicleList("all");
   const { data: bookings } = useBookingList("all");
+  const { data: drivers } = useDriverList();
   const { data: notificationUnread } = useNotificationUnread();
   // The design hangs the merchant-status card under the nav, and only on
   // the dashboard. It reads the dashboard query the page has already
@@ -47,6 +49,7 @@ export function AppLayout(): ReactNode {
           <div style={P.bodyInner}>
             <SideNav
               vehicleCount={vehicles?.counts.all ?? 0}
+              driverActionCount={drivers?.counts.needs_action ?? 0}
               bookingCount={bookings?.counts.all ?? 0}
               notificationUnread={notificationUnread ?? 0}
               footer={onDashboard ? <MerchantStatusCard /> : null}

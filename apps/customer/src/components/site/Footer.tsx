@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { merchantLandingUrl } from "../../lib/merchant-app.js";
 
 /**
  * Public footer, reproduced from the "Cruz Ride Auto - Website" canvas.
@@ -30,7 +31,7 @@ const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
     head: "CRAL",
     links: [
       ["About us", "/about"],
-      ["List your car", "/list-your-car"],
+      ["List your car", merchantLandingUrl()],
     ],
   },
 ];
@@ -126,19 +127,22 @@ export function Footer(): JSX.Element {
                 {col.head}
               </div>
               <div style={{ display: "grid", gap: 10, justifyItems: "start" }}>
-                {col.links.map(([label, to]) => (
-                  <Link
-                    key={to}
-                    to={to}
-                    style={{
-                      font: "400 14px/1.4 'Instrument Sans',sans-serif",
-                      color: "#A7B0BE",
-                      textDecoration: "none",
-                    }}
-                  >
-                    {label}
-                  </Link>
-                ))}
+                {col.links.map(([label, to]) => {
+                  const linkStyle = {
+                    font: "400 14px/1.4 'Instrument Sans',sans-serif",
+                    color: "#A7B0BE",
+                    textDecoration: "none",
+                  } as const;
+                  return to.startsWith("http") ? (
+                    <a key={to} href={to} style={linkStyle}>
+                      {label}
+                    </a>
+                  ) : (
+                    <Link key={to} to={to} style={linkStyle}>
+                      {label}
+                    </Link>
+                  );
+                })}
               </div>
             </div>
           ))}
