@@ -22,6 +22,8 @@ export interface BookingRow {
   driver_rate_quantity: number | null;
   /** Driver-only: the car the driver is coming to drive, as the renter described it. */
   hire_car_details: string | null;
+  /** The other half of a car + another owner's driver request (20261019090000). */
+  linked_booking_id: string | null;
   hirer_id: string;
   status: BookingStatus;
   pickup_at: Date;

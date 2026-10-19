@@ -18,6 +18,7 @@ import heroCx5 from "../assets/hero/cx5.jpg";
 import heroLandCruiser from "../assets/hero/land-cruiser.jpg";
 import heroMercedes from "../assets/hero/mercedes.jpg";
 import trustDriverPhoto from "../assets/trust-driver.jpg";
+import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import keyHandoffPhoto from "../assets/keyhandoff.jpg";
 
 /**
@@ -455,6 +456,13 @@ export function Home(): JSX.Element {
               })}
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* ---- book a driver (docs/plans/drivers.md) ---- */}
+      <div style={{ padding: "clamp(18px,2.6vw,28px) clamp(16px,4vw,40px) 0" }}>
+        <div style={{ maxWidth: 1240, margin: "0 auto" }}>
+          <HireDriverBanner />
         </div>
       </div>
 

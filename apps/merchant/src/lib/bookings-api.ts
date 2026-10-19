@@ -37,6 +37,8 @@ export interface BookingSummary {
   hire_car_details: string | null;
   /** "Toyota Axio · KDL 442N", "... with driver Peter Kamau", or "Driver Peter Kamau · renter's own car". */
   subject_label: string;
+  /** The hirer booked this together with another owner's car or driver. */
+  has_linked_booking: boolean;
   pickup_at: string;
   dropoff_at: string;
   merchant_net: Money;

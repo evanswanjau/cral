@@ -52,7 +52,7 @@ export interface BookingSummary {
 
 export interface BookingDriver {
   id: string;
-  /** "Peter K." - first name and surname initial. */
+  /** The driver's full name. */
   display_name: string;
   merchant_name: string;
 }
@@ -101,6 +101,8 @@ export interface BookingDetail extends BookingSummary {
   decline_reason_code: string | null;
   cancel_reason: string | null;
   handovers: HandoverStatus[];
+  /** The other half of a car + another owner's driver request - accepted and paid on its own. */
+  linked_booking: { id: string; ref: string; status: BookingStatus; gross: Money } | null;
 }
 
 export interface BookingsPage {

@@ -118,7 +118,7 @@ describe("hiring a driver", () => {
     const drv = computeBookingPricing(300_000, 2);
     expect(res.body.gross.amount).toBe(car.gross.amount + drv.gross.amount);
     expect(res.body.driver_amount.amount).toBe(drv.gross.amount);
-    expect(res.body.driver.display_name).toBe("Test D.");
+    expect(res.body.driver.display_name).toBe("Test Driver");
     expect(res.body.vehicle.id).toBe(vehicleId);
 
     const row = await db("bookings").where({ id: res.body.id }).first();
@@ -158,20 +158,75 @@ describe("hiring a driver", () => {
     expect(owner).toBeTruthy();
   });
 
-  it("refuses a rate the driver doesn't offer, and another merchant's driver on this car", async () => {
+  it("offers the car owner's drivers first, and only then another owner's", async () => {
     const hirer = await renter();
     const a = await merchant();
     const b = await merchant();
-    const driverId = await createTestDriver(b.merchantId);
+    const otherDriver = await createTestDriver(b.merchantId);
 
-    const wrongCar = await request(app)
+    // The owner has no drivers: the list falls back to other owners'.
+    const fallback = await request(app).get(`/catalog/vehicles/${a.vehicleId}/drivers`);
+    expect(fallback.body.source).toBe("other_owners");
+    expect(fallback.body.data.map((d: { id: string }) => d.id)).toContain(otherDriver);
+
+    // Once the owner lists one of their own, theirs come first and another
+    // owner's driver is refused.
+    const ownDriver = await createTestDriver(a.merchantId);
+    const own = await request(app).get(`/catalog/vehicles/${a.vehicleId}/drivers`);
+    expect(own.body.source).toBe("owner");
+    expect(own.body.data.map((d: { id: string }) => d.id)).toEqual([ownDriver]);
+    const refused = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ vehicle_id: a.vehicleId, driver_id: otherDriver, pickup_at: at(3, 9), dropoff_at: at(4, 17) });
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe("owner_driver_first");
+  });
+
+  it("splits a car + another owner's driver into two linked bookings, one per owner", async () => {
+    const hirer = await renter();
+    const a = await merchant();
+    const b = await merchant(false);
+    const driverId = await createTestDriver(b.merchantId, { full_name: "Joseph Otieno Ouma" });
+
+    const res = await request(app)
       .post("/bookings")
       .set(bearer(hirer.accessToken))
       .set(idem())
       .send({ vehicle_id: a.vehicleId, driver_id: driverId, pickup_at: at(3, 9), dropoff_at: at(4, 17) });
-    expect(wrongCar.status).toBe(422);
-    expect(wrongCar.body.error.code).toBe("driver_not_for_this_car");
+    expect(res.status).toBe(201);
 
+    // The car booking, with the car owner, at the car's price only.
+    expect(res.body.vehicle.id).toBe(a.vehicleId);
+    expect(res.body.driver).toBeNull();
+    expect(res.body.gross.amount).toBe(computeBookingPricing(900_000, 2).gross.amount);
+    expect(res.body.linked_booking).not.toBeNull();
+
+    // The driver booking, with the driver's owner, describing the car.
+    const car = await db("bookings").where({ id: res.body.id }).first();
+    const drv = await db("bookings").where({ id: res.body.linked_booking.id }).first();
+    expect(car.merchant_id).toBe(a.merchantId);
+    expect(drv.merchant_id).toBe(b.merchantId);
+    expect(drv.vehicle_id).toBeNull();
+    expect(drv.driver_id).toBe(driverId);
+    expect(drv.gross_amount).toBe(computeBookingPricing(300_000, 2).gross.amount);
+    expect(drv.hire_car_details).toMatch(/^Toyota Prado/);
+    expect(car.linked_booking_id).toBe(drv.id);
+    expect(drv.linked_booking_id).toBe(car.id);
+
+    // Both owners were asked, and the renter sees the driver's full name.
+    expect(await db("notifications").where({ subject_id: car.id, merchant_id: a.merchantId }).first()).toBeTruthy();
+    expect(await db("notifications").where({ subject_id: drv.id, merchant_id: b.merchantId }).first()).toBeTruthy();
+    const mine = await request(app).get(`/bookings/${drv.id}`).set(bearer(hirer.accessToken));
+    expect(mine.body.driver.display_name).toBe("Joseph Otieno Ouma");
+    expect(mine.body.linked_booking.id).toBe(car.id);
+  });
+
+  it("refuses a rate the driver doesn't offer", async () => {
+    const hirer = await renter();
+    const { merchantId } = await merchant(false);
+    const driverId = await createTestDriver(merchantId);
     const noTrip = await request(app)
       .post("/bookings")
       .set(bearer(hirer.accessToken))

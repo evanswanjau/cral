@@ -12,9 +12,10 @@ import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
  * their merchant's account is approved - the same "live listing on an
  * approved merchant" gate the vehicle catalog applies, plus the licence.
  *
- * The public projection is deliberately thin: first name and surname
- * initial, county, rates, and who they drive for. Never the national ID,
- * KRA PIN, licence number or phone.
+ * The public projection is deliberately thin: the driver's full name (the
+ * renter should know exactly who is coming - owner's call, 2026-10-19),
+ * county, rates, and who they drive for. Never the national ID, KRA PIN,
+ * licence number or phone.
  */
 
 export function basePublicDriverQuery(): Knex.QueryBuilder {
@@ -36,11 +37,9 @@ const SELECT = [
   "m.surname",
 ];
 
-/** "Peter Kamau Njoroge" -> "Peter N." */
+/** The name a renter sees - the driver's full name (owner's call, 2026-10-19). */
 export function driverPublicName(fullName: string): string {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length < 2) return parts[0] ?? "Driver";
-  return `${parts[0]} ${parts[parts.length - 1]!.charAt(0).toUpperCase()}.`;
+  return fullName.trim().replace(/\s+/g, " ") || "Driver";
 }
 
 export interface PublicDriver {
@@ -88,10 +87,28 @@ export async function listPublicDrivers(query: { county?: string | undefined; cu
   };
 }
 
-/** The drivers a renter can add to one of this merchant's cars. */
-export async function driversForMerchant(merchantId: string): Promise<PublicDriver[]> {
-  const rows = (await basePublicDriverQuery().where("d.merchant_id", merchantId).select(SELECT).orderBy("d.created_at", "asc")) as PublicRow[];
-  return rows.map(serialize);
+/**
+ * The drivers a renter can add to a self-drive car (owner's call,
+ * 2026-10-19): the car's own owner's drivers first. Only when the owner has
+ * none does the renter see other owners' drivers - those in the car's
+ * county, or anyone if the county has none - and booking one splits the
+ * request into two linked bookings (customer-bookings/service.ts).
+ */
+export async function driversForCar(car: {
+  merchant_id: string;
+  county: string | null;
+}): Promise<{ source: "owner" | "other_owners"; data: PublicDriver[] }> {
+  const own = (await basePublicDriverQuery()
+    .where("d.merchant_id", car.merchant_id)
+    .select(SELECT)
+    .orderBy("d.created_at", "asc")) as PublicRow[];
+  if (own.length) return { source: "owner", data: own.map(serialize) };
+
+  const others = () =>
+    basePublicDriverQuery().whereNot("d.merchant_id", car.merchant_id).select(SELECT).orderBy("d.created_at", "asc").limit(50);
+  let rows = car.county ? ((await others().where("d.county", car.county)) as PublicRow[]) : [];
+  if (!rows.length) rows = (await others()) as PublicRow[];
+  return { source: "other_owners", data: rows.map(serialize) };
 }
 
 export async function requirePublicDriver(driverId: string): Promise<PublicRow> {

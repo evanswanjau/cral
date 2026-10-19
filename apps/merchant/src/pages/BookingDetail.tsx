@@ -740,7 +740,9 @@ export function BookingDetail(): JSX.Element {
                 <div style={{ ...P.rowMeta, whiteSpace: "normal" }}>
                   {b.vehicle_registration
                     ? "Drives your car for the whole hire."
-                    : `Driving the hirer's own car${b.hire_car_details ? `: ${b.hire_car_details}` : "."}`}
+                    : b.has_linked_booking
+                      ? `Driving a car the hirer booked from another owner on CRAL${b.hire_car_details ? `: ${b.hire_car_details}` : "."}`
+                      : `Driving the hirer's own car${b.hire_car_details ? `: ${b.hire_car_details}` : "."}`}
                 </div>
               </div>
             </div>
@@ -762,9 +764,11 @@ export function BookingDetail(): JSX.Element {
               </div>
             </div>
             <div style={{ padding: "0 18px 18px", ...P.helperText }}>
-              {b.vehicle_chauffeured
-                ? "Driver included - you or your named driver must be available for the whole hire."
-                : "Self-drive. The hirer drives; their licence is on file above."}
+              {b.has_linked_booking
+                ? "The hirer booked a driver from another owner on CRAL to drive this car. Hand the car to that driver."
+                : b.vehicle_chauffeured
+                  ? "Driver included - you or your named driver must be available for the whole hire."
+                  : "Self-drive. The hirer drives; their licence is on file above."}
             </div>
           </div>
           )}

@@ -1799,10 +1799,20 @@ Linear project "CRAL - Drivers" (COD-103 to COD-106).
 - **Bookings**: `vehicle_id` is nullable, `driver_id` added (CHECK one
   set, migration `20261018100000`). Car + driver = two legs priced and
   summed, same commission; driver-only = the renter's own car
-  (`hire_car_details`) and only their ID is required. A driver only comes
-  with their own merchant's cars, so **a booking still has one payee** and
-  payouts didn't change. Every reader names a booking through
-  `lib/booking-subject.ts` - don't add another "booking has a car" read.
+  (`hire_car_details`) and only their ID is required. Every reader names a
+  booking through `lib/booking-subject.ts` - don't add another "booking
+  has a car" read.
+- **A self-drive car offers a driver, the owner's own first** (owner's
+  call, 2026-10-19). `GET /catalog/vehicles/:id/drivers` returns the
+  owner's drivers (`source: owner`) whenever there are any; only when there
+  are none, other owners' (`source: other_owners`). Picking another owner's
+  driver splits the request into **two linked bookings**
+  (`bookings.linked_booking_id`, migration `20261019090000`) - the car with
+  its owner, the driver with theirs - each accepted, paid and paid out on
+  its own, so **a booking still has exactly one payee** and payouts didn't
+  change. Don't "simplify" this into one booking with two payees.
+- **Renters see the driver's full name** (owner's call, 2026-10-19) -
+  never the ID, KRA PIN, licence number or phone.
 - **Money goes through CRAL** (Daraja), the merchant is paid out at the
   usual commission, never the driver directly. Day, hour and trip rates;
   hourly is live for drivers only (the driver page has time pickers).

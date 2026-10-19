@@ -96,9 +96,18 @@ catalogRouter.get(
   "/catalog/vehicles/:id/drivers",
   browse,
   asyncHandler(async (req, res) => {
-    const vehicle = (await catalog.baseCatalogQuery().where("v.id", req.params.id as string).first("v.merchant_id")) as
-      | { merchant_id: string }
+    // Owner's drivers first, else other owners' (docs/plans/drivers.md). A
+    // car that already comes with a driver offers none.
+    const vehicle = (await catalog
+      .baseCatalogQuery()
+      .where("v.id", req.params.id as string)
+      .first("v.merchant_id", "v.county", "v.chauffeured")) as
+      | { merchant_id: string; county: string | null; chauffeured: boolean }
       | undefined;
-    res.status(200).json({ data: vehicle ? await drivers.driversForMerchant(vehicle.merchant_id) : [] });
+    if (!vehicle || vehicle.chauffeured) {
+      res.status(200).json({ source: "owner", data: [] });
+      return;
+    }
+    res.status(200).json(await drivers.driversForCar(vehicle));
   }),
 );

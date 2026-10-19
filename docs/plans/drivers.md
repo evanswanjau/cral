@@ -225,6 +225,12 @@ additions to `customer-bookings`, `customer-catalog`, `merchant-bookings`,
 - **No driver ratings.** There is no renter-side rating flow at all yet
   (nothing writes `ratee_type = 'merchant'` either), so a rating shown on a
   driver would be "null forever". Add both together.
-- **The car booking page offers the car's own merchant's drivers** as an
-  "Add a driver" select (`?driver=` preselects). The car listing page
-  itself does not advertise drivers yet.
+- **Follow-up (2026-10-19, owner's call):** a self-drive car's listing
+  page and booking page both offer "Book a driver" - the owner's own
+  drivers first; if the owner has none, other owners' (county first).
+  Another owner's driver becomes a second booking linked to the car's
+  (`bookings.linked_booking_id`), so each owner accepts and is paid out
+  for their own part - one payee per booking still holds. Renters see
+  the driver's full name. A shared "Hire a driver" banner sits on Home,
+  Browse, Services and the empty Trips page, and the masthead links
+  `/drivers`.

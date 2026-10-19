@@ -162,6 +162,9 @@ function serializeSummary(
     vehicle_pickup_address: subject.vehicle?.pickup_address ?? null,
     driver: subject.driver ? { id: subject.driver.id, full_name: subject.driver.full_name } : null,
     hire_car_details: booking.hire_car_details,
+    // Booked together with a booking at another owner - the car here and
+    // the driver there, or the reverse (docs/plans/drivers.md).
+    has_linked_booking: booking.linked_booking_id !== null,
     subject_label: subject.long,
     pickup_at: booking.pickup_at.toISOString(),
     dropoff_at: booking.dropoff_at.toISOString(),
