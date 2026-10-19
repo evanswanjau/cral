@@ -1,9 +1,11 @@
 # Car sales - plan
 
-Status: **plan only, nothing built** (revised 2026-10-19, after drivers shipped). Supersedes the
-2026-10-18 draft of this file, which proposed listing fees, paid boosts and
-merchants-only selling. The website canvas already decides those questions
-differently (below), and the canvas owns product copy decisions.
+Status: **built** (2026-10-19, branch `feature/car-sales`, not yet
+merged). S1-S4 shipped together on one branch; see "11. What shipped, and
+where it differs" at the end. Supersedes the 2026-10-18 draft of this
+file, which proposed listing fees, paid boosts and merchants-only selling.
+The website canvas already decides those questions differently (below),
+and the canvas owns product copy decisions.
 
 Selling sits outside `road-to-transactable.md` / `pr-delivery-plan.md`.
 The first PR needs its own recorded owner call in CLAUDE.md, the same way
@@ -294,3 +296,44 @@ against real listings, not seeded ones.
    `live` (section 6).
 
 Nothing is left open before S1.
+
+## 11. What shipped, and where it differs
+
+Everything in sections 2-7 and 9 (S1-S4) is built: API, merchant "For
+sale", the customer site's `/sell`, `/sell/new`, `/my-listings`, `/buy`,
+`/buy/:ref` and `/my-enquiries`, and the Ops "Car sales" queue and case.
+Tests: `modules/sale-listings`, `modules/sales-catalog`,
+`modules/admin-sale-listings` (`__tests__`).
+
+Where the build differs from this plan:
+
+- **No `accountDocuments` helper.** Sale documents carry
+  `documents.sale_listing_id` as their *only* owner (the one-owner CHECK
+  became `num_nonnulls(merchant_id, user_id, sale_listing_id) = 1`), so no
+  owner-keyed account-document query can pick them up in the first place.
+  Simpler than threading a third `whereNull` through a dozen readers.
+- **The checklist lives in code** (`SALE_CHECKLIST` in
+  `modules/admin-sale-listings/service.ts`) with answers in
+  `sale_review_checks`, not in `platform_settings` via
+  `lib/review-checklist.ts`. That library is being reworked on the
+  unmerged checklist-first branch; sales follows its rules (every item
+  answered, none flagged) without coupling to it. Move it across once that
+  branch lands.
+- **Approve accepts the documents.** Photos and papers are read through
+  the checklist, so approving marks every document a reviewer didn't
+  reject as accepted; a reviewer can still ask for one photo or paper
+  again on its own.
+- **The asking price is `bigint`.** Integer cents (`addMoneyColumn`) top
+  out at KES 21.4M - below plenty of cars.
+- **Refs are unhyphenated** (`S261019001`), matching `main`'s `H`/`CB`
+  refs; the hyphenation migration is on an unmerged branch.
+- **A sold car's plate is free for a new sale listing**, but its old
+  `vehicles` row still holds `vehicles_registration_norm_unique`, so the
+  new owner can't add it to a *hire* fleet yet. Hire-side follow-up.
+- **Enquiries stop at `under_offer`** (409 `listing_under_offer`) - the
+  plan didn't say; a buyer can still see the car.
+- **Fleet logbook is copied as bytes**, not shared by reference, so
+  deleting one row can't take the other's file.
+- **New notification category `enquiry`** (kind `hire`, email on / SMS
+  off by default), since none of the six existing categories fit a buyer
+  asking about a car.

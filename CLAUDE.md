@@ -1817,6 +1817,79 @@ Linear project "CRAL - Drivers" (COD-103 to COD-106).
   usual commission, never the driver directly. Day, hour and trip rates;
   hourly is live for drivers only (the driver page has time pickers).
 
+**Car sales (owner's call, 2026-10-19 - a deliberate deviation from
+`road-to-transactable.md`/`pr-delivery-plan.md`, which list selling as out
+of scope).** Plan, the owner's calls and what shipped:
+[`docs/plans/car-sales.md`](./docs/plans/car-sales.md). Contracts
+`openapi/sales-seller.yaml`, `openapi/sales-catalog.yaml`,
+`openapi/admin-sales.yaml`; migration `20261020090000`.
+- **Reviewed classifieds, not a payment flow.** The canvas's `selling`
+  vertical decides it: free listings, no commission, CRAL holds no money,
+  the buyer meets the seller. Nothing in sales takes an `Idempotency-Key`
+  or touches Daraja. Don't add a listing fee or escrow without a new
+  owner call - the canvas copy promises neither.
+- **A listing belongs to a `users` row** (`sale_listings.seller_user_id`,
+  `sal_`), so one seller API (`/me/sale-listings`, `/me/sale-inbox`)
+  serves both portals: merchants sell from the merchant portal's "For
+  sale" page (`merchant_id` set), private people from the customer site's
+  `/sell` + `/my-listings`. A private account may hold **two** open
+  listings (409 `private_listing_limit`). **Seller gate** before Ops can
+  approve: merchant `approved_at`, or a private seller's `national_id`
+  accepted on the renter review plus a verified phone.
+- **One open sale per car**: partial unique indexes on the normalised
+  plate and chassis while open; a plate in **another** account's fleet is
+  409 `registration_taken` (checked under an advisory lock - an index
+  can't span `vehicles`); the seller's own fleet plate links `vehicle_id`
+  automatically. A sold fleet car (`vehicles.sold_at`) no longer blocks its
+  plate for a sale - but `vehicles_registration_norm_unique` still blocks
+  the new owner adding it to a **hire** fleet; that is a hire-side
+  follow-up, not fixed here.
+- **Sale documents are owned only by `documents.sale_listing_id`** - the
+  one-owner CHECK is now `num_nonnulls(merchant_id, user_id,
+  sale_listing_id) = 1`. Every existing query that reads a merchant's or
+  renter's documents by owner therefore never sees a sale logbook or
+  photo; this replaced the plan's `accountDocuments` helper idea (the trap
+  drivers hit with `driver_id`). Kinds `sale_photo` (with `documents.slot`,
+  eight fixed slots), `logbook`, `bank_clearance_letter`, `ntsa_search`
+  (optional - owner's call).
+- **The asking price is `bigint`** (`asking_price_amount`), not
+  `addMoneyColumn`'s integer: integer cents top out at KES 21.4M. Read it
+  through `askingPrice()` (node-pg returns bigint as a string).
+- **A buyer never sees the plate, chassis or seller's phone.** Enquiring
+  needs a verified phone (5/hour); the seller replies and chooses to share
+  their number (or sets `auto_share_contact`). Every listing and buyer
+  notification carries "Never pay anything before you have seen the car
+  and the logbook in person." New notification category **`enquiry`**
+  (kind `hire`), subject type `sale_listing` - mirrored in both portals'
+  `notifications-api.ts`.
+- **Ops review is checklist-first, self-contained.** Nine items in
+  `modules/admin-sale-listings/service.ts#SALE_CHECKLIST`, answers in
+  `sale_review_checks`; approve needs every item answered, none flagged,
+  the seller gate, and the logbook + eight photos not rejected; approving
+  accepts the remaining documents. Deliberately **not** on
+  `lib/review-checklist.ts` / `platform_settings` - that library is being
+  reworked on the unmerged checklist-first branch; move sales onto it once
+  that lands. New admin queue **`sales`** (`admin_reviewer`), nav item
+  "Car sales". Takedown (`removed`) and reinstate; buyer reports
+  (`rpt_`) dismissed or actioned.
+- **Listing lifecycle**: live for 60 days, renew reminder at 7, then
+  `expired` (`runSaleListingSweep` in the daily sweep); `under_offer`
+  never expires and takes no new enquiries. Changing a live listing's car
+  details, disclosures, photos or papers sends it back to `pending`;
+  price/viewing/description edits stay live.
+- **Hire interaction** (owner's call): a fleet car stays hireable until
+  `under_offer`, which pauses its hire listing (`paused_hire`); back to
+  live or withdrawn resumes it. `sold` is refused while a hire booking is
+  requested/confirmed/active, then sets `vehicles.sold_at` - `resume`
+  refuses a sold car (409 `vehicle_sold`). "Sell this car" on
+  `VehicleDetail` prefills the form and copies the logbook bytes.
+- **Sale refs are `S` + Nairobi `YYMMDD` + 3 digits** (`lib/sale-ref.ts`,
+  `sale_ref_daily_counters`), unhyphenated like `main`'s `H`/`CB` refs. If
+  the hyphenated-refs migration merges, extend it to `sale_listings.ref`.
+- **No sales screen is pulled from a canvas** except `/sell`, whose copy
+  is the website canvas's `vertDefs.selling` verbatim. Everything else is
+  built from the portals' existing tokens and flagged in each file.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend
