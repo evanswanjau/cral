@@ -1189,6 +1189,8 @@ export async function runDailyReminderSweep(): Promise<{
   purged: number;
   accountsDeleted: number;
   idempotencyKeysPurged: number;
+  saleListingsReminded: number;
+  saleListingsExpired: number;
 }> {
   const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
   let sent = 0;
@@ -1218,5 +1220,17 @@ export async function runDailyReminderSweep(): Promise<{
   const { purgeExpiredIdempotencyKeys } = await import("../../middleware/idempotency.js");
   const idempotencyKeysPurged = await purgeExpiredIdempotencyKeys();
 
-  return { sent, expiryNotices, purged, accountsDeleted, idempotencyKeysPurged };
+  // Car-sale listings: the 7-day renew reminder and the 60-day expiry.
+  const { runSaleListingSweep } = await import("../sale-listings/sweep.js");
+  const { reminded: saleListingsReminded, expired: saleListingsExpired } = await runSaleListingSweep();
+
+  return {
+    sent,
+    expiryNotices,
+    purged,
+    accountsDeleted,
+    idempotencyKeysPurged,
+    saleListingsReminded,
+    saleListingsExpired,
+  };
 }

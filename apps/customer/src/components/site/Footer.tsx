@@ -20,6 +20,13 @@ const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
     ],
   },
   {
+    head: "BUY AND SELL",
+    links: [
+      ["Cars for sale", "/buy"],
+      ["Sell your car", "/sell"],
+    ],
+  },
+  {
     head: "HELP",
     links: [
       ["Questions and answers", "/help"],

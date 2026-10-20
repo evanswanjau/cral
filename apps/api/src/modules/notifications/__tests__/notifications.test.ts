@@ -155,7 +155,7 @@ describe("merchant notifications — preferences", () => {
 
     const before = await request(app).get("/merchant/notification-preferences").set(auth(m.accessToken));
     expect(before.status).toBe(200);
-    expect(before.body.categories).toHaveLength(6);
+    expect(before.body.categories).toHaveLength(7);
     // `return` defaults to both off.
     const ret = before.body.categories.find((c: { category: string }) => c.category === "return");
     expect(ret).toMatchObject({ sms: false, email: false });

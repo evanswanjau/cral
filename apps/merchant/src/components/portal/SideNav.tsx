@@ -17,6 +17,9 @@ import { P } from "./styles.js";
  * badge is the *unread* count, which is genuinely actionable, so it shows
  * whenever it's non-zero.
  *
+ * For sale (car sales, 2026-10-19) badges only unanswered buyer enquiries,
+ * for the same reason Notifications badges its unread count.
+ *
  * Settings (`/settings`) is a tabbed page - Business, Payouts,
  * Notifications, Security. It carries no badge: nothing under it is a
  * count a merchant needs to act on. The old `/settings/security` and
@@ -25,6 +28,7 @@ import { P } from "./styles.js";
 export function SideNav({
   vehicleCount,
   driverActionCount = 0,
+  saleEnquiryCount = 0,
   bookingCount,
   notificationUnread,
   footer,
@@ -32,6 +36,8 @@ export function SideNav({
   vehicleCount: number;
   /** Drivers sent back by a reviewer - the only driver count worth a badge. */
   driverActionCount?: number;
+  /** Buyer enquiries nobody has answered yet - actionable, so it badges. */
+  saleEnquiryCount?: number;
   bookingCount: number;
   notificationUnread: number;
   /** Hangs below the links. Only the dashboard passes one (its status card). */
@@ -74,6 +80,17 @@ export function SideNav({
             <span style={P.navLabel}>Drivers</span>
             {driverActionCount > 0 && (
               <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{driverActionCount}</span>
+            )}
+          </>
+        )}
+      </NavLink>
+      <NavLink to="/sales" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
+        {({ isActive }) => (
+          <>
+            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+            <span style={P.navLabel}>For sale</span>
+            {saleEnquiryCount > 0 && (
+              <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{saleEnquiryCount}</span>
             )}
           </>
         )}

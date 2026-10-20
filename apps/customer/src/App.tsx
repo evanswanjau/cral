@@ -26,6 +26,13 @@ import { CreateAccount } from "./pages/CreateAccount.js";
 import { ForgotPassword } from "./pages/ForgotPassword.js";
 import { ResetPassword } from "./pages/ResetPassword.js";
 import { Sessions } from "./pages/Sessions.js";
+import { Buy } from "./pages/Buy.js";
+import { BuyDetail } from "./pages/BuyDetail.js";
+import { Sell } from "./pages/Sell.js";
+import { SellNew } from "./pages/SellNew.js";
+import { MyListings } from "./pages/MyListings.js";
+import { MyListing } from "./pages/MyListing.js";
+import { MyEnquiries } from "./pages/MyEnquiries.js";
 
 /**
  * Route map. Everything but the four auth screens sits under `SiteShell`
@@ -65,6 +72,10 @@ const router = createBrowserRouter([
       { path: "/help", element: <Help /> },
       { path: "/contact", element: <Contact /> },
       { path: "/legal", element: <Legal /> },
+      // Car sales (docs/plans/car-sales.md): browsing is public.
+      { path: "/buy", element: <Buy /> },
+      { path: "/buy/:ref", element: <BuyDetail /> },
+      { path: "/sell", element: <Sell /> },
       // Not behind RequireAuth: a signed-out visitor lands here straight
       // from "Request these dates" and signs up inline as part of sending
       // the request - see Booking.tsx.
@@ -80,6 +91,10 @@ const router = createBrowserRouter([
           { path: "/bookings/:id", element: <TripDetail /> },
           { path: "/notifications", element: <Notifications /> },
           { path: "/account", element: <Sessions /> },
+          { path: "/sell/new", element: <SellNew /> },
+          { path: "/my-listings", element: <MyListings /> },
+          { path: "/my-listings/:id", element: <MyListing /> },
+          { path: "/my-enquiries", element: <MyEnquiries /> },
         ],
       },
     ],

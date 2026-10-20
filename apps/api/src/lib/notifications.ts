@@ -56,6 +56,7 @@ const CATEGORY_TO_KIND: Record<NotificationCategory, NotificationKind> = {
   review: "doc",
   expiry: "doc",
   rating: "rate",
+  enquiry: "hire",
 };
 
 export function kindForCategory(category: NotificationCategory): NotificationKind {
@@ -125,6 +126,12 @@ export const NOTIFICATION_CATEGORIES: Record<NotificationCategory, CategoryMeta>
     default: { sms: false, email: true },
     locked: [],
   },
+  enquiry: {
+    label: "Buyer enquiry",
+    body: "Someone asked about a car you are selling.",
+    default: { sms: false, email: true },
+    locked: [],
+  },
 };
 
 export const NOTIFICATION_CATEGORY_ORDER: NotificationCategory[] = [
@@ -134,6 +141,7 @@ export const NOTIFICATION_CATEGORY_ORDER: NotificationCategory[] = [
   "expiry",
   "return",
   "rating",
+  "enquiry",
 ];
 
 /** Categories that always send by SMS regardless of preference. */

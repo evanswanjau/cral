@@ -106,7 +106,7 @@ describe("audiences resolve real, live counts", () => {
 });
 
 describe("templates: automatic rows are derived, manual rows are real", () => {
-  it("lists the six real notification categories plus a newly created manual template", async () => {
+  it("lists the seven real notification categories plus a newly created manual template", async () => {
     const admin = await newAdmin();
 
     const created = await request(app)
@@ -119,7 +119,7 @@ describe("templates: automatic rows are derived, manual rows are real", () => {
     const list = await request(app).get("/admin/comms/templates").set(bearer(admin.token));
     expect(list.status).toBe(200);
     const rows = list.body.data as Array<{ label: string; trigger: string }>;
-    expect(rows.filter((r) => r.trigger === "automatic").length).toBe(6);
+    expect(rows.filter((r) => r.trigger === "automatic").length).toBe(7);
     expect(rows.some((r) => r.trigger === "manual" && r.label === "Verification pricing")).toBe(true);
   });
 });

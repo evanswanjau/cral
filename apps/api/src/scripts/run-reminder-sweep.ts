@@ -25,6 +25,8 @@ async function main(): Promise<void> {
       `  notifications purged        ${result.purged}`,
       `  accounts deleted            ${result.accountsDeleted}`,
       `  idempotency keys purged     ${result.idempotencyKeysPurged}`,
+      `  sale renew reminders        ${result.saleListingsReminded}`,
+      `  sale listings expired       ${result.saleListingsExpired}`,
     ].join("\n"),
   );
   await db.destroy();

@@ -17,7 +17,8 @@ export type NotificationCategory =
   | "review"
   | "expiry"
   | "return"
-  | "rating";
+  | "rating"
+  | "enquiry";
 
 export type NotificationFilter =
   | "all"
@@ -36,7 +37,7 @@ export interface NotificationRow {
   title: string;
   body: string;
   ref: string | null;
-  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | null;
+  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | "sale_listing" | null;
   subject_id: string | null;
   occurred_at: string;
   read: boolean;
