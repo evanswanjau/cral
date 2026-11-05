@@ -5,31 +5,31 @@ import type {
   StkPushInput,
   StkPushResult,
 } from "./types.js";
-import { coopPost, requireCoopEnv } from "../coopbank/client.js";
+import { COOP_PATHS, coopPost, requireCoopEnv } from "../coopbank/client.js";
 
 /**
- * Cooperative Bank's OpenAPI developer portal (developer.co-opbank.co.ke),
- * a WSO2 API Manager instance subscribing this app to their
- * "SafaricomSTKPush" API (context `/stkpush/safaricom/1.0.0`) — Co-op's own
- * gateway in front of Safaricom Daraja's STK push, not a raw Daraja
- * integration.
+ * Cooperative Bank's Co-op Connect gateway (a WSO2 API Manager) in front
+ * of Safaricom's STK push - not a raw Daraja integration.
  *
- * **The request/response shape below is confirmed** — pulled directly
- * from the portal's own OpenAPI document for this resource (2026-09-14),
- * not guessed. It is deliberately NOT Daraja-shaped: no `BusinessShortCode`
- * / `Password` / `Timestamp` — Co-op's proxy computes all of that
- * server-side against the app's own registration. The real request is
- * five fields: `MessageReference` (ours, ≤27 chars, echoed back verbatim
- * in both the sync ack and the async callback — this is what correlates
- * the callback, not anything the provider issues), `TargetMSISDN` (≤12
- * chars — our normalised `2547XXXXXXXX` fits exactly), `CallBackUrl`,
- * `TransactionAmount` (a STRING, ≤7 digits), `TransactionNarration`
- * (≤30 chars). The sync response is `{MessageReference, MessageDateTime,
- * MessageCode, MessageDescription, TelcoRef}` — `MessageCode: "0"` is
- * success. The async callback that lands on `CallBackUrl` is the same
- * shape plus `TransactionID` (the real M-Pesa receipt) and, on success,
- * `TransactionAmount` / `TransactionCompletedDateTime` /
- * `ReceiverPartyPublicName`.
+ * **The request is Co-op's own Postman collection's** ("CRUZ RIDE AUTO
+ * LIMITED", received 2026-11-04): `POST /FT/stk/1.0.0` with
+ * `MessageReference` (ours, <=27 chars, echoed back - this is what
+ * correlates the callback, not anything the provider issues),
+ * `CallBackUrl`, `OperatorCode` (CRAL's, `COOPBANK_OPERATOR_CODE` -
+ * Co-op resolves the receiving account from it), `TransactionCurrency`,
+ * `MobileNumber` (`2547XXXXXXXX`), `Narration`, `Amount` (a NUMBER of
+ * whole shillings), `MessageDateTime` and `OtherDetails` name/value
+ * pairs. It replaced the public store's "SafaricomSTKPush"
+ * (`/stkpush/safaricom/1.0.0`, `TargetMSISDN` / string
+ * `TransactionAmount` / `TransactionNarration`), which CRAL is not
+ * subscribed to. No shortcode/passkey/timestamp either way.
+ *
+ * The collection carries no responses. The ack is read as the old API's
+ * `{MessageReference, MessageCode, MessageDescription, TelcoRef}`
+ * (`MessageCode: "0"` = accepted), and the callback as that shape plus
+ * `TransactionID` (the M-Pesa receipt) and an amount under either
+ * `TransactionAmount` or `Amount` - check both against the first live
+ * push before trusting either.
  *
  * **The callback is authenticated by HTTP Basic** (2026-10-12). The
  * Co-op Connect onboarding form (section 3) has us give Co-op a callback
@@ -41,7 +41,7 @@ import { coopPost, requireCoopEnv } from "../coopbank/client.js";
  * (token issuance works), so that has not happened yet.
  */
 
-/** `+254712345678` -> `254712345678` (Co-op's `TargetMSISDN` wants no leading `+`, and is exactly 12 chars for a normalised Kenyan number). */
+/** `+254712345678` -> `254712345678` (Co-op's `MobileNumber` wants no leading `+`). */
 function toMsisdn(e164: string): string {
   return e164.replace(/^\+/, "");
 }
@@ -66,17 +66,20 @@ export class CoopBankPaymentAdapter implements PaymentAdapter {
 
     const callbackUrl = requireCoopEnv("COOPBANK_CALLBACK_URL");
 
-    // The confirmed request body - see this file's top comment. No
-    // shortcode/passkey/timestamp: Co-op's proxy resolves the receiving
-    // account from the app's own registration, not from anything in this
-    // payload.
-    const res = await coopPost("/stkpush/safaricom/1.0.0", {
+    const operatorCode = requireCoopEnv("COOPBANK_OPERATOR_CODE");
+
+    // Co-op's collection's request body - see this file's top comment.
+    const res = await coopPost(COOP_PATHS.stkPush, {
       MessageReference: input.messageReference,
-      TargetMSISDN: toMsisdn(input.phone),
       CallBackUrl: callbackUrl,
-      // TransactionAmount is a STRING per the confirmed schema (<=7 digits).
-      TransactionAmount: String(Math.round(input.amountCents / 100)),
-      TransactionNarration: input.narration.slice(0, 30),
+      OperatorCode: operatorCode,
+      TransactionCurrency: "KES",
+      MobileNumber: toMsisdn(input.phone),
+      Narration: input.narration.slice(0, 30),
+      // A number of whole shillings - M-Pesa has no sub-shilling unit.
+      Amount: Math.round(input.amountCents / 100),
+      MessageDateTime: new Date().toISOString(),
+      OtherDetails: [{ Name: "MessageReference", Value: input.messageReference }],
     });
     const json = res.body as {
       MessageCode?: string;
@@ -128,14 +131,16 @@ export function parseCoopBankStkCallback(rawBody: unknown): ParsedCallback | nul
     MessageDescription?: unknown;
     TransactionID?: unknown;
     TransactionAmount?: unknown;
+    Amount?: unknown;
   } | null;
   if (typeof body?.MessageReference !== "string" || typeof body?.MessageCode !== "string") {
     return null;
   }
   const succeeded = body.MessageCode === "0";
   const description = typeof body.MessageDescription === "string" ? body.MessageDescription : null;
-  // A string in Co-op's schema, same as on the way out.
-  const amount = Number(body.TransactionAmount);
+  // A string in the old SafaricomSTKPush schema; the FT/stk request sends
+  // a number as `Amount`, and its callback is undocumented - read either.
+  const amount = Number(body.TransactionAmount ?? body.Amount);
   return {
     reference: body.MessageReference,
     succeeded,

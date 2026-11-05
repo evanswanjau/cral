@@ -1,31 +1,36 @@
-import { coopPost, requireCoopEnv, type CoopResponse } from "../coopbank/client.js";
+import { COOP_PATHS, coopPost, coopUserId, requireCoopEnv, type CoopResponse } from "../coopbank/client.js";
 import { queryTransactionStatus } from "../coopbank/transaction-status.js";
 import type { DisbursementAck, DisbursementAdapter, DisbursementInput, DisbursementResult } from "./types.js";
 
 /**
  * Co-op Connect funds transfers out of CRAL's Co-op account
- * (`COOPBANK_SOURCE_ACCOUNT`). Three APIs, one envelope (public swagger,
- * developer.co-opbank.co.ke, read 2026-10-11):
+ * (`COOPBANK_SOURCE_ACCOUNT`). Three APIs, one envelope, requests as in
+ * Co-op's own Postman collection ("CRUZ RIDE AUTO LIMITED", received
+ * 2026-11-04):
  *
- * - `pesalink` - PesaLinkSendToAccount 1.0.0, another bank's account
+ * - `pesalink` - Pesalink Send to Account 2.0.0, another bank's account
  *   (`AccountNumber` <=14 + `BankCode`).
- * - `internal` - IFTAccountToAccount 2.0.0, another Co-op account.
- * - `mpesa`   - SendToM-Pesa 1.0.0, an M-Pesa line (`MobileNumber`).
+ * - `internal` - IFT Send to Account 3.0.0, another Co-op account.
+ * - `mpesa`   - B2C Send to M-Pesa 2.0.0, an M-Pesa line (`MobileNumber`).
  *
- * Each takes our `MessageReference`, a `CallBackUrl`, a `Source` (our
- * account) and one `Destinations[]` leg. `Amount` is an integer - whole
- * shillings. The sync answer is an ack; the result arrives on the callback
- * (the swagger's `103` shape: same envelope with per-leg `ResponseCode` /
- * `TransactionID`) or from Transaction Status.
+ * Each takes our `MessageReference`, `ISO2CountryCode`, a `CallBackUrl`,
+ * a `Source` (our account) and one `Destinations[]` leg; Pesalink and IFT
+ * also carry our `UserId`. Amounts are whole shillings, typed exactly as
+ * the collection types them - M-Pesa as strings, Pesalink a number on the
+ * source and a string on the leg, IFT numbers - because the collection is
+ * the only evidence of what the gateway accepts. The sync answer is an
+ * ack; the result arrives on the callback (the public 1.0 swagger's `103`
+ * shape: same envelope with per-leg `ResponseCode` / `TransactionID`) or
+ * from Transaction Status.
  *
- * Not live-tested: the sandbox gateway 302s every API call as of
- * 2026-10-12. Shapes are the swagger's.
+ * Not live-tested. The collection has no responses, so results are still
+ * read in the public swagger's shape.
  */
 
 const PATHS: Record<DisbursementInput["channel"], string> = {
-  pesalink: "/FundsTransfer/External/A2A/PesaLink/1.0.0",
-  internal: "/FundsTransfer/Internal/A2A/2.0.0",
-  mpesa: "/FundsTransfer/External/A2M/Mpesa/1.0.0",
+  pesalink: COOP_PATHS.pesalink,
+  internal: COOP_PATHS.internalTransfer,
+  mpesa: COOP_PATHS.sendToMpesa,
 };
 
 /** `+254712345678` -> `254712345678`. */
@@ -88,26 +93,31 @@ export class CoopBankDisbursementAdapter implements DisbursementAdapter {
     const sourceAccount = requireCoopEnv("COOPBANK_SOURCE_ACCOUNT");
     const callbackUrl = requireCoopEnv("COOPBANK_CALLBACK_URL");
     const narration = input.narration.slice(0, 25);
+    const amount = input.amountShillings;
+    const { channel } = input;
 
-    const leg: Record<string, unknown> = {
-      ReferenceNumber: `${input.messageReference}_1`,
-      Amount: input.amountShillings,
-      TransactionCurrency: "KES",
-      Narration: narration,
-    };
-    if (input.channel === "mpesa") {
+    // Field order and amount types follow Co-op's collection per channel -
+    // see this file's top comment.
+    const leg: Record<string, unknown> = { ReferenceNumber: `${input.messageReference}_1` };
+    if (channel === "mpesa") {
       leg.MobileNumber = toMsisdn(input.destination);
+      leg.Amount = String(amount);
     } else {
       leg.AccountNumber = input.destination;
-      if (input.channel === "pesalink") leg.BankCode = input.bankCode;
+      if (channel === "pesalink") leg.BankCode = input.bankCode;
+      leg.Amount = channel === "pesalink" ? String(amount) : amount;
+      leg.TransactionCurrency = "KES";
     }
+    leg.Narration = narration;
 
-    const res: CoopResponse = await coopPost(PATHS[input.channel], {
+    const res: CoopResponse = await coopPost(PATHS[channel], {
       MessageReference: input.messageReference,
+      ...(channel === "mpesa" ? {} : { UserId: coopUserId() }),
+      ISO2CountryCode: "KE",
       CallBackUrl: callbackUrl,
       Source: {
         AccountNumber: sourceAccount,
-        Amount: input.amountShillings,
+        Amount: channel === "mpesa" ? String(amount) : amount,
         TransactionCurrency: "KES",
         Narration: narration,
       },

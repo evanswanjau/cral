@@ -1,12 +1,12 @@
 import { db } from "../../db/client.js";
 import { coopBankConfigured } from "../../adapters/coopbank/client.js";
-import { interpretStkStatus, queryTransactionStatus } from "../../adapters/coopbank/transaction-status.js";
+import { interpretStkStatus, queryStkStatus } from "../../adapters/coopbank/transaction-status.js";
 import type { CoopResponse } from "../../adapters/coopbank/client.js";
 import { applySettlement, type PaymentRequestRow } from "./service.js";
 
 /**
  * Settles Co-op STK requests whose callback never arrived, by asking
- * Co-op's Transaction Status API.
+ * Co-op's STK Status Enquiry.
  *
  * A renter can approve the prompt and be charged while the callback is
  * lost (our API restarting, a network blip, Co-op's own retries giving
@@ -36,7 +36,7 @@ export interface StatusSweepResult {
 
 export async function reconcilePendingCoopPayments(
   now: Date = new Date(),
-  query: (messageReference: string) => Promise<CoopResponse> = queryTransactionStatus,
+  query: (messageReference: string) => Promise<CoopResponse> = queryStkStatus,
 ): Promise<StatusSweepResult> {
   const result: StatusSweepResult = { checked: 0, settled: 0, errors: 0 };
   if (!coopBankConfigured()) return result;

@@ -1499,11 +1499,28 @@ Linear project "CRAL - Co-op Bank integration" (COD-89..93).
   public Co-op Connect APIs, results returned on a per-request callback
   URL. The IPN endpoint shipped 2026-09-29 is removed and its table
   dropped (migration `20261012090000`).
-- **Specs are public**: `GET https://developer.co-opbank.co.ke/api/am/store/v1/apis`
+- **Co-op's own Postman collection supersedes the public store's
+  paths** (received 2026-11-04, "CRUZ RIDE AUTO LIMITED"). Every path is
+  in `COOP_PATHS` (`adapters/coopbank/client.ts`), spelt as Co-op spells
+  them, trailing slashes included: STK `FT/stk/1.0.0` (body is
+  `MobileNumber` / number `Amount` / `Narration` / `OperatorCode`, not the
+  old `TargetMSISDN` shape), STK status `Enquiry/STK/1.0.0/` (what the
+  sweep now asks), Transaction Status v3, Pesalink v2, IFT v3, Send to
+  M-Pesa v2, plus Pesalink validation, balance, mini and full statement
+  (`adapters/coopbank/account.ts`, read-only, not wired to any screen).
+  Enquiries and Pesalink/IFT carry `UserId` (`COOPBANK_USER_ID`); STK
+  needs `COOPBANK_OPERATOR_CODE`. The collection has **no responses**, so
+  every reader still assumes the public 1.0/2.0 envelope - check them
+  against the first live answers. `npm run coop:check -w apps/api --
+  <token|balance|mini|statement|validate|stk-status|status>` calls one
+  read-only API and prints the answer.
+- **Public specs** (older versions only): `GET https://developer.co-opbank.co.ke/api/am/store/v1/apis`
   lists them and `.../apis/{id}/swagger` returns each OpenAPI doc, no
-  login. Read those, not memory.
-- **The token URL is `/oauth2/token`**; the bare `/token` 302s to the
-  gateway's `/carbon/admin/login.jsp` since 2026-10.
+  login.
+- **The sandbox token URL is `/oauth2/token`**; the bare `/token` 302s to
+  the gateway's `/carbon/admin/login.jsp` since 2026-10. Co-op's
+  collection uses bare `/token` on the production host
+  (`openapi.co-opbank.co.ke`) - `coop:check token` settles which works.
 - **`POST /payments/coopbank/callback` is the one URL on the onboarding
   form** (test `dev.api.cral.co.ke`, production `api.cral.co.ke`, public
   IP `46.202.128.68`, port 443). HTTP Basic via

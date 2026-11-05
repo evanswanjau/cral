@@ -1,26 +1,37 @@
 import type { ParsedCallback } from "../payment/types.js";
-import { coopPost, type CoopResponse } from "./client.js";
+import { COOP_PATHS, coopPost, coopUserId, type CoopResponse } from "./client.js";
 
 /**
- * Co-op's Transaction Status Enquiry 2.0.0 (`POST /Enquiry/TransactionStatus/2.0.0`,
- * body `{ MessageReference }`) - what happened to a request we sent
- * earlier, asked by the same `MessageReference`.
+ * Co-op's Transaction Status Enquiry 3.0.0
+ * (`POST /Enquiry/TransactionStatus_V3/3.0.0/`, body
+ * `{ MessageReference, UserId }`) - what happened to a funds transfer we
+ * sent earlier, asked by the same `MessageReference`.
  *
- * Documented answers (public swagger):
+ * Documented answers (public swagger for 2.0.0; Co-op's collection gives
+ * the 3.0.0 request and no response, so the 2.0.0 envelope is assumed):
  * - `200` `MessageCode "0"` "FULL SUCCESS", with `Source` and
  *   `Destinations[]` legs, each carrying `ResponseCode`/`TransactionID`.
  * - `207` `MessageCode "1"` "PARTIAL SUCCESS" - some legs failed.
  * - `404` - no request with that reference.
  * - `400`/`401` - our request or token was wrong.
  *
- * The response is shaped for funds transfers. What it returns for an STK
- * reference is not documented, so the readers below decide only on
- * answers that are unambiguous and treat everything else as "not known
+ * STK pushes have their own enquiry, `queryStkStatus`. Neither response is
+ * documented for the versions CRAL uses, so the readers below decide only
+ * on answers that are unambiguous and treat everything else as "not known
  * yet". Guessing "failed" would leave a renter who paid looking unpaid;
  * guessing "success" would mark a booking paid for money nobody sent.
  */
 export async function queryTransactionStatus(messageReference: string): Promise<CoopResponse> {
-  return coopPost("/Enquiry/TransactionStatus/2.0.0", { MessageReference: messageReference });
+  return coopPost(COOP_PATHS.transactionStatus, { MessageReference: messageReference, UserId: coopUserId() });
+}
+
+/**
+ * STK Status Enquiry 1.0.0 (`POST /Enquiry/STK/1.0.0/`, body
+ * `{ MessageReference, UserId }`) - the result of an STK push we sent
+ * with that `MessageReference`. Read with `interpretStkStatus`.
+ */
+export async function queryStkStatus(messageReference: string): Promise<CoopResponse> {
+  return coopPost(COOP_PATHS.stkStatus, { MessageReference: messageReference, UserId: coopUserId() });
 }
 
 type Leg = { ResponseCode?: unknown; ResponseDescription?: unknown; TransactionID?: unknown; Amount?: unknown };
@@ -44,7 +55,8 @@ function str(v: unknown): string | null {
  *   `"0"` - Co-op saying in so many words that it didn't go through.
  * - Everything else (404, 207, unknown codes, missing fields): null.
  *
- * `amountShillings` comes from the leg or `Source.Amount` when present, so
+ * `amountShillings` comes from the leg, `Source.Amount` or a top-level
+ * `TransactionAmount`/`Amount` when present, so
  * `applySettlement`'s amount check still applies.
  */
 export function interpretStkStatus(reference: string, res: CoopResponse): ParsedCallback | null {
@@ -73,7 +85,7 @@ export function interpretStkStatus(reference: string, res: CoopResponse): Parsed
   const receipt = destinations.map((d) => str(d.TransactionID)).find(Boolean) ?? str(body.TransactionID);
   if (!receipt) return null;
 
-  const amountRaw = destinations[0]?.Amount ?? source.Amount ?? body.TransactionAmount;
+  const amountRaw = destinations[0]?.Amount ?? source.Amount ?? body.TransactionAmount ?? body.Amount;
   const amount = Number(amountRaw);
   return {
     reference,
