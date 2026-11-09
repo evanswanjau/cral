@@ -645,7 +645,9 @@ export function VehicleDetail(): JSX.Element {
   if (isPending || !v) return <div />;
 
   const meta = STATUS[v.status];
-  const canPause = v.status === "live" || v.status === "paused";
+  // A car sold through a CRAL sale listing is off hire for good.
+  const canPause = (v.status === "live" || v.status === "paused") && !v.sold_at;
+  const canSell = (v.status === "live" || v.status === "paused") && !v.sold_at;
   const canVerify = v.status === "live" || v.status === "paused";
   const badgeActive = v.verification_badge === "active";
   const badgePending = v.verification_badge === "pending";
@@ -754,7 +756,7 @@ export function VehicleDetail(): JSX.Element {
             style={{ ...P.actionBtn, cursor: canPause ? "pointer" : "not-allowed", opacity: canPause ? 1 : 0.45 }}
             onClick={() => {
               if (!canPause) {
-                flash("Only a live listing can be taken down.", "#8C97A8");
+                flash(v.sold_at ? "This car was sold, so it can't be hired out again." : "Only a live listing can be taken down.", "#8C97A8");
                 return;
               }
               if (v.status === "paused") {
@@ -766,6 +768,16 @@ export function VehicleDetail(): JSX.Element {
           >
             {v.status === "paused" ? "Put back on the market" : "Take listing down"}
           </button>
+          {canSell && (
+            <button type="button" style={P.actionBtn} onClick={() => navigate(`/sales/new?vehicle=${v.id}`)}>
+              Sell this car
+            </button>
+          )}
+          {v.sold_at && (
+            <span style={{ ...P.actionBtn, cursor: "default", color: "#076945", borderColor: "#A8DEC7", background: "#DDF3E9" }}>
+              Sold {new Date(v.sold_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          )}
           {canMessageReviewer(v.status) && (
             <button type="button" style={P.actionBtn} onClick={() => setModal("message")}>
               Message the reviewer

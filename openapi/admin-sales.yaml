@@ -1,0 +1,338 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Car Sales API
+  version: "1.0.0"
+  description: >
+    Ops review of car-sale listings (docs/plans/car-sales.md).
+    `admin_reviewer` on the `sales` queue; `admin_super` bypasses both.
+    Ops-audience token (`aud: "ops"`), same as every `/admin/*` route.
+
+    The canvas's promise is "names and chassis numbers have to agree before
+    the advert appears at all", so the case carries a nine-item checklist
+    (logbook, photos, listing). **Approve** needs: the seller gate cleared
+    (merchant approved / private seller's ID accepted and phone verified),
+    the logbook and all eight photos present and not rejected, and every
+    checklist item answered with none flagged. Approving accepts every
+    document not already rejected, assigns the `S` + `YYMMDD` + `NNN` ref
+    on first approval, and lists the car for 60 days. **Request changes**
+    and **Reject** need a note.
+
+    Answering a check or deciding a document claims the case (`pending` ->
+    `review`, assigned to you). Every decision writes `audit_log` and
+    notifies the seller in the same transaction.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+
+security: [{ opsBearer: [] }]
+tags:
+  - name: review
+  - name: moderation
+
+paths:
+  /admin/sale-listings:
+    get:
+      tags: [review]
+      summary: The sales queue
+      operationId: listSaleQueue
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [open, changes_sent, listed, closed, reported, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: "`open` is oldest-submitted first; the rest newest first. `total` is whole-set."
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        ref: { type: string, nullable: true }
+                        title: { type: string }
+                        registration: { type: string }
+                        status: { type: string }
+                        asking_price: { $ref: "#/components/schemas/Money" }
+                        county: { type: string }
+                        seller_type: { type: string, enum: [merchant, private] }
+                        seller_name: { type: string }
+                        open_reports: { type: integer }
+                        submitted_at: { type: string, format: date-time, nullable: true }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+        "403": { description: Not on the sales queue }
+
+  /admin/sale-listings/{listingId}:
+    get:
+      tags: [review]
+      summary: A sale case
+      operationId: getSaleCase
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "404": { description: "`review_case_not_found` (drafts are never cases)" }
+
+  /admin/sale-listings/{listingId}/assign:
+    post:
+      tags: [review]
+      summary: Assign to me
+      operationId: assignSaleCase
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+
+  /admin/sale-listings/{listingId}/checklist:
+    post:
+      tags: [review]
+      summary: Answer one check
+      description: "`pending` clears the answer. Only while the case is `pending` or `review`."
+      operationId: setSaleCheck
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, result]
+              properties:
+                item_id: { type: string, example: lb_plate_chassis }
+                result: { type: string, enum: [pass, flag, pending] }
+                note: { type: string, description: Quoted to the seller in the suggested note when flagged. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "409": { description: "`case_not_open`" }
+        "422": { description: "`unknown_check`" }
+
+  /admin/sale-listings/{listingId}/documents/{documentId}:
+    get:
+      tags: [review]
+      summary: Open a scan or photo
+      operationId: readSaleCaseDocument
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "File bytes, with nosniff." }
+        "404": { description: "`document_not_found`, `document_bytes_missing`" }
+
+  /admin/sale-listings/{listingId}/documents/{documentId}/decision:
+    post:
+      tags: [review]
+      summary: Accept a document, or ask for a new upload
+      operationId: decideSaleDocument
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [accept, reject] }
+                note: { type: string, description: Required to reject. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "422": { description: "`reason_required`" }
+
+  /admin/sale-listings/{listingId}/decision:
+    post:
+      tags: [review]
+      summary: Approve, request changes or reject
+      operationId: decideSaleListing
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, request_changes, reject] }
+                note: { type: string, description: Required unless approving. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "409": { description: "`case_not_open`, `sale_listing_changed`" }
+        "422":
+          description: >
+            `reason_required`, `merchant_not_approved`, `seller_not_verified`,
+            `documents_incomplete`, `checklist_incomplete`, `checklist_flagged`
+
+  /admin/sale-listings/{listingId}/remove:
+    post:
+      tags: [moderation]
+      summary: Take a listed car down
+      description: >
+        From live / paused / under_offer. The note goes to the seller. Open
+        reports are marked actioned. A fleet car paused by the sale gets its
+        hires back.
+      operationId: removeSaleListing
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string }
+      responses:
+        "200": { description: Now `removed`, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "409": { description: "`not_listed`" }
+
+  /admin/sale-listings/{listingId}/reinstate:
+    post:
+      tags: [moderation]
+      summary: Put a taken-down listing back on sale
+      operationId: reinstateSaleListing
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Live again for 60 days, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "409": { description: "`not_removed`" }
+
+  /admin/sale-reports/{reportId}/resolve:
+    post:
+      tags: [moderation]
+      summary: Dismiss or mark a buyer's report actioned
+      operationId: resolveSaleReport
+      parameters:
+        - { name: reportId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome]
+              properties:
+                outcome: { type: string, enum: [dismissed, actioned] }
+      responses:
+        "200": { description: The listing's case, content: { application/json: { schema: { $ref: "#/components/schemas/SaleCase" } } } }
+        "409": { description: "`report_resolved`" }
+
+components:
+  securitySchemes:
+    opsBearer: { type: http, scheme: bearer, description: "Ops-audience token (`aud: ops`)." }
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, enum: [KES] }
+
+    DocLine:
+      type: object
+      nullable: true
+      properties:
+        document_id: { type: string }
+        original_name: { type: string }
+        content_type: { type: string }
+        state: { type: string, enum: [ok, pending, expiring, rejected] }
+        review_note: { type: string, nullable: true }
+
+    SaleCase:
+      type: object
+      properties:
+        id: { type: string }
+        ref: { type: string, nullable: true }
+        title: { type: string }
+        status: { type: string }
+        vehicle_id: { type: string, nullable: true }
+        car: { type: object, description: Every car field, including registration and chassis_number. }
+        asking_price: { $ref: "#/components/schemas/Money" }
+        negotiable: { type: boolean }
+        disclosures: { type: object }
+        county: { type: string }
+        viewing_area: { type: string }
+        description: { type: string, nullable: true }
+        reviewer_note: { type: string, nullable: true }
+        review_assignee: { type: string, nullable: true }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        live_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        sold_at: { type: string, format: date-time, nullable: true }
+        sold_via_cral: { type: boolean, nullable: true }
+        view_count: { type: integer }
+        seller:
+          type: object
+          properties:
+            type: { type: string, enum: [merchant, private] }
+            user_id: { type: string }
+            merchant_id: { type: string, nullable: true }
+            owner_type: { type: string, enum: [individual, company] }
+            legal_name: { type: string, description: To hold against the name on the logbook. }
+            email: { type: string }
+            phone: { type: string, nullable: true }
+            phone_verified: { type: boolean }
+            cleared: { type: boolean }
+            gate_reason: { type: string, nullable: true }
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [logbook, bank_clearance_letter, ntsa_search] }
+              label: { type: string }
+              required: { type: boolean }
+              doc: { $ref: "#/components/schemas/DocLine" }
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              slot: { type: string }
+              label: { type: string }
+              doc: { $ref: "#/components/schemas/DocLine" }
+        checklist:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string }
+                  section: { type: string, enum: [logbook, photos, listing] }
+                  label: { type: string }
+                  result: { type: string, enum: [pending, pass, flag] }
+                  note: { type: string, nullable: true }
+            outstanding: { type: integer }
+            flagged: { type: integer }
+            complete: { type: boolean }
+            suggested_note: { type: string, description: The flagged items, ready to prefill a request-changes note. }
+        reports:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              reason: { type: string }
+              note: { type: string, nullable: true }
+              status: { type: string, enum: [open, dismissed, actioned] }
+              created_at: { type: string, format: date-time }

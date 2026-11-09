@@ -1,0 +1,255 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Car Sales (buyer) API
+  version: "1.0.0"
+  description: >
+    Buying a car (owner's call, 2026-10-19 - docs/plans/car-sales.md).
+    Browsing is public. Enquiring and reporting need a signed-in account,
+    and enquiring needs a verified phone.
+
+    Only `live` and `under_offer` listings are visible; anything else is
+    404. A buyer never sees the plate, the chassis number or the seller's
+    phone - the first two are what a cloned-logbook fraud needs, and the
+    number is the seller's to hand over (`/me/sale-inbox/{id}/reply` in
+    sales-seller.yaml, or the listing's `auto_share_contact`).
+
+    Every listing and every enquiry carries the same safety line: "Never pay
+    anything before you have seen the car and the logbook in person." CRAL
+    holds no money and takes no commission on a sale.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+
+tags:
+  - name: browse
+  - name: enquire
+
+paths:
+  /sales:
+    get:
+      tags: [browse]
+      summary: Cars for sale
+      operationId: browseSales
+      parameters:
+        - { name: q, in: query, description: Make or model contains, schema: { type: string } }
+        - { name: make, in: query, schema: { type: string } }
+        - { name: category, in: query, schema: { type: string, enum: [sedan, suv, van, truck, machinery] } }
+        - { name: county, in: query, schema: { type: string } }
+        - { name: import_status, in: query, schema: { type: string, enum: [locally_used, foreign_used, new] } }
+        - { name: min_price, in: query, description: Whole shillings, schema: { type: integer } }
+        - { name: max_price, in: query, description: Whole shillings, schema: { type: integer } }
+        - { name: min_year, in: query, schema: { type: integer } }
+        - { name: max_year, in: query, schema: { type: integer } }
+        - { name: max_mileage, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, price_asc, price_desc], default: newest } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: A page of cars. `total` and `facets` are whole-set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SaleSummary" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+                  facets:
+                    type: object
+                    properties:
+                      makes: { type: array, items: { type: string } }
+
+  /sales/{ref}:
+    get:
+      tags: [browse]
+      summary: One car for sale
+      description: Counts a view.
+      operationId: getSale
+      parameters:
+        - { name: ref, in: path, required: true, schema: { type: string, example: S261019001 } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleDetail" } } } }
+        "404": { description: "`sale_listing_not_found`" }
+
+  /sales/{ref}/photos/{documentId}:
+    get:
+      tags: [browse]
+      summary: A listing's photo
+      description: Only `sale_photo` documents of a visible listing - never the logbook or other papers.
+      operationId: readSalePhoto
+      parameters:
+        - { name: ref, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Image bytes. }
+        "404": { description: "`photo_not_found`, `photo_bytes_missing`" }
+
+  /sales/{ref}/enquiries:
+    post:
+      tags: [enquire]
+      summary: Ask the seller about a car
+      description: >
+        Signed in, verified phone, not your own listing, listing `live`. One
+        open enquiry per buyer per listing. Rate-limited to 5 an hour.
+        Notifies the seller. If the listing has `auto_share_contact`, the
+        enquiry is created `replied` with the seller's number.
+      operationId: createSaleEnquiry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: ref, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message: { type: string, minLength: 5, maxLength: 2000 }
+                viewing_window: { type: string, maxLength: 120, example: Saturday morning }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/BuyerEnquiry" } } } }
+        "409": { description: "`own_listing`, `listing_under_offer`, `enquiry_exists`" }
+        "422": { description: "`phone_unverified`" }
+        "429": { description: Rate limited }
+
+  /sales/{ref}/reports:
+    post:
+      tags: [enquire]
+      summary: Report a listing to Ops
+      operationId: reportSaleListing
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: ref, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [not_available, wrong_details, scam, duplicate, other] }
+                note: { type: string, description: Required for `other`. }
+      responses:
+        "201": { description: Reported }
+        "409": { description: "`own_listing`, `already_reported`" }
+        "422": { description: "`note_required`" }
+
+  /me/sale-enquiries:
+    get:
+      tags: [enquire]
+      summary: My enquiries as a buyer
+      operationId: listMySaleEnquiries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/BuyerEnquiry" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, enum: [KES] }
+
+    Seller:
+      type: object
+      properties:
+        name: { type: string, description: The business, or a private seller's first name. }
+        type: { type: string, enum: [dealer, merchant, private] }
+
+    SaleSummary:
+      type: object
+      properties:
+        ref: { type: string }
+        title: { type: string }
+        status: { type: string, enum: [live, under_offer] }
+        category: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: integer }
+        mileage_km: { type: integer }
+        transmission: { type: string }
+        fuel: { type: string }
+        import_status: { type: string }
+        asking_price: { $ref: "#/components/schemas/Money" }
+        negotiable: { type: boolean }
+        county: { type: string }
+        encumbered: { type: boolean }
+        accident_history: { type: string }
+        cover_url: { type: string, nullable: true, description: API path to the front photo. }
+        seller: { $ref: "#/components/schemas/Seller" }
+        live_at: { type: string, format: date-time }
+
+    SaleDetail:
+      allOf:
+        - $ref: "#/components/schemas/SaleSummary"
+        - type: object
+          properties:
+            engine_cc: { type: integer, nullable: true }
+            colour: { type: string, nullable: true }
+            drive: { type: string, nullable: true }
+            disclosures:
+              type: object
+              properties:
+                known_faults: { type: string }
+                accident_history: { type: string }
+                accident_note: { type: string, nullable: true }
+                encumbered: { type: boolean }
+                service_history: { type: string }
+            viewing_area: { type: string }
+            description: { type: string, nullable: true }
+            photos:
+              type: array
+              items:
+                type: object
+                properties:
+                  slot: { type: string }
+                  label: { type: string }
+                  url: { type: string }
+            checks:
+              type: object
+              description: What a reviewer read. `logbook_checked` is always true on a visible listing.
+              properties:
+                logbook_checked: { type: boolean }
+                ntsa_search: { type: boolean }
+                bank_clearance_letter: { type: boolean }
+            safety_note: { type: string }
+
+    BuyerEnquiry:
+      type: object
+      properties:
+        id: { type: string }
+        listing:
+          type: object
+          properties:
+            ref: { type: string }
+            title: { type: string }
+            status: { type: string }
+        message: { type: string }
+        viewing_window: { type: string, nullable: true }
+        status: { type: string, enum: [new, replied, closed] }
+        reply: { type: string, nullable: true }
+        seller_phone: { type: string, nullable: true, description: Only once the seller has shared it. }
+        created_at: { type: string, format: date-time }
+        replied_at: { type: string, format: date-time, nullable: true }

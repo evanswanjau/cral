@@ -10,12 +10,14 @@ export type NotificationCategory =
   | "review"
   | "expiry"
   | "return"
-  | "rating";
+  | "rating"
+  // A buyer asked about a car the merchant is selling (car sales, 2026-10-19).
+  | "enquiry";
 
 /** The feed's four icon/filter groups. */
 export type NotificationKind = "hire" | "money" | "doc" | "rate";
 
-export type NotificationSubjectType = "booking" | "vehicle" | "payout_run" | "merchant" | "driver";
+export type NotificationSubjectType = "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | "sale_listing";
 
 export interface NotificationRow {
   id: string;

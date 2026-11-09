@@ -21,7 +21,8 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
  * fabricate" rule rather than silently dropped:
  *   - "Payments and receipts" has no dedicated screen (receipts live on
  *     each trip's own detail page) - omitted.
- *   - "Sell a car" is tagged SOON in the design itself - kept inert (no
+ *   - "Sell a car" was tagged SOON in the design and kept inert until car
+ *     sales shipped (2026-10-19); it now opens /sell. Originally inert (no
  *     navigation), not linked to a page that doesn't exist.
  * "Notifications" is NOT in the canvas's link list at all (the design's
  * masthead has no bell), but C8's renter feed is real and needs to stay
@@ -150,7 +151,10 @@ export function AccountMenu(): JSX.Element {
   const listingLinks: LinkRowDef[] = [
     { label: "List your car", go: goExternal(merchantLandingUrl()), tag: "FREE", tagColor: "#1B8A5A" },
     { label: "What CRAL checks first", go: goTo("/how-we-protect-you"), tag: "" },
-    { label: "Sell a car", go: null, tag: "SOON" },
+    // Car sales (2026-10-19, docs/plans/car-sales.md) - real now.
+    { label: "Sell a car", go: goTo("/sell"), tag: "FREE", tagColor: "#1B8A5A" },
+    { label: "My cars for sale", go: goTo("/my-listings"), tag: "" },
+    { label: "Cars I asked about", go: goTo("/my-enquiries"), tag: "" },
   ];
 
   const tabStyle = (active: boolean) =>

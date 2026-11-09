@@ -35,6 +35,8 @@ export interface PaginateOptions {
   direction?: "asc" | "desc";
   limit: number;
   cursor?: string;
+  /** The tie-break column. Qualify it (e.g. "e.id") when the query joins another table with an `id`. */
+  idColumn?: string;
 }
 
 /**
@@ -46,7 +48,7 @@ export function applyCursor<TRecord extends object>(
   query: Knex.QueryBuilder<TRecord>,
   options: PaginateOptions,
 ): Knex.QueryBuilder<TRecord> {
-  const { sortColumn, direction = "desc", limit, cursor } = options;
+  const { sortColumn, direction = "desc", limit, cursor, idColumn = "id" } = options;
   const op = direction === "desc" ? "<" : ">";
 
   if (cursor) {
@@ -56,13 +58,13 @@ export function applyCursor<TRecord extends object>(
         builder
           .where(sortColumn, op, decoded.v)
           .orWhere((inner) => {
-            inner.where(sortColumn, "=", decoded.v).andWhere("id", op, decoded.id);
+            inner.where(sortColumn, "=", decoded.v).andWhere(idColumn, op, decoded.id);
           });
       });
     }
   }
 
-  return query.orderBy(sortColumn, direction).orderBy("id", direction).limit(limit + 1);
+  return query.orderBy(sortColumn, direction).orderBy(idColumn, direction).limit(limit + 1);
 }
 
 export function toPaginatedResult<T extends { id: string }>(

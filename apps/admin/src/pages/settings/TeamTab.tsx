@@ -31,7 +31,7 @@ import { ROLE_LABEL } from "../../components/console/styles.js";
  * that don't exist yet; adding those here would let a super admin assign
  * a queue that gates nothing.
  */
-const QUEUES = ["vehicles", "drivers", "merchants", "renters", "bookings"] as const;
+const QUEUES = ["vehicles", "drivers", "sales", "merchants", "renters", "bookings"] as const;
 const ROLES: AdminRole[] = ["admin_reviewer", "admin_finance", "admin_support", "admin_super"];
 
 type Modal =

@@ -52,8 +52,9 @@ import keyHandoffPhoto from "../assets/keyhandoff.jpg";
  *    categories rather than fabricating the canvas's 7; each tile's price
  *    tag is a real `FROM <min> / DAY` computed from whatever's already
  *    loaded in the rails below, shown only when the data supports it.
- *  - The "selling" door/hero-mode (buy and sell, canvas status "NEXT") has
- *    no page to open - same as the AccountMenu's inert "Sell a car" row.
+ *  - The "selling" door/hero-mode (buy and sell, canvas status "NEXT") is
+ *    not drawn here; buying and selling are real since 2026-10-19 and live
+ *    at /buy and /sell (footer "BUY AND SELL", AccountMenu "Sell a car").
  *
  * The collection rails are real data from GET /catalog/collections.
  */

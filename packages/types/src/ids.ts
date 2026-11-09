@@ -83,6 +83,11 @@ export const ID_PREFIXES = {
   // A driver a merchant lists for hire (owner's call, 2026-10-18) - their
   // own person or someone they employ. Belongs to exactly one merchant.
   driver: "drv",
+  // Car sales (owner's call, 2026-10-19): a car listed for sale, a buyer's
+  // enquiry about it, and a report against a listing. Internal entities.
+  saleListing: "sal",
+  saleEnquiry: "enq",
+  saleListingReport: "rpt",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

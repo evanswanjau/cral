@@ -29,6 +29,7 @@ const CATEGORY_KEYS = [
   "expiry",
   "return",
   "rating",
+  "enquiry",
 ] as const satisfies readonly NotificationCategory[];
 
 /**

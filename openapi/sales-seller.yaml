@@ -1,0 +1,419 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Car Sales (seller) API
+  version: "1.0.0"
+  description: >
+    Selling a car (owner's call, 2026-10-19 - docs/plans/car-sales.md).
+    Reviewed classifieds: the seller lists a car, CRAL reads the logbook
+    and eight photos against it before the advert goes live, buyers enquire,
+    and the deal and the money happen off-platform. No fee, no commission,
+    no money held - so no endpoint here takes an `Idempotency-Key`.
+
+    A sale listing belongs to the signed-in **user**, so one API serves
+    both portals: a merchant sells from the merchant portal (the listing
+    also carries their `merchant_id`), a private seller from the customer
+    portal. A private account may hold at most two open listings
+    (409 `private_listing_limit`).
+
+    **Seller gate** (`seller_cleared`): a merchant once their account is
+    approved; a private seller once their national ID has been accepted and
+    their phone is verified. A listing can be drafted and submitted before
+    the gate clears, but Ops can't approve it until then.
+
+    **One open sale per car**: the plate and the chassis number are unique
+    across open listings (409 `registration_taken` / `chassis_taken`), and
+    a plate in another account's fleet can't be listed at all. A plate in
+    the seller's own fleet links `vehicle_id` automatically.
+
+    Statuses: `draft / pending / review / action / rejected / live /
+    paused / under_offer / sold / withdrawn / expired / removed`.
+    `removed` is an Ops takedown. A listing is live for 60 days, then
+    `expired` until renewed.
+
+    Money is integer cents (the asking price is stored as `bigint`, since
+    integer cents top out at KES 21.4M). The asking price is entered in
+    whole shillings as a string, the same as the vehicle forms.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+
+tags:
+  - name: listings
+  - name: inbox
+
+paths:
+  /me/sale-listings:
+    get:
+      tags: [listings]
+      summary: List my sale listings
+      operationId: listMySaleListings
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Newest first. `counts` and `seller` are whole-set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SaleListing" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    properties:
+                      all: { type: integer }
+                      live: { type: integer, description: live + under_offer }
+                      needs_action: { type: integer, description: action + rejected }
+                      new_enquiries: { type: integer }
+                  seller:
+                    type: object
+                    properties:
+                      type: { type: string, enum: [merchant, private] }
+                      cleared: { type: boolean }
+                      reason: { type: string, nullable: true }
+                      limit: { type: integer, nullable: true, description: Open-listing cap for a private seller. }
+    post:
+      tags: [listings]
+      summary: Start a sale listing (as a draft)
+      operationId: createSaleListing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: "#/components/schemas/SaleListingInput"
+                - type: object
+                  properties:
+                    vehicle_id:
+                      type: string
+                      description: >
+                        A fleet car being sold (merchants only). Its plate must
+                        match `registration`; its logbook is copied onto the
+                        listing.
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "404": { description: "`vehicle_not_found`" }
+        "409": { description: "`private_listing_limit`, `registration_taken`, `chassis_taken`, `vehicle_sold`" }
+        "422": { description: "Validation, or `registration_mismatch`" }
+
+  /me/sale-listings/{listingId}:
+    parameters:
+      - { name: listingId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [listings]
+      summary: One of my sale listings
+      operationId: getMySaleListing
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "404": { description: "`sale_listing_not_found`" }
+    patch:
+      tags: [listings]
+      summary: Edit a listing
+      description: >
+        Price, negotiable, county, viewing area, description and
+        `auto_share_contact` can change at any point before the listing
+        closes. The car's details and disclosures can change in `draft`,
+        `action` or `rejected`; on a `live` or `paused` listing they send it
+        back to `pending` (and clear the reviewer's checklist). In
+        `pending`/`review`/`under_offer` they are locked (409
+        `sale_listing_locked`).
+      operationId: updateSaleListing
+      requestBody:
+        content: { application/json: { schema: { $ref: "#/components/schemas/SaleListingPatch" } } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "409": { description: "`sale_listing_locked`, `sale_listing_closed`, `registration_taken`, `chassis_taken`" }
+    delete:
+      tags: [listings]
+      summary: Delete a draft
+      operationId: deleteSaleListing
+      responses:
+        "204": { description: Deleted }
+        "409": { description: "`not_draft` - withdraw it instead" }
+
+  /me/sale-listings/{listingId}/documents:
+    parameters:
+      - { name: listingId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [listings]
+      summary: Upload the logbook, an optional paper, or one of the eight photos
+      description: >
+        Replaces whatever was on that line (`kind`, plus `slot` for a photo).
+        On a `live` or `paused` listing an upload sends it back to review.
+        JPEG / PNG / WebP / PDF only; photos must be images.
+      operationId: uploadSaleDocument
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [kind, file]
+              properties:
+                kind: { type: string, enum: [logbook, bank_clearance_letter, ntsa_search, sale_photo] }
+                slot: { $ref: "#/components/schemas/PhotoSlot" }
+                file: { type: string, format: binary }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "409": { description: "`sale_listing_locked`" }
+        "422": { description: "`slot_required`, `slot_not_allowed`, `photo_must_be_image`, `file_required`" }
+
+  /me/sale-listings/{listingId}/documents/{documentId}:
+    get:
+      tags: [listings]
+      summary: Read back one of my listing's files
+      operationId: readOwnSaleDocument
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+        - { name: documentId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "The file bytes, with nosniff." }
+        "404": { description: "`document_not_found`, `document_bytes_missing`" }
+
+  /me/sale-listings/{listingId}/submit:
+    post:
+      tags: [listings]
+      summary: Send for review
+      description: From `draft`, `action` or `rejected`. Needs the logbook and all eight photos, and - for a private seller - a verified phone.
+      operationId: submitSaleListing
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Now `pending`, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "409": { description: "`not_submittable`" }
+        "422": { description: "`documents_incomplete`, `phone_unverified`" }
+
+  /me/sale-listings/{listingId}/renew:
+    post:
+      tags: [listings]
+      summary: Renew for another 60 days
+      description: A `live` or `expired` listing. No re-review.
+      operationId: renewSaleListing
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: Live again, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "409": { description: "`not_renewable`, `registration_taken` (the car was relisted meanwhile)" }
+
+  /me/sale-listings/{listingId}/status:
+    post:
+      tags: [listings]
+      summary: Pause, put back on sale, mark under offer, sold or withdrawn
+      description: >
+        Allowed moves: live -> paused; paused/under_offer -> live;
+        live/paused -> under_offer; live/paused/under_offer -> sold; any open
+        status -> withdrawn.
+
+        For a fleet car (`vehicle_id`): `under_offer` pauses its hire
+        listing; going back to `live` (or withdrawing) resumes it if the sale
+        is what paused it; `sold` is refused while a hire booking is
+        requested, confirmed or active (409 `vehicle_has_upcoming_bookings`),
+        and otherwise takes the car off hire for good (`vehicles.sold_at`).
+      operationId: setSaleStatus
+      parameters:
+        - { name: listingId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [to]
+              properties:
+                to: { type: string, enum: [paused, live, under_offer, sold, withdrawn] }
+                sold_via_cral: { type: boolean, description: Asked when marking sold - metrics only. }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SaleListing" } } } }
+        "409": { description: "`invalid_transition`, `vehicle_has_upcoming_bookings`, `sale_listing_changed`" }
+
+  /me/sale-inbox:
+    get:
+      tags: [inbox]
+      summary: Buyer enquiries across my listings
+      operationId: listSellerInbox
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [open, all], default: open } }
+        - { name: listing_id, in: query, schema: { type: string } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: Newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/SellerEnquiry" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /me/sale-inbox/{enquiryId}/reply:
+    post:
+      tags: [inbox]
+      summary: Reply, and optionally share my phone number
+      description: >
+        The seller's number is never public. `share_phone: true` is the only
+        way a buyer gets it (besides the listing's `auto_share_contact`).
+        The buyer is notified in-app and by email.
+      operationId: replyToEnquiry
+      parameters:
+        - { name: enquiryId, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [share_phone]
+              properties:
+                message: { type: string, maxLength: 2000 }
+                share_phone: { type: boolean }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SellerEnquiry" } } } }
+        "409": { description: "`enquiry_closed`" }
+        "422": { description: "`reply_empty`, `phone_unverified`" }
+
+  /me/sale-inbox/{enquiryId}/close:
+    post:
+      tags: [inbox]
+      summary: Close an enquiry
+      operationId: closeEnquiry
+      parameters:
+        - { name: enquiryId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: "#/components/schemas/SellerEnquiry" } } } }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents }
+        currency: { type: string, enum: [KES] }
+
+    PhotoSlot:
+      type: string
+      enum: [front, rear, left, right, interior_front, interior_rear, dashboard, engine_bay]
+
+    SaleListingInput:
+      type: object
+      required:
+        [category, make, model, year, registration, chassis_number, mileage_km, transmission, fuel,
+         import_status, asking_price, known_faults, accident_history, encumbered, service_history,
+         county, viewing_area]
+      properties:
+        category: { type: string, enum: [sedan, suv, van, truck, machinery] }
+        make: { type: string }
+        model: { type: string }
+        year: { type: integer }
+        registration: { type: string }
+        chassis_number: { type: string }
+        mileage_km: { type: integer }
+        engine_cc: { type: integer, nullable: true }
+        transmission: { type: string, enum: [Automatic, Manual] }
+        fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
+        colour: { type: string, nullable: true }
+        drive: { type: string, enum: [2wd, 4wd, awd], nullable: true }
+        import_status: { type: string, enum: [locally_used, foreign_used, new] }
+        asking_price: { type: string, description: Whole shillings. }
+        negotiable: { type: boolean, default: true }
+        known_faults: { type: string, description: Required - "None known" is an answer. }
+        accident_history: { type: string, enum: [none, minor, major] }
+        accident_note: { type: string, nullable: true }
+        encumbered: { type: boolean, description: A bank is on the logbook. }
+        service_history: { type: string, enum: [full, partial, none] }
+        county: { type: string }
+        viewing_area: { type: string, description: An area, never a street address. }
+        description: { type: string, nullable: true }
+        auto_share_contact: { type: boolean, default: false }
+
+    SaleListingPatch:
+      type: object
+      description: Any subset of SaleListingInput.
+
+    DocumentSlot:
+      type: object
+      nullable: true
+      properties:
+        document_id: { type: string }
+        original_name: { type: string }
+        review_state: { type: string, enum: [ok, pending, expiring, rejected] }
+        review_note: { type: string, nullable: true }
+
+    SaleListing:
+      type: object
+      properties:
+        id: { type: string, example: sal_01JB2... }
+        ref: { type: string, nullable: true, example: S261019001, description: Set on first approval. }
+        title: { type: string, example: 2018 Toyota Fielder }
+        status:
+          type: string
+          enum: [draft, pending, review, action, rejected, live, paused, under_offer, sold, withdrawn, expired, removed]
+        vehicle_id: { type: string, nullable: true }
+        seller_type: { type: string, enum: [merchant, private] }
+        seller_cleared: { type: boolean }
+        seller_gate_reason: { type: string, nullable: true }
+        car: { type: object, description: The SaleListingInput car fields. }
+        asking_price: { $ref: "#/components/schemas/Money" }
+        negotiable: { type: boolean }
+        disclosures:
+          type: object
+          properties:
+            known_faults: { type: string }
+            accident_history: { type: string }
+            accident_note: { type: string, nullable: true }
+            encumbered: { type: boolean }
+            service_history: { type: string }
+        county: { type: string }
+        viewing_area: { type: string }
+        description: { type: string, nullable: true }
+        auto_share_contact: { type: boolean }
+        reviewer_note: { type: string, nullable: true }
+        documents:
+          type: object
+          properties:
+            logbook: { $ref: "#/components/schemas/DocumentSlot" }
+            bank_clearance_letter: { $ref: "#/components/schemas/DocumentSlot" }
+            ntsa_search: { $ref: "#/components/schemas/DocumentSlot" }
+            photos:
+              type: object
+              description: One DocumentSlot per PhotoSlot.
+              additionalProperties: { $ref: "#/components/schemas/DocumentSlot" }
+        missing_for_submit: { type: array, items: { type: string } }
+        enquiries:
+          type: object
+          properties:
+            total: { type: integer }
+            new: { type: integer }
+        view_count: { type: integer }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        live_at: { type: string, format: date-time, nullable: true }
+        expires_at: { type: string, format: date-time, nullable: true }
+        sold_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    SellerEnquiry:
+      type: object
+      properties:
+        id: { type: string, example: enq_01JB2... }
+        listing:
+          type: object
+          properties:
+            id: { type: string }
+            ref: { type: string, nullable: true }
+            title: { type: string }
+        buyer_name: { type: string, description: First name only. }
+        message: { type: string }
+        viewing_window: { type: string, nullable: true }
+        status: { type: string, enum: [new, replied, closed] }
+        reply: { type: string, nullable: true }
+        contact_shared: { type: boolean }
+        created_at: { type: string, format: date-time }
+        replied_at: { type: string, format: date-time, nullable: true }

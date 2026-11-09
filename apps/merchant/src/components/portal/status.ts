@@ -15,6 +15,7 @@ import type { VehicleFilter } from "../../lib/vehicles-api.js";
 import type { BookingFilter, BookingStatus } from "../../lib/bookings-api.js";
 import type { PayoutStatus } from "../../lib/payouts-api.js";
 import type { NotificationKind } from "../../lib/notifications-api.js";
+import type { SaleStatus } from "../../lib/sales-api.js";
 
 export type VehicleStatus = "draft" | "pending" | "review" | "action" | "rejected" | "live" | "paused";
 export type DocReviewState = "ok" | "pending" | "expiring" | "rejected" | "missing";
@@ -160,3 +161,21 @@ export const BOOKING_FILTER_ORDER: BookingFilter[] = ["all", "requests", "upcomi
 export function bookingFilterLabel(f: BookingFilter): string {
   return BOOKING_BUCKET_LABEL[f];
 }
+
+/**
+ * Car-sale listing statuses (docs/plans/car-sales.md) - a fifth vocabulary.
+ * The first seven reuse the vehicle listing's tints; the sale-only states
+ * get their own. Never colour alone: every chip pairs the dot with the word.
+ */
+export const SALE_STATUS: Record<
+  SaleStatus,
+  { label: string; core: string; tint: string; border: string; text: string }
+> = {
+  ...STATUS,
+  live: { ...STATUS.live, label: "For sale" },
+  under_offer: { label: "Under offer", core: "#0F23A8", tint: "#EDEFFC", border: "#C3CBF5", text: "#0F23A8" },
+  sold: { label: "Sold", core: "#076945", tint: "#DDF3E9", border: "#A8DEC7", text: "#076945" },
+  withdrawn: { label: "Withdrawn", core: "#838C9B", tint: "#F1F3F6", border: "#CDD2DA", text: "#5A6373" },
+  expired: { label: "Expired", core: "#C77400", tint: "#FFF3DB", border: "#F5D9A3", text: "#8A5200" },
+  removed: { label: "Taken down", core: "#D81E32", tint: "#FDE7EA", border: "#F7BDC5", text: "#A50E22" },
+};

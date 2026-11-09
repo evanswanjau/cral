@@ -14,6 +14,8 @@ export interface Money {
 export interface VehicleSummary {
   id: string;
   listing_ref: string | null;
+  /** Sold through a CRAL sale listing - off hire for good. */
+  sold_at: string | null;
   registration: string;
   make: string;
   model: string;
