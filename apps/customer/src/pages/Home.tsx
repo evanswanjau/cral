@@ -455,6 +455,27 @@ export function Home(): JSX.Element {
                 );
               })}
             </div>
+            {/* Merchant sign-up in the hero itself (client ask, 2026-10-22):
+                the masthead button and the closing "List your car" card are
+                easy to miss, and car owners and drivers both register as
+                merchants. */}
+            <a
+              href={merchantLandingUrl()}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 6,
+                marginTop: 22,
+                font: "500 15px/1.4 'Instrument Sans',sans-serif",
+                color: "#C7CED8",
+                textDecoration: "none",
+              }}
+            >
+              Own a car or drive for hire?
+              <span style={{ color: "#FFFFFF", fontWeight: 600, textDecoration: "underline", textUnderlineOffset: 3 }}>
+                Register as a merchant - it's free
+              </span>
+            </a>
           </div>
         </div>
       </div>

@@ -12,7 +12,10 @@ import { listDrivers, rateLine } from "../lib/drivers-api.js";
  * confirmed-token idiom as Towing.tsx and the marketing pages.
  *
  * Every driver here is checked by CRAL (licence, ID, KRA PIN) and drives
- * for an approved merchant. A driver with one of the merchant's own cars
+ * for an approved merchant. The hero copy is the client's own wording
+ * (2026-10-21) minus "police clearance" and a "verified mark" for
+ * physically checked drivers - neither exists yet, and the page must not
+ * claim a check nobody does. A driver with one of the merchant's own cars
  * is booked from that car's page instead.
  */
 export function Drivers(): JSX.Element {
@@ -32,7 +35,7 @@ export function Drivers(): JSX.Element {
       <PageHero
         kicker="HIRE A DRIVER"
         title="A driver for your own car."
-        sub="Every driver is checked by CRAL - licence, ID and KRA PIN - and drives for an approved owner. Book by the day, the hour or the trip, and pay by M-Pesa once they accept."
+        sub="Every driver's documents have been reviewed by CRAL - licence, ID and KRA PIN. Book by the day, the hour or the trip, and pay once they confirm availability."
       />
       <Section>
         {counties.length > 1 && (
