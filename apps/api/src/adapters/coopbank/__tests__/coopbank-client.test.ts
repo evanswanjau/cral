@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { coopPost, resetCoopTokenCacheForTests } from "../client.js";
-import { interpretStkStatus } from "../transaction-status.js";
+import { interpretStkStatus, queryStkStatus, queryTransactionStatus } from "../transaction-status.js";
 
 /**
  * The shared Co-op client and the Transaction Status reader. Payload
@@ -39,7 +39,7 @@ describe("coopPost", () => {
 
   it("asks for the token at /oauth2/token and sends it as a bearer", async () => {
     const fetchMock = stubFetch(new Response(JSON.stringify({ MessageCode: "0" }), { status: 200 }));
-    const res = await coopPost("/Enquiry/TransactionStatus/2.0.0", { MessageReference: "R1" });
+    const res = await coopPost("/Enquiry/STK/1.0.0/", { MessageReference: "R1" });
     expect(res).toEqual({ status: 200, body: { MessageCode: "0" } });
     expect(fetchMock.mock.calls[0]![0]).toBe("https://openapi-sandbox.co-opbank.co.ke/oauth2/token");
     expect(fetchMock.mock.calls[1]![1].headers.Authorization).toBe("Bearer tok");
@@ -61,6 +61,51 @@ describe("coopPost", () => {
   it("throws on a body that isn't JSON", async () => {
     stubFetch(new Response("<html>Access Denied</html>", { status: 403 }));
     await expect(coopPost("/x", {})).rejects.toThrow(/non-JSON/);
+  });
+});
+
+describe("status enquiries", () => {
+  beforeEach(() => {
+    delete process.env.COOPBANK_TOKEN_URL;
+    delete process.env.COOPBANK_API_BASE_URL;
+    process.env.COOPBANK_CONSUMER_KEY = "key";
+    process.env.COOPBANK_CONSUMER_SECRET = "secret";
+    process.env.COOPBANK_USER_ID = "CRUZRIDEAUTO";
+    resetCoopTokenCacheForTests();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.COOPBANK_CONSUMER_KEY;
+    delete process.env.COOPBANK_CONSUMER_SECRET;
+    delete process.env.COOPBANK_USER_ID;
+  });
+
+  function stubOk() {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ access_token: "tok" }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ MessageCode: "0" }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    return () => ({ url: fetchMock.mock.calls[1]![0] as string, body: JSON.parse(fetchMock.mock.calls[1]![1].body) });
+  }
+
+  // Paths and bodies as Co-op's collection spells them, trailing slash included.
+  it("asks STK Status about an STK push", async () => {
+    const sent = stubOk();
+    await queryStkStatus("R1");
+    expect(sent()).toEqual({
+      url: "https://openapi-sandbox.co-opbank.co.ke/Enquiry/STK/1.0.0/",
+      body: { MessageReference: "R1", UserId: "CRUZRIDEAUTO" },
+    });
+  });
+
+  it("asks Transaction Status v3 about a transfer", async () => {
+    const sent = stubOk();
+    await queryTransactionStatus("R1");
+    expect(sent()).toEqual({
+      url: "https://openapi-sandbox.co-opbank.co.ke/Enquiry/TransactionStatus_V3/3.0.0/",
+      body: { MessageReference: "R1", UserId: "CRUZRIDEAUTO" },
+    });
   });
 });
 
@@ -92,6 +137,10 @@ describe("interpretStkStatus", () => {
     expect(parsed?.succeeded).toBe(true);
     expect(parsed?.receipt).toBe("SJC1TEST02");
     expect(parsed?.amountShillings).toBe(750);
+  });
+
+  it("reads a top-level Amount, the field the FT/stk request uses", () => {
+    expect(interpretStkStatus("R1", ok({ MessageCode: "0", TransactionID: "SJC1TEST03", Amount: 750 }))?.amountShillings).toBe(750);
   });
 
   it("does not call it a success without a receipt", () => {
