@@ -6,9 +6,30 @@
  *
  * Every Co-op API is `POST <base>/<context>/<version>` with a JSON body
  * carrying our own `MessageReference` (<=27 chars) and a bearer token from
- * a WSO2 client-credentials grant. The specs are public:
- * `GET https://developer.co-opbank.co.ke/api/am/store/v1/apis/{id}/swagger`.
+ * a WSO2 client-credentials grant. The public store
+ * (`GET https://developer.co-opbank.co.ke/api/am/store/v1/apis/{id}/swagger`)
+ * only lists the 1.0/2.0 versions; the paths CRAL is subscribed to are the
+ * ones in Co-op's own Postman collection "CRUZ RIDE AUTO LIMITED"
+ * (received 2026-11-04), collected in `COOP_PATHS` below.
  */
+
+/**
+ * Every Co-op API CRAL calls, exactly as Co-op's collection spells them -
+ * trailing slashes included, since a WSO2 gateway routes on the literal
+ * context. One table, so a version bump is one edit.
+ */
+export const COOP_PATHS = {
+  stkPush: "/FT/stk/1.0.0",
+  stkStatus: "/Enquiry/STK/1.0.0/",
+  transactionStatus: "/Enquiry/TransactionStatus_V3/3.0.0/",
+  pesalinkValidation: "/Enquiry/Validation/IPSL/1.0.0/",
+  sendToMpesa: "/FundsTransfer/External/A2M/Mpesa_v2/2.0.0",
+  pesalink: "/FundsTransfer/External/A2A/PesaLink_v2/2.0.0",
+  internalTransfer: "/FundsTransfer/Internal/A2A_v3/3.0.0",
+  accountBalance: "/Enquiry/AccountBalance_v2/2.0.0/",
+  miniStatement: "/Enquiry/MiniStatement/Account_v2/2.0.0/",
+  fullStatement: "/Enquiry/AccountFullStatementPaginated/1.0.0/",
+} as const;
 
 interface CachedToken {
   accessToken: string;
@@ -21,6 +42,14 @@ export function requireCoopEnv(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`${name} is required for Co-op Bank calls`);
   return value;
+}
+
+/**
+ * CRAL's Co-op Connect user (`CRUZRIDEAUTO`) - the `UserId` every
+ * enquiry and the Pesalink/internal transfers carry alongside our token.
+ */
+export function coopUserId(): string {
+  return requireCoopEnv("COOPBANK_USER_ID");
 }
 
 /** True when the consumer key/secret are set - what every Co-op call needs. */

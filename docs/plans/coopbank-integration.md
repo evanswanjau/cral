@@ -52,6 +52,31 @@ only at the adapter boundary.
   not routing API traffic at all. This is on Co-op's side; nothing can be
   live-tested until they fix it.
 
+## Co-op's own collection (2026-11-04)
+
+Co-op sent a Postman collection, "CRUZ RIDE AUTO LIMITED", against the
+production host `openapi.co-opbank.co.ke`. It replaces the table above for
+every path CRAL calls (`COOP_PATHS` in `adapters/coopbank/client.ts`):
+
+| Call | Path | Body beyond `MessageReference` |
+|---|---|---|
+| Token | `/token` | `grant_type=client_credentials`, Basic key:secret |
+| STK push | `/FT/stk/1.0.0` | `CallBackUrl`, `OperatorCode`, `TransactionCurrency`, `MobileNumber`, `Narration`, `Amount` (number), `MessageDateTime`, `OtherDetails[]` |
+| STK status | `/Enquiry/STK/1.0.0/` | `UserId` |
+| Transaction status | `/Enquiry/TransactionStatus_V3/3.0.0/` | `UserId` |
+| Pesalink validation | `/Enquiry/Validation/IPSL/1.0.0/` | `UserId`, `AccountNumber`, `RecipientBankIdentifier` (4-digit, `"0011"`) |
+| Send to M-Pesa | `/FundsTransfer/External/A2M/Mpesa_v2/2.0.0` | `ISO2CountryCode`, `CallBackUrl`, `Source`, `Destinations[]` - amounts as strings, no `UserId` |
+| Pesalink | `/FundsTransfer/External/A2A/PesaLink_v2/2.0.0` | as above + `UserId`; leg `BankCode`, leg `Amount` a string |
+| IFT | `/FundsTransfer/Internal/A2A_v3/3.0.0` | as above + `UserId`; amounts numbers |
+| Balance | `/Enquiry/AccountBalance_v2/2.0.0/` | `UserId`, `AccountNumber` |
+| Mini statement | `/Enquiry/MiniStatement/Account_v2/2.0.0/` | `UserId`, `AccountNumber` |
+| Full statement | `/Enquiry/AccountFullStatementPaginated/1.0.0/` | `UserId`, `ISO2CountryCode`, `AccountNumber`, `StartDate`, `EndDate` |
+
+The Pesalink entry's `url.path` array omits `A2A`; its `raw` URL has it,
+and the raw one is used. The collection has no saved responses, so every
+reader still assumes the public 1.0/2.0 envelope. `npm run coop:check -w
+apps/api -- <command>` exercises the read-only ones.
+
 ## Phases (one PR each)
 
 ### PR A - Clean up (small)
