@@ -4,8 +4,9 @@ import { db } from "../db/client.js";
 /**
  * The plated booking reference both sides read aloud. `CB` + `YYMMDD` + a
  * 3-digit sequence that restarts every Nairobi calendar day (owner's call,
- * 2026-09-22), e.g. `CB260922001` for the first booking made on
- * 2026-09-22 - the same shape as `vehicles.listing_ref`
+ * 2026-09-22), hyphen-separated since 2026-09-25 so it reads in three
+ * chunks: `CB-260922-001` for the first booking made on 2026-09-22 - the
+ * same shape as `vehicles.listing_ref`
  * (`lib/vehicle-events.ts#nextListingRef`), so the two plated references
  * both read as "which day, which one that day" rather than one dated and
  * one an opaque running count. A human reference, not a primary key, so
@@ -34,5 +35,14 @@ export async function nextBookingRef(trx: Knex.Transaction | Knex = db): Promise
      RETURNING to_char(day, 'YYMMDD') AS day, n`,
   );
   const { day, n } = result.rows[0]!;
-  return `CB${day}${String(n).padStart(3, "0")}`;
+  return `CB-${day}-${String(n).padStart(3, "0")}`;
+}
+
+/**
+ * The ref without its hyphens (`CB260922001`) - for a provider field too
+ * short for the readable form, like Daraja's 12-character
+ * `AccountReference`.
+ */
+export function compactRef(ref: string): string {
+  return ref.replace(/-/g, "");
 }

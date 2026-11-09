@@ -457,7 +457,7 @@ is `openapi/merchant-bookings.yaml`, code is
   so this is how the Bookings screen gets anything to demo against.
 - **The booking ref changed shape (owner's call, 2026-09-22)**, from an
   undated `CB-<running count>` (`CB-2841`, off `booking_ref_seq`) to `CB` +
-  `YYMMDD` + a 3-digit sequence that restarts each Nairobi day (`CB260922001`)
+  `YYMMDD` + a 3-digit sequence that restarts each Nairobi day (`CB-260922-001` - hyphenated since 2026-09-25, see below)
   — the same shape as `vehicles.listing_ref`, so the two plated references
   both read as "which day, which one that day" instead of one dated and one
   an opaque count. Backed by `booking_ref_daily_counters`, generated in
@@ -485,8 +485,8 @@ model"):**
   cares about — "County, then pickup address"). Required per-vehicle at
   onboarding submission, like `insurance_expiry`.
 - **Listing ref format is `H` + `YYMMDD` + a 3-digit sequence that
-  restarts each Nairobi day** (`H260831001`, `H260831002`, next day
-  `H260901001`). Backed by `listing_ref_daily_counters`, generated in
+  restarts each Nairobi day** (`H-260831-001`, `H-260831-002`, next day
+  `H-260901-001` - hyphenated since 2026-09-25). Backed by `listing_ref_daily_counters`, generated in
   `lib/vehicle-events.ts#nextListingRef`. Older `CRAL-V-*` refs and the
   `vehicle_listing_ref_seq` sequence are left in place, just unused.
 
@@ -1317,6 +1317,70 @@ file keeps its flat `ChecklistPanel`.
   tipping heavy suites into sporadic connection/timeout failures. Four
   forks keeps it well under the cap; the suite is Postgres-bound not
   CPU-bound, so it's also *faster* (~130s vs ~580s).
+
+**Checklist-first review (owner's call, 2026-09-25; landed on `main`
+2026-11-09).** Supersedes the
+`block`/"MUST PASS" rules in the two entries above. Migration
+`20261109090000`.
+- **Every checklist item must be answered (pass or flag) before any
+  decision.** Approve, request changes and reject all return 422
+  `checklist_incomplete` until then; approve also needs zero flags (422
+  `checklist_flagged`). `severity` stays in the stored definitions but is
+  no longer read. `ChecklistBlock` dropped `blockers_outstanding` for
+  `outstanding` + `complete`, and items carry `skipped`.
+- **A document's state follows its checklist:** every item under it
+  passed -> `ok` (silent accept); an `ok` document whose items stop being
+  all-pass -> back to `pending`. Document decisions are `accept` / `reject`
+  ("Ask for a new upload") / `reset` ("Undo" - clears every answer under
+  it). A manual `accept` needs that document's own checklist passed.
+- **Two things are derived, not stored** (`lib/review-checklist.ts`): an
+  answer older than its document's upload (`documents.created_at` - a
+  re-upload deletes + inserts) reads `pending` again, and items under a
+  `rejected` document are `skipped`. A document with **no** applicable
+  items (the tracker under the `rate_over` line) counts as one open check
+  until accepted by hand (`undecidedUncheckedDocs`).
+- **The merchant file matches the vehicle case.** `merchant_approval.
+  checklist` items now carry a `document` (auto-accept works there too;
+  address/consistency/payout items are the "business as a whole"
+  section). The file returns `declared` (what the merchant typed, for
+  comparison with the scans) and `events` (an Ops-only reader over
+  `audit_log`). New `POST /admin/merchants/{id}/request-changes`
+  (`merchants.review_changes_requested_at` + `review_note`, cleared on
+  approve, badge `changes_requested`). **No business-level reject** - that
+  is account suspension, its own slice.
+- **UI** (`apps/admin/src/components/console/review/`, replacing
+  `ChecklistPanel`): each section folds away when complete and the next
+  one opens; a decided section shows a status chip + "Change" menu instead
+  of Accept/Reject buttons; decisions live in a sticky dock that shows
+  only progress until the checklist is done; "Open scan" puts the document
+  beside its checklist. The two gates prompt each other: a car whose
+  business isn't verified offers "Review the business" (`?from=<vehicle>`),
+  and the approved file offers the way back; after a decision the case
+  offers `next_case` / `merchant_next_case`. This layout departs from the
+  admin canvas deliberately (owner asked for a better review UI), built
+  in the console's existing tokens.
+- **Follow-ups the same day (owner's call):**
+  - **An individual merchant is an "account", a company a "business".**
+    Everything the reviewer or merchant reads follows `owner_type`
+    (`entityWord` in `console/status.ts` and `admin-merchants/service.ts`):
+    "Approve account", "Your account is verified", "✓ Account verified" on
+    the case's merchant card; the account-wide section is "Consistency and
+    payout" for an individual, "The business as a whole" for a company.
+  - **Working a case claims it.** Answering a check or deciding a document
+    on a `pending` or unassigned case assigns it and moves it to `review`
+    ("With you"), so a case being worked never reads "Needs review". It
+    never takes a case from another reviewer; "Assign to me" still does.
+    Once every check is answered and nothing is decided, the status pill
+    reads **Ready to decide** (`READY_TONE`; `READY TO DECIDE` badge on the
+    merchant file). The waiting-time pill only shows on open cases.
+- **Plated refs are hyphenated** (`H-260924-001`, `CB-260922-001`),
+  generated by `nextListingRef` / `nextBookingRef`; migration
+  `20261109100000` rewrote existing dated refs in `vehicles`, `bookings`,
+  `payout_run_lines` and `notifications.ref` (bodies are history, left
+  alone). Daraja's 12-char `AccountReference` now gets
+  `compactRef(booking.ref)` (`CB260922001`) - it used to get
+  `"CRAL CB2609…"` cut to 12. There is no car-sale ref yet; that vertical
+  is still "opening soon", and should take the same shape when built.
 
 **Admin Settings shell + Team management (2026-09-15).** `/settings` is
 now a real tabbed screen — `Cruz Admin Settings.dc.html`'s own six tabs

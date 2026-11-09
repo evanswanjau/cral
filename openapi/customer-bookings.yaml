@@ -287,7 +287,7 @@ components:
         id: { type: string, example: bkg_01J... }
         ref:
           type: string
-          description: The plated reference both sides read aloud, e.g. "CB260922001".
+          description: The plated reference both sides read aloud, e.g. "CB-260922-001".
         status:
           type: string
           enum: [requested, confirmed, active, completed, declined, expired, cancelled]

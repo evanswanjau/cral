@@ -69,7 +69,7 @@ describe("vehicles — create and list", () => {
     expect(createRes.status).toBe(201);
     expect(createRes.body.id).toMatch(/^veh_/);
     // H + YYMMDD + a 3-digit per-day sequence (owner's call, 2026-08-31).
-    expect(createRes.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(createRes.body.listing_ref).toMatch(/^H-\d{6}-\d{3}$/);
     expect(createRes.body.county).toBe("Nairobi");
     expect(createRes.body.status).toBe("draft");
     expect(createRes.body.daily_rate).toEqual({ amount: 450000, currency: "KES" });
@@ -137,8 +137,8 @@ describe("vehicles — create and list", () => {
     const a = await createVehicle(accessToken, "KAB 010A");
     const b = await createVehicle(accessToken, "KAB 011B");
 
-    expect(a.body.listing_ref).toMatch(/^H\d{9}$/);
-    expect(b.body.listing_ref).toMatch(/^H\d{9}$/);
+    expect(a.body.listing_ref).toMatch(/^H-\d{6}-\d{3}$/);
+    expect(b.body.listing_ref).toMatch(/^H-\d{6}-\d{3}$/);
     // Same Nairobi day → same date portion; sequence only moves forward.
     // (Not strictly +1: the whole suite shares one daily counter.)
     expect(a.body.listing_ref.slice(0, 7)).toBe(b.body.listing_ref.slice(0, 7));

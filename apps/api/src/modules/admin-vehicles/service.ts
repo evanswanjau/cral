@@ -16,10 +16,15 @@ import {
   setVehicleCheck,
   checklistSnapshot,
   splitByDocument,
-  documentChecksAllPass,
+  documentChecklistState,
+  resetDocumentChecks,
+  unanswered,
+  flaggedItems,
+  undecidedUncheckedDocs,
   toBlock,
   UnknownChecklistItem,
   type CheckResult,
+  type MergedCheck,
 } from "../../lib/review-checklist.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { effectiveDocState } from "../vehicles/service.js";
@@ -280,6 +285,10 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
     getMerchantApprovalDocs(),
     vehicleChecklist(vehicle),
   ]);
+  const [nextCase, merchantNextCase] = await Promise.all([
+    nextOpenCase({ excludeId: vehicle.id }),
+    nextOpenCase({ excludeId: vehicle.id, merchantId: merchant.id }),
+  ]);
 
   const photos = vehicleDocs.filter((d) => d.kind === "vehicle_photo");
   const name = merchantName(merchant);
@@ -299,6 +308,7 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
       review_note: doc?.review_note ?? null,
       original_name: doc?.original_name ?? null,
       expires_at: doc?.expires_at ?? null,
+      reviewed_at: doc?.reviewed_at?.toISOString() ?? null,
       checklist: toBlock(checksByDocument.get(kind) ?? []),
     };
   };
@@ -306,6 +316,8 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
   // The car's own three documents - the per-vehicle gate.
   const documents = settings.requiredDocumentKinds.map(docLine);
   const outstanding = documents.filter((d) => d.state !== "ok").map((d) => d.kind);
+  const undecided = undecidedUncheckedDocs(vehicleDocs, checklist.merged, settings.requiredDocumentKinds);
+  const reviewComplete = checklist.block.complete && undecided.length === 0;
 
   // The merchant's own documents - context only. An approved merchant has
   // already cleared these; an unapproved one shows their real state and a
@@ -357,15 +369,23 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
     reviewer_note: vehicle.reviewer_note,
     reviewer_note_resolved: vehicle.reviewer_note_resolved,
     assigned_to_me: vehicle.review_assignee !== null,
+    // Checklist-first: nothing can be decided until every item is answered.
+    can_decide: reviewComplete,
     can_approve:
+      reviewComplete &&
+      checklist.block.flagged === 0 &&
       outstanding.length === 0 &&
-      checklist.block.blockers_outstanding === 0 &&
       merchantApproved,
     approve_blockers: {
+      checklist_outstanding: checklist.block.outstanding + undecided.length,
+      flagged: checklist.block.flagged,
       documents: outstanding.length,
-      checklist: checklist.block.blockers_outstanding,
       merchant_not_approved: !merchantApproved,
     },
+    // Where the reviewer goes next: the oldest other open case, and the
+    // oldest other open case from this same merchant.
+    next_case: nextCase,
+    merchant_next_case: merchantNextCase,
     outstanding_documents: outstanding,
     merchant_approved: merchantApproved,
     documents,
@@ -400,6 +420,22 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
   };
 }
 
+/** The oldest open (pending / review) case other than `excludeId`, optionally for one merchant. */
+async function nextOpenCase(opts: {
+  excludeId: string;
+  merchantId?: string;
+}): Promise<{ id: string; registration: string } | null> {
+  const q = db<VehicleRow>("vehicles")
+    .whereIn("status", ["pending", "review"])
+    .andWhereNot({ id: opts.excludeId })
+    .orderByRaw("coalesce(submitted_at, created_at) asc")
+    .orderBy("id", "asc")
+    .first("id", "registration");
+  if (opts.merchantId) q.andWhere({ merchant_id: opts.merchantId });
+  const row = await q;
+  return row ? { id: row.id, registration: row.registration } : null;
+}
+
 export async function getReviewCase(vehicleId: string) {
   const { vehicle, merchant } = await requireCase(vehicleId);
   return serializeCase(vehicle, merchant);
@@ -414,12 +450,34 @@ export async function assignCase(vehicleId: string, admin: AdminContextInput) {
   if (vehicle.review_assignee === admin.adminId && vehicle.status !== "pending") {
     return serializeCase(vehicle, merchant);
   }
+  return serializeCase(await takeCase(vehicle, merchant, admin, true), merchant);
+}
 
-  const updated = await db.transaction(async (trx) => {
+/**
+ * Starting work on an untouched case claims it (owner's call, 2026-09-25):
+ * a case someone is checking must not still read "Needs review" in the
+ * queue. Only a `pending` or unassigned case is claimed - another
+ * reviewer's case is never taken over by answering a check on it.
+ */
+async function claimOnWork(vehicle: VehicleRow, merchant: MerchantRow, admin: AdminContextInput): Promise<void> {
+  if (vehicle.status !== "pending" && vehicle.review_assignee !== null) return;
+  if (vehicle.status !== "pending" && vehicle.status !== "review") return;
+  await takeCase(vehicle, merchant, admin);
+}
+
+/** `force` (the explicit "Assign to me") takes the case from anyone; the automatic claim keeps an existing assignee. */
+async function takeCase(
+  vehicle: VehicleRow,
+  merchant: MerchantRow,
+  admin: AdminContextInput,
+  force = false,
+): Promise<VehicleRow> {
+  return db.transaction(async (trx) => {
     const nextStatus = vehicle.status === "pending" ? "review" : vehicle.status;
+    const assignee = force ? admin.adminId : (vehicle.review_assignee ?? admin.adminId);
     const [row] = await trx<VehicleRow>("vehicles")
       .where({ id: vehicle.id })
-      .update({ review_assignee: admin.adminId, status: nextStatus })
+      .update({ review_assignee: assignee, status: nextStatus })
       .returning("*");
     if (!row) throw new Error("assign failed");
     await appendVehicleEvent(trx, {
@@ -427,7 +485,7 @@ export async function assignCase(vehicleId: string, admin: AdminContextInput) {
       merchantId: merchant.id,
       kind: "assigned",
       tone: "blue",
-      label: `Assigned to ${admin.adminName}`,
+      label: assignee === admin.adminId ? `Assigned to ${admin.adminName}` : "Review started",
       actorType: "reviewer",
       actorName: admin.adminName,
     });
@@ -438,14 +496,12 @@ export async function assignCase(vehicleId: string, admin: AdminContextInput) {
       entityType: "vehicle",
       entityId: vehicle.id,
       before: { status: vehicle.status, review_assignee: vehicle.review_assignee },
-      after: { status: nextStatus, review_assignee: admin.adminId },
+      after: { status: nextStatus, review_assignee: assignee },
       requestId: admin.requestId,
       ip: admin.ip,
     });
     return row;
   });
-
-  return serializeCase(updated, merchant);
 }
 
 // ---------------------------------------------------------------------
@@ -457,10 +513,12 @@ export async function assignCase(vehicleId: string, admin: AdminContextInput) {
 // file - the second gate. See docs/plans/admin-review-checklist.md.
 const REVIEWABLE_DOC_KINDS = [...VEHICLE_DOC_KINDS];
 
+export type DocumentDecision = "accept" | "reject" | "reset";
+
 export async function decideDocument(
   vehicleId: string,
   kind: string,
-  decision: "accept" | "reject",
+  decision: DocumentDecision,
   note: string | null,
   admin: AdminContextInput,
 ) {
@@ -478,7 +536,7 @@ export async function decideDocument(
       status: 422,
       type: "validation_error",
       code: "reason_required",
-      message: "Write what the merchant should read before rejecting a document.",
+      message: "Write what the merchant should read before asking for a new upload.",
       field: "note",
     });
   }
@@ -487,6 +545,7 @@ export async function decideDocument(
   const doc = await db<DocumentRow>("documents")
     .where({ vehicle_id: vehicle.id, kind: kind as DocumentRow["kind"] })
     .first();
+  if (doc) await claimOnWork(vehicle, merchant, admin);
   if (!doc) {
     throw new ApiError({
       status: 404,
@@ -496,7 +555,13 @@ export async function decideDocument(
     });
   }
 
-  const nextState = decision === "accept" ? "ok" : "rejected";
+  // Checklist-first: a manual accept is only for a document whose own
+  // checklist is fully passed (normally that has already auto-accepted it).
+  const { merged } = await vehicleChecklist(vehicle);
+  const docItems = merged.filter((m) => m.document === kind);
+  if (decision === "accept") assertDocumentChecklistPassed(merged, kind);
+
+  const nextState = decision === "accept" ? "ok" : decision === "reject" ? "rejected" : "pending";
   const notificationIds: string[] = [];
 
   await db.transaction(async (trx) => {
@@ -505,16 +570,32 @@ export async function decideDocument(
       .update({
         review_state: nextState,
         review_note: decision === "reject" ? note!.trim() : null,
-        reviewed_by: admin.adminId,
-        reviewed_at: new Date(),
+        reviewed_by: decision === "reset" ? null : admin.adminId,
+        reviewed_at: decision === "reset" ? null : new Date(),
       });
+    // Undo starts that document's checklist over.
+    if (decision === "reset") {
+      await resetDocumentChecks(
+        trx,
+        "vehicle_review_checks",
+        { vehicle_id: vehicle.id },
+        docItems.map((m) => m.id),
+      );
+    }
 
+    const label = DOC_LABEL[kind] ?? kind;
     await appendVehicleEvent(trx, {
       vehicleId: vehicle.id,
       merchantId: merchant.id,
-      kind: decision === "accept" ? "document_accepted" : "document_rejected",
-      tone: decision === "accept" ? "green" : "red",
-      label: `${DOC_LABEL[kind] ?? kind} ${decision === "accept" ? "accepted" : "rejected"}`,
+      kind:
+        decision === "accept" ? "document_accepted" : decision === "reject" ? "document_rejected" : "document_reopened",
+      tone: decision === "accept" ? "green" : decision === "reject" ? "red" : "grey",
+      label:
+        decision === "accept"
+          ? `${label} accepted`
+          : decision === "reject"
+            ? `${label} - new upload requested`
+            : `${label} decision undone`,
       body: decision === "reject" ? note!.trim() : null,
       actorType: "reviewer",
       actorName: admin.adminName,
@@ -522,7 +603,12 @@ export async function decideDocument(
     await writeAuditEntry(trx, {
       actorId: admin.adminId,
       actorType: "admin",
-      action: decision === "accept" ? "admin.document_accepted" : "admin.document_rejected",
+      action:
+        decision === "accept"
+          ? "admin.document_accepted"
+          : decision === "reject"
+            ? "admin.document_rejected"
+            : "admin.document_reopened",
       entityType: "document",
       entityId: doc.id,
       before: { review_state: doc.review_state },
@@ -531,14 +617,14 @@ export async function decideDocument(
       ip: admin.ip,
     });
 
-    // Only a rejection reaches the merchant — an accept is silent (the
-    // whole-listing decision is the notification that matters).
+    // Only a rejection reaches the merchant — an accept or an undo is
+    // silent (the whole-listing decision is the notification that matters).
     if (decision === "reject") {
       notificationIds.push(
         await notify(trx, {
           merchantId: merchant.id,
           category: "review",
-          title: `${DOC_LABEL[kind] ?? kind} on ${vehicle.registration} needs another look`,
+          title: `${label} on ${vehicle.registration} needs another look`,
           body: note!.trim(),
           ref: vehicle.registration,
           subjectType: "vehicle",
@@ -550,6 +636,26 @@ export async function decideDocument(
 
   if (notificationIds.length) await enqueueNotificationDelivery(merchant.id, notificationIds);
   return getReviewCase(vehicleId);
+}
+
+function assertDocumentChecklistPassed(merged: MergedCheck[], kind: string): void {
+  const state = documentChecklistState(merged, kind);
+  if (state === "incomplete") {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "checklist_incomplete",
+      message: "Work every check under this document before accepting it.",
+    });
+  }
+  if (state === "flagged") {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "checklist_flagged",
+      message: "A check under this document is flagged - it can't be accepted as it stands.",
+    });
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -564,6 +670,7 @@ export async function setChecklistItem(
   admin: AdminContextInput,
 ) {
   const { vehicle, merchant } = await requireCase(vehicleId);
+  await claimOnWork(vehicle, merchant, admin);
   try {
     await setVehicleCheck(vehicle, itemId, result, note?.trim() || null, admin.adminId);
   } catch (err) {
@@ -579,20 +686,21 @@ export async function setChecklistItem(
     throw err;
   }
 
-  // Passing the last blocking check under a document accepts that document.
-  await maybeAutoAcceptDocument(vehicle, merchant, itemId, admin);
+  // The document's state follows its checklist.
+  await syncDocumentWithChecklist(vehicle, merchant, itemId, admin);
 
   return getReviewCase(vehicleId);
 }
 
 /**
- * When every `block` checklist item under a real car document is now
- * `pass`, mark that document accepted (once) - the same effect as the
- * reviewer clicking Accept, minus the merchant notification (an accept is
- * silent either way). A rejected line is left alone; the merchant must
- * re-upload it. Photos have no document row, so they never trigger this.
+ * Keep a car document's `review_state` in step with the checklist under it:
+ * every item passed -> accepted (a silent accept, same as clicking Accept);
+ * an accepted document whose checklist is no longer all-pass (an item was
+ * flagged or cleared) -> back to pending. A rejected document is left
+ * alone - the merchant must re-upload it. Photos have no document row, so
+ * they never trigger this.
  */
-async function maybeAutoAcceptDocument(
+async function syncDocumentWithChecklist(
   vehicle: VehicleRow,
   merchant: MerchantRow,
   itemId: string,
@@ -602,41 +710,62 @@ async function maybeAutoAcceptDocument(
   const item = merged.find((m) => m.id === itemId);
   const kind = item?.document ?? null;
   if (!kind || !(VEHICLE_DOC_KINDS as readonly string[]).includes(kind)) return;
-  if (!documentChecksAllPass(merged, kind)) return;
 
   const doc = await db<DocumentRow>("documents")
     .where({ vehicle_id: vehicle.id, kind: kind as DocumentRow["kind"] })
     .first();
-  if (!doc || doc.review_state === "ok" || doc.review_state === "rejected") return;
+  if (!doc || doc.review_state === "rejected") return;
 
+  const passed = documentChecklistState(merged, kind) === "passed";
+  const accepted = doc.review_state === "ok";
+  if (passed === accepted) return;
+
+  const nextState = passed ? "ok" : "pending";
+  const label = DOC_LABEL[kind] ?? kind;
   await db.transaction(async (trx) => {
     await trx<DocumentRow>("documents").where({ id: doc.id }).update({
-      review_state: "ok",
+      review_state: nextState,
       review_note: null,
-      reviewed_by: admin.adminId,
-      reviewed_at: new Date(),
+      reviewed_by: passed ? admin.adminId : null,
+      reviewed_at: passed ? new Date() : null,
     });
     await appendVehicleEvent(trx, {
       vehicleId: vehicle.id,
       merchantId: merchant.id,
-      kind: "document_accepted",
-      tone: "green",
-      label: `${DOC_LABEL[kind] ?? kind} accepted - checklist complete`,
+      kind: passed ? "document_accepted" : "document_reopened",
+      tone: passed ? "green" : "grey",
+      label: passed ? `${label} accepted - checklist complete` : `${label} reopened - a check changed`,
       actorType: "reviewer",
       actorName: admin.adminName,
     });
     await writeAuditEntry(trx, {
       actorId: admin.adminId,
       actorType: "admin",
-      action: "admin.document_accepted",
+      action: passed ? "admin.document_accepted" : "admin.document_reopened",
       entityType: "document",
       entityId: doc.id,
       before: { review_state: doc.review_state },
-      after: { review_state: "ok", kind, via: "checklist" },
+      after: { review_state: nextState, kind, via: "checklist" },
       requestId: admin.requestId,
       ip: admin.ip,
     });
   });
+}
+
+/**
+ * Checklist-first: every decision needs every item answered, and every
+ * document without checks of its own decided.
+ */
+function assertChecklistComplete(merged: MergedCheck[], undecidedDocs: string[] = []): void {
+  const open = unanswered(merged).length + undecidedDocs.length;
+  if (open) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "checklist_incomplete",
+      message: `Finish the checklist first - ${open} check${open === 1 ? "" : "s"} still to answer.`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------
@@ -652,7 +781,9 @@ export async function decideListing(
   admin: AdminContextInput,
 ) {
   const { vehicle, merchant } = await requireCase(vehicleId);
-  const { merged: checklistMerged } = await vehicleChecklist(vehicle);
+  const settings = await getVehicleReviewSettings();
+  const vehicleDocs = await db<DocumentRow>("documents").where({ vehicle_id: vehicle.id });
+  const { merged: checklistMerged } = await vehicleChecklist(vehicle, vehicleDocs);
 
   if ((action === "request_changes" || action === "reject") && !note?.trim()) {
     throw new ApiError({
@@ -664,6 +795,13 @@ export async function decideListing(
     });
   }
 
+  // Every decision - approve, request changes, reject - waits on the
+  // whole checklist being worked (owner's call, 2026-09-25).
+  assertChecklistComplete(
+    checklistMerged,
+    undecidedUncheckedDocs(vehicleDocs, checklistMerged, settings.requiredDocumentKinds),
+  );
+
   if (action === "approve") {
     // Gate 1: the business. A car can't go live for an unverified merchant.
     if (merchant.approved_at === null) {
@@ -671,12 +809,10 @@ export async function decideListing(
         status: 422,
         type: "validation_error",
         code: "merchant_not_approved",
-        message: "Approve the business on the merchant file before publishing one of its cars.",
+        message: "Approve the merchant on their file before publishing one of their cars.",
       });
     }
     // Gate 2: the car's three documents.
-    const settings = await getVehicleReviewSettings();
-    const vehicleDocs = await db<DocumentRow>("documents").where({ vehicle_id: vehicle.id });
     const outstanding = settings.requiredDocumentKinds.filter(
       (kind) => effectiveDocState(vehicleDocs.find((d) => d.kind === kind)) !== "ok",
     );
@@ -688,14 +824,14 @@ export async function decideListing(
         message: `Accept every document first — still outstanding: ${outstanding.join(", ")}.`,
       });
     }
-    // Gate 3: every blocking checklist item passed.
-    const blocking = checklistMerged.filter((m) => m.severity === "block" && m.result !== "pass");
-    if (blocking.length) {
+    // Gate 3: nothing flagged.
+    const flagged = flaggedItems(checklistMerged);
+    if (flagged.length) {
       throw new ApiError({
         status: 422,
         type: "validation_error",
-        code: "checklist_blockers_outstanding",
-        message: `Work the checklist first — still open: ${blocking.map((b) => b.label).join("; ")}.`,
+        code: "checklist_flagged",
+        message: `A flagged check can't go live - request changes instead. Flagged: ${flagged.map((f) => f.label).join("; ")}.`,
       });
     }
   }

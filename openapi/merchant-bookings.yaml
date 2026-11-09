@@ -611,7 +611,7 @@ components:
       type: object
       properties:
         id: { type: string }
-        ref: { type: string, description: "Public plated reference, e.g. CB260922001" }
+        ref: { type: string, description: "Public plated reference, e.g. CB-260922-001" }
         status: { $ref: "#/components/schemas/BookingStatus" }
         hirer_name: { type: string }
         hirer_is_corporate: { type: boolean }

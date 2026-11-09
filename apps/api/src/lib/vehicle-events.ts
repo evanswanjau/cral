@@ -13,8 +13,9 @@ import type { EventTone, VehicleEventRow } from "../modules/merchant/db-types.js
 
 /**
  * A human-readable listing reference: `H` + `YYMMDD` + a 3-digit sequence
- * that restarts each Nairobi calendar day (owner's call, 2026-08-31), e.g.
- * `H260831001` for the first vehicle listed on 2026-08-31. Backed by
+ * that restarts each Nairobi calendar day (owner's call, 2026-08-31),
+ * hyphen-separated since 2026-09-25: `H-260831-001` for the first vehicle
+ * listed on 2026-08-31. Backed by
  * `listing_ref_daily_counters` — one row per day, bumped atomically here
  * so concurrent inserts can't collide. Runs inside the caller's
  * transaction, so a rolled-back vehicle insert rolls the counter back too.
@@ -28,7 +29,7 @@ export async function nextListingRef(trx: Knex.Transaction | Knex): Promise<stri
      RETURNING to_char(day, 'YYMMDD') AS day, n`,
   );
   const { day, n } = result.rows[0]!;
-  return `H${day}${String(n).padStart(3, "0")}`;
+  return `H-${day}-${String(n).padStart(3, "0")}`;
 }
 
 export async function appendVehicleEvent(

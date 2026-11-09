@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { compactRef } from "../../lib/booking-ref.js";
 import { ApiError, kes, type Money } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -176,6 +177,7 @@ export async function initiatePayment(
       phone,
       amountCents,
       narration: `CRAL ${booking.ref}`,
+      accountReference: compactRef(booking.ref),
     });
   } catch (err) {
     await db<PaymentRequestRow>("payment_requests")

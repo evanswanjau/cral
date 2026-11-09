@@ -100,19 +100,10 @@ async function submittedVehicle(): Promise<{ token: string; vehicleId: string; m
   return { token: accessToken, vehicleId, merchantId: merchant.id as string };
 }
 
-/** Runs the merchant-approval gate: accept business docs, pass its checklist blockers, approve. */
+/** Runs the merchant-approval gate: pass every checklist item (which accepts the business docs), approve. */
 async function approveMerchant(adminToken: string, merchantId: string) {
   const file = await request(app).get(`/admin/merchants/${merchantId}`).set(bearer(adminToken));
-  for (const d of file.body.business_documents as Array<{ kind: string }>) {
-    await request(app)
-      .post(`/admin/merchants/${merchantId}/documents/${d.kind}/decision`)
-      .set(bearer(adminToken))
-      .set(idem())
-      .send({ decision: "accept" });
-  }
-  for (const it of (file.body.checklist.items as Array<{ id: string; severity: string }>).filter(
-    (i) => i.severity === "block",
-  )) {
+  for (const it of file.body.checklist.items as Array<{ id: string }>) {
     await request(app)
       .post(`/admin/merchants/${merchantId}/checklist`)
       .set(bearer(adminToken))
@@ -126,16 +117,27 @@ async function approveMerchant(adminToken: string, merchantId: string) {
   expect(res.body.approved).toBe(true);
 }
 
-/** Passes every blocking item on a vehicle case's checklist. */
-async function passVehicleChecklist(adminToken: string, vehicleId: string) {
+/** Answers every item on a vehicle case's checklist - `pass`, except the ids in `flag`. */
+async function workVehicleChecklist(adminToken: string, vehicleId: string, flag: string[] = []) {
   const detail = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(adminToken));
-  for (const it of (detail.body.checklist.items as Array<{ id: string; severity: string }>).filter(
-    (i) => i.severity === "block",
-  )) {
-    await request(app)
+  for (const it of detail.body.checklist.items as Array<{ id: string; skipped: boolean }>) {
+    if (it.skipped) continue;
+    const res = await request(app)
       .post(`/admin/vehicles/${vehicleId}/checklist`)
       .set(bearer(adminToken))
-      .send({ item_id: it.id, result: "pass" });
+      .send({ item_id: it.id, result: flag.includes(it.id) ? "flag" : "pass" });
+    expect(res.status).toBe(200);
+  }
+  // A document with no checks of its own (the tracker, under the rate line)
+  // is decided by hand - until then it counts as an open check.
+  for (const d of detail.body.documents as Array<{ kind: string; state: string; checklist: { total: number } }>) {
+    if (d.checklist.total > 0 || d.state !== "pending") continue;
+    const res = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/documents/${d.kind}/decision`)
+      .set(bearer(adminToken))
+      .set(idem())
+      .send({ decision: "accept" });
+    expect(res.status).toBe(200);
   }
 }
 
@@ -190,7 +192,26 @@ describe("the two gates: approve the merchant, then approve the car", () => {
     ]);
     expect(detail.body.account_documents.map((d: { kind: string }) => d.kind).sort()).toEqual(["kra_pin", "national_id"]);
     expect(detail.body.checklist.items.length).toBeGreaterThan(0);
+    expect(detail.body.checklist.complete).toBe(false);
+    expect(detail.body.can_decide).toBe(false);
     expect(detail.body.can_approve).toBe(false);
+
+    // Checklist-first: nothing can be decided before every item is answered
+    // (the tracker has no checks under the rate line, so it counts as one).
+    expect(detail.body.approve_blockers.checklist_outstanding).toBe(detail.body.checklist.total + 1);
+    const early = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/decision`)
+      .set(bearer(admin.token))
+      .set(idem())
+      .send({ action: "approve" });
+    expect(early.status).toBe(422);
+    expect(early.body.error.code).toBe("checklist_incomplete");
+
+    // Working the whole checklist accepts the three car docs on its own.
+    await workVehicleChecklist(admin.token, vehicleId);
+    const worked = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
+    expect(worked.body.can_decide).toBe(true);
+    expect(worked.body.documents.every((d: { state: string }) => d.state === "ok")).toBe(true);
 
     // Gate 1 not met -> approve is refused with merchant_not_approved.
     const noMerchant = await request(app)
@@ -208,33 +229,6 @@ describe("the two gates: approve the merchant, then approve the car", () => {
     const afterMerchant = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
     expect(afterMerchant.body.merchant_approved).toBe(true);
     expect(afterMerchant.body.account_documents.every((d: { verified_with_account: boolean }) => d.verified_with_account)).toBe(true);
-
-    // Gate 2: the three car docs.
-    const stillDocs = await request(app)
-      .post(`/admin/vehicles/${vehicleId}/decision`)
-      .set(bearer(admin.token))
-      .set(idem())
-      .send({ action: "approve" });
-    expect(stillDocs.body.error.code).toBe("documents_not_all_accepted");
-
-    for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
-      const acc = await request(app)
-        .post(`/admin/vehicles/${vehicleId}/documents/${kind}/decision`)
-        .set(bearer(admin.token))
-        .set(idem())
-        .send({ decision: "accept" });
-      expect(acc.status).toBe(200);
-    }
-
-    // Gate 3: the checklist blockers.
-    const stillChecklist = await request(app)
-      .post(`/admin/vehicles/${vehicleId}/decision`)
-      .set(bearer(admin.token))
-      .set(idem())
-      .send({ action: "approve" });
-    expect(stillChecklist.body.error.code).toBe("checklist_blockers_outstanding");
-
-    await passVehicleChecklist(admin.token, vehicleId);
 
     const approved = await request(app)
       .post(`/admin/vehicles/${vehicleId}/decision`)
@@ -269,6 +263,33 @@ describe("request changes and reject", () => {
     expect(docReject.status).toBe(200);
     const logbookLine = docReject.body.documents.find((d: { kind: string }) => d.kind === "logbook");
     expect(logbookLine).toMatchObject({ state: "rejected", review_note: "The scan is cut off at the top." });
+    // Its checks are skipped - the merchant has to replace the file first.
+    expect(logbookLine.checklist.items.every((i: { skipped: boolean }) => i.skipped)).toBe(true);
+
+    // Still checklist-first for request changes.
+    const early = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/decision`)
+      .set(bearer(admin.token))
+      .set(idem())
+      .send({ action: "request_changes", note: "x" });
+    expect(early.body.error.code).toBe("checklist_incomplete");
+
+    // Work the rest, flagging insurance cover.
+    await workVehicleChecklist(admin.token, vehicleId, ["ins_comp"]);
+    const worked = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
+    expect(worked.body.can_decide).toBe(true);
+    expect(worked.body.can_approve).toBe(false);
+    expect(worked.body.approve_blockers.flagged).toBe(1);
+    expect(worked.body.checklist.suggested_note.changes).toContain("- ");
+    // A flagged document is not accepted.
+    expect(worked.body.documents.find((d: { kind: string }) => d.kind === "comprehensive_insurance").state).not.toBe("ok");
+    // And a flagged case can't be approved.
+    const flaggedApprove = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/decision`)
+      .set(bearer(admin.token))
+      .set(idem())
+      .send({ action: "approve" });
+    expect(flaggedApprove.status).toBe(422);
 
     // A whole-listing "request changes" needs a note.
     const noNote = await request(app)
@@ -298,8 +319,8 @@ describe("request changes and reject", () => {
 
 // --- checklist drives the document ------------------------------
 
-describe("passing a document's blocking checks accepts the document", () => {
-  it("flips the logbook line to ok once its MUST-PASS items all pass, with no explicit accept", async () => {
+describe("a document's state follows its checklist", () => {
+  it("accepts the logbook once every item passes, reopens it on a flag, and undo restarts the checks", async () => {
     const admin = await newAdmin();
     const { vehicleId } = await submittedVehicle();
     await request(app).post(`/admin/vehicles/${vehicleId}/assign`).set(bearer(admin.token));
@@ -307,13 +328,29 @@ describe("passing a document's blocking checks accepts the document", () => {
     const detail = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
     const logbook = detail.body.documents.find((d: { kind: string }) => d.kind === "logbook");
     expect(logbook.state).not.toBe("ok");
-    const blockItems = (logbook.checklist.items as Array<{ id: string; severity: string; document: string }>).filter(
-      (i) => i.severity === "block",
-    );
-    expect(blockItems.length).toBeGreaterThan(0);
-    expect(blockItems.every((i) => i.document === "logbook")).toBe(true);
+    const items = logbook.checklist.items as Array<{ id: string; document: string }>;
+    expect(items.length).toBeGreaterThan(1);
+    expect(items.every((i) => i.document === "logbook")).toBe(true);
 
-    for (const it of blockItems) {
+    // A manual accept before the checklist is worked is refused.
+    const early = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/documents/logbook/decision`)
+      .set(bearer(admin.token))
+      .set(idem())
+      .send({ decision: "accept" });
+    expect(early.body.error.code).toBe("checklist_incomplete");
+
+    // All but the last item passed: still not accepted (no "must pass" tier).
+    for (const it of items.slice(0, -1)) {
+      await request(app)
+        .post(`/admin/vehicles/${vehicleId}/checklist`)
+        .set(bearer(admin.token))
+        .send({ item_id: it.id, result: "pass" });
+    }
+    const partial = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
+    expect(partial.body.documents.find((d: { kind: string }) => d.kind === "logbook").state).not.toBe("ok");
+
+    for (const it of items.slice(-1)) {
       await request(app)
         .post(`/admin/vehicles/${vehicleId}/checklist`)
         .set(bearer(admin.token))
@@ -323,12 +360,47 @@ describe("passing a document's blocking checks accepts the document", () => {
     const after = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
     const logbookAfter = after.body.documents.find((d: { kind: string }) => d.kind === "logbook");
     expect(logbookAfter.state).toBe("ok");
-    expect(logbookAfter.checklist.blockers_outstanding).toBe(0);
+    expect(logbookAfter.checklist).toMatchObject({ complete: true, outstanding: 0 });
     // The insurance line, whose checks are untouched, is still pending.
     expect(after.body.documents.find((d: { kind: string }) => d.kind === "comprehensive_insurance").state).not.toBe("ok");
     expect(
       (after.body.events as Array<{ label: string }>).some((e) => e.label.includes("checklist complete")),
     ).toBe(true);
+
+    // Flagging an item puts the accepted document back to pending.
+    const flagged = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/checklist`)
+      .set(bearer(admin.token))
+      .send({ item_id: items[0]!.id, result: "flag", note: "Page two is missing." });
+    expect(flagged.body.documents.find((d: { kind: string }) => d.kind === "logbook").state).toBe("pending");
+
+    // Undo clears every answer under the document.
+    const reset = await request(app)
+      .post(`/admin/vehicles/${vehicleId}/documents/logbook/decision`)
+      .set(bearer(admin.token))
+      .set(idem())
+      .send({ decision: "reset" });
+    expect(reset.status).toBe(200);
+    const resetLine = reset.body.documents.find((d: { kind: string }) => d.kind === "logbook");
+    expect(resetLine.state).toBe("pending");
+    expect(resetLine.checklist.checked).toBe(0);
+  });
+
+  it("treats answers given before a re-upload as stale", async () => {
+    const admin = await newAdmin();
+    const { vehicleId } = await submittedVehicle();
+    await workVehicleChecklist(admin.token, vehicleId);
+    // Working an untouched case claimed it - it no longer reads "Needs review".
+    const claimed = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
+    expect(claimed.body).toMatchObject({ status: "review", bucket: "with_you", assigned_to_me: true });
+    // Simulate the merchant replacing the logbook after the checks.
+    await db("documents")
+      .where({ vehicle_id: vehicleId, kind: "logbook" })
+      .update({ created_at: new Date(Date.now() + 60_000), review_state: "pending" });
+    const detail = await request(app).get(`/admin/vehicles/${vehicleId}`).set(bearer(admin.token));
+    const logbook = detail.body.documents.find((d: { kind: string }) => d.kind === "logbook");
+    expect(logbook.checklist.checked).toBe(0);
+    expect(detail.body.can_decide).toBe(false);
   });
 });
 
@@ -340,6 +412,7 @@ describe("decision idempotency", () => {
     const { vehicleId } = await submittedVehicle();
     const key = { "Idempotency-Key": `dbl-${ulid()}` };
     const body = { action: "reject", note: "Logbook is in a third party's name." };
+    await workVehicleChecklist(admin.token, vehicleId, ["lb_owner"]);
 
     const first = await request(app).post(`/admin/vehicles/${vehicleId}/decision`).set(bearer(admin.token)).set(key).send(body);
     expect(first.status).toBe(200);

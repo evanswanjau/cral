@@ -551,7 +551,7 @@ describe("merchant onboarding — submit", () => {
     const vehicleRow = await db("vehicles").where({ id: vehicleId }).first();
     expect(vehicleRow.status).toBe("pending");
     expect(vehicleRow.submitted_at).toBeTruthy();
-    expect(vehicleRow.listing_ref).toMatch(/^H\d{9}$/);
+    expect(vehicleRow.listing_ref).toMatch(/^H-\d{6}-\d{3}$/);
     const submittedEvent = await db("vehicle_events")
       .where({ vehicle_id: vehicleId, kind: "submitted" })
       .first();

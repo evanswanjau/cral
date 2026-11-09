@@ -3,13 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMerchants, type MerchantRow } from "../lib/merchants-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { MERCHANT_BADGE } from "../components/console/status.js";
 
 const GRID = "minmax(0,1fr) 190px 96px 74px 62px 96px 14px";
-
-const BADGE: Record<string, { label: string; bg: string; border: string; fg: string }> = {
-  verified: { label: "VERIFIED", bg: "#DDF3E9", border: "#A8DEC7", fg: "#076945" },
-  new_merchant: { label: "NEW MERCHANT", bg: "#FFF3DB", border: "#F5D9A3", fg: "#8A5200" },
-};
 
 export function Merchants(): JSX.Element {
   usePageTitle("Merchants");
@@ -70,7 +66,7 @@ export function Merchants(): JSX.Element {
 }
 
 function Row({ m, onOpen }: { m: MerchantRow; onOpen: () => void }): JSX.Element {
-  const b = BADGE[m.badge]!;
+  const b = MERCHANT_BADGE[m.badge];
   return (
     <div onClick={onOpen} style={{ ...S.rowGrid, ...S.row }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
@@ -78,7 +74,7 @@ function Row({ m, onOpen }: { m: MerchantRow; onOpen: () => void }): JSX.Element
         <div style={{ minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
             <span style={{ font: "600 15px/1.25 Archivo,sans-serif", color: "#1A1F2B" }}>{m.name}</span>
-            <span style={{ ...S.badge, background: b.bg, borderColor: b.border, color: b.fg }}>{b.label}</span>
+            <span style={{ ...S.badge, background: b.bg, borderColor: b.border, color: b.fg }}>{b.glyph} {b.label}</span>
           </div>
           <div style={S.towns}>{m.towns.length ? m.towns.join(", ") : "No county on file"}</div>
         </div>

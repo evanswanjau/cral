@@ -125,7 +125,7 @@ export function CodeInput({
   };
 
   return (
-    <div role="group" aria-label={label} style={{ display: "flex", gap: length > 4 ? 8 : 10 }}>
+    <div role="group" aria-label={label} style={{ display: "flex", gap: length > 4 ? 8 : 10, width: "100%", minWidth: 0 }}>
       {Array.from({ length }, (_, i) => {
         const active = focused === i;
         return (
@@ -158,7 +158,12 @@ export function CodeInput({
             }}
             onBlur={() => setFocused((f) => (f === i ? null : f))}
             style={{
+              // `width: 0` keeps each box's intrinsic (min-content) width out
+              // of the parent's sizing - otherwise six boxes at their 58px cap
+              // force a grid-laid form wider than a narrow card and spill out
+              // of it (the Ops sign-in did). Flex then grows them to fit.
               flex: "1 1 0",
+              width: 0,
               minWidth: 0,
               maxWidth: 58,
               height: 56,

@@ -39,6 +39,20 @@ export function statusTone(status: BackendVehicleStatus): Tone {
   return S[STATUS_TO_KEY[status]];
 }
 
+/** Every check answered, nothing decided yet - the case (or file) is waiting on a decision, not a review. */
+export const READY_TONE: Tone = {
+  label: "Ready to decide",
+  core: "#0F23A8",
+  tint: "#E8EBFA",
+  border: "#C5CCF2",
+  text: "#0F23A8",
+};
+
+/** A company has a "business"; an individual renting out their own car has an "account". */
+export function entityWord(ownerType: string): "business" | "account" {
+  return ownerType === "company" ? "business" : "account";
+}
+
 export const BUCKET_LABEL: Record<ReviewBucket | "all", string> = {
   needs_review: "Needs review",
   with_you: "With you",
@@ -63,6 +77,17 @@ export const DOC_DOT: Record<DocState, { core: string; fg: string; label: string
   expiring: { core: "#C77400", fg: "#8A5200", label: "Expiring soon" },
   rejected: { core: "#D81E32", fg: "#A50E22", label: "Rejected — the merchant has been told" },
   missing: { core: "#E4E7EC", fg: "#838C9B", label: "Not uploaded" },
+};
+
+/** The merchant-review badge - glyph + word, never colour alone. */
+export const MERCHANT_BADGE: Record<
+  "verified" | "changes_requested" | "new_merchant" | "ready",
+  { label: string; glyph: string; bg: string; border: string; fg: string }
+> = {
+  verified: { label: "VERIFIED", glyph: "✓", bg: "#DDF3E9", border: "#A8DEC7", fg: "#076945" },
+  changes_requested: { label: "CHANGES SENT", glyph: "⚑", bg: "#FFF3DB", border: "#F5D9A3", fg: "#8A5200" },
+  new_merchant: { label: "NOT VERIFIED YET", glyph: "○", bg: "#F1F3F6", border: "#E4E7EC", fg: "#5A6373" },
+  ready: { label: "READY TO DECIDE", glyph: "●", bg: "#E8EBFA", border: "#C5CCF2", fg: "#0F23A8" },
 };
 
 export const TONE_DOT: Record<EventTone, string> = {
