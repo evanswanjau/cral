@@ -234,7 +234,7 @@ components:
           type: string
           nullable: true
           description: >
-            The plated reference shown on the row, e.g. "CB-2841" /
+            The plated reference shown on the row, e.g. "CB-260922-001" /
             "PAY-0918" / "KDL 559X". Null for a merchant-level notice.
         subject_type:
           type: string

@@ -169,7 +169,11 @@ paths:
   /admin/vehicles/{vehicleId}/documents/{kind}/decision:
     post:
       tags: [admin-vehicles]
-      summary: Accept or reject one document line
+      summary: >
+        Accept one document line, ask for a new upload (`reject`), or undo
+        (`reset` - back to pending, and every answer under the document is
+        cleared). `accept` needs the document's own checklist fully passed;
+        normally the checklist has already accepted it.
       operationId: adminDecideVehicleDocument
       security: [{ bearerAuth: [] }]
       parameters:
@@ -192,7 +196,7 @@ paths:
               type: object
               required: [decision]
               properties:
-                decision: { type: string, enum: [accept, reject] }
+                decision: { type: string, enum: [accept, reject, reset] }
                 note:
                   type: string
                   description: Required when `decision` is `reject` — quoted to the merchant verbatim.
@@ -206,7 +210,7 @@ paths:
           description: idempotency_key_required | idempotency_conflict
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "422":
-          description: reason_required | not_a_reviewable_document
+          description: reason_required | not_a_reviewable_document | checklist_incomplete | checklist_flagged (accept)
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "404":
           description: review_case_not_found | document_not_uploaded
@@ -218,9 +222,11 @@ paths:
     post:
       tags: [admin-vehicles]
       summary: >
-        Set one review-checklist answer (idempotent upsert, no key). When
-        this makes every `block` item under a real car document `pass`,
-        that document is set `ok` in the same call (a silent accept).
+        Set one review-checklist answer (idempotent upsert, no key). The
+        document it hangs under follows: every item under it `pass` -> the
+        document is set `ok` (a silent accept); an `ok` document whose
+        items stop being all-pass -> back to `pending`. A rejected
+        document is left alone.
       operationId: adminSetVehicleChecklistItem
       security: [{ bearerAuth: [] }]
       parameters:
@@ -282,10 +288,12 @@ paths:
               schema: { $ref: "#/components/schemas/ReviewCase" }
         "422":
           description: >
+            reason_required (request_changes / reject without a note) |
+            checklist_incomplete (any action, an item unanswered or a
+            check-less document undecided) |
             merchant_not_approved (approve, business not verified) |
             documents_not_all_accepted (approve, a car doc still not `ok`) |
-            checklist_blockers_outstanding (approve, a `block` item not `pass`) |
-            reason_required (request_changes / reject without a note)
+            checklist_flagged (approve, an item flagged)
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "400":
           description: idempotency_key_required | idempotency_conflict
@@ -363,12 +371,14 @@ components:
         review_note: { type: string, nullable: true }
         original_name: { type: string, nullable: true }
         expires_at: { type: string, nullable: true }
+        reviewed_at: { type: string, format: date-time, nullable: true }
         checklist:
           allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
           description: >
-            This document's slice of the review checklist, shown as an
-            accordion under the row. When every `block` item here is
-            `pass` the document is set `ok` automatically.
+            This document's slice of the review checklist, shown under the
+            row. When every item here is `pass` the document is set `ok`
+            automatically; a document with no applicable items is accepted
+            by hand.
 
     CheckLine:
       type: object
@@ -404,15 +414,26 @@ components:
                   The document this item hangs under
                   (`logbook` / `comprehensive_insurance` /
                   `tracker_certificate` / `photos`), or null.
-              severity: { type: string, enum: [block, flag] }
               label: { type: string }
               help: { type: string }
               result: { type: string, enum: [pending, pass, flag] }
               note: { type: string, nullable: true }
-        checked: { type: integer }
-        total: { type: integer }
+              skipped:
+                type: boolean
+                description: >
+                  Under a document already sent back for a new upload - no
+                  answer needed until the replacement arrives.
+        checked: { type: integer, description: Answered items, skipped ones excluded. }
+        total: { type: integer, description: Items that need an answer, skipped ones excluded. }
         flagged: { type: integer }
-        blockers_outstanding: { type: integer, description: "`block` items not yet `pass` — these disable Approve." }
+        outstanding: { type: integer, description: "`total - checked`." }
+        complete:
+          type: boolean
+          description: >
+            Every item answered. Checklist-first (2026-09-25): every item
+            must be `pass` or `flag` before any decision; there is no
+            "must pass" tier. An answer given before its document was
+            re-uploaded reads `pending` again.
         suggested_note:
           type: object
           description: What the request-changes / reject modal opens pre-filled with.
@@ -456,13 +477,30 @@ components:
         reviewer_note: { type: string, nullable: true }
         reviewer_note_resolved: { type: boolean }
         assigned_to_me: { type: boolean }
-        can_approve: { type: boolean, description: "car docs `ok` AND checklist blockers clear AND `merchant_approved`" }
+        can_decide:
+          type: boolean
+          description: >
+            Checklist complete AND every uploaded document with no checks
+            of its own decided - the gate for approve, request changes and
+            reject alike.
+        can_approve: { type: boolean, description: "`can_decide` AND nothing flagged AND car docs `ok` AND `merchant_approved`" }
         approve_blockers:
           type: object
           properties:
+            checklist_outstanding: { type: integer, description: Unanswered items plus undecided check-less documents. }
+            flagged: { type: integer }
             documents: { type: integer }
-            checklist: { type: integer }
             merchant_not_approved: { type: boolean }
+        next_case:
+          type: object
+          nullable: true
+          description: The oldest other open (pending / review) case - "Next in queue".
+          properties: { id: { type: string }, registration: { type: string } }
+        merchant_next_case:
+          type: object
+          nullable: true
+          description: The oldest other open case from this same merchant.
+          properties: { id: { type: string }, registration: { type: string } }
         outstanding_documents: { type: array, items: { type: string }, description: The three per-vehicle docs still not `ok`. }
         merchant_approved: { type: boolean, description: "`merchants.approved_at` is set (gate 1)." }
         documents: { type: array, items: { $ref: "#/components/schemas/DocumentLine" }, description: The three per-vehicle docs only. }
@@ -483,8 +521,8 @@ components:
         checklist:
           allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
           description: >
-            The whole checklist across every document - drives the approve
-            gate (`checklist_blockers_outstanding`) and the pre-filled
+            The whole checklist across every document - drives the decision
+            gates (`checklist_incomplete`, `checklist_flagged`) and the pre-filled
             request-changes / reject note. Per-document slices also appear
             on each `documents[].checklist`.
         photos_checklist:

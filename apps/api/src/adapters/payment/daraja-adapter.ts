@@ -174,7 +174,7 @@ export class DarajaPaymentAdapter implements PaymentAdapter {
         // the booking ref is exactly the thing they would want to
         // recognise. NOT a correlator: Daraja never sends this back. See
         // the class comment.
-        AccountReference: input.narration.slice(0, 12),
+        AccountReference: (input.accountReference ?? input.narration).slice(0, 12),
         TransactionDesc: input.narration.slice(0, 13),
       }),
     });

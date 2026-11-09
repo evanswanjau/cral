@@ -183,7 +183,7 @@ components:
         ref:
           type: string
           nullable: true
-          description: The plated booking reference shown on the row, e.g. "CB-2841".
+          description: The plated booking reference shown on the row, e.g. "CB-260922-001".
         subject_type:
           type: string
           nullable: true

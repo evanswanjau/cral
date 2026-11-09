@@ -401,7 +401,7 @@ components:
         ]
       properties:
         id: { type: string, example: veh_01J... }
-        listing_ref: { type: string, nullable: true, example: H260831001 }
+        listing_ref: { type: string, nullable: true, example: H-260831-001 }
         make: { type: string }
         model: { type: string }
         year: { type: string }

@@ -149,7 +149,7 @@ interface NotifyBase {
   category: NotificationCategory;
   title: string;
   body: string;
-  /** The plated reference shown on the row, e.g. "CB-2841". */
+  /** The plated reference shown on the row, e.g. "CB-260922-001". */
   ref?: string | null;
   /** Deep-link target for the row's CTA. Omit both for an account-level notice. */
   subjectType?: NotificationSubjectType | null;

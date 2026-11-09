@@ -133,7 +133,7 @@ async function addVehicle(merchantId: string, spec: VehicleSpec = {}): Promise<s
       chauffeured: spec.chauffeured ?? false,
       status: spec.status ?? "live",
       verification_badge: spec.verification_badge ?? "none",
-      listing_ref: `H${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 900 + 100)}`,
+      listing_ref: `H-${Date.now().toString().slice(-6)}-${ulid().slice(-6)}`,
       submitted_at: new Date(),
       insurance_expiry: "2027-02-15",
     })
@@ -172,7 +172,7 @@ async function seedBooking(
   const id = generateId("booking");
   await db("bookings").insert({
     id,
-    ref: `CB-${Math.floor(Math.random() * 9000 + 1000)}`,
+    ref: `CB-${Date.now().toString().slice(-6)}-${ulid().slice(-6)}`,
     merchant_id: merchantId,
     vehicle_id: vehicleId,
     hirer_id: userId,

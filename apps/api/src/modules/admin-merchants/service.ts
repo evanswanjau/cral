@@ -10,8 +10,16 @@ import {
   merchantChecklist,
   setMerchantCheck,
   checklistSnapshot,
+  splitByDocument,
+  toBlock,
+  documentChecklistState,
+  resetDocumentChecks,
+  unanswered,
+  flaggedItems,
+  undecidedUncheckedDocs,
   UnknownChecklistItem,
   type CheckResult,
+  type MergedCheck,
 } from "../../lib/review-checklist.js";
 import { effectiveDocState } from "../vehicles/service.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
@@ -160,7 +168,7 @@ export async function listMerchants(query: ListMerchantsQuery) {
         name,
         initials: initials(name),
         approved: a.merchant.approved_at !== null,
-        badge: a.merchant.approved_at !== null ? "verified" : "new_merchant",
+        badge: badgeOf(a.merchant),
         contact: contactLine(a),
         joined: a.merchant.created_at.toISOString(),
         towns: a.towns,
@@ -197,18 +205,93 @@ async function requireMerchant(merchantId: string): Promise<MerchantRow> {
   return merchant;
 }
 
+/**
+ * What the merchant's approval is called to them: a company has a
+ * "business", an individual has an "account" (owner's call, 2026-09-25 -
+ * someone renting out their own car isn't a business).
+ */
+function entityWord(m: MerchantRow): "business" | "account" {
+  return m.owner_type === "company" ? "business" : "account";
+}
+
+/** Where the business review stands - the file's status chip and the list badge. */
+function reviewStateOf(m: MerchantRow): "verified" | "changes_requested" | "in_review" {
+  if (m.approved_at !== null) return "verified";
+  if (m.review_changes_requested_at !== null) return "changes_requested";
+  return "in_review";
+}
+
+function badgeOf(m: MerchantRow): "verified" | "changes_requested" | "new_merchant" {
+  const s = reviewStateOf(m);
+  return s === "in_review" ? "new_merchant" : s;
+}
+
+const AUDIT_EVENT: Record<string, { label: string; tone: "grey" | "blue" | "green" | "amber" | "red" }> = {
+  "merchant.approved": { label: "Merchant approved", tone: "green" },
+  "merchant.changes_requested": { label: "Changes requested", tone: "amber" },
+  "merchant.approval_reopened": { label: "Approval reopened", tone: "amber" },
+  "merchant.document_accepted": { label: "accepted", tone: "green" },
+  "merchant.document_rejected": { label: "new upload requested", tone: "red" },
+  "merchant.document_reopened": { label: "decision undone", tone: "grey" },
+};
+
+/**
+ * The file's activity timeline. The merchant side has no events table of
+ * its own, so this reads the admin decisions off `audit_log` - an Ops
+ * reader behind `requireAdmin`, which is exactly where CLAUDE.md says an
+ * audit reader may live. Document rows are deleted on re-upload, so a
+ * replaced file's history drops out with it.
+ */
+async function merchantActivity(merchant: MerchantRow, ownerDocs: DocumentRow[]) {
+  const docKind = new Map(ownerDocs.map((d) => [d.id, d.kind as string]));
+  const rows = await db("audit_log")
+    .where((q) => {
+      q.where({ entity_type: "merchant", entity_id: merchant.id });
+      if (docKind.size) q.orWhere((q2) => q2.where({ entity_type: "document" }).whereIn("entity_id", [...docKind.keys()]));
+    })
+    .whereIn("action", Object.keys(AUDIT_EVENT))
+    .orderBy("created_at", "desc")
+    .limit(30)
+    .select("action", "entity_id", "actor_id", "after", "created_at");
+  const adminIds = [...new Set(rows.map((r) => r.actor_id as string | null).filter((x): x is string => !!x))];
+  const admins = adminIds.length
+    ? await db<{ id: string; full_name: string }>("admin_users").whereIn("id", adminIds).select("id", "full_name")
+    : [];
+  const nameOf = new Map(admins.map((a) => [a.id, a.full_name]));
+  return rows.map((r) => {
+    const ev = AUDIT_EVENT[r.action as string]!;
+    const after = (typeof r.after === "string" ? JSON.parse(r.after) : r.after) as Record<string, unknown> | null;
+    const kind = docKind.get(r.entity_id as string);
+    const viaChecklist = after?.via === "checklist";
+    return {
+      label: kind ? `${DOC_LABEL[kind] ?? kind} ${ev.label}${viaChecklist ? " - checklist complete" : ""}` : ev.label,
+      body: typeof after?.note === "string" ? after.note : null,
+      tone: ev.tone,
+      actor_name: r.actor_id ? (nameOf.get(r.actor_id as string) ?? null) : null,
+      occurred_at: (r.created_at as Date).toISOString(),
+    };
+  });
+}
+
 export async function getMerchantFile(merchantId: string) {
   const merchant = await requireMerchant(merchantId);
 
-  const [user, vehicles, ownerDocs, checklist, docSets] = await Promise.all([
-    db<{ id: string; phone: string | null }>("users").where({ id: merchant.user_id }).first(),
+  const [user, vehicles, ownerDocs, docSets] = await Promise.all([
+    db<{ id: string; phone: string | null; email: string; phone_verified: boolean; full_name: string | null }>("users")
+      .where({ id: merchant.user_id })
+      .first(),
     db<VehicleRow>("vehicles").where({ merchant_id: merchant.id }).whereIn("status", [...QUEUE_STATUSES]),
     db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
-    merchantChecklist(merchant),
     getMerchantApprovalDocs(),
   ]);
+  const [checklist, events] = await Promise.all([
+    merchantChecklist(merchant, ownerDocs),
+    merchantActivity(merchant, ownerDocs),
+  ]);
+  const checksByDocument = splitByDocument(checklist.merged);
 
-  // The business / account documents - this file's own review gate.
+  // The business / account documents - this file's own review gate, each
+  // with the checklist items that hang under it.
   const requiredDocs = merchantApprovalDocsFor(merchant.owner_type, docSets);
   const businessDocuments = requiredDocs.map((kind) => {
     const doc = ownerDocs.find((d) => d.kind === kind);
@@ -219,11 +302,16 @@ export async function getMerchantFile(merchantId: string) {
       document_id: doc?.id ?? null,
       review_note: doc?.review_note ?? null,
       original_name: doc?.original_name ?? null,
+      expires_at: doc?.expires_at ?? null,
+      reviewed_at: doc?.reviewed_at?.toISOString() ?? null,
+      checklist: toBlock(checksByDocument.get(kind) ?? []),
     };
   });
   const docsOutstanding = businessDocuments.filter((d) => d.state !== "ok").map((d) => d.kind);
-  const canApprove =
-    docsOutstanding.length === 0 && checklist.block.blockers_outstanding === 0;
+  const block = checklist.block;
+  const undecided = undecidedUncheckedDocs(ownerDocs, checklist.merged, requiredDocs);
+  const reviewComplete = block.complete && undecided.length === 0;
+  const canApprove = reviewComplete && block.flagged === 0 && docsOutstanding.length === 0;
   const vehicleIds = vehicles.map((v) => v.id);
   const docs = vehicleIds.length
     ? await db<DocumentRow>("documents").whereIn("vehicle_id", vehicleIds)
@@ -253,41 +341,81 @@ export async function getMerchantFile(merchantId: string) {
   const name = merchantDisplayName(merchant);
   const towns = [...new Set(vehicles.map((v) => v.county).filter((c): c is string => !!c))];
 
-  // Oldest still-open case — the "Review <plate>" button jumps to it.
+  // Oldest still-open case — the "Review <plate>" prompt jumps to it.
   const nextCase = vehicles
     .filter((v) => (OPEN_STATUSES as readonly string[]).includes(v.status))
     .sort((a, b) => (a.submitted_at ?? a.created_at).getTime() - (b.submitted_at ?? b.created_at).getTime())[0];
 
   const approved = merchant.approved_at !== null;
   const note = !approved
-    ? "Business documents for this merchant are still being checked. Approving a vehicle does not verify the business - those are two separate decisions."
+    ? `Approving a vehicle does not verify the ${entityWord(merchant)} - those are two separate decisions.`
     : agg.rejected > 0
       ? `${agg.rejected} earlier submission${agg.rejected === 1 ? " was" : "s were"} rejected. Read what they were told before you decide again.`
       : null;
+  const isCompany = merchant.owner_type === "company";
+  const personName = [merchant.first_name, merchant.middle_name, merchant.surname].filter(Boolean).join(" ") || null;
 
   return {
     id: merchant.id,
     name,
     initials: initials(name),
     approved,
-    badge: approved ? "verified" : "new_merchant",
+    approved_at: merchant.approved_at?.toISOString() ?? null,
+    badge: badgeOf(merchant),
+    review_state: reviewStateOf(merchant),
+    review_note: merchant.review_note,
+    changes_requested_at: merchant.review_changes_requested_at?.toISOString() ?? null,
     owner_type: merchant.owner_type,
-    contact: [
-      merchant.owner_type === "company"
-        ? [merchant.first_name, merchant.surname].filter(Boolean).join(" ")
-        : name,
-      user?.phone ?? null,
-    ]
+    contact: [isCompany ? [merchant.first_name, merchant.surname].filter(Boolean).join(" ") : name, user?.phone ?? null]
       .filter(Boolean)
       .join(" · ") || "No contact on file",
     joined: merchant.created_at.toISOString(),
     towns,
     note,
+    // Checklist-first: nothing can be decided until every item is answered.
+    can_decide: reviewComplete,
     can_approve: canApprove,
-    approve_blockers: { documents: docsOutstanding.length, checklist: checklist.block.blockers_outstanding },
+    approve_blockers: {
+      checklist_outstanding: block.outstanding + undecided.length,
+      flagged: block.flagged,
+      documents: docsOutstanding.length,
+    },
     outstanding_documents: docsOutstanding,
     business_documents: businessDocuments,
-    checklist: checklist.block,
+    /** Items about the account as a whole (no document row). */
+    business_checklist: toBlock(checksByDocument.get("other") ?? []),
+    checklist: block,
+    // What the merchant typed - the checklist asks the reviewer to compare
+    // these against the scans, so they sit beside them.
+    declared: {
+      person: {
+        full_name: personName,
+        national_id: merchant.national_id,
+        kra_pin: merchant.kra_pin,
+      },
+      company: isCompany
+        ? {
+            name: merchant.company_name,
+            cert_no: merchant.company_cert_no,
+            kra_pin: merchant.company_kra,
+            email: merchant.company_email,
+            address: merchant.company_address,
+          }
+        : null,
+      contact: {
+        email: user?.email ?? null,
+        phone: user?.phone ?? null,
+        phone_verified: user?.phone_verified ?? false,
+      },
+      payout: {
+        method: merchant.payout_method,
+        mpesa_name: merchant.payout_mpesa_name,
+        bank_name: merchant.bank_name,
+        bank_account_name: merchant.bank_account_name,
+        bank_account_number: merchant.bank_account_number,
+      },
+    },
+    events,
     stats: {
       submitted: agg.fleet,
       live: agg.live,
@@ -336,7 +464,7 @@ export async function getMerchantFile(merchantId: string) {
 export async function decideMerchantDocument(
   merchantId: string,
   kind: string,
-  decision: "accept" | "reject",
+  decision: "accept" | "reject" | "reset",
   note: string | null,
   admin: AdminCtx,
 ) {
@@ -356,7 +484,7 @@ export async function decideMerchantDocument(
       status: 422,
       type: "validation_error",
       code: "reason_required",
-      message: "Write what the merchant should read before rejecting a document.",
+      message: "Write what the merchant should read before asking for a new upload.",
       field: "note",
     });
   }
@@ -373,7 +501,23 @@ export async function decideMerchantDocument(
     });
   }
 
-  const nextState = decision === "accept" ? "ok" : "rejected";
+  const { merged } = await merchantChecklist(merchant);
+  if (decision === "accept") {
+    const state = documentChecklistState(merged, kind);
+    if (state === "incomplete" || state === "flagged") {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: state === "incomplete" ? "checklist_incomplete" : "checklist_flagged",
+        message:
+          state === "incomplete"
+            ? "Work every check under this document before accepting it."
+            : "A check under this document is flagged - it can't be accepted as it stands.",
+      });
+    }
+  }
+
+  const nextState = decision === "accept" ? "ok" : decision === "reject" ? "rejected" : "pending";
   const notificationIds: string[] = [];
   await db.transaction(async (trx) => {
     await trx<DocumentRow>("documents")
@@ -381,17 +525,30 @@ export async function decideMerchantDocument(
       .update({
         review_state: nextState,
         review_note: decision === "reject" ? note!.trim() : null,
-        reviewed_by: admin.adminId,
-        reviewed_at: new Date(),
+        reviewed_by: decision === "reset" ? null : admin.adminId,
+        reviewed_at: decision === "reset" ? null : new Date(),
       });
+    if (decision === "reset") {
+      await resetDocumentChecks(
+        trx,
+        "merchant_review_checks",
+        { merchant_id: merchant.id },
+        merged.filter((m) => m.document === kind).map((m) => m.id),
+      );
+    }
     await writeAuditEntry(trx, {
       actorId: admin.adminId,
       actorType: "admin",
-      action: decision === "accept" ? "merchant.document_accepted" : "merchant.document_rejected",
+      action:
+        decision === "accept"
+          ? "merchant.document_accepted"
+          : decision === "reject"
+            ? "merchant.document_rejected"
+            : "merchant.document_reopened",
       entityType: "document",
       entityId: doc.id,
       before: { review_state: doc.review_state },
-      after: { review_state: nextState, kind },
+      after: { review_state: nextState, kind, ...(decision === "reject" ? { note: note!.trim() } : {}) },
       requestId: admin.requestId,
       ip: admin.ip,
     });
@@ -438,23 +595,77 @@ export async function setMerchantChecklistItem(
     }
     throw err;
   }
+  await syncBusinessDocWithChecklist(merchant, itemId, admin);
   return getMerchantFile(merchantId);
 }
 
+/**
+ * Same rule as the vehicle case: a business document's `review_state`
+ * follows the checklist under it - all passed -> accepted (silently), an
+ * accepted document whose checklist stops being all-pass -> pending. A
+ * rejected document waits for the merchant's re-upload.
+ */
+async function syncBusinessDocWithChecklist(merchant: MerchantRow, itemId: string, admin: AdminCtx) {
+  const { merged } = await merchantChecklist(merchant);
+  const kind = merged.find((m) => m.id === itemId)?.document ?? null;
+  if (!kind) return;
+  const doc = await db<DocumentRow>("documents")
+    .where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null, kind: kind as DocumentRow["kind"] })
+    .first();
+  if (!doc || doc.review_state === "rejected") return;
+
+  const passed = documentChecklistState(merged, kind) === "passed";
+  if (passed === (doc.review_state === "ok")) return;
+  const nextState = passed ? "ok" : "pending";
+  await db.transaction(async (trx) => {
+    await trx<DocumentRow>("documents").where({ id: doc.id }).update({
+      review_state: nextState,
+      review_note: null,
+      reviewed_by: passed ? admin.adminId : null,
+      reviewed_at: passed ? new Date() : null,
+    });
+    await writeAuditEntry(trx, {
+      actorId: admin.adminId,
+      actorType: "admin",
+      action: passed ? "merchant.document_accepted" : "merchant.document_reopened",
+      entityType: "document",
+      entityId: doc.id,
+      before: { review_state: doc.review_state },
+      after: { review_state: nextState, kind, via: "checklist" },
+      requestId: admin.requestId,
+      ip: admin.ip,
+    });
+  });
+}
+
+function assertChecklistComplete(merged: MergedCheck[], undecidedDocs: string[] = []): void {
+  const open = unanswered(merged).length + undecidedDocs.length;
+  if (open) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "checklist_incomplete",
+      message: `Finish the checklist first - ${open} check${open === 1 ? "" : "s"} still to answer.`,
+    });
+  }
+}
+
 // ---------------------------------------------------------------------
-// Approve / reopen
+// Approve / request changes / reopen
 // ---------------------------------------------------------------------
 
 export async function approveMerchant(merchantId: string, admin: AdminCtx) {
   const merchant = await requireMerchant(merchantId);
   if (merchant.approved_at !== null) return getMerchantFile(merchantId);
 
-  const [ownerDocs, checklist, docSets] = await Promise.all([
+  const [ownerDocs, docSets] = await Promise.all([
     db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
-    merchantChecklist(merchant),
     getMerchantApprovalDocs(),
   ]);
+  const checklist = await merchantChecklist(merchant, ownerDocs);
   const required = merchantApprovalDocsFor(merchant.owner_type, docSets);
+  assertChecklistComplete(checklist.merged, undecidedUncheckedDocs(ownerDocs, checklist.merged, required));
+
   const docsOutstanding = required.filter(
     (kind) => effectiveDocState(ownerDocs.find((d) => d.kind === kind)) !== "ok",
   );
@@ -463,22 +674,24 @@ export async function approveMerchant(merchantId: string, admin: AdminCtx) {
       status: 422,
       type: "validation_error",
       code: "documents_not_all_accepted",
-      message: `Accept every business document first — still outstanding: ${docsOutstanding.join(", ")}.`,
+      message: `Accept every ${entityWord(merchant)} document first — still outstanding: ${docsOutstanding.join(", ")}.`,
     });
   }
-  const blocking = checklist.merged.filter((m) => m.severity === "block" && m.result !== "pass");
-  if (blocking.length) {
+  const flagged = flaggedItems(checklist.merged);
+  if (flagged.length) {
     throw new ApiError({
       status: 422,
       type: "validation_error",
-      code: "checklist_blockers_outstanding",
-      message: `Work the checklist first — still open: ${blocking.map((b) => b.label).join("; ")}.`,
+      code: "checklist_flagged",
+      message: `A flagged check can't be approved - request changes instead. Flagged: ${flagged.map((f) => f.label).join("; ")}.`,
     });
   }
 
   const notificationIds: string[] = [];
   await db.transaction(async (trx) => {
-    await trx("merchants").where({ id: merchant.id }).update({ approved_at: new Date() });
+    await trx("merchants")
+      .where({ id: merchant.id })
+      .update({ approved_at: new Date(), review_changes_requested_at: null, review_note: null });
     await writeAuditEntry(trx, {
       actorId: admin.adminId,
       actorType: "admin",
@@ -493,8 +706,66 @@ export async function approveMerchant(merchantId: string, admin: AdminCtx) {
       await notify(trx, {
         merchantId: merchant.id,
         category: "review",
-        title: "Your business is verified",
+        title: `Your ${entityWord(merchant)} is verified`,
         body: "Your account documents have been approved. New vehicles now only need their own documents checked.",
+        subjectType: null,
+        subjectId: null,
+      }),
+    );
+  });
+  await enqueueNotificationDelivery(merchant.id, notificationIds);
+  return getMerchantFile(merchantId);
+}
+
+/**
+ * The business-level "Request changes": the merchant is told what to fix
+ * (in-app, and by SMS/email - `review` always texts), and the file reads
+ * "Changes sent" until an approve clears it. Checklist-first, same as
+ * every other decision.
+ */
+export async function requestMerchantChanges(merchantId: string, note: string, admin: AdminCtx) {
+  const merchant = await requireMerchant(merchantId);
+  if (merchant.approved_at !== null) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "merchant_already_approved",
+      message: `This ${entityWord(merchant)} is already verified. Reopen the review first.`,
+    });
+  }
+  const [ownerDocs, docSets] = await Promise.all([
+    db<DocumentRow>("documents").where({ merchant_id: merchant.id, vehicle_id: null, driver_id: null }),
+    getMerchantApprovalDocs(),
+  ]);
+  const checklist = await merchantChecklist(merchant, ownerDocs);
+  assertChecklistComplete(
+    checklist.merged,
+    undecidedUncheckedDocs(ownerDocs, checklist.merged, merchantApprovalDocsFor(merchant.owner_type, docSets)),
+  );
+
+  const trimmed = note.trim();
+  const notificationIds: string[] = [];
+  await db.transaction(async (trx) => {
+    await trx("merchants")
+      .where({ id: merchant.id })
+      .update({ review_changes_requested_at: new Date(), review_note: trimmed });
+    await writeAuditEntry(trx, {
+      actorId: admin.adminId,
+      actorType: "admin",
+      action: "merchant.changes_requested",
+      entityType: "merchant",
+      entityId: merchant.id,
+      before: { review_note: merchant.review_note },
+      after: { note: trimmed, checklist: checklistSnapshot(checklist.merged) },
+      requestId: admin.requestId,
+      ip: admin.ip,
+    });
+    notificationIds.push(
+      await notify(trx, {
+        merchantId: merchant.id,
+        category: "review",
+        title: merchant.owner_type === "company" ? "Your business details need a change" : "Your account details need a change",
+        body: trimmed,
         subjectType: null,
         subjectId: null,
       }),

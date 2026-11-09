@@ -37,6 +37,10 @@ export interface MerchantRow {
   approved_at: Date | null;
   /** Someone with no car who only lists drivers - waives onboarding's "at least one vehicle" (20261018090000). */
   drivers_only: boolean;
+  /** Set by an admin's business-level "Request changes"; cleared on approve (20261109090000). */
+  review_changes_requested_at: Date | null;
+  /** What the merchant was told with that request. */
+  review_note: string | null;
   last_activity_at: Date;
   created_at: Date;
   updated_at: Date;

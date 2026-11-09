@@ -186,7 +186,7 @@ describe("requesting a car", () => {
 
     expect(res.status).toBe(201);
     expect(res.body.status).toBe("requested");
-    expect(res.body.ref).toMatch(/^CB\d{6}\d{3}$/);
+    expect(res.body.ref).toMatch(/^CB-\d{6}-\d{3}$/);
     // dates(3, 3) spans four Nairobi days inclusive.
     expect(res.body.days).toBe(4);
 

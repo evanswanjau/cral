@@ -14,6 +14,12 @@ export interface StkPushInput {
   amountCents: number;
   /** What shows in the STK prompt / statement line, e.g. a booking ref. Co-op's `TransactionNarration`, max 30 chars. */
   narration: string;
+  /**
+   * A short reference for providers with a tight field - Daraja's
+   * `AccountReference` is 12 characters, which the narration
+   * ("CRAL CB-260922-001") never fit. The booking ref without hyphens.
+   */
+  accountReference?: string;
 }
 
 export interface StkPushResult {

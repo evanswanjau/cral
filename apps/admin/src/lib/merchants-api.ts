@@ -1,18 +1,23 @@
 import { apiGet, apiPost } from "./api.js";
 import type {
   BackendVehicleStatus,
+  CaseEvent,
   ChecklistBlock,
   CheckResult,
+  DocDecision,
   DocState,
   ReviewBucket,
 } from "./vehicles-api.js";
+
+export type MerchantBadge = "verified" | "changes_requested" | "new_merchant";
+export type MerchantReviewState = "verified" | "changes_requested" | "in_review";
 
 export interface MerchantRow {
   id: string;
   name: string;
   initials: string;
   approved: boolean;
-  badge: "verified" | "new_merchant";
+  badge: MerchantBadge;
   contact: string;
   joined: string;
   towns: string[];
@@ -49,6 +54,28 @@ export interface BusinessDocLine {
   document_id: string | null;
   review_note: string | null;
   original_name: string | null;
+  expires_at: string | null;
+  reviewed_at: string | null;
+  checklist: ChecklistBlock;
+}
+
+export interface MerchantDeclared {
+  person: { full_name: string | null; national_id: string | null; kra_pin: string | null };
+  company: {
+    name: string | null;
+    cert_no: string | null;
+    kra_pin: string | null;
+    email: string | null;
+    address: string | null;
+  } | null;
+  contact: { email: string | null; phone: string | null; phone_verified: boolean };
+  payout: {
+    method: string;
+    mpesa_name: string | null;
+    bank_name: string | null;
+    bank_account_name: string | null;
+    bank_account_number: string | null;
+  };
 }
 
 export interface MerchantFile {
@@ -56,17 +83,26 @@ export interface MerchantFile {
   name: string;
   initials: string;
   approved: boolean;
-  badge: "verified" | "new_merchant";
+  approved_at: string | null;
+  badge: MerchantBadge;
+  review_state: MerchantReviewState;
+  review_note: string | null;
+  changes_requested_at: string | null;
   owner_type: string;
   contact: string;
   joined: string;
   towns: string[];
   note: string | null;
+  can_decide: boolean;
   can_approve: boolean;
-  approve_blockers: { documents: number; checklist: number };
+  approve_blockers: { checklist_outstanding: number; flagged: number; documents: number };
   outstanding_documents: string[];
   business_documents: BusinessDocLine[];
+  /** Items about the account as a whole - no document row. */
+  business_checklist: ChecklistBlock;
   checklist: ChecklistBlock;
+  declared: MerchantDeclared;
+  events: CaseEvent[];
   stats: { submitted: number; live: number; waiting: number; rejected: number };
   review_next: { id: string; registration: string } | null;
   fleet: MerchantFleetRow[];
@@ -88,7 +124,7 @@ const idem = () => ({ headers: { "Idempotency-Key": `adm-${crypto.randomUUID()}`
 export function decideBusinessDocument(
   merchantId: string,
   kind: string,
-  decision: "accept" | "reject",
+  decision: DocDecision,
   note?: string,
 ) {
   return apiPost<MerchantFile>(
@@ -113,6 +149,10 @@ export function setMerchantChecklistItem(
 
 export function approveMerchant(merchantId: string) {
   return apiPost<MerchantFile>(`/admin/merchants/${merchantId}/approve`, undefined, idem());
+}
+
+export function requestMerchantChanges(merchantId: string, note: string) {
+  return apiPost<MerchantFile>(`/admin/merchants/${merchantId}/request-changes`, { note }, idem());
 }
 
 export function reopenMerchantReview(merchantId: string) {

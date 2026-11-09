@@ -27,8 +27,11 @@ const ListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });
 const DocDecisionSchema = z.object({
-  decision: z.enum(["accept", "reject"]),
+  decision: z.enum(["accept", "reject", "reset"]),
   note: z.string().trim().min(1).max(2000).optional(),
+});
+const RequestChangesSchema = z.object({
+  note: z.string().trim().min(1).max(2000),
 });
 const ChecklistItemSchema = z.object({
   item_id: z.string().min(1).max(40),
@@ -114,6 +117,20 @@ adminMerchantsRouter.post(
   requireIdempotencyKey(),
   asyncHandler(async (req, res) => {
     const result = await admin.approveMerchant(req.params.merchantId as string, ctxOf(req));
+    await req.idempotency!.complete(200, result);
+    res.status(200).json(result);
+  }),
+);
+
+// Business-level "Request changes" - there is deliberately no business
+// reject (that is account suspension, its own slice).
+adminMerchantsRouter.post(
+  "/admin/merchants/:merchantId/request-changes",
+  guard,
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    const body = RequestChangesSchema.parse(req.body);
+    const result = await admin.requestMerchantChanges(req.params.merchantId as string, body.note, ctxOf(req));
     await req.idempotency!.complete(200, result);
     res.status(200).json(result);
   }),

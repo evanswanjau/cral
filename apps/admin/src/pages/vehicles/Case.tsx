@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -9,34 +9,51 @@ import {
   fetchCase,
   setChecklistItem,
   type CheckResult,
-  type DocLine,
+  type DocDecision,
   type ReviewCase,
 } from "../../lib/vehicles-api.js";
-import { ChecklistRow } from "../../components/console/ChecklistPanel.js";
 import { ApiClientError } from "../../lib/api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
-import {
-  ageBadge,
-  DOC_DOT,
-  money,
-  REASON_TEMPLATES,
-  statusTone,
-  TONE_DOT,
-} from "../../components/console/status.js";
+import { ageBadge, entityWord, money, READY_TONE, REASON_TEMPLATES, statusTone } from "../../components/console/status.js";
+import { ActivityPanel } from "../../components/console/review/Activity.js";
+import { ReviewSection } from "../../components/console/review/ReviewSection.js";
+import { DecisionDock, NextStep, ProgressStrip, Toast } from "../../components/console/review/Progress.js";
+import { ApproveModal, ReasonModal, ScanViewer, UploadRequestModal } from "../../components/console/review/modals.js";
+import { scrollToSection, sectionOpen, type SectionModel } from "../../components/console/review/model.js";
+import { RS, TONE_BTN } from "../../components/console/review/styles.js";
 
 type Modal =
   | { kind: "approve" }
   | { kind: "changes" }
   | { kind: "reject" }
-  | { kind: "doc"; line: DocLine }
+  | { kind: "upload"; key: string }
+  | { kind: "scan"; key: string }
   | null;
 
+type ListingAction = "approve" | "request_changes" | "reject";
+
+/**
+ * The vehicle review case, checklist-first (owner's call, 2026-09-25):
+ * work every document's checklist - each one accepts itself when every
+ * line passes - and only then do Approve / Request changes / Reject
+ * appear, in the dock at the foot of the screen. The business is a
+ * separate gate; the dock sends the reviewer to the merchant file when it
+ * isn't verified yet, and the file sends them back.
+ */
 export function Case(): JSX.Element {
   const { vehicleId } = useParams<{ vehicleId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [modal, setModal] = useState<Modal>(null);
   const [toast, setToast] = useState<{ text: string; dot: string } | null>(null);
+  const [justDecided, setJustDecided] = useState<ListingAction | null>(null);
+  const [redeciding, setRedeciding] = useState(false);
+
+  useEffect(() => {
+    setJustDecided(null);
+    setRedeciding(false);
+    setModal(null);
+  }, [vehicleId]);
 
   const { data: c, isLoading, error } = useQuery({
     queryKey: ["admin", "vehicles", "case", vehicleId],
@@ -49,6 +66,8 @@ export function Case(): JSX.Element {
     setToast({ text, dot });
     window.setTimeout(() => setToast(null), 3600);
   };
+  const failed = (e: unknown, fallback = "That didn't work.") =>
+    flash(e instanceof ApiClientError ? e.message : fallback, "#D81E32");
   const onCase = (next: ReviewCase) => {
     qc.setQueryData(["admin", "vehicles", "case", vehicleId], next);
     void qc.invalidateQueries({ queryKey: ["admin", "vehicles", "queue"] });
@@ -62,230 +81,336 @@ export function Case(): JSX.Element {
     },
   });
   const docDecision = useMutation({
-    mutationFn: (v: { kind: string; decision: "accept" | "reject"; note?: string }) =>
+    mutationFn: (v: { kind: string; decision: DocDecision; note?: string }) =>
       decideDocument(vehicleId!, v.kind, v.decision, v.note),
     onSuccess: (next, v) => {
       onCase(next);
-      flash(v.decision === "accept" ? "Document accepted." : "Marked for rework — the merchant has been told.", v.decision === "accept" ? "#0B8A5B" : "#C77400");
       setModal(null);
+      if (v.decision === "accept") flash("Document accepted.");
+      else if (v.decision === "reject") flash("New upload requested - the merchant has been told.", "#C77400");
+      else if (v.decision === "reset") flash("Decision undone. Work the checklist again.", "#838C9B");
     },
-    onError: (e) => flash(e instanceof ApiClientError ? e.message : "That didn't work.", "#D81E32"),
+    onError: (e) => failed(e),
   });
   const checklistMut = useMutation({
     mutationFn: (v: { itemId: string; result: CheckResult; note?: string }) =>
       setChecklistItem(vehicleId!, v.itemId, v.result, v.note),
     onSuccess: onCase,
-    onError: (e) => flash(e instanceof ApiClientError ? e.message : "That didn't save.", "#D81E32"),
+    onError: (e) => failed(e, "That didn't save."),
   });
   const listingDecision = useMutation({
-    mutationFn: (v: { action: "approve" | "request_changes" | "reject"; note?: string }) =>
-      decideListing(vehicleId!, v.action, v.note),
+    mutationFn: (v: { action: ListingAction; note?: string }) => decideListing(vehicleId!, v.action, v.note),
     onSuccess: (next, v) => {
       onCase(next);
       setModal(null);
-      flash(
-        v.action === "approve"
-          ? `${next.registration} is live. The merchant has been told.`
-          : v.action === "request_changes"
-            ? `Sent to ${next.merchant.name}. The case is with them now.`
-            : `${next.registration} rejected and closed.`,
-        v.action === "approve" ? "#0B8A5B" : v.action === "request_changes" ? "#C77400" : "#D81E32",
-      );
+      setRedeciding(false);
+      setJustDecided(v.action);
+      window.scrollTo({ top: 0, behavior: "smooth" });
     },
-    onError: (e) => flash(e instanceof ApiClientError ? e.message : "That didn't work.", "#D81E32"),
+    onError: (e) => failed(e),
   });
 
-  if (isLoading) return <div style={CS.loading}>Loading the case…</div>;
+  if (isLoading) return <div style={RS.loading}>Loading the case…</div>;
   if (error || !c) {
     return (
-      <div style={CS.loading}>
+      <div style={RS.loading}>
         Couldn't load that case.{" "}
-        <button type="button" style={CS.link} onClick={() => navigate("/vehicles")}>
+        <button type="button" style={RS.link} onClick={() => navigate("/vehicles")}>
           Back to the queue
         </button>
       </div>
     );
   }
 
-  const tone = statusTone(c.status);
+  const sections: SectionModel[] = [
+    ...c.documents.map((d) => ({
+      key: d.kind,
+      label: d.label,
+      doc: {
+        state: d.state,
+        document_id: d.document_id,
+        review_note: d.review_note,
+        original_name: d.original_name,
+        expires_at: d.expires_at,
+      },
+      checklist: d.checklist,
+    })),
+    {
+      key: "photos",
+      label: "Photos",
+      hint: `${c.photos.length} uploaded · 3 required`,
+      doc: null,
+      checklist: c.photos_checklist,
+    },
+  ];
+  const sectionByKey = (key: string) => sections.find((s) => s.key === key)!;
+  const savingItemId = checklistMut.isPending ? (checklistMut.variables?.itemId ?? null) : null;
+  const setCheck = (itemId: string, result: CheckResult, note?: string) =>
+    checklistMut.mutate({ itemId, result, ...(note ? { note } : {}) });
+
+  /** When a section finishes: say what happened and move to the next open one. */
+  const onSectionComplete = (key: string) => {
+    const s = sectionByKey(key);
+    const idx = sections.findIndex((x) => x.key === key);
+    const next = [...sections.slice(idx + 1), ...sections.slice(0, idx)].find(sectionOpen);
+    flash(
+      s.checklist.flagged
+        ? `${s.label}: ${s.checklist.flagged} flagged - it'll go in the request-changes note.`
+        : s.doc
+          ? `${s.label} accepted - checklist complete.`
+          : `${s.label} checked.`,
+      s.checklist.flagged ? "#C77400" : "#0B8A5B",
+    );
+    if (next) window.setTimeout(() => scrollToSection(next.key), 250);
+  };
+
+  // "Needs review" / "With you" describe the queue, not the work: once every
+  // check is answered and nothing is decided yet, say so.
+  const tone =
+    c.can_decide && (c.status === "pending" || c.status === "review") ? READY_TONE : statusTone(c.status);
+  // A company has a "business"; an individual renting out their own car has an "account".
+  const entity = entityWord(c.merchant.owner_type);
   const age = ageBadge(c.waiting_hours, c.sla_days);
+  const decided = (c.status === "live" || c.status === "rejected" || c.status === "action") && !redeciding;
+  const merchantFileHref = `/merchants/${c.merchant.id}?from=${c.id}`;
+  const b = c.approve_blockers;
+
+  // --- the dock -------------------------------------------------------
+  const btn = (style: CSSProperties) => ({ ...RS.actBtn, ...style });
+  const changesBtn = (solid: boolean) => (
+    <button type="button" onClick={() => setModal({ kind: "changes" })} style={btn(solid ? TONE_BTN.changesSolid : TONE_BTN.changes)}>
+      Request changes
+    </button>
+  );
+  const rejectBtn = (
+    <button type="button" onClick={() => setModal({ kind: "reject" })} style={btn(TONE_BTN.reject)}>
+      Reject
+    </button>
+  );
+  let notice: JSX.Element | undefined;
+  let actions: JSX.Element;
+  if (c.can_approve) {
+    actions = (
+      <>
+        {rejectBtn}
+        {changesBtn(false)}
+        <button type="button" onClick={() => setModal({ kind: "approve" })} style={btn(TONE_BTN.approve)}>
+          Approve &amp; publish
+        </button>
+      </>
+    );
+  } else if (b.flagged > 0) {
+    notice = (
+      <>
+        <strong>{b.flagged} flagged check{b.flagged === 1 ? "" : "s"}.</strong> A flagged listing can't go live - send the
+        merchant what to fix. The note is already written from your flags.
+      </>
+    );
+    actions = (
+      <>
+        {rejectBtn}
+        {changesBtn(true)}
+      </>
+    );
+  } else if (b.merchant_not_approved) {
+    notice = (
+      <>
+        <strong>The car checks out, but {c.merchant.name} isn't verified yet.</strong> A car can only go live once the
+        merchant's {entity} is approved - review it, and you'll be brought back here to publish.
+      </>
+    );
+    actions = (
+      <>
+        {rejectBtn}
+        {changesBtn(false)}
+        <button type="button" onClick={() => navigate(merchantFileHref)} style={btn(TONE_BTN.primary)}>
+          Review the {entity} →
+        </button>
+      </>
+    );
+  } else {
+    notice = (
+      <>
+        <strong>
+          {b.documents} document{b.documents === 1 ? " isn't" : "s aren't"} accepted.
+        </strong>{" "}
+        A document that's missing, sent back or about to expire has to be replaced before this can go live.
+      </>
+    );
+    actions = (
+      <>
+        {rejectBtn}
+        {changesBtn(true)}
+      </>
+    );
+  }
+
+  const outcome = decided ? (
+    <div>
+      <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>
+        {c.status === "live"
+          ? `${c.registration} is live.`
+          : c.status === "rejected"
+            ? `${c.registration} was rejected.`
+            : `Changes sent - waiting on ${c.merchant.name}.`}
+      </div>
+      <div style={{ font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 }}>
+        {c.status === "action"
+          ? "The case comes back to the queue when they resubmit."
+          : "The merchant has been told."}
+      </div>
+    </div>
+  ) : undefined;
+  const outcomeActions = (
+    <>
+      <button type="button" onClick={() => setRedeciding(true)} style={btn(TONE_BTN.quiet)}>
+        Change decision
+      </button>
+      {c.next_case && (
+        <button type="button" onClick={() => navigate(`/vehicles/${c.next_case!.id}`)} style={btn(TONE_BTN.primary)}>
+          Next case · {c.next_case.registration} →
+        </button>
+      )}
+    </>
+  );
+
+  const scanSection = modal?.kind === "scan" ? sectionByKey(modal.key) : null;
+  const docSections = sections.filter((s) => s.doc);
+  const scanNext = scanSection
+    ? docSections[docSections.findIndex((s) => s.key === scanSection.key) + 1]
+    : undefined;
 
   return (
     <div>
-      <button type="button" onClick={() => navigate("/vehicles")} style={CS.back}>
+      <button type="button" onClick={() => navigate("/vehicles")} style={RS.back}>
         ‹ Back to vehicle review
       </button>
 
+      {justDecided && (
+        <NextStep
+          tone={justDecided === "approve" ? "green" : "amber"}
+          title={
+            justDecided === "approve"
+              ? `${c.registration} is live. The merchant has been told.`
+              : justDecided === "request_changes"
+                ? `Changes sent to ${c.merchant.name}.`
+                : `${c.registration} rejected and closed.`
+          }
+          body={
+            c.merchant_next_case
+              ? `${c.merchant.name} has another car waiting: ${c.merchant_next_case.registration}.`
+              : c.next_case
+                ? "On to the next one in the queue."
+                : "The queue is clear."
+          }
+          actions={
+            <>
+              {c.merchant_next_case && (
+                <button type="button" onClick={() => navigate(`/vehicles/${c.merchant_next_case!.id}`)} style={btn(TONE_BTN.quiet)}>
+                  Review {c.merchant_next_case.registration}
+                </button>
+              )}
+              {c.next_case && (
+                <button type="button" onClick={() => navigate(`/vehicles/${c.next_case!.id}`)} style={btn(TONE_BTN.primary)}>
+                  Next in queue · {c.next_case.registration} →
+                </button>
+              )}
+              {!c.next_case && (
+                <button type="button" onClick={() => navigate("/vehicles")} style={btn(TONE_BTN.primary)}>
+                  Back to the queue
+                </button>
+              )}
+            </>
+          }
+        />
+      )}
+
       {/* header */}
-      <div style={CS.card}>
+      <div style={RS.card}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 18, flexWrap: "wrap" }}>
-          <div>
+          <div style={{ minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 11, flexWrap: "wrap", marginBottom: 9 }}>
-              <span style={CS.plateLg}>{c.registration}</span>
-              <span style={{ ...CS.statePill, background: tone.tint, borderColor: tone.border, color: tone.text }}>
+              <span style={S.plateLg}>{c.registration}</span>
+              <span style={{ ...RS.statePill, background: tone.tint, borderColor: tone.border, color: tone.text }}>
                 <span style={{ width: 8, height: 8, borderRadius: 999, background: tone.core }} />
                 {tone.label}
               </span>
-              <span style={{ ...CS.agePill, background: age.bg, color: age.fg }}>{age.long}</span>
+              {/* Waiting time only means something while the case is open. */}
+              {(c.status === "pending" || c.status === "review") && (
+                <span style={{ ...S.agePill, background: age.bg, color: age.fg }}>{age.long}</span>
+              )}
             </div>
-            <h1 style={CS.h1}>{c.title}</h1>
-            <div style={CS.subline}>
+            <h1 style={RS.h1}>{c.title}</h1>
+            <div style={RS.subline}>
               {c.type} · {c.year} · {c.transmission} · {c.seats} seats · {c.county ?? "—"}
               {c.pickup_address ? ` · ${c.pickup_address}` : ""}
             </div>
           </div>
-          <div style={{ textAlign: "right", marginLeft: "auto", flex: "none" }}>
-            <div style={CS.kicker}>LISTING REF</div>
-            <div style={CS.refChip}>{c.listing_ref ?? "—"}</div>
-            <div style={{ font: "400 11px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".04em", color: "#838C9B" }}>
+          <div style={{ display: "grid", justifyItems: "end", gap: 8, marginLeft: "auto", flex: "none" }}>
+            <div style={{ textAlign: "right" }}>
+              <div style={RS.kicker}>LISTING REF</div>
+              <div style={S.refChip}>{c.listing_ref ?? "—"}</div>
+            </div>
+            <div style={{ ...RS.mono, color: "#838C9B", fontWeight: 400 }}>
               SUBMITTED {new Date(c.submitted_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase()}
             </div>
+            <button
+              type="button"
+              onClick={() => (c.assigned_to_me ? flash("Already yours.", "#838C9B") : assign.mutate())}
+              disabled={assign.isPending}
+              style={{ ...RS.smallBtn, color: c.assigned_to_me ? "#9AA2B0" : "#0F23A8" }}
+            >
+              {c.assigned_to_me ? "Assigned to you" : "Assign to me"}
+            </button>
           </div>
         </div>
-
-        <div style={CS.actions}>
-          <button
-            type="button"
-            onClick={() =>
-              c.can_approve
-                ? setModal({ kind: "approve" })
-                : flash(
-                    c.approve_blockers.merchant_not_approved
-                      ? "Approve the business on the merchant file first."
-                      : c.approve_blockers.documents > 0
-                        ? `${c.approve_blockers.documents} car document${c.approve_blockers.documents === 1 ? "" : "s"} still to accept.`
-                        : `${c.approve_blockers.checklist} checklist blocker${c.approve_blockers.checklist === 1 ? "" : "s"} still open.`,
-                    "#C77400",
-                  )
-            }
-            style={{ ...CS.actBtn, background: c.can_approve ? "#0B8A5B" : "#076945", color: "#fff", cursor: c.can_approve ? "pointer" : "not-allowed" }}
-          >
-            Approve &amp; publish
-          </button>
-          <button type="button" onClick={() => setModal({ kind: "changes" })} style={{ ...CS.actBtn, background: "#FFFFFF", color: "#8A5200", border: "1px solid #F5D9A3" }}>
-            Request changes
-          </button>
-          <button type="button" onClick={() => setModal({ kind: "reject" })} style={{ ...CS.actBtn, background: "#FFFFFF", color: "#A50E22", border: "1px solid #F7BDC5" }}>
-            Reject
-          </button>
-          <button
-            type="button"
-            onClick={() => (c.assigned_to_me ? flash("Already yours.", "#838C9B") : assign.mutate())}
-            disabled={assign.isPending}
-            style={{ ...CS.actBtn, marginLeft: "auto", background: "#FFFFFF", color: c.assigned_to_me ? "#9AA2B0" : "#0F23A8", border: "1px solid #E4E7EC" }}
-          >
-            {c.assigned_to_me ? "Assigned to you" : "Assign to me"}
-          </button>
-        </div>
+        <ProgressStrip sections={sections} />
       </div>
 
       <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
-        {/* left column */}
-        <div style={{ flex: 1.55, minWidth: 320, display: "grid", gap: 16 }}>
-          <section style={CS.panel}>
-            <div style={CS.panelHead}>
-              <div>
-                <div style={CS.panelTitle}>Documents</div>
-                <div style={CS.panelSub}>Every line must be accepted before the listing can go live.</div>
-              </div>
-              <span style={{ font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: c.can_approve ? "#0B8A5B" : "#C77400" }}>
-                {c.documents.filter((d) => d.state === "ok").length} OF {c.documents.length} ACCEPTED
-              </span>
-            </div>
-            {c.documents.map((d) => (
-              <DocRow
-                key={d.kind}
-                line={d}
-                busy={docDecision.isPending}
-                checkBusy={checklistMut.isPending}
-                onView={() => d.document_id && setModal({ kind: "doc", line: d })}
-                onAccept={() => docDecision.mutate({ kind: d.kind, decision: "accept" })}
-                onRejectWithNote={(note) => docDecision.mutate({ kind: d.kind, decision: "reject", note })}
-                onSetCheck={(itemId, result, note) =>
-                  checklistMut.mutate({ itemId, result, ...(note ? { note } : {}) })
-                }
+        {/* left column: the work */}
+        <div style={{ flex: 1.55, minWidth: "min(100%, 320px)", display: "grid", gap: 16 }}>
+          {sections.map((s) =>
+            s.doc ? (
+              <ReviewSection
+                key={s.key}
+                section={s}
+                savingItemId={savingItemId}
+                docBusy={docDecision.isPending}
+                onSetCheck={setCheck}
+                onOpenScan={() => setModal({ kind: "scan", key: s.key })}
+                onRequestUpload={() => setModal({ kind: "upload", key: s.key })}
+                onUndo={() => docDecision.mutate({ kind: s.key, decision: "reset" })}
+                onAccept={() => docDecision.mutate({ kind: s.key, decision: "accept" })}
+                onComplete={() => onSectionComplete(s.key)}
               />
-            ))}
-            <div style={CS.panelFoot}>
-              Work each document's checklist - when every MUST&nbsp;PASS line is ticked the document is
-              accepted for you. A rejected line is quoted to the merchant word for word.
-            </div>
-          </section>
-
-          <section style={CS.panel}>
-            <div style={CS.panelHead}>
-              <div>
-                <div style={CS.panelTitle}>Owner documents</div>
-                <div style={CS.panelSub}>
-                  {c.merchant_approved
-                    ? "Verified with the account - not re-checked per car."
-                    : "Reviewed on the merchant file, not here. The business isn't approved yet."}
+            ) : (
+              <ReviewSection
+                key={s.key}
+                section={s}
+                savingItemId={savingItemId}
+                onSetCheck={setCheck}
+                onComplete={() => onSectionComplete(s.key)}
+              >
+                <div style={{ padding: "0 18px 16px", display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 8 }}>
+                  {c.photos.length === 0 && <div style={RS.panelSub}>No photos on file.</div>}
+                  {c.photos.map((p) => (
+                    <PhotoTile key={p.document_id} vehicleId={c.id} documentId={p.document_id} label={p.original_name} />
+                  ))}
                 </div>
-              </div>
-              {!c.merchant_approved && (
-                <button type="button" onClick={() => navigate(`/merchants/${c.merchant.id}`)} style={CS.smallBtn}>
-                  Open merchant file
-                </button>
-              )}
-            </div>
-            {c.account_documents.map((d) => (
-              <div key={d.kind} style={{ ...CS.docRow, borderBottom: "1px solid #F1F3F6" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                  <span
-                    style={{
-                      width: 8,
-                      height: 8,
-                      borderRadius: 999,
-                      background: d.verified_with_account || d.state === "ok" ? "#0B8A5B" : d.state === "rejected" ? "#D81E32" : "#C77400",
-                      flex: "none",
-                    }}
-                  />
-                  <span style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", flex: 1 }}>{d.label}</span>
-                  <span style={{ font: "500 11px/1.3 'IBM Plex Mono',monospace", color: "#838C9B" }}>
-                    {d.verified_with_account ? "VERIFIED WITH ACCOUNT" : d.state.toUpperCase()}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </section>
+              </ReviewSection>
+            ),
+          )}
 
-          <section style={CS.panel}>
-            <div style={CS.panelHead}>
-              <span style={CS.panelTitle}>Photos</span>
-              <span style={{ font: "500 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#9AA2B0" }}>
-                {c.photos.length} UPLOADED · 3 REQUIRED
-              </span>
-            </div>
-            <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(120px,1fr))", gap: 8 }}>
-              {c.photos.length === 0 && <div style={CS.panelSub}>No photos on file.</div>}
-              {c.photos.map((p) => (
-                <PhotoTile key={p.document_id} vehicleId={c.id} documentId={p.document_id} label={p.original_name} />
-              ))}
-            </div>
-            {c.photos_checklist.items.length > 0 && (
-              <div style={{ borderTop: "1px solid #F1F3F6" }}>
-                <div style={CS.groupHead}>PHOTO CHECKS</div>
-                {c.photos_checklist.items.map((it) => (
-                  <ChecklistRow
-                    key={it.id}
-                    item={it}
-                    busy={checklistMut.isPending}
-                    onSet={(itemId, result, note) =>
-                      checklistMut.mutate({ itemId, result, ...(note ? { note } : {}) })
-                    }
-                  />
-                ))}
-              </div>
-            )}
-          </section>
-
-          <section style={CS.panel}>
-            <div style={CS.panelHead}>
-              <span style={CS.panelTitle}>Declared details</span>
+          <section style={RS.panel}>
+            <div style={RS.panelHead}>
+              <span style={RS.panelTitle}>Declared details</span>
               <span style={{ font: "400 12px/1.3 'Instrument Sans',sans-serif", color: "#838C9B" }}>Check against the logbook scan</span>
             </div>
             <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "16px 18px" }}>
               {[
+                ["REGISTRATION", c.registration],
+                ["MAKE & MODEL", c.title],
                 ["TYPE", c.type],
                 ["YEAR", c.year],
                 ["SEATS", String(c.seats)],
@@ -296,75 +421,78 @@ export function Case(): JSX.Element {
                 ["BASED IN", c.county ?? "—"],
               ].map(([k, v]) => (
                 <div key={k}>
-                  <div style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0", marginBottom: 6 }}>{k}</div>
-                  <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{v}</div>
+                  <div style={{ ...RS.kicker, marginBottom: 6 }}>{k}</div>
+                  <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", overflowWrap: "anywhere" }}>{v}</div>
                 </div>
               ))}
             </div>
           </section>
         </div>
 
-        {/* right column */}
-        <div style={{ flex: 1, minWidth: 280, display: "grid", gap: 16 }}>
-          <section style={CS.panel}>
-            <div style={CS.panelHead}>
-              <span style={CS.panelTitle}>The merchant</span>
-              <button type="button" onClick={() => navigate(`/merchants/${c.merchant.id}`)} style={CS.smallBtn}>
+        {/* right column: context */}
+        <div style={{ flex: 1, minWidth: "min(100%, 280px)", display: "grid", gap: 16 }}>
+          <section style={RS.panel}>
+            <div style={RS.panelHead}>
+              <span style={RS.panelTitle}>The merchant</span>
+              <button type="button" onClick={() => navigate(merchantFileHref)} style={RS.smallBtn}>
                 Open file
               </button>
             </div>
-            <div style={{ padding: "16px 18px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 11, marginBottom: 14 }}>
-                <span style={CS.avatar}>{c.merchant.initials}</span>
-                <div>
+            <div style={{ padding: "16px 18px", display: "grid", gap: 14 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 11 }}>
+                <span style={RS.avatar}>{c.merchant.initials}</span>
+                <div style={{ minWidth: 0 }}>
                   <div style={{ font: "600 14px/1.25 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{c.merchant.name}</div>
                   <div style={{ font: "400 12px/1.4 'Instrument Sans',sans-serif", color: "#838C9B" }}>{c.merchant.contact_phone ?? "No phone on file"}</div>
                 </div>
               </div>
+              <div
+                style={{
+                  ...RS.hint,
+                  padding: "10px 12px",
+                  background: c.merchant_approved ? "#DDF3E9" : "#FFF3DB",
+                  border: `1px solid ${c.merchant_approved ? "#A8DEC7" : "#F5D9A3"}`,
+                  color: c.merchant_approved ? "#076945" : "#8A5200",
+                  fontSize: 12,
+                }}
+              >
+                <strong>
+                  {c.merchant_approved
+                    ? `✓ ${entity === "business" ? "Business" : "Account"} verified`
+                    : `! ${entity === "business" ? "Business" : "Account"} not verified yet`}
+                </strong>
+                <div style={{ marginTop: 6, display: "grid", gap: 4 }}>
+                  {c.account_documents.map((d) => (
+                    <div key={d.kind} style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span>{d.label}</span>
+                      <span style={RS.mono}>{d.verified_with_account || d.state === "ok" ? "✓ OK" : d.state.toUpperCase()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div style={{ display: "grid", gap: 10, fontVariantNumeric: "tabular-nums" }}>
                 {[
-                  ["Account", c.merchant.approved ? "Verified" : "Documents pending", c.merchant.approved ? "#0B8A5B" : "#C77400"],
                   ["Merchant since", new Date(c.merchant.member_since).toLocaleDateString("en-GB", { month: "short", year: "numeric" }), "#1A1F2B"],
                   ["Live vehicles", String(c.merchant.live_vehicles), "#1A1F2B"],
                   ["Past rejections", String(c.merchant.prior_rejections), c.merchant.prior_rejections ? "#C77400" : "#1A1F2B"],
                 ].map(([k, v, fg]) => (
-                  <div key={k} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                    <span style={{ font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>{k}</span>
-                    <span style={{ font: "600 13px/1.3 'Instrument Sans',sans-serif", color: fg, textAlign: "right" }}>{v}</span>
+                  <div key={k} style={RS.kv}>
+                    <span style={RS.kvKey}>{k}</span>
+                    <span style={{ ...RS.kvVal, color: fg }}>{v}</span>
                   </div>
                 ))}
               </div>
             </div>
             {c.reviewer_note && (
-              <div style={{ padding: "13px 18px", background: "#FFF3DB", borderTop: "1px solid #F5D9A3", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
+              <div style={{ padding: "13px 18px", background: "#FFF3DB", borderTop: "1px solid #F5D9A3", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#8A5200", whiteSpace: "pre-wrap" }}>
                 Note on file: {c.reviewer_note}
               </div>
             )}
           </section>
 
-          <section style={{ ...CS.panel, padding: 18 }}>
-            <div style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 16 }}>CASE ACTIVITY</div>
-            {c.events.map((e, i) => (
-              <div key={i} style={{ display: "grid", gridTemplateColumns: "14px minmax(0,1fr)", gap: 12 }}>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                  <span style={{ width: 9, height: 9, borderRadius: 999, background: TONE_DOT[e.tone], marginTop: 5, flex: "none" }} />
-                  {i < c.events.length - 1 && <span style={{ flex: 1, width: 1, background: "#E4E7EC", minHeight: 8 }} />}
-                </div>
-                <div style={{ paddingBottom: 16 }}>
-                  <div style={{ font: "600 13px/1.35 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{e.label}</div>
-                  {e.body && <div style={{ font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginTop: 3 }}>{e.body}</div>}
-                  <div style={{ font: "400 11px/1.3 'IBM Plex Mono',monospace", letterSpacing: ".03em", color: "#838C9B", marginTop: 5 }}>
-                    {new Date(e.occurred_at).toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase()}
-                    {e.actor_name ? ` · ${e.actor_name}` : ""}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </section>
-
-          <section style={CS.panel}>
-            <div style={{ ...CS.panelHead, borderBottom: "1px solid #F1F3F6" }}>
-              <span style={CS.panelTitle}>What the listing will say</span>
+          <section style={RS.panel}>
+            <div style={RS.panelHead}>
+              <span style={RS.panelTitle}>What the listing will say</span>
             </div>
             <div style={{ padding: "16px 18px", display: "grid", gap: 12 }}>
               {[
@@ -372,22 +500,37 @@ export function Case(): JSX.Element {
                 ["Minimum hire", `${c.minimum_hire_days} ${c.minimum_hire_days === 1 ? "day" : "days"}`],
                 ["Driver", c.chauffeured ? "Included" : "Self-drive"],
               ].map(([k, v]) => (
-                <div key={k} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12 }}>
-                  <span style={{ font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>{k}</span>
-                  <span style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", fontVariantNumeric: "tabular-nums" }}>{v}</span>
+                <div key={k} style={RS.kv}>
+                  <span style={RS.kvKey}>{k}</span>
+                  <span style={{ ...RS.kvVal, fontSize: 14, fontVariantNumeric: "tabular-nums" }}>{v}</span>
                 </div>
               ))}
             </div>
-            <div style={CS.panelFoot}>Rates are the merchant's to set. Flag only what breaks the rules.</div>
+            <div style={RS.panelFoot}>Rates are the merchant's to set. Flag only what breaks the rules.</div>
           </section>
+
+          <ActivityPanel events={c.events} />
         </div>
       </div>
 
+      <DecisionDock
+        sections={sections}
+        canDecide={c.can_decide}
+        notice={decided ? undefined : notice}
+        actions={decided ? outcomeActions : actions}
+        outcome={outcome}
+      />
+
       {modal?.kind === "approve" && (
         <ApproveModal
-          registration={c.registration}
-          county={c.county}
-          rate={money(c.daily_rate?.amount)}
+          title={`Publish ${c.registration}`}
+          sub="The listing goes live in search and the merchant is told by SMS."
+          points={[
+            `Every check on every document passed, and the merchant's ${entity} is verified.`,
+            `Goes live at ${money(c.daily_rate?.amount)} a day in ${c.county ?? "search"}.`,
+          ]}
+          cta="Publish listing"
+          withNote
           busy={listingDecision.isPending}
           onClose={() => setModal(null)}
           onConfirm={(note) => listingDecision.mutate({ action: "approve", ...(note ? { note } : {}) })}
@@ -396,150 +539,51 @@ export function Case(): JSX.Element {
       {(modal?.kind === "changes" || modal?.kind === "reject") && (
         <ReasonModal
           mode={modal.kind}
-          registration={c.registration}
-          busy={listingDecision.isPending}
+          subject={c.registration}
           suggestedNote={modal.kind === "reject" ? c.checklist.suggested_note.reject : c.checklist.suggested_note.changes}
+          templates={modal.kind === "reject" ? REASON_TEMPLATES.reject : REASON_TEMPLATES.changes}
+          hint={
+            modal.kind === "reject"
+              ? "Sent by SMS and email, and kept on the merchant file. Use rejection for ownership and fraud - not for a bad scan."
+              : "Sent by SMS and email. The case moves to Changes sent and comes back to you when they resubmit."
+          }
+          busy={listingDecision.isPending}
           onClose={() => setModal(null)}
           onConfirm={(note) =>
             listingDecision.mutate({ action: modal.kind === "reject" ? "reject" : "request_changes", note })
           }
         />
       )}
-      {modal?.kind === "doc" && (
-        <DocModal vehicleId={c.id} line={modal.line} onClose={() => setModal(null)} />
+      {modal?.kind === "upload" && (
+        <UploadRequestModal
+          docLabel={sectionByKey(modal.key).label}
+          flaggedNote={sectionByKey(modal.key)
+            .checklist.items.filter((i) => i.result === "flag")
+            .map((i) => i.note ?? i.label)
+            .join(" ")}
+          busy={docDecision.isPending}
+          onClose={() => setModal(null)}
+          onConfirm={(note) => docDecision.mutate({ kind: modal.key, decision: "reject", note })}
+        />
+      )}
+      {scanSection && (
+        <ScanViewer
+          section={scanSection}
+          loadUrl={() =>
+            scanSection.doc?.document_id
+              ? documentObjectUrl(c.id, scanSection.doc.document_id)
+              : Promise.reject(new Error("no document"))
+          }
+          savingItemId={savingItemId}
+          onSetCheck={setCheck}
+          onAccept={() => docDecision.mutate({ kind: scanSection.key, decision: "accept" })}
+          onNext={scanNext ? () => setModal({ kind: "scan", key: scanNext.key }) : undefined}
+          nextLabel={scanNext ? scanNext.label : undefined}
+          onClose={() => setModal(null)}
+        />
       )}
 
-      {toast && (
-        <div style={CS.toast}>
-          <span style={{ width: 8, height: 8, borderRadius: 999, background: toast.dot, flex: "none" }} />
-          <span style={{ font: "500 13px/1.35 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{toast.text}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// --- document row -------------------------------------------------
-
-function DocRow({
-  line,
-  busy,
-  checkBusy,
-  onView,
-  onAccept,
-  onRejectWithNote,
-  onSetCheck,
-}: {
-  line: DocLine;
-  busy: boolean;
-  checkBusy: boolean;
-  onView: () => void;
-  onAccept: () => void;
-  onRejectWithNote: (note: string) => void;
-  onSetCheck: (itemId: string, result: CheckResult, note?: string) => void;
-}): JSX.Element {
-  const [rejecting, setRejecting] = useState(false);
-  const [note, setNote] = useState("");
-  const dot = DOC_DOT[line.state];
-  const accepted = line.state === "ok";
-  const rejected = line.state === "rejected";
-  const cl = line.checklist;
-  const hasChecklist = cl.items.length > 0;
-  const clClear = hasChecklist && cl.blockers_outstanding === 0;
-  // Open the checklist by default while there's still a blocker to work.
-  const [checksOpen, setChecksOpen] = useState(hasChecklist && !clClear && !accepted);
-
-  return (
-    <div style={{ ...CS.docRow, background: rejected ? "#FDE7EA" : "#FFFFFF" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-        <span style={{ width: 8, height: 8, borderRadius: 999, background: dot.core, flex: "none" }} />
-        <div style={{ flex: 1, minWidth: 180 }}>
-          <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>
-            {line.label}
-            {line.scope === "account" && <span style={CS.accountTag}>ACCOUNT</span>}
-          </div>
-          <div style={{ font: "400 12px/1.45 'Instrument Sans',sans-serif", color: rejected ? "#D81E32" : accepted ? "#0B8A5B" : "#838C9B", marginTop: 2 }}>
-            {rejected && line.review_note ? line.review_note : accepted && clClear ? "Accepted — checklist complete" : dot.label}
-          </div>
-        </div>
-        <button type="button" onClick={onView} disabled={!line.document_id} style={{ ...CS.smallBtn, opacity: line.document_id ? 1 : 0.4 }}>
-          Open scan
-        </button>
-        <div style={{ display: "flex", gap: 6, flex: "none" }}>
-          <button
-            type="button"
-            disabled={busy || line.state === "missing"}
-            onClick={onAccept}
-            style={{ ...CS.smallBtn, background: accepted ? "#0B8A5B" : "#FFFFFF", color: accepted ? "#FFFFFF" : "#0B8A5B", borderColor: accepted ? "#0B8A5B" : "#A8DEC7" }}
-          >
-            Accept
-          </button>
-          <button
-            type="button"
-            disabled={busy || line.state === "missing"}
-            onClick={() => setRejecting((v) => !v)}
-            style={{ ...CS.smallBtn, background: rejected ? "#D81E32" : "#FFFFFF", color: rejected ? "#FFFFFF" : "#D81E32", borderColor: rejected ? "#D81E32" : "#F7BDC5" }}
-          >
-            Reject
-          </button>
-        </div>
-      </div>
-
-      {hasChecklist && (
-        <>
-          <button type="button" onClick={() => setChecksOpen((v) => !v)} style={CS.clToggle}>
-            <span style={{ display: "inline-flex", alignItems: "center", gap: 7 }}>
-              <span style={{ color: "#9AA2B0" }}>{checksOpen ? "▾" : "▸"}</span>
-              Checklist
-            </span>
-            <span
-              style={{
-                font: "500 11px/1.3 'IBM Plex Mono',monospace",
-                letterSpacing: ".04em",
-                color: cl.blockers_outstanding ? "#A50E22" : cl.flagged ? "#8A5200" : "#0B8A5B",
-              }}
-            >
-              {cl.checked}/{cl.total}
-              {cl.blockers_outstanding
-                ? ` · ${cl.blockers_outstanding} MUST PASS`
-                : cl.flagged
-                  ? ` · ${cl.flagged} FLAGGED`
-                  : " · ALL CLEAR"}
-            </span>
-          </button>
-          {checksOpen && (
-            <div style={CS.clBox}>
-              {cl.items.map((it) => (
-                <ChecklistRow key={it.id} item={it} busy={checkBusy} onSet={onSetCheck} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {rejecting && (
-        <div style={{ marginTop: 12, display: "grid", gap: 8 }}>
-          <textarea
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            placeholder="What the merchant reads — quoted to them word for word."
-            style={CS.textarea}
-          />
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button type="button" style={CS.smallBtn} onClick={() => { setRejecting(false); setNote(""); }}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={busy || !note.trim()}
-              style={{ ...CS.smallBtn, background: "#D81E32", color: "#fff", borderColor: "#D81E32" }}
-              onClick={() => onRejectWithNote(note.trim())}
-            >
-              Send rejection
-            </button>
-          </div>
-        </div>
-      )}
+      <Toast toast={toast} />
     </div>
   );
 }
@@ -562,234 +606,19 @@ function PhotoTile({ vehicleId, documentId, label }: { vehicleId: string; docume
     };
   }, [vehicleId, documentId]);
   return (
-    <div style={CS.photoTile} title={label}>
+    <a href={url ?? undefined} target="_blank" rel="noreferrer" style={S.photoTile} title={label}>
       {url ? (
         <img src={url} alt={label} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "var(--r)" }} />
       ) : (
-        <span style={{ font: "500 10px/1.3 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#9AA2B0" }}>LOADING</span>
+        <span style={{ ...RS.mono, fontSize: 10, color: "#9AA2B0" }}>LOADING</span>
       )}
-    </div>
+    </a>
   );
 }
 
-// --- modals -----------------------------------------------------
-
-function Shell({ title, sub, width, children, footer, onClose }: { title: string; sub: string; width: number; children: ReactNode; footer: ReactNode; onClose: () => void }): JSX.Element {
-  return (
-    <div style={CS.overlay} onClick={onClose}>
-      <div style={{ ...CS.modal, maxWidth: width }} onClick={(e) => e.stopPropagation()}>
-        <div style={CS.modalHead}>
-          <div>
-            <div style={{ font: "600 17px/1.25 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", color: "#1A1F2B" }}>{title}</div>
-            <div style={{ font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginTop: 4, maxWidth: "52ch" }}>{sub}</div>
-          </div>
-          <button type="button" onClick={onClose} style={CS.modalX}>×</button>
-        </div>
-        <div style={{ padding: 20 }}>{children}</div>
-        <div style={CS.modalFoot}>{footer}</div>
-      </div>
-    </div>
-  );
-}
-
-function ApproveModal({ registration, county, rate, busy, onConfirm, onClose }: { registration: string; county: string | null; rate: string; busy: boolean; onConfirm: (note?: string) => void; onClose: () => void }): JSX.Element {
-  const [note, setNote] = useState("");
-  return (
-    <Shell
-      title="Approve and publish"
-      sub="The listing goes live in search and the merchant gets an SMS."
-      width={540}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" style={CS.cancelBtn} onClick={onClose}>Cancel</button>
-          <button type="button" disabled={busy} style={{ ...CS.ctaBtn, background: "#0B8A5B" }} onClick={() => onConfirm(note.trim() || undefined)}>
-            Publish listing
-          </button>
-        </>
-      }
-    >
-      <div style={{ display: "grid", gap: 15 }}>
-        <div style={{ display: "grid", gap: 9 }}>
-          {[
-            "Every required document accepted, checked against the logbook name on the account.",
-            `Listing goes live at ${rate} a day in ${county ?? "search"}.`,
-          ].map((t) => (
-            <div key={t} style={{ display: "flex", gap: 11, alignItems: "flex-start" }}>
-              <span style={{ width: 7, height: 7, borderRadius: 999, background: "#0B8A5B", marginTop: 6, flex: "none" }} />
-              <div style={{ font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#333B4A" }}>{t}</div>
-            </div>
-          ))}
-        </div>
-        <label style={{ display: "block" }}>
-          <span style={CS.fieldLabel}>Note for the merchant · optional</span>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="Anything they should know now that it is live." style={CS.textarea} />
-        </label>
-        <div style={{ ...CS.hint, background: "#DDF3E9", border: "1px solid #A8DEC7", color: "#076945" }}>
-          Publishing puts {registration} in search straight away and sends the merchant an SMS.
-        </div>
-      </div>
-    </Shell>
-  );
-}
-
-function ReasonModal({
-  mode,
-  registration,
-  busy,
-  suggestedNote,
-  onConfirm,
-  onClose,
-}: {
-  mode: "changes" | "reject";
-  registration: string;
-  busy: boolean;
-  suggestedNote: string;
-  onConfirm: (note: string) => void;
-  onClose: () => void;
-}): JSX.Element {
-  const templates = mode === "reject" ? REASON_TEMPLATES.reject : REASON_TEMPLATES.changes;
-  const [picked, setPicked] = useState<number>(suggestedNote ? -1 : 0);
-  // Opens pre-filled from the checklist's flagged items; falls back to the
-  // first canned template when nothing was flagged.
-  const [note, setNote] = useState(suggestedNote || templates[0]![1]);
-  return (
-    <Shell
-      title={mode === "reject" ? "Reject this submission" : "Request changes"}
-      sub={mode === "reject" ? "A rejection closes the case. The merchant must start a fresh submission." : "The vehicle stays in the merchant's hands. Nothing is published and they can resubmit."}
-      width={540}
-      onClose={onClose}
-      footer={
-        <>
-          <button type="button" style={CS.cancelBtn} onClick={onClose}>Cancel</button>
-          <button
-            type="button"
-            disabled={busy || !note.trim()}
-            style={{ ...CS.ctaBtn, background: mode === "reject" ? "#D81E32" : "#0F23A8" }}
-            onClick={() => onConfirm(note.trim())}
-          >
-            {mode === "reject" ? "Reject and close" : "Send to merchant"}
-          </button>
-        </>
-      }
-    >
-      <div style={{ display: "grid", gap: 15 }}>
-        <div>
-          <span style={CS.fieldLabel}>Reason</span>
-          <div style={{ display: "grid", gap: 7 }}>
-            {templates.map(([label, body], i) => {
-              const on = picked === i;
-              return (
-                <button
-                  key={label}
-                  type="button"
-                  onClick={() => { setPicked(i); setNote(body); }}
-                  style={{ ...CS.reasonBtn, borderColor: on ? "#0F23A8" : "#E4E7EC" }}
-                >
-                  <span style={{ ...CS.radio, borderColor: on ? "#0F23A8" : "#E4E7EC" }}>
-                    <span style={{ width: 8, height: 8, borderRadius: 999, background: on ? "#0F23A8" : "transparent", display: "block" }} />
-                  </span>
-                  <span style={{ flex: 1, font: "600 13px/1.4 'Instrument Sans',sans-serif", color: "#1A1F2B" }}>{label}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <label style={{ display: "block" }}>
-          <span style={CS.fieldLabel}>What the merchant reads</span>
-          <textarea value={note} onChange={(e) => setNote(e.target.value)} style={{ ...CS.textarea, minHeight: 132 }} />
-        </label>
-        <div
-          style={{
-            ...CS.hint,
-            background: mode === "reject" ? "#FDE7EA" : "#FFF3DB",
-            border: `1px solid ${mode === "reject" ? "#F7BDC5" : "#F5D9A3"}`,
-            color: mode === "reject" ? "#A50E22" : "#8A5200",
-          }}
-        >
-          {mode === "reject"
-            ? `Sent to ${registration}'s owner by SMS and email, and kept on the merchant file. Use rejection for ownership and fraud — not for a bad scan.`
-            : "Sent by SMS and email. The case moves to Changes sent and comes back to you when they resubmit."}
-        </div>
-      </div>
-    </Shell>
-  );
-}
-
-function DocModal({ vehicleId, line, onClose }: { vehicleId: string; line: DocLine; onClose: () => void }): JSX.Element {
-  const [url, setUrl] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    let made: string | null = null;
-    if (!line.document_id) return;
-    documentObjectUrl(vehicleId, line.document_id)
-      .then((u) => { made = u; setUrl(u); })
-      .catch(() => setFailed(true));
-    return () => { if (made) URL.revokeObjectURL(made); };
-  }, [vehicleId, line.document_id]);
-  return (
-    <Shell
-      title={`${line.label} · document`}
-      sub="What the merchant uploaded."
-      width={640}
-      onClose={onClose}
-      footer={<button type="button" style={{ ...CS.ctaBtn, background: "#0F23A8" }} onClick={onClose}>Close</button>}
-    >
-      <div style={{ aspectRatio: "4/3", borderRadius: "var(--r)", border: "1px solid #E4E7EC", background: "#F1F3F6", display: "grid", placeItems: "center", overflow: "hidden" }}>
-        {failed ? (
-          <span style={{ font: "500 11px/1.5 'IBM Plex Mono',monospace", color: "#A50E22" }}>FILE NO LONGER STORED</span>
-        ) : url ? (
-          <iframe title={line.label} src={url} style={{ width: "100%", height: "100%", border: "none" }} />
-        ) : (
-          <span style={{ font: "500 11px/1.5 'IBM Plex Mono',monospace", color: "#838C9B" }}>LOADING…</span>
-        )}
-      </div>
-      <div style={{ marginTop: 12, font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
-        {line.original_name ?? "—"}
-        {line.expires_at ? ` · expires ${line.expires_at}` : ""}
-      </div>
-    </Shell>
-  );
-}
-
-const CS = {
-  loading: { padding: 40, font: "400 13px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" },
-  link: { background: "none", border: "none", padding: 0, color: "#0F23A8", cursor: "pointer", font: "600 13px/1 'Instrument Sans',sans-serif" },
-  back: { display: "inline-flex", alignItems: "center", gap: 7, height: 32, padding: "0 12px 0 8px", marginBottom: 14, background: "transparent", color: "#5A6373", border: "none", borderRadius: "var(--r-sm)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
-  card: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", padding: "clamp(18px,2.6vw,24px)", marginBottom: 16 },
+const S = {
   plateLg: { display: "inline-block", padding: "6px 12px", border: "1.5px solid #0B0F1A", borderRadius: "var(--r-sm)", font: "600 17px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".05em", color: "#1A1F2B", fontVariantNumeric: "tabular-nums" },
-  statePill: { display: "inline-flex", alignItems: "center", gap: 7, padding: "6px 12px", border: "1px solid", borderRadius: 999, font: "600 13px/1.2 'Instrument Sans',sans-serif" },
   agePill: { display: "inline-block", padding: "6px 11px", borderRadius: 999, font: "600 12px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".04em" },
-  h1: { margin: "0 0 6px", font: "600 clamp(24px,3.2vw,30px)/1.1 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", letterSpacing: "-.022em", color: "#1A1F2B" },
-  subline: { font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" },
-  kicker: { font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 6 },
-  refChip: { display: "inline-block", padding: "5px 10px", background: "#F1F3F6", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "500 12px/1.2 'IBM Plex Mono',monospace", color: "#333B4A", marginBottom: 9 },
-  actions: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18, paddingTop: 18, borderTop: "1px solid #F1F3F6" },
-  actBtn: { height: 40, padding: "0 17px", border: "none", borderRadius: "var(--r)", font: "600 13px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
-  panel: { background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: "var(--r-lg)", overflow: "hidden" },
-  panelHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "15px 18px", borderBottom: "1px solid #F1F3F6", flexWrap: "wrap" },
-  panelTitle: { font: "600 15px/1.2 Archivo,sans-serif", color: "#1A1F2B" },
-  panelSub: { font: "400 12px/1.45 'Instrument Sans',sans-serif", color: "#838C9B", marginTop: 3 },
-  panelFoot: { padding: "12px 18px", background: "#FFFFFF", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
-  docRow: { padding: "14px 18px", borderBottom: "1px solid #F1F3F6" },
-  accountTag: { marginLeft: 8, padding: "2px 6px", background: "#F1F3F6", borderRadius: "var(--r-sm)", font: "500 9px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#5A6373", verticalAlign: "middle" },
-  smallBtn: { height: 32, padding: "0 12px", background: "#FFFFFF", color: "#0F23A8", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "600 12px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
-  groupHead: { padding: "9px 18px", background: "#FAFBFC", borderBottom: "1px solid #F1F3F6", font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0" },
-  clToggle: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, width: "100%", marginTop: 12, padding: "9px 12px", background: "#FAFBFC", border: "1px solid #EEF0F3", borderRadius: "var(--r-sm)", font: "600 12px/1 'Instrument Sans',sans-serif", color: "#5A6373", cursor: "pointer" },
-  clBox: { marginTop: 8, border: "1px solid #EEF0F3", borderRadius: "var(--r)", overflow: "hidden" },
+  refChip: { display: "inline-block", padding: "5px 10px", background: "#F1F3F6", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "500 12px/1.2 'IBM Plex Mono',monospace", color: "#333B4A" },
   photoTile: { aspectRatio: "4/3", borderRadius: "var(--r)", border: "1px solid #E4E7EC", background: "#F1F3F6", display: "grid", placeItems: "center", overflow: "hidden" },
-  avatar: { width: 36, height: 36, borderRadius: 999, background: "#F1F3F6", color: "#0F23A8", font: "600 12px/36px 'IBM Plex Mono',monospace", textAlign: "center", flex: "none" },
-  overlay: { position: "fixed", inset: 0, background: "rgba(11,15,26,.44)", display: "grid", placeItems: "center", padding: 20, zIndex: 60 },
-  modal: { width: "100%", background: "#FFFFFF", borderRadius: "var(--r-lg)", boxShadow: "0 24px 60px rgba(11,15,26,.28)", maxHeight: "88vh", overflowY: "auto" },
-  modalHead: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, padding: "18px 20px", borderBottom: "1px solid #F1F3F6" },
-  modalX: { width: 30, height: 30, background: "#F1F3F6", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", color: "#5A6373", font: "400 15px/1 'Instrument Sans',sans-serif", cursor: "pointer", flex: "none" },
-  modalFoot: { display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, padding: "16px 20px", borderTop: "1px solid #F1F3F6", flexWrap: "wrap" },
-  cancelBtn: { height: 42, padding: "0 16px", background: "transparent", color: "#5A6373", border: "1px solid transparent", borderRadius: "var(--r)", font: "600 14px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
-  ctaBtn: { height: 42, padding: "0 20px", color: "#FFFFFF", border: "none", borderRadius: "var(--r)", font: "600 14px/1 'Instrument Sans',sans-serif", cursor: "pointer" },
-  fieldLabel: { display: "block", font: "600 13px/1.3 'Instrument Sans',sans-serif", color: "#1A1F2B", marginBottom: 7 },
-  textarea: { width: "100%", minHeight: 84, padding: 13, border: "1.5px solid #E4E7EC", borderRadius: "var(--r)", font: "400 14px/1.55 'Instrument Sans',sans-serif", color: "#1A1F2B", background: "#FFFFFF", resize: "vertical" },
-  hint: { padding: "13px 15px", borderRadius: "var(--r)", font: "400 13px/1.55 'Instrument Sans',sans-serif" },
-  reasonBtn: { display: "flex", alignItems: "flex-start", gap: 11, padding: "12px 14px", background: "#F1F3F6", border: "1.5px solid", borderRadius: "var(--r)", cursor: "pointer", textAlign: "left" },
-  radio: { width: 16, height: 16, borderRadius: 999, border: "1.5px solid", background: "#FFFFFF", flex: "none", marginTop: 1, display: "flex", alignItems: "center", justifyContent: "center" },
-  toast: { position: "fixed", left: "50%", bottom: 26, transform: "translateX(-50%)", display: "flex", alignItems: "center", gap: 11, padding: "13px 18px", background: "#F1F3F6", borderRadius: 999, boxShadow: "0 12px 32px rgba(11,15,26,.3)", zIndex: 70, maxWidth: "calc(100vw - 32px)" },
 } satisfies Record<string, CSSProperties>;

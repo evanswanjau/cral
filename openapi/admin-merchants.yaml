@@ -132,7 +132,11 @@ paths:
   /admin/merchants/{merchantId}/documents/{kind}/decision:
     post:
       tags: [admin-merchants]
-      summary: Accept or reject one business document (Idempotency-Key required)
+      summary: >
+        Accept one business document, ask for a new upload (`reject`), or
+        undo (`reset` - back to pending, answers under it cleared).
+        Idempotency-Key required. `accept` needs the document's own
+        checklist fully passed.
       operationId: adminDecideBusinessDocument
       security: [{ bearerAuth: [] }]
       parameters:
@@ -150,11 +154,11 @@ paths:
               type: object
               required: [decision]
               properties:
-                decision: { type: string, enum: [accept, reject] }
+                decision: { type: string, enum: [accept, reject, reset] }
                 note: { type: string, description: Required on `reject` — quoted to the merchant. }
       responses:
         "200": { description: The updated file, content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
-        "422": { description: reason_required | not_a_reviewable_document, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "422": { description: reason_required | not_a_reviewable_document | checklist_incomplete | checklist_flagged, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "404": { description: document_not_uploaded, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
@@ -165,8 +169,9 @@ paths:
       summary: >
         Verify the business - sets `merchants.approved_at`, notifies the
         merchant, and clears the account-document half of every future
-        car's approve gate. Requires the business documents `ok` and the
-        merchant checklist's blockers passed.
+        car's approve gate. Clears a pending "changes requested". Requires
+        the whole checklist answered, nothing flagged, and the business
+        documents `ok`.
       operationId: adminApproveMerchant
       security: [{ bearerAuth: [] }]
       parameters:
@@ -174,7 +179,37 @@ paths:
         - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
       responses:
         "200": { description: The updated file (now `approved`), content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
-        "422": { description: documents_not_all_accepted | checklist_blockers_outstanding, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "422": { description: checklist_incomplete | documents_not_all_accepted | checklist_flagged, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/merchants/{merchantId}/request-changes:
+    post:
+      tags: [admin-merchants]
+      summary: >
+        The business-level "Request changes" - the merchant is notified with
+        the note (in-app, SMS and email; `review` always texts) and the file
+        reads `changes_requested` until an approve clears it. Needs the whole
+        checklist answered. There is deliberately no business-level reject -
+        that is account suspension, a separate slice.
+      operationId: adminRequestMerchantChanges
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: merchantId, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string, description: Quoted to the merchant verbatim. }
+      responses:
+        "200": { description: The updated file (now `changes_requested`), content: { application/json: { schema: { $ref: "#/components/schemas/MerchantFile" } } } }
+        "409": { description: merchant_already_approved, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
+        "422": { description: checklist_incomplete, content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
@@ -231,7 +266,7 @@ components:
         name: { type: string }
         initials: { type: string }
         approved: { type: boolean }
-        badge: { type: string, enum: [verified, new_merchant] }
+        badge: { type: string, enum: [verified, changes_requested, new_merchant] }
         contact: { type: string, example: "Mwangi Karanja · +254733376061" }
         joined: { type: string, format: date-time }
         towns: { type: array, items: { type: string }, description: Distinct counties across the merchant's fleet }
@@ -262,7 +297,11 @@ components:
         name: { type: string }
         initials: { type: string }
         approved: { type: boolean }
-        badge: { type: string, enum: [verified, new_merchant] }
+        approved_at: { type: string, format: date-time, nullable: true }
+        badge: { type: string, enum: [verified, changes_requested, new_merchant] }
+        review_state: { type: string, enum: [verified, changes_requested, in_review] }
+        review_note: { type: string, nullable: true, description: What the merchant was told with the last request for changes. }
+        changes_requested_at: { type: string, format: date-time, nullable: true }
         owner_type: { type: string }
         contact: { type: string }
         joined: { type: string, format: date-time }
@@ -299,18 +338,21 @@ components:
               status: { type: string }
               county: { type: string }
         fleet_summary: { type: string }
-        can_approve:
+        can_decide:
           type: boolean
           description: >
-            True when every required business document is `ok` and the
-            verification checklist has no outstanding blockers. The
-            "Approve business" button's enabled state.
+            Every checklist item answered and every check-less document
+            decided - the gate for approve and request changes alike.
+        can_approve:
+          type: boolean
+          description: "`can_decide` AND nothing flagged AND every required business document `ok`."
         approve_blockers:
           type: object
-          description: Why `can_approve` is false — surfaced as the button's disabled reason.
+          description: Why `can_approve` is false.
           properties:
-            documents: { type: array, items: { type: string }, description: Outstanding business-document kinds }
-            checklist: { type: integer, description: Count of unresolved `block`-severity checklist items }
+            checklist_outstanding: { type: integer }
+            flagged: { type: integer }
+            documents: { type: integer, description: Business documents not yet `ok` }
         outstanding_documents:
           type: array
           items: { type: string }
@@ -329,15 +371,72 @@ components:
               document_id: { type: string, nullable: true }
               review_note: { type: string, nullable: true }
               original_name: { type: string, nullable: true }
-        checklist: { $ref: "#/components/schemas/ChecklistBlock" }
+              expires_at: { type: string, nullable: true }
+              reviewed_at: { type: string, format: date-time, nullable: true }
+              checklist:
+                allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+                description: The items under this document; all passed -> the document is set `ok`.
+        business_checklist:
+          allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+          description: Items about the account as a whole (address, consistency, payout name) - no document row.
+        checklist:
+          allOf: [{ $ref: "#/components/schemas/ChecklistBlock" }]
+          description: The whole checklist - drives the gates and the pre-filled note.
+        declared:
+          type: object
+          description: What the merchant typed at onboarding, shown beside the scans for comparison.
+          properties:
+            person:
+              type: object
+              properties:
+                full_name: { type: string, nullable: true }
+                national_id: { type: string, nullable: true }
+                kra_pin: { type: string, nullable: true }
+            company:
+              type: object
+              nullable: true
+              properties:
+                name: { type: string, nullable: true }
+                cert_no: { type: string, nullable: true }
+                kra_pin: { type: string, nullable: true }
+                email: { type: string, nullable: true }
+                address: { type: string, nullable: true }
+            contact:
+              type: object
+              properties:
+                email: { type: string, nullable: true }
+                phone: { type: string, nullable: true }
+                phone_verified: { type: boolean }
+            payout:
+              type: object
+              properties:
+                method: { type: string }
+                mpesa_name: { type: string, nullable: true }
+                bank_name: { type: string, nullable: true }
+                bank_account_name: { type: string, nullable: true }
+                bank_account_number: { type: string, nullable: true }
+        events:
+          type: array
+          description: >
+            Admin decisions on this business and its documents, newest
+            first, read from `audit_log` (an Ops-only reader).
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              body: { type: string, nullable: true }
+              tone: { type: string, enum: [grey, blue, green, amber, red] }
+              actor_name: { type: string, nullable: true }
+              occurred_at: { type: string, format: date-time }
 
     ChecklistBlock:
       type: object
       description: >
         A working review checklist — item definitions from
-        `platform_settings`, answers from `merchant_review_checks`. `block`
-        items gate approval; `flag`s and unresolved blockers compose the
-        pre-filled request-changes / reject note.
+        `platform_settings`, answers from `merchant_review_checks`.
+        Checklist-first (2026-09-25): every item must be answered before any
+        decision, and approve needs nothing flagged. Flags compose the
+        pre-filled request-changes note.
       properties:
         items:
           type: array
@@ -346,15 +445,17 @@ components:
             properties:
               id: { type: string }
               group: { type: string }
-              severity: { type: string, enum: [block, flag] }
+              document: { type: string, nullable: true, description: The business document this item hangs under, or null. }
               label: { type: string }
               help: { type: string }
               result: { type: string, enum: [pending, pass, flag] }
               note: { type: string, nullable: true }
+              skipped: { type: boolean, description: Under a document sent back for a new upload. }
         checked: { type: integer }
         total: { type: integer }
         flagged: { type: integer }
-        blockers_outstanding: { type: integer, description: "`block` items not yet `pass` — these disable Approve." }
+        outstanding: { type: integer }
+        complete: { type: boolean }
         suggested_note:
           type: object
           description: What the request-changes / reject modal opens pre-filled with.

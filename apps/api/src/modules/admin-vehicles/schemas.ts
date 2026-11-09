@@ -10,8 +10,10 @@ export const QueueQuerySchema = z.object({
 });
 
 export const DocumentDecisionSchema = z.object({
-  decision: z.enum(["accept", "reject"]),
-  // Required when decision is "reject"; the service enforces that.
+  // "reject" asks the merchant for a new upload (note required - the
+  // service enforces that); "reset" undoes a decision and restarts that
+  // document's checklist.
+  decision: z.enum(["accept", "reject", "reset"]),
   note: z.string().trim().min(1).max(2000).optional(),
 });
 

@@ -190,7 +190,7 @@ describe("a merchant file", () => {
 });
 
 describe("merchant approval - the business gate", () => {
-  it("blocks approve until the business docs and checklist are clear, then verifies", async () => {
+  it("blocks every decision until the checklist is worked, accepts docs from it, then verifies", async () => {
     const admin = await newAdmin();
     const { merchantId } = await merchantWith([{ status: "pending", county: "Nairobi", hoursAgo: 5 }]);
     await seedBusinessDocs(merchantId, ["national_id", "kra_pin"]);
@@ -199,39 +199,39 @@ describe("merchant approval - the business gate", () => {
     expect(file.body.business_documents.map((d: { kind: string }) => d.kind).sort()).toEqual(["kra_pin", "national_id"]);
     expect(file.body.checklist.items.length).toBeGreaterThan(0);
     expect(file.body.can_approve).toBe(false);
+    expect(file.body.can_decide).toBe(false);
+    // Each document carries its own checks; account-wide ones sit apart.
+    const idLine = file.body.business_documents.find((d: { kind: string }) => d.kind === "national_id");
+    expect(idLine.checklist.items.length).toBeGreaterThan(0);
+    expect(file.body.business_checklist.items.length).toBeGreaterThan(0);
+    expect(file.body.declared.person).toHaveProperty("national_id");
 
-    // Too early - docs not accepted.
+    // Too early - checklist not worked.
     const early = await request(app)
       .post(`/admin/merchants/${merchantId}/approve`)
       .set(bearer(admin.token))
       .set(bearerIdem());
     expect(early.status).toBe(422);
-    expect(early.body.error.code).toBe("documents_not_all_accepted");
-
-    for (const kind of ["national_id", "kra_pin"]) {
-      const acc = await request(app)
-        .post(`/admin/merchants/${merchantId}/documents/${kind}/decision`)
-        .set(bearer(admin.token))
-        .set(bearerIdem())
-        .send({ decision: "accept" });
-      expect(acc.status).toBe(200);
-    }
-
-    // Docs done but the checklist blockers aren't.
-    const midway = await request(app)
-      .post(`/admin/merchants/${merchantId}/approve`)
+    expect(early.body.error.code).toBe("checklist_incomplete");
+    const earlyChanges = await request(app)
+      .post(`/admin/merchants/${merchantId}/request-changes`)
       .set(bearer(admin.token))
-      .set(bearerIdem());
-    expect(midway.body.error.code).toBe("checklist_blockers_outstanding");
+      .set(bearerIdem())
+      .send({ note: "x" });
+    expect(earlyChanges.body.error.code).toBe("checklist_incomplete");
 
-    const items = (await request(app).get(`/admin/merchants/${merchantId}`).set(bearer(admin.token))).body
-      .checklist.items as Array<{ id: string; severity: string }>;
-    for (const it of items.filter((i) => i.severity === "block")) {
+    const items = file.body.checklist.items as Array<{ id: string }>;
+    for (const it of items) {
       await request(app)
         .post(`/admin/merchants/${merchantId}/checklist`)
         .set(bearer(admin.token))
         .send({ item_id: it.id, result: "pass" });
     }
+    const worked = await request(app).get(`/admin/merchants/${merchantId}`).set(bearer(admin.token));
+    expect(worked.body.can_decide).toBe(true);
+    expect(worked.body.can_approve).toBe(true);
+    // Passing a document's checks accepted it.
+    expect(worked.body.business_documents.every((d: { state: string }) => d.state === "ok")).toBe(true);
 
     const approved = await request(app)
       .post(`/admin/merchants/${merchantId}/approve`)
@@ -240,6 +240,8 @@ describe("merchant approval - the business gate", () => {
     expect(approved.status).toBe(200);
     expect(approved.body.approved).toBe(true);
     expect(approved.body.badge).toBe("verified");
+    expect(approved.body.review_state).toBe("verified");
+    expect(approved.body.events.some((e: { label: string }) => e.label === "Merchant approved")).toBe(true);
 
     // Reopen puts it back.
     const reopened = await request(app)
@@ -247,6 +249,53 @@ describe("merchant approval - the business gate", () => {
       .set(bearer(admin.token))
       .set(bearerIdem());
     expect(reopened.body.approved).toBe(false);
+  });
+
+  it("request changes needs a finished checklist, marks the file, and approve clears it", async () => {
+    const admin = await newAdmin();
+    const { merchantId } = await merchantWith([{ status: "pending", county: "Nairobi", hoursAgo: 5 }]);
+    await seedBusinessDocs(merchantId, ["national_id", "kra_pin"]);
+
+    const file = await request(app).get(`/admin/merchants/${merchantId}`).set(bearer(admin.token));
+    for (const it of file.body.checklist.items as Array<{ id: string }>) {
+      await request(app)
+        .post(`/admin/merchants/${merchantId}/checklist`)
+        .set(bearer(admin.token))
+        .send({ item_id: it.id, result: it.id === "id_name" ? "flag" : "pass" });
+    }
+    const worked = await request(app).get(`/admin/merchants/${merchantId}`).set(bearer(admin.token));
+    expect(worked.body.can_decide).toBe(true);
+    expect(worked.body.can_approve).toBe(false);
+    expect(worked.body.approve_blockers.flagged).toBe(1);
+    expect(worked.body.business_documents.find((d: { kind: string }) => d.kind === "national_id").state).not.toBe("ok");
+
+    const flaggedApprove = await request(app)
+      .post(`/admin/merchants/${merchantId}/approve`)
+      .set(bearer(admin.token))
+      .set(bearerIdem());
+    expect(flaggedApprove.status).toBe(422);
+
+    const note = worked.body.checklist.suggested_note.changes as string;
+    expect(note).toContain("National ID");
+    const sent = await request(app)
+      .post(`/admin/merchants/${merchantId}/request-changes`)
+      .set(bearer(admin.token))
+      .set(bearerIdem())
+      .send({ note });
+    expect(sent.status).toBe(200);
+    expect(sent.body).toMatchObject({ review_state: "changes_requested", badge: "changes_requested", review_note: note });
+
+    // The reviewer re-checks after the fix, and approve clears the request.
+    await request(app)
+      .post(`/admin/merchants/${merchantId}/checklist`)
+      .set(bearer(admin.token))
+      .send({ item_id: "id_name", result: "pass" });
+    const approved = await request(app)
+      .post(`/admin/merchants/${merchantId}/approve`)
+      .set(bearer(admin.token))
+      .set(bearerIdem());
+    expect(approved.status).toBe(200);
+    expect(approved.body).toMatchObject({ review_state: "verified", review_note: null, changes_requested_at: null });
   });
 
   it("a rejected business document notifies nobody breaks and stays rejected", async () => {

@@ -46,6 +46,7 @@ export interface DocLine {
   review_note: string | null;
   original_name: string | null;
   expires_at: string | null;
+  reviewed_at: string | null;
   /** This document's slice of the review checklist, shown as an accordion. */
   checklist: ChecklistBlock;
 }
@@ -65,28 +66,33 @@ export interface CaseEvent {
   occurred_at: string;
 }
 
-export type CheckSeverity = "block" | "flag";
 export type CheckResult = "pending" | "pass" | "flag";
 
 export interface ChecklistItem {
   id: string;
   group: string;
   document: string | null;
-  severity: CheckSeverity;
   label: string;
   help: string;
   result: CheckResult;
   note: string | null;
+  /** Under a document already sent back for a new upload - no answer needed. */
+  skipped: boolean;
 }
 
+/** Checklist-first: every item needs an answer before any decision. */
 export interface ChecklistBlock {
   items: ChecklistItem[];
   checked: number;
   total: number;
   flagged: number;
-  blockers_outstanding: number;
+  outstanding: number;
+  complete: boolean;
   suggested_note: { changes: string; reject: string };
 }
+
+export type DocDecision = "accept" | "reject" | "reset";
+export type CaseLink = { id: string; registration: string };
 
 export interface AccountDocLine {
   kind: string;
@@ -120,8 +126,16 @@ export interface ReviewCase {
   reviewer_note: string | null;
   reviewer_note_resolved: boolean;
   assigned_to_me: boolean;
+  can_decide: boolean;
   can_approve: boolean;
-  approve_blockers: { documents: number; checklist: number; merchant_not_approved: boolean };
+  approve_blockers: {
+    checklist_outstanding: number;
+    flagged: number;
+    documents: number;
+    merchant_not_approved: boolean;
+  };
+  next_case: CaseLink | null;
+  merchant_next_case: CaseLink | null;
   outstanding_documents: string[];
   merchant_approved: boolean;
   documents: DocLine[];
@@ -178,7 +192,7 @@ const idemHeaders = () => ({ headers: { "Idempotency-Key": `adm-${crypto.randomU
 export function decideDocument(
   vehicleId: string,
   kind: string,
-  decision: "accept" | "reject",
+  decision: DocDecision,
   note?: string,
 ) {
   return apiPost<ReviewCase>(
