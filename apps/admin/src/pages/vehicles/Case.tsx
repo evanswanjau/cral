@@ -412,6 +412,12 @@ export function Case(): JSX.Element {
                 ["REGISTRATION", c.registration],
                 ["MAKE & MODEL", c.title],
                 ["TYPE", c.type],
+                ...(c.type === "truck"
+                  ? [
+                      ["TRUCK TYPE", humaniseSlug(c.truck_type) || "—"],
+                      ["CARRIES UP TO", c.payload_kg ? `${c.payload_kg / 1000} t` : "—"],
+                    ]
+                  : []),
                 ["YEAR", c.year],
                 ["SEATS", String(c.seats)],
                 ["TRANSMISSION", c.transmission],
@@ -622,3 +628,14 @@ const S = {
   refChip: { display: "inline-block", padding: "5px 10px", background: "#F1F3F6", border: "1px solid #E4E7EC", borderRadius: "var(--r-sm)", font: "500 12px/1.2 'IBM Plex Mono',monospace", color: "#333B4A" },
   photoTile: { aspectRatio: "4/3", borderRadius: "var(--r)", border: "1px solid #E4E7EC", background: "#F1F3F6", display: "grid", placeItems: "center", overflow: "hidden" },
 } satisfies Record<string, CSSProperties>;
+
+/**
+ * "prime_mover" -> "Prime mover". The console shows the truck type the way
+ * it shows `c.type` (the raw category), so there's no third copy of the
+ * truck-type label list to keep in step with the API and the two portals.
+ */
+function humaniseSlug(slug: string | null): string {
+  if (!slug) return "";
+  const words = slug.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}

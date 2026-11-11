@@ -17,6 +17,7 @@ import {
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
+import { truckColumns } from "../vehicles/categories.js";
 import type {
   DocumentKind,
   DocumentRow,
@@ -195,6 +196,8 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     transmission: vehicle.transmission,
     fuel: vehicle.fuel,
     colour: vehicle.colour,
+    truck_type: vehicle.truck_type,
+    payload_kg: vehicle.payload_kg,
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
@@ -684,9 +687,14 @@ function toDailyRateCents(value: string | undefined): number | undefined {
   return Number.isFinite(n) ? Math.round(n * 100) : 0;
 }
 
-function vehicleUpdateFromInput(input: VehicleInput) {
-  const { daily_rate, ...rest } = input;
-  const update: Record<string, unknown> = { ...rest };
+/**
+ * `category` is the type the vehicle will have after this write - the
+ * input's own `type` if it sends one, else the row's. A non-truck never
+ * keeps truck fields (`truckColumns`).
+ */
+function vehicleUpdateFromInput(input: VehicleInput, category: string | undefined) {
+  const { daily_rate, truck_type, payload_kg, ...rest } = input;
+  const update: Record<string, unknown> = { ...rest, ...truckColumns(category, { truck_type, payload_kg }) };
   const cents = toDailyRateCents(daily_rate);
   if (cents !== undefined) update.daily_rate_amount = cents;
   return update;
@@ -702,7 +710,7 @@ export async function addVehicle(userId: string, input: CreateVehicleInput, _ctx
           id: generateId("vehicle"),
           merchant_id: merchant.id,
           listing_ref: listingRef,
-          ...vehicleUpdateFromInput(input),
+          ...vehicleUpdateFromInput(input, input.type),
         })
         .returning("*");
       if (!created) throw new Error("Failed to create vehicle");
@@ -723,7 +731,7 @@ export async function patchVehicle(
   if (input.insurance_expiry) assertNotPast(input.insurance_expiry, "insurance_expiry");
   const [updated] = await db<VehicleRow>("vehicles")
     .where({ id: vehicle.id })
-    .update(vehicleUpdateFromInput(input))
+    .update(vehicleUpdateFromInput(input, input.type ?? vehicle.type))
     .returning("*")
     .catch(rethrowRegistrationConflict);
   if (!updated) throw new Error("Failed to update vehicle");
@@ -1011,6 +1019,9 @@ async function assertCompleteForSubmission(userId: string): Promise<{
 
   for (const v of vehicles) {
     if (!v.county?.trim()) fail(`${v.registration || "A vehicle"} is missing its county.`);
+    if (v.type === "truck" && (!v.truck_type || !v.payload_kg)) {
+      fail(`${v.registration || "A truck"} needs its truck type and how much it carries.`);
+    }
     for (const kind of VEHICLE_DOC_KINDS) {
       if (!documents.some((d) => d.vehicle_id === v.id && d.kind === kind)) {
         fail(`${v.registration || "A vehicle"} is missing a required document.`);

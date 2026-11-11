@@ -675,3 +675,53 @@ describe("vehicles — merchant approval", () => {
     expect(afterApproval.body.merchant_approved).toBe(true);
   });
 });
+
+describe("vehicles — truck type and capacity (PR T1)", () => {
+  const TRUCK = { type: "truck" as const, make: "Isuzu", model: "FRR", transmission: "Manual" as const, fuel: "Diesel" as const };
+
+  it("stores a truck's type and payload, and drops them when the category stops being truck", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KTT 101A", { ...TRUCK, truck_type: "canter", payload_kg: 4000 });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ type: "truck", truck_type: "canter", payload_kg: 4000 });
+
+    const edited = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ ...BASE_VEHICLE, type: "van", registration: "KTT 101A", truck_type: "canter", payload_kg: 4000 });
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ type: "van", truck_type: null, payload_kg: null });
+  });
+
+  it("never stores truck fields on a non-truck at create", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KTT 102A", { truck_type: "tipper", payload_kg: 9000 });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ type: "sedan", truck_type: null, payload_kg: null });
+  });
+
+  it("rejects an unknown truck type and an absurd payload", async () => {
+    const { accessToken } = await newMerchant();
+    const badType = await createVehicle(accessToken, "KTT 103A", { ...TRUCK, truck_type: "spaceship" });
+    expect(badType.status).toBe(422);
+    const badLoad = await createVehicle(accessToken, "KTT 104A", { ...TRUCK, truck_type: "tipper", payload_kg: 1_000_000 });
+    expect(badLoad.status).toBe(422);
+  });
+
+  it("won't submit a truck without its type and payload", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KTT 105A", TRUCK);
+    await makeSubmittable(accessToken, created.body.id);
+
+    const blocked = await request(app).post(`/merchant/vehicles/${created.body.id}/submit`).set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.code).toBe("truck_details_required");
+
+    await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ ...BASE_VEHICLE, ...TRUCK, registration: "KTT 105A", truck_type: "flatbed", payload_kg: 12000 });
+    const ok = await request(app).post(`/merchant/vehicles/${created.body.id}/submit`).set(auth(accessToken));
+    expect(ok.status).toBe(200);
+  });
+});

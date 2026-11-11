@@ -7,7 +7,7 @@ import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays } from "
 import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
-import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { formatPayload, specLine, truckTypeLabel, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../lib/hiring-units.js";
 import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 
@@ -165,6 +165,12 @@ export function CarDetail(): JSX.Element {
     // The stored value is a slug ("sedan"); the cell was rendering it
     // raw, lowercase, mid-sentence. Same label map Browse's filter uses.
     { k: "CATEGORY", v: VEHICLE_CATEGORY_LABEL[car.category] ?? car.category, icon: "category" },
+    ...(car.category === "truck"
+      ? [
+          { k: "TRUCK TYPE", v: truckTypeLabel(car.truck_type) || "Not given", icon: "category" as SpecIconName },
+          { k: "CARRIES UP TO", v: formatPayload(car.payload_kg) || "Not given", icon: "category" as SpecIconName },
+        ]
+      : []),
     { k: "TRANSMISSION", v: car.transmission === "manual" ? "Manual" : "Automatic", icon: "transmission" },
     { k: "FUEL", v: car.fuel, icon: "fuel" },
     { k: "SEATS", v: String(car.seats), icon: "seats" },
@@ -355,8 +361,7 @@ export function CarDetail(): JSX.Element {
                * find the car described differently on the next screen.
                */}
               <span style={{ font: "400 14px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                {car.seats} seats · {car.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
-                {car.chauffeured ? "With driver" : "Self-drive"}
+                {specLine(car)} · {car.chauffeured ? "With driver" : "Self-drive"}
               </span>
               <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
               {/*

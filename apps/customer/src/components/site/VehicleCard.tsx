@@ -1,5 +1,6 @@
 import { photoSrc, formatMoney, type CatalogVehicleSummary } from "../../lib/catalog-api.js";
 import { HIRING_UNIT_LABEL, unitRate } from "../../lib/hiring-units.js";
+import { specLine } from "../../lib/vehicle-categories.js";
 
 /**
  * A listing card, reproduced from the design's card markup (used on the
@@ -144,8 +145,7 @@ export function VehicleCard({
             marginBottom: 12,
           }}
         >
-          {car.seats} seats · {car.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
-          {car.chauffeured ? "With driver" : "Self-drive"}
+          {specLine(car)} · {car.chauffeured ? "With driver" : "Self-drive"}
         </div>
         <div
           style={{

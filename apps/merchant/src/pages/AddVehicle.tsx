@@ -4,6 +4,8 @@ import { Earnings } from "../components/onboarding/steps/Vehicles.js";
 import { RateField } from "../components/onboarding/RateField.js";
 import {
   EMPTY_VEHICLE_DETAILS,
+  truckDetailsMissing,
+  truckPayload,
   VehicleDetailsFields,
   type VehicleDetailsValue,
 } from "../components/vehicle/VehicleDetailsFields.js";
@@ -44,6 +46,7 @@ export function AddVehicle(): JSX.Element {
     details.model.trim() &&
     details.year.trim() &&
     details.registration.trim() &&
+    !truckDetailsMissing(details) &&
     county.trim() &&
     pickupAddress.trim() &&
     dailyRate.trim();
@@ -65,6 +68,7 @@ export function AddVehicle(): JSX.Element {
         transmission: details.transmission,
         fuel: details.fuel,
         colour: details.colour.trim() || undefined,
+        ...truckPayload(details),
         county: county.trim(),
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),

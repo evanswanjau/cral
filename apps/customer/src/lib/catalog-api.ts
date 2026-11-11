@@ -38,6 +38,10 @@ export interface CatalogVehicleSummary {
   fuel: string;
   colour: string | null;
   seats: number;
+  /** Set only when `category` is `truck` (PR T1). */
+  truck_type: string | null;
+  /** Kilograms, set only for a truck. */
+  payload_kg: number | null;
   chauffeured: boolean;
   county: string | null;
   daily_rate: Money;
@@ -103,6 +107,8 @@ export interface CatalogSearchParams {
   max_price?: number;
   seats_min?: number;
   transmission?: "automatic" | "manual";
+  truck_type?: string;
+  payload_min_kg?: number;
   chauffeured?: boolean;
   sort?: "recommended" | "price_asc" | "price_desc" | "newest" | "rating_desc";
   cursor?: string;

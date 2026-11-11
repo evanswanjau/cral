@@ -109,6 +109,10 @@ export interface ReviewCase {
   type: string;
   year: string;
   seats: number;
+  /** Set only for a truck (PR T1) - a slug such as `prime_mover`. */
+  truck_type: string | null;
+  /** Kilograms, set only for a truck. */
+  payload_kg: number | null;
   transmission: string;
   fuel: string;
   colour: string | null;

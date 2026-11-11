@@ -1898,6 +1898,21 @@ Linear project "CRAL - Drivers" (COD-103 to COD-106).
   usual commission, never the driver directly. Day, hour and trip rates;
   hourly is live for drivers only (the driver page has time pickers).
 
+**Truck types and capacity (owner's call, 2026-11-10 - PR T1 of
+[`docs/plans/trucks-and-sales-agents.md`](./docs/plans/trucks-and-sales-agents.md)).**
+- `vehicles.truck_type` (10 slugs, `categories.ts#TRUCK_TYPES`, repeated
+  in migration `20261110090000`'s CHECK and mirrored in the merchant +
+  customer `vehicle-categories.ts`) and `vehicles.payload_kg` (integer kg,
+  shown as tonnes). Only kept for `type = 'truck'`:
+  `categories.ts#truckColumns` nulls both on any other category, including
+  when a draft switches away from truck.
+- Required at submission, not at save - `submitVehicle` 422s
+  `truck_details_required` and onboarding's `assertCompleteForSubmission`
+  fails the same way. Catalog filters `truck_type` / `payload_min_kg`;
+  Browse shows them only once "Truck & trailers" is picked. A truck's card
+  and car page read "Tipper · carries 14 t" (`specLine`), not seats/gearbox.
+- The admin case humanises the slug rather than carrying a third label list.
+
 ## What NOT to do
 
 - Don't add a fourth portal, a meta-framework, or a shared frontend

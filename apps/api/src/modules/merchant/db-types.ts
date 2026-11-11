@@ -60,6 +60,10 @@ export interface VehicleRow {
   transmission: string;
   fuel: string;
   colour: string | null;
+  /** Truck sub-type, only when `type = 'truck'` (20261110090000). */
+  truck_type: string | null;
+  /** Kilograms, only when `type = 'truck'`. */
+  payload_kg: number | null;
   county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;

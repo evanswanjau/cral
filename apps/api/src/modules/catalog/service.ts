@@ -41,6 +41,8 @@ interface CatalogRow {
   fuel: string;
   colour: string | null;
   seats: number;
+  truck_type: string | null;
+  payload_kg: number | null;
   chauffeured: boolean;
   county: string | null;
   daily_rate_amount: number;
@@ -72,6 +74,8 @@ const CATALOG_COLUMNS = [
   "v.fuel",
   "v.colour",
   "v.seats",
+  "v.truck_type",
+  "v.payload_kg",
   "v.chauffeured",
   "v.county",
   "v.daily_rate_amount",
@@ -185,6 +189,8 @@ function serializeSummary(
     fuel: row.fuel,
     colour: row.colour,
     seats: row.seats,
+    truck_type: row.truck_type,
+    payload_kg: row.payload_kg,
     chauffeured: row.chauffeured,
     county: row.county,
     daily_rate: kes(row.daily_rate_amount) as Money,
@@ -277,6 +283,8 @@ export async function listCatalog(query: CatalogSearchQuery) {
     qb.where("v.transmission", query.transmission === "automatic" ? "Automatic" : "Manual");
   }
   if (query.chauffeured !== undefined) qb.where("v.chauffeured", query.chauffeured);
+  if (query.truck_type) qb.where("v.truck_type", query.truck_type);
+  if (query.payload_min_kg !== undefined) qb.where("v.payload_kg", ">=", query.payload_min_kg);
 
   if (query.from && query.to) {
     // Day-granular overlap: a confirmed/active hire touching any day in

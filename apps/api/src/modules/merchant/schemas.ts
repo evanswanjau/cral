@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VEHICLE_CATEGORIES } from "../vehicles/categories.js";
+import { MAX_PAYLOAD_KG, TRUCK_TYPES, VEHICLE_CATEGORIES } from "../vehicles/categories.js";
 
 export const PatchOnboardingSchema = z.object({
   step: z.number().int().min(1).max(5).optional(),
@@ -39,6 +39,10 @@ export const VehicleInputSchema = z.object({
   transmission: z.enum(["Automatic", "Manual"]).optional(),
   fuel: z.enum(["Petrol", "Diesel", "Hybrid", "Electric"]).optional(),
   colour: z.string().optional(),
+  /** Only kept when `type` is `truck` - see `categories.ts#truckColumns`. */
+  truck_type: z.enum(TRUCK_TYPES).nullable().optional(),
+  /** Kilograms. Shown to renters as tonnes. */
+  payload_kg: z.number().int().min(1).max(MAX_PAYLOAD_KG).nullable().optional(),
   // County is progressively filled like insurance_expiry — optional on the
   // wizard's lazy create, enforced per-vehicle at submission time.
   county: z.string().optional(),
