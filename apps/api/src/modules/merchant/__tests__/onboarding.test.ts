@@ -473,6 +473,88 @@ describe("merchant onboarding — document upload", () => {
 });
 
 describe("merchant onboarding — submit", () => {
+  it("won't submit a truck until it has a truck type and payload, and never keeps them on a non-truck", async () => {
+    const { accessToken, userId } = await newMerchant();
+    await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(accessToken))
+      .send({
+        first_name: "Amani",
+        surname: "Otieno",
+        national_id: "12345678",
+        kra_pin: "A012345678Z",
+        payout_same: true,
+        phone: "+254712345679",
+        terms_accepted: true,
+      });
+    await markPhoneVerified(userId);
+
+    const truck = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "truck",
+        make: "Isuzu",
+        model: "FRR",
+        year: "2019",
+        registration: "KTR 301T",
+        transmission: "Manual",
+        fuel: "Diesel",
+        county: "Nairobi",
+        pickup_address: "Industrial Area, Nairobi",
+        daily_rate: "12000",
+      });
+    const vehicleId = truck.body.id;
+    expect(truck.body).toMatchObject({ truck_type: null, payload_kg: null });
+
+    for (const kind of ["national_id", "kra_pin"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .field("vehicle_id", vehicleId)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ insurance_expiry: futureDate });
+
+    const blocked = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.message).toMatch(/truck type/);
+
+    const filled = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ truck_type: "box_body", payload_kg: 5000 });
+    expect(filled.body).toMatchObject({ truck_type: "box_body", payload_kg: 5000 });
+
+    const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(ok.status).toBe(200);
+  });
+
+  it("drops truck fields sent for a vehicle that isn't a truck", async () => {
+    const { accessToken } = await newMerchant();
+    const car = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({ type: "sedan", make: "Toyota", model: "Axio", year: "2019", registration: "KTR 302T", transmission: "Automatic", fuel: "Petrol", pickup_address: "Westlands", daily_rate: "4500" });
+    const patched = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${car.body.id}`)
+      .set(auth(accessToken))
+      .send({ truck_type: "tipper", payload_kg: 9000 });
+    expect(patched.body).toMatchObject({ type: "sedan", truck_type: null, payload_kg: null });
+  });
+
   it("422s when incomplete and 200s once every requirement is satisfied", async () => {
     const { accessToken, userId } = await newMerchant();
 

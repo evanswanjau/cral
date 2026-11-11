@@ -22,3 +22,37 @@ export const VEHICLE_CATEGORY_LABEL = Object.fromEntries(
 export function vehicleTypeLabel(value: string): string {
   return VEHICLE_CATEGORY_LABEL[value as VehicleType] ?? value;
 }
+
+/**
+ * Truck sub-types (owner's call, 2026-11-10 - PR T1 of
+ * `docs/plans/trucks-and-sales-agents.md`). Client mirror of
+ * `TRUCK_TYPES` in `apps/api/src/modules/vehicles/categories.ts` - keep
+ * them in step. Only meaningful when the category is `truck`.
+ */
+export const TRUCK_TYPES = [
+  { value: "pickup", label: "Pickup" },
+  { value: "canter", label: "Canter / light truck" },
+  { value: "box_body", label: "Box body" },
+  { value: "flatbed", label: "Flatbed" },
+  { value: "tipper", label: "Tipper" },
+  { value: "refrigerated", label: "Refrigerated" },
+  { value: "water_bowser", label: "Water bowser" },
+  { value: "prime_mover", label: "Prime mover + trailer" },
+  { value: "low_loader", label: "Low-loader" },
+  { value: "crane_truck", label: "Crane truck" },
+] as const;
+
+export type TruckType = (typeof TRUCK_TYPES)[number]["value"];
+
+/** How a stored truck-type slug reads on a screen; tolerates an unknown value. */
+export function truckTypeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return TRUCK_TYPES.find((t) => t.value === value)?.label ?? value;
+}
+
+/** Kilograms -> "4 t" / "1.5 t". The API stores kg; people think in tonnes. */
+export function formatPayload(kg: number | null | undefined): string {
+  if (!kg) return "";
+  const t = kg / 1000;
+  return `${Number.isInteger(t) ? t : t.toFixed(1).replace(/\.0$/, "")} t`;
+}

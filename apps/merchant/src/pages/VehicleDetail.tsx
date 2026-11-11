@@ -11,7 +11,7 @@ import { useToast } from "../components/portal/Toast.js";
 import { usePhotoPreview } from "../lib/use-photo-preview.js";
 import { ApiClientError } from "../lib/api.js";
 import { toE164 } from "../lib/device.js";
-import { vehicleTypeLabel } from "../lib/vehicle-categories.js";
+import { formatPayload, truckTypeLabel, vehicleTypeLabel } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
 import { HIRING_UNIT_LABELS, SELECTABLE_UNITS, type HiringUnit } from "../lib/hiring-units.js";
 import {
@@ -34,7 +34,13 @@ import {
   type VehicleDocInfo,
   type VehicleStatus,
 } from "../lib/vehicles-api.js";
-import { VehicleDetailsFields, type VehicleDetailsValue } from "../components/vehicle/VehicleDetailsFields.js";
+import {
+  tonnesFromKg,
+  truckDetailsMissing,
+  truckPayload,
+  VehicleDetailsFields,
+  type VehicleDetailsValue,
+} from "../components/vehicle/VehicleDetailsFields.js";
 
 type ModalKind = "price" | "details" | "message" | "verify" | "delete" | null;
 
@@ -413,11 +419,18 @@ function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
     transmission: (v.transmission as VehicleDetailsValue["transmission"]) || "Automatic",
     fuel: (v.fuel as VehicleDetailsValue["fuel"]) || "Petrol",
     colour: v.colour ?? "",
+    truck_type: (v.truck_type as VehicleDetailsValue["truck_type"]) ?? "",
+    payload_t: tonnesFromKg(v.payload_kg),
   });
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const filled = value.make.trim() && value.model.trim() && value.year.trim() && value.registration.trim();
+  const filled =
+    value.make.trim() &&
+    value.model.trim() &&
+    value.year.trim() &&
+    value.registration.trim() &&
+    !truckDetailsMissing(value);
 
   return (
     <Modal
@@ -442,6 +455,7 @@ function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
             transmission: value.transmission,
             fuel: value.fuel,
             ...(value.colour.trim() ? { colour: value.colour.trim() } : {}),
+            ...truckPayload(value),
           },
           {
             onSuccess: () => {
@@ -931,6 +945,12 @@ export function VehicleDetail(): JSX.Element {
                 ["MAKE", v.make],
                 ["MODEL", v.model],
                 ["TYPE", vehicleTypeLabel(v.type)],
+                ...(v.type === "truck"
+                  ? [
+                      ["TRUCK TYPE", truckTypeLabel(v.truck_type) || " - "],
+                      ["CARRIES UP TO", formatPayload(v.payload_kg) || " - "],
+                    ]
+                  : []),
                 ["YEAR", v.year],
                 ["SEATS", String(v.seats)],
                 ["TRANSMISSION", v.transmission],

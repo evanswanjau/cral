@@ -93,6 +93,18 @@ paths:
         - name: transmission
           in: query
           schema: { type: string, enum: [automatic, manual] }
+        - name: truck_type
+          in: query
+          schema:
+            type: string
+            enum: [pickup, canter, box_body, flatbed, tipper, refrigerated, water_bowser, prime_mover, low_loader, crane_truck]
+          description: Only trucks of this type. Implies `category=truck`.
+        - name: payload_min_kg
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100000 }
+          description: >
+            Only trucks that carry at least this many kilograms. The browse
+            UI asks in tonnes and converts. Implies `category=truck`.
         - name: chauffeured
           in: query
           schema: { type: boolean }
@@ -388,6 +400,8 @@ components:
           transmission,
           fuel,
           seats,
+          truck_type,
+          payload_kg,
           chauffeured,
           county,
           daily_rate,
@@ -418,6 +432,15 @@ components:
         fuel: { type: string }
         colour: { type: string, nullable: true }
         seats: { type: integer }
+        truck_type:
+          type: string
+          nullable: true
+          enum: [pickup, canter, box_body, flatbed, tipper, refrigerated, water_bowser, prime_mover, low_loader, crane_truck]
+          description: Set only when `category` is `truck`.
+        payload_kg:
+          type: integer
+          nullable: true
+          description: What the truck carries, in kilograms. Set only when `category` is `truck`.
         chauffeured: { type: boolean }
         county: { type: string, nullable: true }
         daily_rate:

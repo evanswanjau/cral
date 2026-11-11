@@ -7,7 +7,7 @@ import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import { Dropdown, PIN_ICON, type DropdownOption } from "../components/site/Dropdown.js";
 import { Popover, PopoverGroup, ChoiceRow } from "../components/site/Popover.js";
 import { Skeleton, VehicleCardSkeletonGrid } from "../components/site/Skeleton.js";
-import { VEHICLE_CATEGORIES, type VehicleCategory } from "../lib/vehicle-categories.js";
+import { TRUCK_TYPES, VEHICLE_CATEGORIES, type VehicleCategory } from "../lib/vehicle-categories.js";
 import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import { earliestPickupDay } from "../lib/hire-dates.js";
 
@@ -50,6 +50,22 @@ const PRICE_CEILINGS: DropdownOption[] = [
 const CATEGORY_OPTIONS: DropdownOption[] = [
   { value: "", label: "Any type" },
   ...VEHICLE_CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
+];
+
+// Truck-only filters (PR T1) - shown once "Truck & trailers" is picked.
+const TRUCK_TYPE_OPTIONS: DropdownOption[] = [
+  { value: "", label: "Any truck" },
+  ...TRUCK_TYPES.map((t) => ({ value: t.value, label: t.label })),
+];
+
+// Kilograms on the wire; tonnes on screen.
+const PAYLOAD_OPTIONS: DropdownOption[] = [
+  { value: "", label: "Any load" },
+  { value: "1000", label: "1 t and up" },
+  { value: "3000", label: "3 t and up" },
+  { value: "5000", label: "5 t and up" },
+  { value: "10000", label: "10 t and up" },
+  { value: "20000", label: "20 t and up" },
 ];
 
 const SEAT_OPTIONS: DropdownOption[] = [
@@ -259,6 +275,10 @@ export function Browse(): JSX.Element {
   const category = params.get("category") ?? "";
   const seatsMin = params.get("seats_min") ?? "";
   const transmission = params.get("transmission") ?? "";
+  // Only honoured while the category is truck, so a stale param left in the
+  // URL after switching to "Van" can't silently empty the grid.
+  const truckType = category === "truck" ? (params.get("truck_type") ?? "") : "";
+  const payloadMin = category === "truck" ? (params.get("payload_min_kg") ?? "") : "";
   const chauffeured = params.get("chauffeured") ?? "";
   const maxPrice = params.get("max_price") ?? "";
   const sort = (params.get("sort") as CatalogSearchParams["sort"]) ?? "recommended";
@@ -286,8 +306,18 @@ export function Browse(): JSX.Element {
   const minDay = earliestPickupDay();
 
   // What sits behind the "More filters" pill - the count on its badge.
-  const PANEL_KEYS = ["max_price", "category", "seats_min", "transmission", "chauffeured"] as const;
-  const panelCount = PANEL_KEYS.filter((k) => params.get(k)).length;
+  const PANEL_KEYS = [
+    "max_price",
+    "category",
+    "truck_type",
+    "payload_min_kg",
+    "seats_min",
+    "transmission",
+    "chauffeured",
+  ] as const;
+  const panelCount = PANEL_KEYS.filter((k) =>
+    k === "truck_type" ? truckType : k === "payload_min_kg" ? payloadMin : params.get(k),
+  ).length;
   const clearPanelFilters = () =>
     set(Object.fromEntries(PANEL_KEYS.map((k) => [k, undefined])) as Record<string, undefined>);
   const clearFilters = () => setParams(new URLSearchParams(sort === "recommended" ? "" : `sort=${sort}`));
@@ -301,6 +331,8 @@ export function Browse(): JSX.Element {
     [
       ["max_price", maxPrice, PRICE_CEILINGS],
       ["category", category, CATEGORY_OPTIONS],
+      ["truck_type", truckType, TRUCK_TYPE_OPTIONS],
+      ["payload_min_kg", payloadMin, PAYLOAD_OPTIONS],
       ["seats_min", seatsMin, SEAT_OPTIONS],
       ["transmission", transmission, GEARBOX_OPTIONS],
       ["chauffeured", chauffeured, DRIVER_OPTIONS],
@@ -338,11 +370,13 @@ export function Browse(): JSX.Element {
       q.to = to;
     }
     if (category) q.category = category as VehicleCategory;
+    if (truckType) q.truck_type = truckType;
+    if (payloadMin) q.payload_min_kg = Number(payloadMin);
     if (seatsMin) q.seats_min = Number(seatsMin);
     if (transmission === "automatic" || transmission === "manual") q.transmission = transmission;
     if (chauffeured) q.chauffeured = chauffeured === "true";
     return q;
-  }, [county, from, to, category, seatsMin, transmission, chauffeured, maxPrice, sort]);
+  }, [county, from, to, category, truckType, payloadMin, seatsMin, transmission, chauffeured, maxPrice, sort]);
 
   const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
     queryKey: ["catalog", "search", query],
@@ -467,8 +501,31 @@ export function Browse(): JSX.Element {
                       name="Body type"
                       value={category}
                       options={CATEGORY_OPTIONS}
-                      onChange={(v) => set({ category: v || undefined })}
+                      onChange={(v) =>
+                        set({
+                          category: v || undefined,
+                          ...(v !== "truck" ? { truck_type: undefined, payload_min_kg: undefined } : {}),
+                        })
+                      }
                     />
+                    {category === "truck" && (
+                      <>
+                        <div className="cral-pop-sub">Truck type</div>
+                        <ChoiceRow
+                          name="Truck type"
+                          value={truckType}
+                          options={TRUCK_TYPE_OPTIONS}
+                          onChange={(v) => set({ truck_type: v || undefined })}
+                        />
+                        <div className="cral-pop-sub">Carries</div>
+                        <ChoiceRow
+                          name="Carries"
+                          value={payloadMin}
+                          options={PAYLOAD_OPTIONS}
+                          onChange={(v) => set({ payload_min_kg: v || undefined })}
+                        />
+                      </>
+                    )}
                     <div className="cral-pop-sub">Seats</div>
                     <ChoiceRow
                       name="Seats"
