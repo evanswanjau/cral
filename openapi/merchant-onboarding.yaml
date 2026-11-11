@@ -287,6 +287,19 @@ components:
         transmission: { type: string, enum: [Automatic, Manual] }
         fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
         colour: { type: string }
+        truck_type:
+          type: string
+          nullable: true
+          enum: [pickup, canter, box_body, flatbed, tipper, refrigerated, water_bowser, prime_mover, low_loader, crane_truck]
+          description: >
+            Only kept when `type` is `truck`; any other category stores
+            null (sending one is ignored). Required at submission for a truck.
+        payload_kg:
+          type: integer
+          nullable: true
+          minimum: 1
+          maximum: 100000
+          description: How much the truck carries, in kilograms. Same rules as `truck_type`.
         county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
         daily_rate: { type: string, description: "KES, whole shillings, as a numeric string. Always the gross/list price the hirer pays, even when rate_mode is 'net'." }

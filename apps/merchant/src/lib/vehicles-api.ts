@@ -20,6 +20,8 @@ export interface VehicleSummary {
   type: string;
   year: string;
   seats: number;
+  truck_type: string | null;
+  payload_kg: number | null;
   county: string | null;
   pickup_address: string | null;
   status: VehicleStatus;
@@ -117,6 +119,10 @@ export interface CreateVehicleInput {
   fuel: string;
   colour?: string | undefined;
   seats?: number | undefined;
+  /** Only for a truck - the API nulls both for any other type. */
+  truck_type?: string | null;
+  /** Kilograms. */
+  payload_kg?: number | null;
   county: string;
   pickup_address: string;
   daily_rate: string;
@@ -154,6 +160,10 @@ export interface EditVehicleDetailsInput {
   fuel: string;
   colour?: string;
   seats?: number;
+  /** Only for a truck - the API nulls both for any other type. */
+  truck_type?: string | null;
+  /** Kilograms. */
+  payload_kg?: number | null;
 }
 
 /** The logbook-derived fields. Server accepts this only while the listing

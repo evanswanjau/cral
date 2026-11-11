@@ -60,6 +60,8 @@ interface VehicleSpec {
   chauffeured?: boolean;
   daily_rate_amount?: number;
   verification_badge?: string;
+  truck_type?: string;
+  payload_kg?: number;
 }
 
 async function makeMerchant(
@@ -125,6 +127,8 @@ async function addVehicle(merchantId: string, spec: VehicleSpec = {}): Promise<s
       fuel: "Petrol",
       colour: "Silver",
       seats: spec.seats ?? 5,
+      truck_type: spec.truck_type ?? null,
+      payload_kg: spec.payload_kg ?? null,
       county: spec.county ?? "Nairobi",
       pickup_address: "17 Ndemi Road, Kilimani",
       daily_rate_amount: spec.daily_rate_amount ?? 420_000,
@@ -320,6 +324,24 @@ describe("filters", () => {
       max_price: 1_000_000,
     });
     expect(res.body.data.map((v: { id: string }) => v.id)).toEqual([wanted]);
+  });
+
+  it("narrows trucks by type and minimum payload, and returns both on the card", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = "Truck County";
+    const canter = await addVehicle(m.merchantId, { county, type: "truck", truck_type: "canter", payload_kg: 4000 });
+    const tipper = await addVehicle(m.merchantId, { county, type: "truck", truck_type: "tipper", payload_kg: 14000 });
+    await addVehicle(m.merchantId, { county, type: "sedan" });
+
+    const byType = await request(app).get("/catalog/vehicles").query({ county, truck_type: "canter" });
+    expect(byType.body.data.map((v: { id: string }) => v.id)).toEqual([canter]);
+    expect(byType.body.data[0]).toMatchObject({ category: "truck", truck_type: "canter", payload_kg: 4000 });
+
+    const byLoad = await request(app).get("/catalog/vehicles").query({ county, payload_min_kg: 10000 });
+    expect(byLoad.body.data.map((v: { id: string }) => v.id)).toEqual([tipper]);
+
+    const bad = await request(app).get("/catalog/vehicles").query({ truck_type: "spaceship" });
+    expect(bad.status).toBe(422);
   });
 
   it("rejects from without to", async () => {

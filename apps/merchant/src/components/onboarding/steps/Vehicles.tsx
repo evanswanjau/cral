@@ -4,7 +4,15 @@ import { O } from "../styles.js";
 import { Combobox } from "../Combobox.js";
 import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
-import { VEHICLE_CATEGORIES, vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
+import {
+  formatPayload,
+  TRUCK_TYPES,
+  truckTypeLabel,
+  VEHICLE_CATEGORIES,
+  vehicleTypeLabel,
+  type TruckType,
+} from "../../../lib/vehicle-categories.js";
+import { payloadKgFromTonnes } from "../../vehicle/VehicleDetailsFields.js";
 import { COUNTIES } from "../../../lib/kenya.js";
 import { RateField } from "../RateField.js";
 import {
@@ -100,7 +108,8 @@ export function Vehicles({
             <div style={{ flex: "1 1 0%", minWidth: "min(100%,160px)" }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
-                {vehicleTypeLabel(v.type)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
+                {v.type === "truck" && v.truckType ? truckTypeLabel(v.truckType) : vehicleTypeLabel(v.type)}
+                {v.type === "truck" && payloadKgFromTonnes(v.payloadT) ? ` (${formatPayload(payloadKgFromTonnes(v.payloadT))})` : ""} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -195,7 +204,8 @@ function VehicleForm({
       return next;
     });
 
-  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim();
+  const truckMissing = v.type === "truck" && (!v.truckType || payloadKgFromTonnes(v.payloadT) === null);
+  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim() && !truckMissing;
   const photosOk = v.photos.length === MAX_PHOTOS;
 
   // Lazily create the vehicle on the server the first moment it's saveable
@@ -271,6 +281,30 @@ function VehicleForm({
                   {VEHICLE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </Select>
               </FormField>
+              {v.type === "truck" && (
+                <>
+                  <FormField label="Truck type" required error={showErrors && !v.truckType ? "Pick the closest match." : undefined}>
+                    <Select value={v.truckType} onChange={(e) => patch({ truckType: e.target.value as TruckType | "" })}>
+                      <option value="">Select a truck type</option>
+                      {TRUCK_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+                    </Select>
+                  </FormField>
+                  <FormField
+                    label="Carries up to (tonnes)"
+                    required
+                    error={showErrors && payloadKgFromTonnes(v.payloadT) === null ? "Enter tonnes, e.g. 4 or 1.5." : undefined}
+                    helper="Hirers filter on this."
+                  >
+                    <TextInput
+                      inputMode="decimal"
+                      value={v.payloadT}
+                      onChange={(e) => patch({ payloadT: e.target.value.replace(/[^0-9.]/g, "").slice(0, 5) })}
+                      placeholder="4"
+                      error={showErrors && payloadKgFromTonnes(v.payloadT) === null}
+                    />
+                  </FormField>
+                </>
+              )}
               <FormField label="Make" required error={showErrors && !v.make.trim() ? "Required." : undefined} helper="Pick from the list or type your own.">
                 <Combobox
                   value={v.make}

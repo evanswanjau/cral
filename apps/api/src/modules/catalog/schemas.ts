@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VEHICLE_CATEGORIES } from "../vehicles/categories.js";
+import { TRUCK_TYPES, VEHICLE_CATEGORIES } from "../vehicles/categories.js";
 
 /**
  * Query schema for `GET /catalog/vehicles`. Every filter is optional; a
@@ -15,6 +15,10 @@ export const CatalogSearchQuerySchema = z
     max_price: z.coerce.number().int().min(0).optional(),
     seats_min: z.coerce.number().int().min(1).max(40).optional(),
     transmission: z.enum(["automatic", "manual"]).optional(),
+    // Truck filters (20261110090000). Either one narrows to trucks, since
+    // no other category carries a truck type or a payload.
+    truck_type: z.enum(TRUCK_TYPES).optional(),
+    payload_min_kg: z.coerce.number().int().min(1).max(100_000).optional(),
     chauffeured: z
       .enum(["true", "false"])
       .transform((v) => v === "true")

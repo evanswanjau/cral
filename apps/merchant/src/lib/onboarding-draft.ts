@@ -12,7 +12,7 @@
 
 import { getCurrentUserId } from "./auth.js";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
-import type { VehicleType } from "./vehicle-categories.js";
+import type { TruckType, VehicleType } from "./vehicle-categories.js";
 
 export type OwnerType = "individual" | "company";
 /**
@@ -59,6 +59,10 @@ export interface DraftVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string;
+  /** Truck-only (PR T1). "" until picked; the API stores null for non-trucks. */
+  truckType: TruckType | "";
+  /** Truck-only capacity in tonnes as typed; the wire carries kg. */
+  payloadT: string;
   county: string;
   pickupAddress: string;
   dailyRate: string;
@@ -179,6 +183,8 @@ export function emptyVehicle(id: string): DraftVehicle {
     transmission: "Automatic",
     fuel: "Petrol",
     colour: "",
+    truckType: "",
+    payloadT: "",
     county: "",
     pickupAddress: "",
     dailyRate: "",
@@ -242,6 +248,8 @@ interface WireVehicle {
   transmission: Transmission;
   fuel: Fuel;
   colour: string | null;
+  truck_type?: TruckType | null;
+  payload_kg?: number | null;
   county: string | null;
   pickup_address: string | null;
   daily_rate: string;
@@ -315,6 +323,8 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     transmission: v.transmission,
     fuel: v.fuel,
     colour: v.colour ?? "",
+    truckType: v.truck_type ?? "",
+    payloadT: v.payload_kg ? String(v.payload_kg / 1000) : "",
     county: v.county ?? "",
     pickupAddress: v.pickup_address ?? "",
     chauffeured: v.chauffeured ?? true,
@@ -490,8 +500,13 @@ export async function confirmPhoneVerification(code: string): Promise<void> {
 // --- vehicles --------------------------------------------------------
 
 function vehicleToWireInput(v: Partial<DraftVehicle>) {
-  const { pickupAddress, dailyRate, rateMode, insuranceExpiry, ...rest } = v;
+  const { pickupAddress, dailyRate, rateMode, insuranceExpiry, truckType, payloadT, ...rest } = v;
   const body: Record<string, unknown> = { ...rest };
+  if (truckType !== undefined) body.truck_type = truckType || null;
+  if (payloadT !== undefined) {
+    const t = Number(payloadT);
+    body.payload_kg = Number.isFinite(t) && t > 0 && t <= 100 ? Math.round(t * 1000) : null;
+  }
   if (pickupAddress !== undefined) body.pickup_address = pickupAddress;
   if (dailyRate !== undefined) body.daily_rate = dailyRate;
   if (rateMode !== undefined) body.rate_mode = rateMode;

@@ -460,6 +460,8 @@ components:
         type: { type: string }
         year: { type: string }
         seats: { type: integer }
+        truck_type: { type: string, nullable: true, description: "Set only for a truck." }
+        payload_kg: { type: integer, nullable: true, description: "Kilograms, set only for a truck." }
         transmission: { type: string }
         fuel: { type: string }
         colour: { type: string, nullable: true }
