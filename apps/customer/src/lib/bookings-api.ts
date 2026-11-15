@@ -50,6 +50,30 @@ export interface BookingSummary {
   created_at: string;
 }
 
+/** Where a truck collects the load and where it goes (PR T2). */
+export interface BookingRoute {
+  from: string;
+  from_county: string;
+  to: string;
+  to_county: string;
+}
+
+/** What a truck is moving; `kg` only when the renter gave a weight. */
+export interface BookingCargo {
+  description: string;
+  kg: number | null;
+}
+
+/** The extra fields a truck request sends - required for a truck, refused for anything else. */
+export interface TruckRequestFields {
+  route_from: string;
+  route_from_county: string;
+  route_to: string;
+  route_to_county: string;
+  cargo_description: string;
+  cargo_kg: number | null;
+}
+
 export interface BookingDriver {
   id: string;
   /** The driver's full name. */
@@ -96,6 +120,9 @@ export interface BookingDetail extends BookingSummary {
   total_due: Money;
   pickup_location: string;
   dropoff_location: string;
+  /** Truck requests only (PR T2) - null on every other booking. */
+  route: BookingRoute | null;
+  cargo: BookingCargo | null;
   note_from_hirer: string | null;
   response_due_at: string | null;
   decline_reason_code: string | null;
@@ -124,7 +151,7 @@ export function createBooking(input: {
   pickup_at: string;
   dropoff_at: string;
   note_from_hirer?: string;
-}) {
+} & Partial<TruckRequestFields>) {
   return apiPost<BookingDetail>("/bookings", input, {
     headers: { "Idempotency-Key": idempotencyKey() },
   });

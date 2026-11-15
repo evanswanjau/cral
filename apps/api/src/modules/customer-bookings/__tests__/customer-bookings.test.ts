@@ -99,6 +99,8 @@ async function listing(
     hiringUnit?: "day" | "hour" | "trip";
     hourlyRate?: number;
     tripRate?: number;
+    /** A truck listing (PR T1/T2), carrying this many kg. */
+    truckPayloadKg?: number;
   } = {},
 ) {
   const owner = await createVerifiedTestUser();
@@ -126,7 +128,8 @@ async function listing(
   await db("vehicles").insert({
     id: vehicleId,
     merchant_id: merchantId,
-    type: "sedan",
+    type: opts.truckPayloadKg ? "truck" : "sedan",
+    ...(opts.truckPayloadKg ? { truck_type: "canter", payload_kg: opts.truckPayloadKg } : {}),
     make: "Toyota",
     model: "Corolla Fielder",
     year: "2018",
@@ -295,6 +298,126 @@ describe("hiring cadence (day/hour/trip)", () => {
       .send({ ...dates(3, 0), vehicle_id: vehicleId });
 
     expect(res.status).toBe(201);
+  });
+});
+
+describe("truck requests carry a route and a load (PR T2)", () => {
+  const route = {
+    route_from: "Godown 14, Enterprise Road",
+    route_from_county: "Nairobi",
+    route_to: "Site office, Kitengela",
+    route_to_county: "Kajiado",
+    cargo_description: "40 bags of cement",
+  };
+
+  it("stores the route and load, and fills pickup/dropoff from it", async () => {
+    const hirer = await renter();
+    const { merchantId, vehicleId } = await listing({ truckPayloadKg: 4_000, hiringUnit: "trip", tripRate: 1_500_000 });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...route, cargo_kg: 2_000 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.route).toEqual({
+      from: "Godown 14, Enterprise Road",
+      from_county: "Nairobi",
+      to: "Site office, Kitengela",
+      to_county: "Kajiado",
+    });
+    expect(res.body.cargo).toEqual({ description: "40 bags of cement", kg: 2_000 });
+    expect(res.body.pickup_location).toBe("Godown 14, Enterprise Road, Nairobi");
+    expect(res.body.dropoff_location).toBe("Site office, Kitengela, Kajiado");
+
+    // The owner is told where and what in the request notification itself.
+    const notification = await db("notifications")
+      .where({ merchant_id: merchantId, subject_id: res.body.id })
+      .first("body");
+    expect(notification.body).toContain("Nairobi to Kajiado: 40 bags of cement");
+  });
+
+  it("needs all four route fields and what's being moved", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ truckPayloadKg: 4_000 });
+
+    const noRoute = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId });
+    expect(noRoute.status).toBe(422);
+    expect(noRoute.body.error.code).toBe("route_required");
+    expect(noRoute.body.error.field).toBe("route_from");
+
+    const noToCounty: Partial<typeof route> = { ...route };
+    delete noToCounty.route_to_county;
+    const halfRoute = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...noToCounty });
+    expect(halfRoute.status).toBe(422);
+    expect(halfRoute.body.error.field).toBe("route_to_county");
+
+    const noCargo: Partial<typeof route> = { ...route };
+    delete noCargo.cargo_description;
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...noCargo });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("cargo_required");
+  });
+
+  it("refuses a load heavier than the truck carries", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ truckPayloadKg: 3_000 });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...route, cargo_kg: 5_000 });
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("cargo_over_capacity");
+  });
+
+  it("refuses a county that isn't one of the 47", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing({ truckPayloadKg: 3_000 });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...route, route_to_county: "Atlantis" });
+    expect(res.status).toBe(422);
+  });
+
+  it("refuses a route on a non-truck listing, and leaves both null there", async () => {
+    const hirer = await renter();
+    const { vehicleId } = await listing();
+
+    const refused = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId, ...route });
+    expect(refused.status).toBe(422);
+    expect(refused.body.error.code).toBe("route_not_applicable");
+
+    const plain = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 1), vehicle_id: vehicleId });
+    expect(plain.status).toBe(201);
+    expect(plain.body.route).toBeNull();
+    expect(plain.body.cargo).toBeNull();
+    expect(plain.body.pickup_location).toBe("Nairobi");
   });
 });
 

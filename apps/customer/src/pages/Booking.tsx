@@ -31,6 +31,13 @@ import {
   hireInstants,
 } from "../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
+import {
+  EMPTY_TRUCK_ROUTE,
+  TruckRouteFields,
+  truckRequestFields,
+  truckRouteProblem,
+  type TruckRouteDraft,
+} from "../components/site/TruckRouteFields.js";
 
 /**
  * `/book/:id` - the pre-booking half of a hire, reproduced from the
@@ -209,6 +216,8 @@ export function Booking(): JSX.Element {
 
   const key = draftKey(id ?? "", from, to);
   const [note, setNote] = useState(() => readDraft(key));
+  // Truck listings only (PR T2): where from, where to, and what.
+  const [route, setRoute] = useState<TruckRouteDraft>(EMPTY_TRUCK_ROUTE);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -334,6 +343,9 @@ export function Booking(): JSX.Element {
   // rather than at the end of the flow - the car page now blocks it at
   // the point the dates are picked.
   const belowMinimum = isDayUnit && days > 0 && days < car.minimum_hire_days;
+  // A truck request isn't sendable until it says from where, to where and what.
+  const isTruck = car.category === "truck";
+  const routeProblem = isTruck ? truckRouteProblem(route, car.payload_kg) : null;
   const here = `/book/${id}?from=${from}&to=${to}`;
   const steps = isAuthenticated ? BOOKING_STEPS : NEW_ACCOUNT_BOOKING_STEPS;
   const doneIndex = isAuthenticated ? 0 : stage === "account" ? 0 : 1;
@@ -495,6 +507,7 @@ export function Booking(): JSX.Element {
         ...(driver ? { driver_id: driver.id } : {}),
         ...hireInstants(from, to),
         ...(note ? { note_from_hirer: note } : {}),
+        ...(isTruck ? truckRequestFields(route) : {}),
       });
       writeDraft(key, "");
       // The booking now owns the URL. Everything from here - waiting,
@@ -1010,6 +1023,8 @@ export function Booking(): JSX.Element {
                   </label>
                 )}
 
+                {isTruck && <TruckRouteFields value={route} onChange={setRoute} payloadKg={car.payload_kg} />}
+
                 <label style={{ display: "block", marginBottom: 22 }}>
                   <span style={label}>Anything {car.owner.display_name} should know</span>
                   <textarea
@@ -1017,7 +1032,11 @@ export function Booking(): JSX.Element {
                     onChange={(e) => setNote(e.target.value)}
                     maxLength={1000}
                     rows={3}
-                    placeholder="Driving to Naivasha on Saturday, back Sunday evening."
+                    placeholder={
+                      isTruck
+                        ? "Need hands to load, or a tarpaulin? Say so here."
+                        : "Driving to Naivasha on Saturday, back Sunday evening."
+                    }
                     style={{
                       width: "100%",
                       padding: "11px 13px",
@@ -1084,11 +1103,17 @@ export function Booking(): JSX.Element {
                   </div>
                 )}
 
+                {routeProblem && (
+                  <p style={{ margin: "0 0 12px", font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                    {routeProblem}
+                  </p>
+                )}
+
                 <button
                   type="button"
                   onClick={submitRequest}
-                  disabled={submitting || belowMinimum}
-                  style={{ ...primaryButton, opacity: submitting || belowMinimum ? 0.7 : 1 }}
+                  disabled={submitting || belowMinimum || !!routeProblem}
+                  style={{ ...primaryButton, opacity: submitting || belowMinimum || routeProblem ? 0.7 : 1 }}
                 >
                   {submitting ? "Sending…" : "Send request"}
                 </button>

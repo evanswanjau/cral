@@ -118,6 +118,27 @@ paths:
                   maxLength: 1000
                   nullable: true
                   description: The design's "Anything {owner} should know".
+                route_from:
+                  type: string
+                  maxLength: 200
+                  description: >
+                    Truck listings only (PR T2), required there with the
+                    other three route fields and `cargo_description` - 422
+                    `route_required` / `cargo_required`. Sent for any other
+                    listing it is refused, 422 `route_not_applicable`.
+                    `pickup_location` / `dropoff_location` are filled from
+                    the route.
+                route_from_county: { type: string, description: "One of the 47 counties." }
+                route_to: { type: string, maxLength: 200 }
+                route_to_county: { type: string, description: "One of the 47 counties." }
+                cargo_description: { type: string, maxLength: 300, example: "40 bags of cement" }
+                cargo_kg:
+                  type: integer
+                  nullable: true
+                  maximum: 100000
+                  description: >
+                    Optional rough weight in kg. Above the truck's
+                    `payload_kg` is 422 `cargo_over_capacity`.
       responses:
         "201":
           description: The request was created and the owner notified.
@@ -252,6 +273,31 @@ paths:
 
 components:
   schemas:
+
+    BookingRoute:
+      type: object
+      nullable: true
+      description: >
+        Truck requests only (PR T2) - where the load is collected and where
+        it goes. Null on every other booking.
+      required: [from, from_county, to, to_county]
+      properties:
+        from: { type: string, example: "Godown 14, Enterprise Road" }
+        from_county: { type: string, example: Nairobi }
+        to: { type: string, example: "Site office, Kitengela" }
+        to_county: { type: string, example: Kajiado }
+
+    BookingCargo:
+      type: object
+      nullable: true
+      description: Truck requests only (PR T2) - what's being moved. Null on every other booking.
+      required: [description, kg]
+      properties:
+        description: { type: string, example: "40 bags of cement" }
+        kg:
+          type: integer
+          nullable: true
+          description: Rough weight in kilograms, if the renter gave one. Shown in tonnes.
     Money:
       type: object
       required: [amount, currency]
@@ -333,6 +379,8 @@ components:
                 exactly the hire.
             pickup_location: { type: string }
             dropoff_location: { type: string }
+            route: { $ref: "#/components/schemas/BookingRoute" }
+            cargo: { $ref: "#/components/schemas/BookingCargo" }
             note_from_hirer: { type: string, nullable: true }
             response_due_at:
               type: string

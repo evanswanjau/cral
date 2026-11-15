@@ -25,6 +25,7 @@ import {
   type DeclineBookingInput,
   type Handover,
 } from "../lib/bookings-api.js";
+import { formatPayload } from "../lib/vehicle-categories.js";
 
 type ModalKind = "accept" | "decline" | "cancel" | "handover" | "rate" | "hirer-history" | null;
 
@@ -677,6 +678,15 @@ export function BookingDetail(): JSX.Element {
                 <div style={{ ...P.rowMeta, marginTop: 4 }}>{b.dropoff_location}</div>
               </div>
             </div>
+            {b.cargo && (
+              <div style={{ padding: "0 18px 18px" }}>
+                <div style={P.specKey}>THE LOAD</div>
+                <div style={{ font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#333B4A" }}>
+                  {b.cargo.description}
+                  {b.cargo.kg ? ` · about ${formatPayload(b.cargo.kg)}` : ""}
+                </div>
+              </div>
+            )}
             {b.note_from_hirer && (
               <div style={{ padding: "0 18px 18px" }}>
                 <div style={P.specKey}>NOTE FROM THE HIRER</div>

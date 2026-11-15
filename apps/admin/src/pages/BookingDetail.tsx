@@ -53,6 +53,13 @@ export function BookingDetail(): JSX.Element {
           value={`${new Date(b.pickup_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })} → ${new Date(b.dropoff_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
         />
         <Row label="Pickup location" value={b.pickup_location} />
+        {b.route && <Row label="Drop-off location" value={b.dropoff_location} />}
+        {b.cargo && (
+          <Row
+            label="Load"
+            value={b.cargo.kg ? `${b.cargo.description} · about ${Number((b.cargo.kg / 1000).toFixed(1))} t` : b.cargo.description}
+          />
+        )}
         {b.note_from_hirer && <Row label="Renter's note" value={b.note_from_hirer} />}
         <Row label="Gross" value={money(b.gross)} />
         <Row label="Commission" value={money(b.commission)} />

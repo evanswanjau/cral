@@ -16,6 +16,7 @@ import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js
 import { baseCatalogQuery } from "../catalog/service.js";
 import { basePublicDriverQuery, driverPublicName, requirePublicDriver } from "../catalog/drivers.js";
 import { subjectOf } from "../../lib/booking-subject.js";
+import { placeLine, routeAndLoadOf } from "../../lib/booking-route.js";
 import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
 import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
@@ -67,6 +68,8 @@ interface PublicVehicleForBooking {
   hourly_rate_amount: number | null;
   trip_rate_amount: number | null;
   minimum_hire_days: number;
+  /** Trucks only (PR T1) - what the truck carries, in kg. */
+  payload_kg: number | null;
   m_user_id: string;
   m_owner_type: string;
   m_company_name: string | null;
@@ -105,6 +108,7 @@ async function requirePublicVehicle(vehicleId: string): Promise<PublicVehicleFor
       "v.hourly_rate_amount",
       "v.trip_rate_amount",
       "v.minimum_hire_days",
+      "v.payload_kg",
       "m.user_id as m_user_id",
       "m.owner_type as m_owner_type",
       "m.company_name as m_company_name",
@@ -409,6 +413,7 @@ function serializeDetail(
     total_due: kes(b.gross_amount + b.deposit_amount) as Money,
     pickup_location: b.pickup_location,
     dropoff_location: b.dropoff_location,
+    ...routeAndLoadOf(b),
     note_from_hirer: b.note_from_hirer,
     response_due_at: b.response_due_at ? b.response_due_at.toISOString() : null,
     decline_reason_code: b.decline_reason_code,
@@ -443,6 +448,83 @@ async function detailOf(b: BookingRow) {
 // ---------------------------------------------------------------------
 // Create
 // ---------------------------------------------------------------------
+
+/**
+ * A truck request's route and load (PR T2), checked and ready to store -
+ * or null for anything that isn't a truck. A truck is hired to move
+ * something, so the owner needs to know from where, to where and what
+ * before they can say yes; every other listing refuses the fields rather
+ * than silently dropping them.
+ */
+function truckLoadOf(vehicle: PublicVehicleForBooking | null, input: CreateBookingInput) {
+  const given =
+    input.route_from !== undefined ||
+    input.route_from_county !== undefined ||
+    input.route_to !== undefined ||
+    input.route_to_county !== undefined ||
+    input.cargo_description !== undefined ||
+    (input.cargo_kg !== undefined && input.cargo_kg !== null);
+
+  if (vehicle?.type !== "truck") {
+    if (given) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "route_not_applicable",
+        message: "A route and load only go on a truck request.",
+        field: "route_from",
+      });
+    }
+    return null;
+  }
+
+  const missing = (
+    [
+      ["route_from", input.route_from, "Where should the truck collect the load?"],
+      ["route_from_county", input.route_from_county, "Which county is the collection in?"],
+      ["route_to", input.route_to, "Where is the load going?"],
+      ["route_to_county", input.route_to_county, "Which county is the load going to?"],
+    ] as const
+  ).find(([, value]) => !value);
+  if (missing) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "route_required",
+      message: missing[2],
+      field: missing[0],
+    });
+  }
+  if (!input.cargo_description) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "cargo_required",
+      message: "Say what the truck will be moving.",
+      field: "cargo_description",
+    });
+  }
+  const kg = input.cargo_kg ?? null;
+  if (kg !== null && vehicle.payload_kg !== null && kg > vehicle.payload_kg) {
+    const t = (n: number) => `${Number((n / 1000).toFixed(1))} t`;
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "cargo_over_capacity",
+      message: `This truck carries up to ${t(vehicle.payload_kg)}, and your load is ${t(kg)}.`,
+      field: "cargo_kg",
+    });
+  }
+
+  return {
+    route_from: input.route_from!,
+    route_from_county: input.route_from_county!,
+    route_to: input.route_to!,
+    route_to_county: input.route_to_county!,
+    cargo_description: input.cargo_description,
+    cargo_kg: kg,
+  };
+}
 
 export async function createBooking(
   userId: string,
@@ -531,6 +613,8 @@ export async function createBooking(
       field: "hire_car_details",
     });
   }
+
+  const load = truckLoadOf(vehicle, input);
 
   const carLeg = vehicle ? unitPricingBasis(vehicle, pickupAt, dropoffAt) : null;
   const driverLeg = driver ? driverPricingBasis(driver, input.driver_unit ?? carLeg?.unit, pickupAt, dropoffAt) : null;
@@ -678,6 +762,8 @@ export async function createBooking(
       const m = (await trx<MerchantRow>("merchants").where({ id: part.merchantId }).first())!;
       const merchantUser = await trx("users").where({ id: m.user_id }).first("phone");
       const location = part.vehicle?.county ?? vehicle?.county ?? part.driver?.county ?? "To be agreed with the owner";
+      // A truck request carries its own route, on both halves of a split
+      // request - the driver drives the same load the same way.
 
       const [inserted] = await trx<BookingRow>("bookings")
         .insert({
@@ -700,8 +786,9 @@ export async function createBooking(
           rate_quantity: quantity,
           // The exact pickup address is withheld until the booking is
           // confirmed; the county is what the renter has seen all along.
-          pickup_location: location,
-          dropoff_location: location,
+          pickup_location: load ? placeLine(load.route_from, load.route_from_county) : location,
+          dropoff_location: load ? placeLine(load.route_to, load.route_to_county) : location,
+          ...(load ?? {}),
           note_from_hirer: input.note_from_hirer ?? null,
           gross_amount: pricing.gross.amount,
           gross_currency: pricing.gross.currency,
@@ -737,7 +824,9 @@ export async function createBooking(
         merchantId: part.merchantId,
         category: "booking",
         title: "New booking request",
-        body: `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.`,
+        body:
+          `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.` +
+          (load ? ` ${load.route_from_county} to ${load.route_to_county}: ${load.cargo_description}.` : ""),
         ref: inserted.ref,
         subjectType: "booking",
         subjectId: inserted.id,
@@ -758,6 +847,7 @@ export async function createBooking(
           dropoff_at: dropoffAt.toISOString(),
           gross_amount: pricing.gross.amount,
           deposit_amount: 0,
+          ...(load ?? {}),
         },
         ip: ctx.ip,
         requestId: ctx.requestId,

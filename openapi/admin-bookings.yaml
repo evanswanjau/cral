@@ -83,6 +83,31 @@ paths:
 
 components:
   schemas:
+
+    BookingRoute:
+      type: object
+      nullable: true
+      description: >
+        Truck requests only (PR T2) - where the load is collected and where
+        it goes. Null on every other booking.
+      required: [from, from_county, to, to_county]
+      properties:
+        from: { type: string, example: "Godown 14, Enterprise Road" }
+        from_county: { type: string, example: Nairobi }
+        to: { type: string, example: "Site office, Kitengela" }
+        to_county: { type: string, example: Kajiado }
+
+    BookingCargo:
+      type: object
+      nullable: true
+      description: Truck requests only (PR T2) - what's being moved. Null on every other booking.
+      required: [description, kg]
+      properties:
+        description: { type: string, example: "40 bags of cement" }
+        kg:
+          type: integer
+          nullable: true
+          description: Rough weight in kilograms, if the renter gave one. Shown in tonnes.
     Money:
       type: object
       required: [amount, currency]
@@ -122,6 +147,8 @@ components:
             vehicle_id: { type: string }
             pickup_location: { type: string }
             dropoff_location: { type: string }
+            route: { $ref: "#/components/schemas/BookingRoute" }
+            cargo: { $ref: "#/components/schemas/BookingCargo" }
             note_from_hirer: { type: string, nullable: true }
             commission: { $ref: "#/components/schemas/Money" }
             merchant_net: { $ref: "#/components/schemas/Money" }

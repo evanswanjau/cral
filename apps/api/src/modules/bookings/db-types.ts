@@ -61,6 +61,14 @@ export interface BookingRow {
   rate_unit: string;
   /** Days for a day-unit booking, hours (rounded up) for hour, always 1 for trip. */
   rate_quantity: number;
+  /** Truck requests only (20261115090000): where from / to, all four set or none. */
+  route_from: string | null;
+  route_from_county: string | null;
+  route_to: string | null;
+  route_to_county: string | null;
+  /** Truck requests only: what's being moved, and roughly how heavy (kg). */
+  cargo_description: string | null;
+  cargo_kg: number | null;
   created_at: Date;
   updated_at: Date;
 }
