@@ -46,9 +46,16 @@ export interface CatalogVehicleSummary {
   county: string | null;
   daily_rate: Money;
   /** What `daily_rate`/`hourly_rate`/`trip_rate` actually prices a booking on (owner's call, 2026-09-23). */
-  hiring_unit: "day" | "hour" | "trip";
+  hiring_unit: "day" | "hour" | "trip" | "km" | "tonne";
   hourly_rate: Money | null;
   trip_rate: Money | null;
+  /** Trucks only (PR T3): guide rates - the owner prices each job by quote. */
+  km_rate: Money | null;
+  tonne_rate: Money | null;
+  /** "Doesn't move for less than", shown beside the guide rate. */
+  minimum_charge: Money | null;
+  /** True when a request here gets a price from the owner rather than an instant total. */
+  quoted: boolean;
   verified: boolean;
   primary_photo_url: string | null;
   owner: CatalogOwner;

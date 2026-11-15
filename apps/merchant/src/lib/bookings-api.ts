@@ -2,7 +2,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiUpload } from "./api.js";
 
 export type BookingFilter = "all" | "requests" | "upcoming" | "on_hire" | "completed" | "cancelled";
-export type BookingStatus = "requested" | "confirmed" | "active" | "completed" | "declined" | "expired" | "cancelled";
+export type BookingStatus =
+  | "requested"
+  /** PR T3: waiting for you to send a price. */
+  | "quote_requested"
+  /** PR T3: price sent, waiting for the hirer. */
+  | "quoted"
+  | "confirmed"
+  | "active"
+  | "completed"
+  | "declined"
+  | "expired"
+  | "cancelled";
+
+/** Your price on a quote request (PR T3). Null until you've sent one. */
+export interface BookingQuote {
+  amount: Money;
+  note: string | null;
+  quoted_at: string;
+  expires_at: string | null;
+}
 
 export interface Money {
   amount: number;
@@ -72,6 +91,7 @@ export interface BookingDetail extends BookingSummary {
   /** Truck requests only (PR T2) - null on every other booking. */
   route: { from: string; from_county: string; to: string; to_county: string } | null;
   cargo: { description: string; kg: number | null } | null;
+  quote: BookingQuote | null;
   note_from_hirer: string | null;
   payout_method: string;
   payout_detail: string;
@@ -113,7 +133,18 @@ export interface DeclineBookingInput {
 }
 
 export function declineBooking(id: string, input: DeclineBookingInput) {
-  return apiPost<BookingDetail>(`/merchant/bookings/${id}/decline`, input);
+  // The API requires a key here (a decline can refund); this call used to
+  // send none and was refused with 400 before it reached the handler.
+  return apiPost<BookingDetail>(`/merchant/bookings/${id}/decline`, input, {
+    headers: { "Idempotency-Key": idempotencyKey() },
+  });
+}
+
+/** Send the hirer your price for a quote request (PR T3). `amount` is what they pay, in cents. */
+export function sendQuote(id: string, input: { amount: Money; note?: string }) {
+  return apiPost<BookingDetail>(`/merchant/bookings/${id}/quote`, input, {
+    headers: { "Idempotency-Key": idempotencyKey() },
+  });
 }
 
 export function cancelBooking(id: string, reason: string) {
@@ -271,6 +302,14 @@ export function useConfirmBooking(id: string) {
 export function useDeclineBooking(id: string) {
   const invalidate = useInvalidateBookings();
   return useMutation({ mutationFn: (input: DeclineBookingInput) => declineBooking(id, input), onSuccess: () => invalidate(id) });
+}
+
+export function useSendQuote(id: string) {
+  const invalidate = useInvalidateBookings();
+  return useMutation({
+    mutationFn: (input: { amount: Money; note?: string }) => sendQuote(id, input),
+    onSuccess: () => invalidate(id),
+  });
 }
 
 export function useCancelBooking(id: string) {

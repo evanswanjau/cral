@@ -37,7 +37,7 @@ paths:
           in: query
           schema:
             type: string
-            enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+            enum: [requested, quote_requested, quoted, confirmed, active, completed, declined, expired, cancelled]
         - name: cursor
           in: query
           schema: { type: string }
@@ -84,6 +84,20 @@ paths:
 components:
   schemas:
 
+    BookingQuote:
+      type: object
+      nullable: true
+      description: >
+        The merchant's price on a quoted booking (PR T3). Null until they
+        send one - a quote_requested booking's money fields are zero and
+        are not a price. Valid until `expires_at` (48 h).
+      required: [amount, note, quoted_at, expires_at]
+      properties:
+        amount: { $ref: "#/components/schemas/Money" }
+        note: { type: string, nullable: true, maxLength: 500 }
+        quoted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+
     BookingRoute:
       type: object
       nullable: true
@@ -123,7 +137,7 @@ components:
         ref: { type: string }
         status:
           type: string
-          enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+          enum: [requested, quote_requested, quoted, confirmed, active, completed, declined, expired, cancelled]
         pickup_at: { type: string, format: date-time }
         dropoff_at: { type: string, format: date-time }
         gross: { $ref: "#/components/schemas/Money" }
@@ -149,6 +163,7 @@ components:
             dropoff_location: { type: string }
             route: { $ref: "#/components/schemas/BookingRoute" }
             cargo: { $ref: "#/components/schemas/BookingCargo" }
+            quote: { $ref: "#/components/schemas/BookingQuote" }
             note_from_hirer: { type: string, nullable: true }
             commission: { $ref: "#/components/schemas/Money" }
             merchant_net: { $ref: "#/components/schemas/Money" }

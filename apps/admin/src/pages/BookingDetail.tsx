@@ -54,6 +54,14 @@ export function BookingDetail(): JSX.Element {
         />
         <Row label="Pickup location" value={b.pickup_location} />
         {b.route && <Row label="Drop-off location" value={b.dropoff_location} />}
+        {b.quote && (
+          <Row
+            label="Owner's quote"
+            value={`${money(b.quote.amount)}${b.quote.note ? ` · "${b.quote.note}"` : ""}${
+              b.quote.expires_at ? ` · held until ${new Date(b.quote.expires_at).toLocaleString("en-GB")}` : ""
+            }`}
+          />
+        )}
         {b.cargo && (
           <Row
             label="Load"

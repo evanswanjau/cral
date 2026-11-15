@@ -12,6 +12,7 @@ import {
   CreateBookingReportSchema,
   CreateHandoverSchema,
   DeclineBookingSchema,
+  SendQuoteSchema,
   HandoverConditionSchema,
   ListBookingsQuerySchema,
   RateHirerSchema,
@@ -55,6 +56,19 @@ bookingsRouter.post(
   requireIdempotencyKey(),
   asyncHandler(async (req, res) => {
     const result = await bookingsService.confirmBooking(req.auth!.sub, req.params.bookingId as string, ctxOf(req));
+    await req.idempotency!.complete(200, result);
+    res.status(200).json(result);
+  }),
+);
+
+/** Price a quote request (PR T3). Keyed: it sets what the hirer will be charged. */
+bookingsRouter.post(
+  "/merchant/bookings/:bookingId/quote",
+  authenticate(),
+  requireIdempotencyKey(),
+  validateBody(SendQuoteSchema),
+  asyncHandler(async (req, res) => {
+    const result = await bookingsService.sendQuote(req.auth!.sub, req.params.bookingId as string, req.body, ctxOf(req));
     await req.idempotency!.complete(200, result);
     res.status(200).json(result);
   }),

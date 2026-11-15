@@ -28,7 +28,7 @@ inert.
 
 | # | Vertical | Plan | PRs |
 |---|----------|------|-----|
-| 1 | Trucks | [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md) Part A | T1 type + capacity (**built**, `27ca88c`, PR #70 into develop, in `main` via PR #71), T2 route + load (**built**, `feature/truck-route-load`), T3 quote step + km/tonne |
+| 1 | Trucks | [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md) Part A | T1 type + capacity (**built**, `27ca88c`, PR #70 into develop, in `main` via PR #71), T2 route + load (**built**, `feature/truck-route-load`), T3 quote step + km/tonne (**built**, `feature/truck-quotes`) |
 | 2 | Sales agents | same file, Part B | AG1 role + invite + My merchants, AG2 sign-up link, AG3 assist session |
 | 3 | Garage services | this file, below | GS1-GS4 |
 | 4 | Parts | this file, below | PT1-PT2 (on top of GS1-GS3) |

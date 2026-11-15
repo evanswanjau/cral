@@ -132,8 +132,11 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
         </div>
       </div>
       <div style={{ textAlign: "right" }}>
-        <div style={P.rateLabel}>KES {money(b.merchant_net.amount)}</div>
-        <div style={{ font: "400 11px/1.3 'Instrument Sans',sans-serif", color: "#A7AEBB" }}>after commission</div>
+        {/* A quote request has no price until you send one (PR T3) - never show its zero. */}
+        <div style={P.rateLabel}>{b.status === "quote_requested" ? "Price it" : `KES ${money(b.merchant_net.amount)}`}</div>
+        <div style={{ font: "400 11px/1.3 'Instrument Sans',sans-serif", color: "#A7AEBB" }}>
+          {b.status === "quote_requested" ? "you set the price" : "after commission"}
+        </div>
       </div>
       <span style={{ ...P.statusTag, background: meta.tint, border: `1px solid ${meta.border}`, color: meta.text }}>
         <span style={{ ...P.statusDot, background: meta.core }} />
