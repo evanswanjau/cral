@@ -1,3 +1,4 @@
+import { commissionOn } from "@cral/types";
 import { useEffect, useRef, useState } from "react";
 import { CodeInput } from "@cral/ui";
 import { useNavigate, useParams } from "react-router-dom";
@@ -17,6 +18,7 @@ import {
   useConfirmHandover,
   useCreateHandover,
   useDeclineBooking,
+  useSendQuote,
   useHirerHistory,
   useLogHandoverCondition,
   useRateHirer,
@@ -27,7 +29,7 @@ import {
 } from "../lib/bookings-api.js";
 import { formatPayload } from "../lib/vehicle-categories.js";
 
-type ModalKind = "accept" | "decline" | "cancel" | "handover" | "rate" | "hirer-history" | null;
+type ModalKind = "accept" | "quote" | "decline" | "cancel" | "handover" | "rate" | "hirer-history" | null;
 
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { weekday: "short", day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }).toUpperCase();
@@ -138,6 +140,87 @@ function AcceptModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
             <span style={{ ...P.verifyPointDot, background: "#C77400" }} />
             <div style={P.verifyPointText}>Cancelling after you accept counts against your response record.</div>
           </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------
+// Send quote modal (PR T3)
+// ---------------------------------------------------------------------
+
+/**
+ * One amount, one optional note, and what the merchant keeps. Not from a
+ * canvas file - the merchant bundle has no quote screen - so it reuses
+ * AcceptModal's breakdown idiom. The commission percentage is never shown
+ * (owner's global rule); only the shilling amounts are.
+ */
+function QuoteModal({ b, onClose }: { b: BookingDetailData; onClose: () => void }): JSX.Element {
+  const flash = useToast();
+  const send = useSendQuote(b.id);
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  const shillings = parseInt(amount, 10) || 0;
+  const keep = shillings - commissionOn(shillings);
+
+  return (
+    <Modal
+      title="Send your price"
+      sub="The hirer sees this figure and accepts it to book. It's held for 48 hours."
+      onClose={onClose}
+      ctaLabel={send.isPending ? "Sending…" : "Send price"}
+      ctaDisabled={send.isPending || shillings < 1}
+      onConfirm={() =>
+        send.mutate(
+          { amount: { amount: shillings * 100, currency: "KES" }, ...(note.trim() ? { note: note.trim() } : {}) },
+          {
+            onSuccess: () => {
+              onClose();
+              flash(`Price sent. KES ${money(shillings * 100)} to ${b.hirer_name}.`);
+            },
+            onError: (err) => flash(err instanceof ApiClientError ? err.message : "Couldn't send the price. Try again.", "#FF8A8A"),
+          },
+        )
+      }
+    >
+      <div style={{ display: "grid", gap: 14 }}>
+        {b.route && (
+          <div style={P.breakdown}>
+            {[
+              ["From", `${b.route.from}, ${b.route.from_county}`],
+              ["To", `${b.route.to}, ${b.route.to_county}`],
+              ...(b.cargo ? [["Load", b.cargo.kg ? `${b.cargo.description} · about ${formatPayload(b.cargo.kg)}` : b.cargo.description]] : []),
+            ].map(([k, v]) => (
+              <div key={k} style={{ ...P.breakdownRow, background: "#F8F9FB" }}>
+                <span style={P.breakdownKey}>{k}</span>
+                <span style={{ ...P.breakdownVal, fontFamily: "'Instrument Sans',sans-serif" }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <div>
+          <label style={P.fieldLabel}>The hirer pays (KES)</label>
+          <input
+            style={P.fieldInput}
+            value={amount}
+            inputMode="numeric"
+            autoFocus
+            onChange={(e) => setAmount(e.target.value.replace(/\D/g, ""))}
+          />
+          <p style={{ margin: "6px 0 0", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+            {shillings ? `You keep KES ${money(keep * 100)} after CRAL's service fee.` : "Type the full price for this job."}
+          </p>
+        </div>
+        <div>
+          <label style={P.fieldLabel}>Note for the hirer, optional</label>
+          <input
+            style={P.fieldInputText}
+            value={note}
+            maxLength={500}
+            placeholder="Price includes fuel and tolls."
+            onChange={(e) => setNote(e.target.value)}
+          />
         </div>
       </div>
     </Modal>
@@ -573,7 +656,7 @@ export function BookingDetail(): JSX.Element {
                 <span style={{ ...P.mastStatusDot, background: meta.core }} />
                 {meta.label}
               </span>
-              {b.status === "requested" && b.response_due_at && (
+              {(b.status === "requested" || b.status === "quote_requested") && b.response_due_at && (
                 <span style={{ ...P.mastStatus, background: "#FFF3DB", border: "1px solid #F5D9A3", color: "#8A5200" }}>
                   {respondByLabel(b.response_due_at)}
                 </span>
@@ -592,6 +675,21 @@ export function BookingDetail(): JSX.Element {
         </div>
 
         <div style={P.mastActions}>
+          {b.status === "quote_requested" && (
+            <>
+              <button type="button" style={{ ...P.addButton, height: 38, padding: "0 15px", font: "600 13px/1 'Instrument Sans',sans-serif" }} onClick={() => setModal("quote")}>
+                Send a price
+              </button>
+              <button type="button" style={{ ...P.deleteBtn, marginLeft: 0 }} onClick={() => setModal("decline")}>Turn it down</button>
+            </>
+          )}
+          {b.status === "quoted" && b.quote && (
+            <span style={{ font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              You quoted KES {money(b.quote.amount.amount)}
+              {b.quote.expires_at ? ` · the hirer has until ${fmtDateTime(b.quote.expires_at)} to accept` : ""}. You keep KES{" "}
+              {money(b.merchant_net.amount)}.
+            </span>
+          )}
           {b.status === "requested" && (
             <>
               <button type="button" style={{ ...P.addButton, height: 38, padding: "0 15px", font: "600 13px/1 'Instrument Sans',sans-serif" }} onClick={() => setModal("accept")}>
@@ -783,6 +881,14 @@ export function BookingDetail(): JSX.Element {
           </div>
           )}
 
+          {b.status === "quote_requested" ? (
+          <div style={P.sideCard}>
+            <div style={P.sideCardLabel}>WHAT THIS BOOKING PAYS</div>
+            <p style={{ margin: 0, font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              Nothing is priced yet. Send the hirer a price and you'll see what you keep before it goes.
+            </p>
+          </div>
+          ) : (
           <div style={P.sideCard}>
             <div style={P.sideCardLabel}>WHAT THIS BOOKING PAYS</div>
             <div style={P.breakdown}>
@@ -812,6 +918,7 @@ export function BookingDetail(): JSX.Element {
               </div>
             </div>
           </div>
+          )}
 
           <div style={P.payoutCard}>
             <div style={P.payoutLabel}>PAYOUT DESTINATION</div>
@@ -844,6 +951,7 @@ export function BookingDetail(): JSX.Element {
       </div>
 
       {modal === "accept" && <AcceptModal b={b} onClose={() => setModal(null)} />}
+      {modal === "quote" && <QuoteModal b={b} onClose={() => setModal(null)} />}
       {modal === "decline" && <DeclineModal b={b} onClose={() => setModal(null)} />}
       {modal === "cancel" && <CancelModal b={b} onClose={() => setModal(null)} />}
       {modal === "handover" && <HandoverModal b={b} kind={handoverKind} onClose={() => setModal(null)} />}

@@ -9,7 +9,7 @@ import { maskIdentifier } from "../../lib/mask.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import { emailCode, emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
-import { computeLateCancellationFee } from "../../lib/booking-pricing.js";
+import { computeBookingPricing, computeLateCancellationFee } from "../../lib/booking-pricing.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
 import { executeRefund, recordRefund } from "../../lib/refunds.js";
@@ -33,12 +33,14 @@ import type {
   CreateBookingReportInput,
   CreateHandoverInput,
   DeclineBookingInput,
+  SendQuoteInput,
   HandoverConditionInput,
   ListBookingsQuery,
   RateHirerInput,
   VerifyHandoverOtpInput,
 } from "./schemas.js";
 import { routeAndLoadOf } from "../../lib/booking-route.js";
+import { QUOTE_VALID_HOURS, quoteOf } from "../../lib/booking-quote.js";
 
 const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
@@ -123,7 +125,8 @@ function money(amount: number | null, currency: string | null): Money | null {
 }
 
 function bucketOf(status: BookingStatus): Exclude<BookingFilter, "all"> {
-  if (status === "requested") return "requests";
+  // A quote request and a sent quote are both still requests (PR T3).
+  if (status === "requested" || status === "quote_requested" || status === "quoted") return "requests";
   if (status === "confirmed") return "upcoming";
   if (status === "active") return "on_hire";
   if (status === "completed") return "completed";
@@ -236,6 +239,7 @@ async function serializeDetail(booking: BookingRow, subject: BookingSubject, hir
     pickup_location: booking.pickup_location,
     dropoff_location: booking.dropoff_location,
     ...routeAndLoadOf(booking),
+    quote: quoteOf(booking),
     note_from_hirer: booking.note_from_hirer,
     payout_method: booking.payout_method,
     payout_detail: booking.payout_detail,
@@ -291,7 +295,7 @@ export async function listBookings(userId: string, query: ListBookingsQuery) {
   let base = db<BookingRow>("bookings").where({ merchant_id: merchant.id });
   if (query.filter !== "all") {
     const statusesForFilter: Record<Exclude<BookingFilter, "all">, BookingStatus[]> = {
-      requests: ["requested"],
+      requests: ["requested", "quote_requested", "quoted"],
       upcoming: ["confirmed"],
       on_hire: ["active"],
       completed: ["completed"],
@@ -372,6 +376,7 @@ async function appendBookingEvent(
 
 export async function confirmBooking(userId: string, bookingId: string, ctx: RequestContext) {
   const { merchant, booking } = await requireOwnBooking(userId, bookingId);
+  if (booking.status === "quote_requested") conflict("quote_required", "Send this hirer a price - they accept it to confirm.");
   if (booking.status !== "requested") conflict("already_answered", "This request has already been answered.");
   if (booking.response_due_at && booking.response_due_at.getTime() < Date.now()) {
     conflict("response_window_closed", "The 12-hour response window for this request has closed.");
@@ -446,9 +451,121 @@ export async function confirmBooking(userId: string, bookingId: string, ctx: Req
   return serializeDetail(updated, subject, hirer);
 }
 
+/**
+ * Price a quote request (PR T3). The merchant has seen the route and the
+ * load; this is the figure the hirer pays. Commission and take-home are
+ * computed here, once, with `computeBookingPricing(amount, 1)` - the same
+ * snapshot rule as every booking, never recomputed. The hirer then has
+ * `QUOTE_VALID_HOURS` to accept (straight to `confirmed`) or say no.
+ *
+ * Conditional on `status = quote_requested`, so a quote racing the
+ * hirer's withdrawal or the expiry sweep can't both win.
+ */
+export async function sendQuote(userId: string, bookingId: string, input: SendQuoteInput, ctx: RequestContext) {
+  const { merchant, booking } = await requireOwnBooking(userId, bookingId);
+  if (booking.status !== "quote_requested") conflict("already_answered", "This request has already been answered.");
+  if (booking.response_due_at && booking.response_due_at.getTime() < Date.now()) {
+    conflict("response_window_closed", "The 12-hour response window for this request has closed.");
+  }
+
+  const pricing = computeBookingPricing(input.amount.amount, 1);
+  const note = input.note?.trim() || null;
+  const expiresAt = new Date(Date.now() + QUOTE_VALID_HOURS * 60 * 60 * 1000);
+  const shillings = `KES ${Math.round(pricing.gross.amount / 100).toLocaleString("en-KE")}`;
+  const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
+
+  const { row: updated, renterNotificationId } = await db.transaction(async (trx) => {
+    const [row] = await trx<BookingRow>("bookings")
+      .where({ id: booking.id, status: "quote_requested" })
+      .update({
+        status: "quoted",
+        response_due_at: null,
+        quoted_at: new Date(),
+        quote_note: note,
+        quote_expires_at: expiresAt,
+        gross_amount: pricing.gross.amount,
+        gross_currency: pricing.gross.currency,
+        commission_amount: pricing.commission.amount,
+        commission_currency: pricing.commission.currency,
+        merchant_net_amount: pricing.merchantNet.amount,
+        merchant_net_currency: pricing.merchantNet.currency,
+        rate_quantity: 1,
+      })
+      .returning("*");
+    if (!row) conflict("already_answered", "This request was just answered - reload to see where it stands.");
+
+    await appendBookingEvent(trx, {
+      bookingId: booking.id,
+      merchantId: merchant.id,
+      kind: "quoted",
+      tone: "blue",
+      label: `You quoted ${shillings}`,
+      body: note,
+      actorType: "merchant",
+    });
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "booking.quoted",
+      entityType: "booking",
+      entityId: booking.id,
+      before: { status: booking.status },
+      after: {
+        status: "quoted",
+        gross_amount: pricing.gross.amount,
+        commission_amount: pricing.commission.amount,
+        merchant_net_amount: pricing.merchantNet.amount,
+        quote_expires_at: expiresAt.toISOString(),
+      },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    const renterNotificationId = await notify(trx, {
+      userId: booking.hirer_id,
+      category: "booking",
+      title: `${booking.ref}: your price is in`,
+      body: `${shillings} for ${subject.long}. Accept within ${QUOTE_VALID_HOURS} hours to lock it in.`,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
+    return { row, renterNotificationId };
+  });
+
+  // Post-commit: a failed send must not undo the quote.
+  await enqueueRenterNotificationDelivery([renterNotificationId]);
+  if (hirer.email) {
+    await emailAdapter.send({
+      to: hirer.email,
+      subject: `${booking.ref}: your price is in · ${subject.short}`,
+      html: emailLayout({
+        preheader: `${shillings} for ${subject.short}`,
+        bodyHtml: [
+          emailHeading("Your price is in"),
+          emailParagraph(`${booking.ref} · ${subject.long}`),
+          emailParagraph(shillings),
+          ...(note ? [emailMuted(escapeHtml(note))] : []),
+          emailMuted(`Open the booking to accept it and pay by M-Pesa. The price is held for ${QUOTE_VALID_HOURS} hours.`),
+        ].join(""),
+      }),
+      text: `${booking.ref}: ${shillings} for ${subject.long}. Accept within ${QUOTE_VALID_HOURS} hours.`,
+    });
+  }
+
+  return serializeDetail(updated, subject, hirer);
+}
+
+/** The merchant's note goes into an email body - never as raw HTML. */
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
 export async function declineBooking(userId: string, bookingId: string, input: DeclineBookingInput, ctx: RequestContext) {
   const { merchant, booking } = await requireOwnBooking(userId, bookingId);
-  if (booking.status !== "requested") conflict("already_answered", "This request has already been answered.");
+  // A quote request can be turned down the same way as a request (PR T3).
+  if (booking.status !== "requested" && booking.status !== "quote_requested") {
+    conflict("already_answered", "This request has already been answered.");
+  }
 
   const [subject, hirer] = await Promise.all([subjectOf(booking), hirerInfoOf(booking.hirer_id)]);
 
@@ -1232,15 +1349,22 @@ export async function rateHirer(userId: string, bookingId: string, input: RateHi
 // ---------------------------------------------------------------------
 
 export async function expireStaleBookingRequests(): Promise<number> {
+  const now = new Date();
+  // Unanswered requests and quote requests lapse on the 12-hour response
+  // window; a sent quote lapses on its own 48-hour clock (PR T3).
   const stale = await db<BookingRow>("bookings")
-    .where({ status: "requested" })
-    .whereNotNull("response_due_at")
-    .where("response_due_at", "<", new Date());
+    .where((q) =>
+      q
+        .where((w) =>
+          w.whereIn("status", ["requested", "quote_requested"]).whereNotNull("response_due_at").where("response_due_at", "<", now),
+        )
+        .orWhere((w) => w.where({ status: "quoted" }).whereNotNull("quote_expires_at").where("quote_expires_at", "<", now)),
+    );
 
   for (const booking of stale) {
     const refundId = await db.transaction(async (trx) => {
       const updatedRows = await trx<BookingRow>("bookings")
-        .where({ id: booking.id, status: "requested" }) // re-check status inside the txn in case it was just answered
+        .where({ id: booking.id, status: booking.status }) // re-check status inside the txn in case it was just answered
         .update({
           status: "expired",
           refund_amount: booking.gross_amount,
@@ -1277,10 +1401,13 @@ export async function expireStaleBookingRequests(): Promise<number> {
         merchantId: booking.merchant_id,
         kind: "expired",
         tone: "grey",
-        label: "Request expired",
-        body: refundId
-          ? "No answer within 12 hours. The hirer has been refunded in full."
-          : "No answer within 12 hours. The dates are open again - the hirer was never charged.",
+        label: booking.status === "quoted" ? "Quote expired" : "Request expired",
+        body:
+          booking.status === "quoted"
+            ? "The hirer didn't accept within 48 hours. The dates are open again - nothing was charged."
+            : refundId
+              ? "No answer within 12 hours. The hirer has been refunded in full."
+              : "No answer within 12 hours. The dates are open again - the hirer was never charged.",
         actorType: "system",
       });
       await writeAuditEntry(trx, {
@@ -1289,7 +1416,7 @@ export async function expireStaleBookingRequests(): Promise<number> {
         action: "booking.expired",
         entityType: "booking",
         entityId: booking.id,
-        before: { status: "requested" },
+        before: { status: booking.status },
         after: { status: "expired" },
       });
       // Sent after commit by the caller - a provider timeout must not

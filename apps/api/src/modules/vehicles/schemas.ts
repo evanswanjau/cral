@@ -72,6 +72,12 @@ export const PriceAvailabilitySchema = z.object({
   daily_rate: z.string().optional(),
   hiring_unit: z.enum(HIRING_UNITS).optional(),
   trip_rate: z.string().optional(),
+  // PR T3, trucks only: per-km / per-tonne guide rates (KES, as typed),
+  // an optional minimum charge ("" clears it), and "Always quote me first".
+  km_rate: z.string().optional(),
+  tonne_rate: z.string().optional(),
+  minimum_charge: z.string().optional(),
+  quote_required: z.boolean().optional(),
   rate_mode: z.enum(["list", "net"]).optional(),
   minimum_hire_days: z.number().int().min(1).max(30).optional(),
   county: z.string().optional(),

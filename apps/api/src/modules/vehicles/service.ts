@@ -153,6 +153,10 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
     hiring_unit: vehicle.hiring_unit,
     hourly_rate: vehicle.hourly_rate_amount ? kes(vehicle.hourly_rate_amount) : null,
     trip_rate: vehicle.trip_rate_amount ? kes(vehicle.trip_rate_amount) : null,
+    km_rate: vehicle.km_rate_amount ? kes(vehicle.km_rate_amount) : null,
+    tonne_rate: vehicle.tonne_rate_amount ? kes(vehicle.tonne_rate_amount) : null,
+    minimum_charge: vehicle.minimum_charge_amount ? kes(vehicle.minimum_charge_amount) : null,
+    quote_required: vehicle.quote_required,
     submitted_at: vehicle.submitted_at ? vehicle.submitted_at.toISOString() : null,
     created_at: vehicle.created_at.toISOString(),
   };
@@ -513,6 +517,10 @@ export async function updatePriceAvailability(
   if (input.daily_rate !== undefined) update.daily_rate_amount = dailyRateCents(input.daily_rate);
   if (input.hiring_unit !== undefined) update.hiring_unit = input.hiring_unit;
   if (input.trip_rate !== undefined) update.trip_rate_amount = dailyRateCents(input.trip_rate);
+  if (input.km_rate !== undefined) update.km_rate_amount = dailyRateCents(input.km_rate) || null;
+  if (input.tonne_rate !== undefined) update.tonne_rate_amount = dailyRateCents(input.tonne_rate) || null;
+  if (input.minimum_charge !== undefined) update.minimum_charge_amount = dailyRateCents(input.minimum_charge) || null;
+  if (input.quote_required !== undefined) update.quote_required = input.quote_required;
   if (input.rate_mode !== undefined) update.rate_mode = input.rate_mode;
   if (input.minimum_hire_days !== undefined) update.minimum_hire_days = input.minimum_hire_days;
   if (input.county !== undefined) update.county = input.county;
@@ -546,6 +554,40 @@ export async function updatePriceAvailability(
     });
   }
 
+  // Per km / per tonne are for trucks only (PR T3), and each needs its own
+  // rate - the same reason a trip listing needs a trip rate. The rate is a
+  // guide shown to renters; the price itself is always a quote.
+  if ((effectiveUnit === "km" || effectiveUnit === "tonne") && vehicle.type !== "truck") {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "hiring_unit_trucks_only",
+      message: "Per-km and per-tonne pricing is for trucks.",
+      field: "hiring_unit",
+    });
+  }
+  const effectiveKm = update.km_rate_amount !== undefined ? (update.km_rate_amount as number | null) : vehicle.km_rate_amount;
+  const effectiveTonne =
+    update.tonne_rate_amount !== undefined ? (update.tonne_rate_amount as number | null) : vehicle.tonne_rate_amount;
+  if (effectiveUnit === "km" && !effectiveKm) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "km_rate_required",
+      message: "Set a rate per km before pricing this truck per km.",
+      field: "km_rate",
+    });
+  }
+  if (effectiveUnit === "tonne" && !effectiveTonne) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "tonne_rate_required",
+      message: "Set a rate per tonne before pricing this truck per tonne.",
+      field: "tonne_rate",
+    });
+  }
+
   const rate = (update.daily_rate_amount as number | undefined) ?? vehicle.daily_rate_amount;
   const minDays = (update.minimum_hire_days as number | undefined) ?? vehicle.minimum_hire_days;
 
@@ -562,7 +604,11 @@ export async function updatePriceAvailability(
       body:
         effectiveUnit === "trip"
           ? `KES ${Math.round((effectiveTrip ?? 0) / 100).toLocaleString("en-KE")} a trip.`
-          : `KES ${Math.round(rate / 100).toLocaleString("en-KE")} a day, minimum ${minDays} day${minDays === 1 ? "" : "s"}.`,
+          : effectiveUnit === "km"
+            ? `KES ${Math.round((effectiveKm ?? 0) / 100).toLocaleString("en-KE")} a km, quoted per job.`
+            : effectiveUnit === "tonne"
+              ? `KES ${Math.round((effectiveTonne ?? 0) / 100).toLocaleString("en-KE")} a tonne, quoted per job.`
+              : `KES ${Math.round(rate / 100).toLocaleString("en-KE")} a day, minimum ${minDays} day${minDays === 1 ? "" : "s"}.`,
       actorType: "merchant",
     });
     await writeAuditEntry(trx, {
@@ -576,8 +622,21 @@ export async function updatePriceAvailability(
         minimum_hire_days: vehicle.minimum_hire_days,
         hiring_unit: vehicle.hiring_unit,
         trip_rate_amount: vehicle.trip_rate_amount,
+        km_rate_amount: vehicle.km_rate_amount,
+        tonne_rate_amount: vehicle.tonne_rate_amount,
+        minimum_charge_amount: vehicle.minimum_charge_amount,
+        quote_required: vehicle.quote_required,
       },
-      after: { daily_rate_amount: rate, minimum_hire_days: minDays, hiring_unit: effectiveUnit, trip_rate_amount: effectiveTrip },
+      after: {
+        daily_rate_amount: rate,
+        minimum_hire_days: minDays,
+        hiring_unit: effectiveUnit,
+        trip_rate_amount: effectiveTrip,
+        km_rate_amount: effectiveKm,
+        tonne_rate_amount: effectiveTonne,
+        minimum_charge_amount: (update.minimum_charge_amount as number | null | undefined) ?? vehicle.minimum_charge_amount,
+        quote_required: (update.quote_required as boolean | undefined) ?? vehicle.quote_required,
+      },
       requestId: ctx.requestId,
       ip: ctx.ip,
     });

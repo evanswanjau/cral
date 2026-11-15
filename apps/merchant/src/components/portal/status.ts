@@ -138,6 +138,8 @@ export function money(cents: number | null | undefined): string {
  */
 export const BOOKING_STATUS: Record<BookingStatus, { label: string; core: string; tint: string; border: string; text: string }> = {
   requested: { label: "New request", core: "#C77400", tint: "#FFF3DB", border: "#F5D9A3", text: "#8A5200" },
+  quote_requested: { label: "Needs a price", core: "#C77400", tint: "#FFF3DB", border: "#F5D9A3", text: "#8A5200" },
+  quoted: { label: "Quote sent", core: "#0B7BC1", tint: "#E1F1FA", border: "#A9D6EE", text: "#075D93" },
   confirmed: { label: "Upcoming", core: "#0B7BC1", tint: "#E1F1FA", border: "#A9D6EE", text: "#075D93" },
   active: { label: "On hire", core: "#0B8A5B", tint: "#DDF3E9", border: "#A8DEC7", text: "#076945" },
   completed: { label: "Completed", core: "#838C9B", tint: "#F1F3F6", border: "#CDD2DA", text: "#5A6373" },

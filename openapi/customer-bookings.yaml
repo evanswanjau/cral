@@ -230,6 +230,34 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
+  /bookings/{id}/accept-quote:
+    post:
+      tags: [bookings]
+      summary: Accept the owner's quote (PR T3)
+      operationId: acceptBookingQuote
+      description: >
+        Only on a `quoted` booking before `quote.expires_at` - 409
+        `no_quote_to_accept` / `quote_expired` otherwise. Goes straight to
+        `confirmed` (the owner agreed by quoting), then payment runs as for
+        any confirmed booking. Saying no is the ordinary cancel, which
+        withdraws a `quote_requested` or `quoted` booking.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: Confirmed at the quoted price.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: No open quote, or it has lapsed.
   /bookings/{id}/cancel:
     post:
       tags: [bookings]
@@ -273,6 +301,20 @@ paths:
 
 components:
   schemas:
+
+    BookingQuote:
+      type: object
+      nullable: true
+      description: >
+        The merchant's price on a quoted booking (PR T3). Null until they
+        send one - a quote_requested booking's money fields are zero and
+        are not a price. Valid until `expires_at` (48 h).
+      required: [amount, note, quoted_at, expires_at]
+      properties:
+        amount: { $ref: "#/components/schemas/Money" }
+        note: { type: string, nullable: true, maxLength: 500 }
+        quoted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
 
     BookingRoute:
       type: object
@@ -336,7 +378,7 @@ components:
           description: The plated reference both sides read aloud, e.g. "CB-260922-001".
         status:
           type: string
-          enum: [requested, confirmed, active, completed, declined, expired, cancelled]
+          enum: [requested, quote_requested, quoted, confirmed, active, completed, declined, expired, cancelled]
         pickup_at: { type: string, format: date-time }
         dropoff_at: { type: string, format: date-time }
         days:
@@ -381,6 +423,7 @@ components:
             dropoff_location: { type: string }
             route: { $ref: "#/components/schemas/BookingRoute" }
             cargo: { $ref: "#/components/schemas/BookingCargo" }
+            quote: { $ref: "#/components/schemas/BookingQuote" }
             note_from_hirer: { type: string, nullable: true }
             response_due_at:
               type: string

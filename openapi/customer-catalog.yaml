@@ -408,6 +408,10 @@ components:
           hiring_unit,
           hourly_rate,
           trip_rate,
+          km_rate,
+          tonne_rate,
+          minimum_charge,
+          quoted,
           verified,
           primary_photo_url,
           owner,
@@ -453,13 +457,35 @@ components:
             whose `hiring_unit` isn't `day`.
         hiring_unit:
           type: string
-          enum: [day, hour, trip]
+          enum: [day, hour, trip, km, tonne]
+          description: >
+            `km` / `tonne` are trucks only (PR T3) and always priced by
+            quote - the matching rate is a guide, not a computed price.
         hourly_rate:
           allOf: [{ $ref: "#/components/schemas/Money" }]
           nullable: true
         trip_rate:
           allOf: [{ $ref: "#/components/schemas/Money" }]
           nullable: true
+        km_rate:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+          description: Trucks only (PR T3) - guide rate per km.
+        tonne_rate:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+          description: Trucks only (PR T3) - guide flat rate per tonne.
+        minimum_charge:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+          description: The owner's minimum for a quoted job, shown beside the guide.
+        quoted:
+          type: boolean
+          description: >
+            True when a request on this listing goes out as a quote request
+            (per km / per tonne, or the owner's "Always quote me first")
+            and the owner sends the price. No pre-submit total is honest
+            for these.
         verified:
           type: boolean
           description: >

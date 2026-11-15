@@ -6,6 +6,7 @@ import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
 import { ratingSummaries, vehicleReviews, type RatingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
+import { needsQuote } from "../vehicles/hiring-units.js";
 
 /**
  * The public catalog. Every read here goes through `baseCatalogQuery`,
@@ -50,6 +51,10 @@ interface CatalogRow {
   hiring_unit: string;
   hourly_rate_amount: number | null;
   trip_rate_amount: number | null;
+  km_rate_amount: number | null;
+  tonne_rate_amount: number | null;
+  minimum_charge_amount: number | null;
+  quote_required: boolean;
   verification_badge: string;
   minimum_hire_days: number;
   created_at: Date;
@@ -83,6 +88,10 @@ const CATALOG_COLUMNS = [
   "v.hiring_unit",
   "v.hourly_rate_amount",
   "v.trip_rate_amount",
+  "v.km_rate_amount",
+  "v.tonne_rate_amount",
+  "v.minimum_charge_amount",
+  "v.quote_required",
   "v.verification_badge",
   "v.minimum_hire_days",
   "v.created_at",
@@ -197,6 +206,12 @@ function serializeSummary(
     hiring_unit: row.hiring_unit,
     hourly_rate: row.hourly_rate_amount ? (kes(row.hourly_rate_amount) as Money) : null,
     trip_rate: row.trip_rate_amount ? (kes(row.trip_rate_amount) as Money) : null,
+    // PR T3: guide rates for a quoted truck, and whether a request here is
+    // priced by the owner after they've seen it rather than instantly.
+    km_rate: row.km_rate_amount ? (kes(row.km_rate_amount) as Money) : null,
+    tonne_rate: row.tonne_rate_amount ? (kes(row.tonne_rate_amount) as Money) : null,
+    minimum_charge: row.minimum_charge_amount ? (kes(row.minimum_charge_amount) as Money) : null,
+    quoted: needsQuote(row),
     verified: row.verification_badge === "active",
     primary_photo_url: photoIds[0] ? photoPath(row.id, photoIds[0]) : null,
     owner: {

@@ -242,8 +242,14 @@ function BookingRow({
         {skin.label}
       </span>
       <span style={P.dashRowMoney}>
-        <span style={P.dashRowKeep}>KES {money(booking.merchant_net.amount)}</span>
-        <span style={P.dashRowGross}>of {money(booking.gross.amount)}</span>
+        {booking.status === "quote_requested" ? (
+          <span style={P.dashRowKeep}>Price it</span>
+        ) : (
+          <>
+            <span style={P.dashRowKeep}>KES {money(booking.merchant_net.amount)}</span>
+            <span style={P.dashRowGross}>of {money(booking.gross.amount)}</span>
+          </>
+        )}
       </span>
       <span style={P.dashChevron}>›</span>
     </HoverRow>

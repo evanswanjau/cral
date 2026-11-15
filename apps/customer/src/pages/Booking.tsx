@@ -336,7 +336,9 @@ export function Booking(): JSX.Element {
   const carTotal = quoteTotal(car, days);
   const driver = carDrivers?.data.find((d) => d.id === driverId) ?? null;
   // The driver is priced on the car's own unit, so the two legs count the same span.
-  const driverTotal = driver ? driverQuote(driver, car.hiring_unit, days, 0) : null;
+  // Nobody has a per-km driver rate; on a quoted truck the owner prices the driver into the quote (PR T3).
+  const driverTotal =
+    driver && car.hiring_unit !== "km" && car.hiring_unit !== "tonne" ? driverQuote(driver, car.hiring_unit, days, 0) : null;
   const total = carTotal === null ? null : driver ? (driverTotal === null ? null : carTotal + driverTotal) : carTotal;
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
@@ -979,8 +981,8 @@ export function Booking(): JSX.Element {
                     </>
                   ) : (
                     <Row
-                      label={`Priced per ${HIRING_UNIT_LABEL[car.hiring_unit]}`}
-                      value="Total shown after you send this"
+                      label={car.quoted ? "Price" : `Priced per ${HIRING_UNIT_LABEL[car.hiring_unit]}`}
+                      value={car.quoted ? "The owner sends one after seeing this" : "Total shown after you send this"}
                     />
                   )}
                 </div>
@@ -1115,7 +1117,7 @@ export function Booking(): JSX.Element {
                   disabled={submitting || belowMinimum || !!routeProblem}
                   style={{ ...primaryButton, opacity: submitting || belowMinimum || routeProblem ? 0.7 : 1 }}
                 >
-                  {submitting ? "Sending…" : "Send request"}
+                  {submitting ? "Sending…" : car.quoted ? "Ask for a price" : "Send request"}
                 </button>
                 <p
                   style={{

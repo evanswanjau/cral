@@ -12,6 +12,8 @@ const GRID = "120px minmax(0,1fr) minmax(0,1fr) 140px 110px 14px";
 
 const STATUS: Record<AdminBookingStatus, { label: string; bg: string; border: string; fg: string }> = {
   requested: { label: "WAITING", bg: "#FFF3DB", border: "#F5D9A3", fg: "#8A5200" },
+  quote_requested: { label: "NEEDS A PRICE", bg: "#FFF3DB", border: "#F5D9A3", fg: "#8A5200" },
+  quoted: { label: "QUOTE SENT", bg: "#E1F1FA", border: "#A9D6EE", fg: "#075D93" },
   confirmed: { label: "CONFIRMED", bg: "#E1F1FA", border: "#A9D6EE", fg: "#075D93" },
   active: { label: "ON HIRE", bg: "#DDF3E9", border: "#A8DEC7", fg: "#076945" },
   completed: { label: "COMPLETED", bg: "#F1F3F6", border: "#E4E7EC", fg: "#5A6373" },
@@ -23,6 +25,8 @@ const STATUS: Record<AdminBookingStatus, { label: string; bg: string; border: st
 const FILTERS: Array<{ key: string; label: string }> = [
   { key: "", label: "All" },
   { key: "requested", label: "Waiting" },
+  { key: "quote_requested", label: "Needs a price" },
+  { key: "quoted", label: "Quote sent" },
   { key: "confirmed", label: "Confirmed" },
   { key: "active", label: "On hire" },
   { key: "completed", label: "Completed" },

@@ -163,6 +163,45 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
 
+  /merchant/bookings/{bookingId}/quote:
+    post:
+      tags: [bookings]
+      summary: Send the hirer a price for a quote request (PR T3)
+      operationId: sendBookingQuote
+      description: >
+        Only on a `quote_requested` booking, inside its 12-hour response
+        window (409 `already_answered` / `response_window_closed`).
+        `amount` is what the hirer pays; commission and `merchant_net` are
+        computed from it once and never recomputed. Moves the booking to
+        `quoted`, held 48 h. Confirming a `quote_requested` booking
+        directly is 409 `quote_required`; it can still be declined.
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - name: bookingId
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [amount]
+              properties:
+                amount: { $ref: "#/components/schemas/Money" }
+                note: { type: string, maxLength: 500, nullable: true, example: "Price includes fuel and tolls." }
+      responses:
+        "200":
+          description: The quote was sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: Already answered, or the response window closed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
   /merchant/bookings/{bookingId}/decline:
     parameters:
       - name: bookingId
@@ -573,6 +612,20 @@ components:
 
   schemas:
 
+    BookingQuote:
+      type: object
+      nullable: true
+      description: >
+        The merchant's price on a quoted booking (PR T3). Null until they
+        send one - a quote_requested booking's money fields are zero and
+        are not a price. Valid until `expires_at` (48 h).
+      required: [amount, note, quoted_at, expires_at]
+      properties:
+        amount: { $ref: "#/components/schemas/Money" }
+        note: { type: string, nullable: true, maxLength: 500 }
+        quoted_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+
     BookingRoute:
       type: object
       nullable: true
@@ -625,6 +678,8 @@ components:
       enum:
         [
           requested,
+          quote_requested,
+          quoted,
           confirmed,
           active,
           completed,
@@ -872,6 +927,7 @@ components:
             payout_method: { type: string, enum: [mpesa] }
             route: { $ref: "#/components/schemas/BookingRoute" }
             cargo: { $ref: "#/components/schemas/BookingCargo" }
+            quote: { $ref: "#/components/schemas/BookingQuote" }
             payout_detail: { type: string }
             payout_account_name: { type: string }
             has_pickup_condition_photos: { type: boolean }

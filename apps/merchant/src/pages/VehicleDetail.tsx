@@ -13,7 +13,7 @@ import { ApiClientError } from "../lib/api.js";
 import { toE164 } from "../lib/device.js";
 import { formatPayload, truckTypeLabel, vehicleTypeLabel } from "../lib/vehicle-categories.js";
 import { COUNTIES } from "../lib/kenya.js";
-import { HIRING_UNIT_LABELS, SELECTABLE_UNITS, type HiringUnit } from "../lib/hiring-units.js";
+import { HIRING_UNIT_LABELS, isQuoteUnit, selectableUnitsFor, type HiringUnit } from "../lib/hiring-units.js";
 import {
   isPlaceholderRegistration,
   useDeleteVehicle,
@@ -267,16 +267,25 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
   const [loc, setLoc] = useState(v.pickup_address ?? "");
   const [driver, setDriver] = useState(v.chauffeured);
   // Per-hour can't be chosen yet (the API refuses it until the customer
-  // booking flow has a time picker), so a listing only ever opens on day or trip.
-  const [unit, setUnit] = useState<HiringUnit>(v.hiring_unit === "trip" ? "trip" : "day");
-  const [tripRate, setTripRate] = useState(v.trip_rate ? String(Math.round(v.trip_rate.amount / 100)) : "");
+  // booking flow has a time picker), so a listing opens on its own unit
+  // unless that is hour. Per km / per tonne are trucks only (PR T3).
+  const units = selectableUnitsFor(v.type);
+  const [unit, setUnit] = useState<HiringUnit>(units.includes(v.hiring_unit) ? v.hiring_unit : "day");
+  const shillings = (m: { amount: number } | null) => (m ? String(Math.round(m.amount / 100)) : "");
+  const [tripRate, setTripRate] = useState(shillings(v.trip_rate));
+  const [kmRate, setKmRate] = useState(shillings(v.km_rate));
+  const [tonneRate, setTonneRate] = useState(shillings(v.tonne_rate));
+  const [minCharge, setMinCharge] = useState(shillings(v.minimum_charge));
+  const [quoteFirst, setQuoteFirst] = useState(v.quote_required);
 
   const isTrip = unit === "trip";
-  const rateNum = parseInt((isTrip ? tripRate : rate).replace(/[^0-9]/g, ""), 10) || 0;
+  const quoteUnit = isQuoteUnit(unit);
+  const typed = unit === "trip" ? tripRate : unit === "km" ? kmRate : unit === "tonne" ? tonneRate : rate;
+  const rateNum = parseInt(typed.replace(/[^0-9]/g, ""), 10) || 0;
   const comm = commissionOn(rateNum);
   const net = rateNum - comm;
   const days = Math.max(1, parseInt(minDays, 10) || 1);
-  const per = isTrip ? "per trip" : "per day";
+  const per = `per ${unit}`;
 
   return (
     <Modal
@@ -289,7 +298,15 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
         update.mutate(
           {
             hiring_unit: unit,
-            ...(isTrip ? { trip_rate: String(rateNum) } : { daily_rate: String(rateNum), minimum_hire_days: days }),
+            ...(unit === "trip"
+              ? { trip_rate: String(rateNum) }
+              : unit === "km"
+                ? { km_rate: String(rateNum), minimum_charge: minCharge }
+                : unit === "tonne"
+                  ? { tonne_rate: String(rateNum), minimum_charge: minCharge }
+                  : { daily_rate: String(rateNum), minimum_hire_days: days }),
+            // km / tonne are always quoted; the switch only means something on day / trip.
+            quote_required: quoteUnit ? false : quoteFirst,
             county,
             pickup_address: loc,
             chauffeured: driver,
@@ -307,7 +324,7 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
         <div>
           <label style={P.fieldLabel}>Price it</label>
           <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
-            {SELECTABLE_UNITS.map((u) => (
+            {units.map((u) => (
               <button
                 key={u}
                 type="button"
@@ -328,11 +345,28 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             ))}
           </div>
           <p style={{ margin: "6px 0 0", font: "400 11.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
-            Per trip suits trucks and transport: one flat price, whatever the dates.
+            {quoteUnit
+              ? "Hirers see this rate as a guide. Every request comes to you with the route and load, and you send the price."
+              : "Per trip suits trucks and transport: one flat price, whatever the dates."}
           </p>
         </div>
 
-        {isTrip ? (
+        {quoteUnit ? (
+          <div style={P.fieldGrid}>
+            <div>
+              <label style={P.fieldLabel}>Rate per {unit} (KES)</label>
+              <input
+                style={P.fieldInput}
+                value={unit === "km" ? kmRate : tonneRate}
+                onChange={(e) => (unit === "km" ? setKmRate : setTonneRate)(e.target.value.replace(/\D/g, ""))}
+              />
+            </div>
+            <div>
+              <label style={P.fieldLabel}>Minimum charge (KES), optional</label>
+              <input style={P.fieldInput} value={minCharge} onChange={(e) => setMinCharge(e.target.value.replace(/\D/g, ""))} />
+            </div>
+          </div>
+        ) : isTrip ? (
           <div>
             <label style={P.fieldLabel}>Trip rate (KES)</label>
             <input style={P.fieldInput} value={tripRate} onChange={(e) => setTripRate(e.target.value.replace(/\D/g, ""))} />
@@ -364,6 +398,26 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
             <input style={P.fieldInputText} value={loc} onChange={(e) => setLoc(e.target.value)} />
           </div>
         </div>
+        {!quoteUnit && (
+          <div style={P.toggleRow}>
+            <div>
+              <div style={P.toggleRowTitle}>Always quote me first</div>
+              <div style={P.toggleRowSub}>
+                {quoteFirst
+                  ? "Hirers send a request and you reply with a price. They accept it to book."
+                  : "Hirers see this price and book it. Turn on to price each request yourself."}
+              </div>
+            </div>
+            <button
+              type="button"
+              aria-pressed={quoteFirst}
+              onClick={() => setQuoteFirst((q) => !q)}
+              style={{ ...P.toggleTrack, background: quoteFirst ? "#0F23A8" : "#CDD2DA", justifyContent: quoteFirst ? "flex-end" : "flex-start" }}
+            >
+              <span style={P.toggleThumb} />
+            </button>
+          </div>
+        )}
         <div style={P.toggleRow}>
           <div>
             <div style={P.toggleRowTitle}>Chauffeured</div>
@@ -396,8 +450,10 @@ function PriceModal({ v, onClose }: { v: VehicleDetailData; onClose: () => void 
           </div>
           <div style={P.breakdownNote}>
             {!rateNum
-              ? `Type a ${isTrip ? "trip" : "daily"} rate to see what you keep.`
-              : isTrip
+              ? `Type a ${isTrip ? "trip" : quoteUnit ? `per-${unit}` : "daily"} rate to see what you keep.`
+              : quoteUnit
+                ? `A guide only - you'll see what you keep on each quote before you send it.`
+                : isTrip
                 ? `Each trip pays you KES ${money(net * 100)} - KES ${money(rateNum * 100)} less KES ${money(comm * 100)} commission.`
                 : `A ${days}-day hire pays you KES ${money(net * days * 100)} - KES ${money(rateNum * days * 100)} less KES ${money(comm * days * 100)} commission.`}
           </div>

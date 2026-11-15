@@ -6,6 +6,7 @@ import type { VehicleRow, DocumentRow } from "../merchant/db-types.js";
 import type { PaymentRequestRow } from "../payments/service.js";
 import { RENTER_DOC_KINDS } from "../customer-account/schemas.js";
 import { routeAndLoadOf } from "../../lib/booking-route.js";
+import { quoteOf } from "../../lib/booking-quote.js";
 
 /**
  * Read-only Ops visibility into customer bookings - the same footing as
@@ -130,6 +131,7 @@ export async function getAdminBooking(id: string) {
     pickup_location: booking.pickup_location,
     dropoff_location: booking.dropoff_location,
     ...routeAndLoadOf(booking),
+    quote: quoteOf(booking),
     note_from_hirer: booking.note_from_hirer,
     commission: kes(booking.commission_amount) as Money,
     merchant_net: kes(booking.merchant_net_amount) as Money,

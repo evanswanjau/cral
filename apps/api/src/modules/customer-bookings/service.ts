@@ -17,6 +17,8 @@ import { baseCatalogQuery } from "../catalog/service.js";
 import { basePublicDriverQuery, driverPublicName, requirePublicDriver } from "../catalog/drivers.js";
 import { subjectOf } from "../../lib/booking-subject.js";
 import { placeLine, routeAndLoadOf } from "../../lib/booking-route.js";
+import { OPEN_REQUEST_STATUSES, quoteOf } from "../../lib/booking-quote.js";
+import { needsQuote } from "../vehicles/hiring-units.js";
 import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
 import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
@@ -70,6 +72,8 @@ interface PublicVehicleForBooking {
   minimum_hire_days: number;
   /** Trucks only (PR T1) - what the truck carries, in kg. */
   payload_kg: number | null;
+  /** "Always quote me first" (PR T3). */
+  quote_required: boolean;
   m_user_id: string;
   m_owner_type: string;
   m_company_name: string | null;
@@ -109,6 +113,7 @@ async function requirePublicVehicle(vehicleId: string): Promise<PublicVehicleFor
       "v.trip_rate_amount",
       "v.minimum_hire_days",
       "v.payload_kg",
+      "v.quote_required",
       "m.user_id as m_user_id",
       "m.owner_type as m_owner_type",
       "m.company_name as m_company_name",
@@ -414,6 +419,7 @@ function serializeDetail(
     pickup_location: b.pickup_location,
     dropoff_location: b.dropoff_location,
     ...routeAndLoadOf(b),
+    quote: quoteOf(b),
     note_from_hirer: b.note_from_hirer,
     response_due_at: b.response_due_at ? b.response_due_at.toISOString() : null,
     decline_reason_code: b.decline_reason_code,
@@ -616,8 +622,21 @@ export async function createBooking(
 
   const load = truckLoadOf(vehicle, input);
 
-  const carLeg = vehicle ? unitPricingBasis(vehicle, pickupAt, dropoffAt) : null;
-  const driverLeg = driver ? driverPricingBasis(driver, input.driver_unit ?? carLeg?.unit, pickupAt, dropoffAt) : null;
+  // A per-km / per-tonne truck, or a listing whose owner asked to quote
+  // first (PR T3), isn't priced here: the request goes out as a quote
+  // request and the owner names the figure once they've seen it. Its money
+  // columns stay zero until then.
+  const quoted = vehicle ? needsQuote(vehicle) : false;
+  const carLeg = vehicle
+    ? quoted
+      ? { unit: vehicle.hiring_unit, quantity: 1, rateAmountCents: 0 }
+      : unitPricingBasis(vehicle, pickupAt, dropoffAt)
+    : null;
+  // A driver only shares the car's unit when they can be priced on it -
+  // nobody has a per-km driver rate, so a quoted truck's driver falls back
+  // to their own first rate.
+  const sharedUnit = carLeg && ["day", "hour", "trip"].includes(carLeg.unit) ? carLeg.unit : undefined;
+  const driverLeg = driver ? driverPricingBasis(driver, input.driver_unit ?? sharedUnit, pickupAt, dropoffAt) : null;
 
   // What gets booked, one row per owner: normally one; two when the driver
   // is another owner's (see the owner-first rule above).
@@ -647,7 +666,9 @@ export async function createBooking(
           vehicle,
           driver,
           carLeg,
-          driverLeg,
+          // The owner's own driver is part of what they quote for, so they
+          // aren't priced separately on a quote request.
+          driverLeg: quoted ? null : driverLeg,
           carDetails: vehicle ? null : carDetails,
         },
       ];
@@ -779,7 +800,7 @@ export async function createBooking(
           hire_car_details: part.carDetails,
           linked_booking_id: rows[0]?.booking.id ?? null,
           hirer_id: userId,
-          status: "requested",
+          status: part.vehicle && quoted ? "quote_requested" : "requested",
           pickup_at: pickupAt,
           dropoff_at: dropoffAt,
           rate_unit: unit,
@@ -823,7 +844,7 @@ export async function createBooking(
       const notificationId = await notify(trx, {
         merchantId: part.merchantId,
         category: "booking",
-        title: "New booking request",
+        title: part.vehicle && quoted ? "New quote request" : "New booking request",
         body:
           `${hirer?.full_name ?? "A renter"} asked for ${subject.long} from ${pickupAt.toDateString()} to ${dropoffAt.toDateString()}.` +
           (load ? ` ${load.route_from_county} to ${load.route_to_county}: ${load.cargo_description}.` : ""),
@@ -879,7 +900,7 @@ export async function createBooking(
 // ---------------------------------------------------------------------
 
 const FILTER_STATUSES: Record<Exclude<ListMyBookingsQuery["filter"], "all">, BookingStatus[]> = {
-  upcoming: ["requested", "confirmed"],
+  upcoming: ["requested", "quote_requested", "quoted", "confirmed"],
   on_hire: ["active"],
   completed: ["completed"],
   cancelled: ["cancelled", "declined", "expired"],
@@ -971,7 +992,9 @@ export async function cancelMyBooking(
 ) {
   const booking = await requireOwnBooking(userId, bookingId);
 
-  const withdrawable = booking.status === "requested";
+  // Anything still waiting on an answer - a request, a quote request, or a
+  // quote the renter is saying "no thanks" to (PR T3) - is a withdrawal.
+  const withdrawable = (OPEN_REQUEST_STATUSES as readonly string[]).includes(booking.status);
   const cancellable = booking.status === "confirmed" && Date.now() < booking.pickup_at.getTime();
   if (!withdrawable && !cancellable) {
     throw new ApiError({
@@ -1036,3 +1059,93 @@ export async function cancelMyBooking(
   return detailOf(updated);
 }
 
+
+// ---------------------------------------------------------------------
+// Accept a quote (PR T3)
+// ---------------------------------------------------------------------
+
+/**
+ * The renter takes the owner's quote. The owner already agreed by quoting,
+ * so this goes straight to `confirmed` - no second accept - and payment
+ * then runs exactly as it does for any confirmed booking. "No thanks" is
+ * the ordinary withdraw (`cancelMyBooking`).
+ *
+ * The update is conditional on the status and expiry that were checked, so
+ * an accept racing the expiry sweep or a withdraw can't both win.
+ */
+export async function acceptQuote(userId: string, bookingId: string, ctx: RequestContext) {
+  const booking = await requireOwnBooking(userId, bookingId);
+  if (booking.status !== "quoted") {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "no_quote_to_accept",
+      message:
+        booking.status === "quote_requested"
+          ? "The owner hasn't sent a price yet."
+          : "There's no open quote on this booking any more.",
+    });
+  }
+  if (!booking.quote_expires_at || booking.quote_expires_at.getTime() <= Date.now()) {
+    throw new ApiError({
+      status: 409,
+      type: "conflict",
+      code: "quote_expired",
+      message: "This quote has lapsed. Send a new request if you still need the truck.",
+    });
+  }
+
+  const hirer = await db("users").where({ id: userId }).first("full_name");
+  const { row, notificationId } = await db.transaction(async (trx) => {
+    const [updated] = await trx<BookingRow>("bookings")
+      .where({ id: booking.id, status: "quoted" })
+      .where("quote_expires_at", ">", new Date())
+      .update({ status: "confirmed", quote_expires_at: null })
+      .returning("*");
+    if (!updated) {
+      throw new ApiError({
+        status: 409,
+        type: "conflict",
+        code: "no_quote_to_accept",
+        message: "This quote just changed - reload to see where it stands.",
+      });
+    }
+    await trx("booking_events").insert({
+      id: generateId("bookingEvent"),
+      booking_id: booking.id,
+      merchant_id: booking.merchant_id,
+      kind: "quote_accepted",
+      tone: "blue",
+      label: "The hirer accepted your quote",
+      body: `${hirer?.full_name ?? "The hirer"} will pay by M-Pesa to lock it in.`,
+      actor_type: "hirer",
+      actor_name: hirer?.full_name ?? null,
+    });
+    await writeAuditEntry(trx, {
+      actorType: "user",
+      actorId: userId,
+      action: "booking.quote_accepted",
+      entityType: "booking",
+      entityId: booking.id,
+      before: { status: "quoted" },
+      after: { status: "confirmed", gross_amount: booking.gross_amount },
+      ip: ctx.ip,
+      requestId: ctx.requestId,
+    });
+    const subject = await subjectOf(updated);
+    const notificationId = await notify(trx, {
+      merchantId: booking.merchant_id,
+      category: "booking",
+      title: `${booking.ref} quote accepted`,
+      body: `${hirer?.full_name ?? "The hirer"} accepted your price for ${subject.long}. They'll pay to lock it in.`,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
+    return { row: updated, notificationId };
+  });
+
+  // After the commit, never inside it - same rule as createBooking.
+  await enqueueNotificationDelivery(row.merchant_id, [notificationId]);
+  return detailOf(row);
+}

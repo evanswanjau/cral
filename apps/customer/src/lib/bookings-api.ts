@@ -20,6 +20,10 @@ export interface BookingVehicle {
 
 export type BookingStatus =
   | "requested"
+  /** PR T3: waiting for the owner's price. */
+  | "quote_requested"
+  /** PR T3: priced - accept it to book. */
+  | "quoted"
   | "confirmed"
   | "active"
   | "completed"
@@ -48,6 +52,21 @@ export interface BookingSummary {
   /** Driver-only: the car the driver is coming to drive. */
   hire_car_details: string | null;
   created_at: string;
+}
+
+/** The owner's price for a quote request (PR T3). */
+export interface BookingQuote {
+  amount: Money;
+  note: string | null;
+  quoted_at: string;
+  expires_at: string | null;
+}
+
+/** Take the owner's price (PR T3) - the booking is confirmed and goes on to payment. */
+export function acceptQuote(id: string) {
+  return apiPost<BookingDetail>(`/bookings/${id}/accept-quote`, undefined, {
+    headers: { "Idempotency-Key": idempotencyKey() },
+  });
 }
 
 /** Where a truck collects the load and where it goes (PR T2). */
@@ -123,6 +142,8 @@ export interface BookingDetail extends BookingSummary {
   /** Truck requests only (PR T2) - null on every other booking. */
   route: BookingRoute | null;
   cargo: BookingCargo | null;
+  /** The owner's price on a quoted booking (PR T3); null until they send it. */
+  quote: BookingQuote | null;
   note_from_hirer: string | null;
   response_due_at: string | null;
   decline_reason_code: string | null;

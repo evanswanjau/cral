@@ -16,6 +16,20 @@ export const DeclineBookingSchema = z.object({
 });
 export type DeclineBookingInput = z.infer<typeof DeclineBookingSchema>;
 
+/**
+ * The merchant's price for a quote request (PR T3): what the hirer pays,
+ * in integer cents, plus an optional note ("price includes fuel and
+ * tolls"). Commission and take-home are computed from it server-side.
+ */
+export const SendQuoteSchema = z.object({
+  amount: z.object({
+    amount: z.number().int().min(100).max(100_000_000),
+    currency: z.literal("KES"),
+  }),
+  note: z.string().trim().max(500).optional().nullable(),
+});
+export type SendQuoteInput = z.infer<typeof SendQuoteSchema>;
+
 export const CancelBookingSchema = z.object({
   reason: z.string().trim().min(1, "Say why you're cancelling."),
 });
