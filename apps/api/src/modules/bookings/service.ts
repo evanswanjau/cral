@@ -38,6 +38,7 @@ import type {
   RateHirerInput,
   VerifyHandoverOtpInput,
 } from "./schemas.js";
+import { routeAndLoadOf } from "../../lib/booking-route.js";
 
 const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
@@ -234,6 +235,7 @@ async function serializeDetail(booking: BookingRow, subject: BookingSubject, hir
     refund: money(booking.refund_amount, booking.refund_currency),
     pickup_location: booking.pickup_location,
     dropoff_location: booking.dropoff_location,
+    ...routeAndLoadOf(booking),
     note_from_hirer: booking.note_from_hirer,
     payout_method: booking.payout_method,
     payout_detail: booking.payout_detail,

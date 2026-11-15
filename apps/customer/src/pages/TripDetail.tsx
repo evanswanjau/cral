@@ -13,7 +13,7 @@ import {
 import { getPaymentState, payForBooking } from "../lib/payments-api.js";
 import { BOOKING_STEPS, BookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { VEHICLE_CATEGORY_LABEL, formatPayload } from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
@@ -982,7 +982,20 @@ export function TripDetail(): JSX.Element {
             <Row label="Status" value={booking.status.replace(/_/g, " ")} />
             <Row label="Pickup" value={dayLabel(booking.pickup_at)} />
             <Row label="Return" value={dayLabel(booking.dropoff_at)} />
-            <Row label="Where" value={booking.pickup_location} />
+            {booking.route ? (
+              <>
+                <Row label="From" value={`${booking.route.from}, ${booking.route.from_county}`} />
+                <Row label="To" value={`${booking.route.to}, ${booking.route.to_county}`} />
+              </>
+            ) : (
+              <Row label="Where" value={booking.pickup_location} />
+            )}
+            {booking.cargo && (
+              <Row
+                label="Load"
+                value={booking.cargo.kg ? `${booking.cargo.description} · ${formatPayload(booking.cargo.kg)}` : booking.cargo.description}
+              />
+            )}
             {booking.note_from_hirer && <Row label="Your note" value={booking.note_from_hirer} />}
             {booking.driver_amount && <Row label="Driver" value={formatMoney(booking.driver_amount)} />}
             <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>

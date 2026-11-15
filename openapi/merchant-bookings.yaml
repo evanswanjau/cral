@@ -469,6 +469,7 @@ paths:
       tags: [reports]
       summary: File a claim or a conduct report
       operationId: createBookingReport
+      description: >
         Filable while `on_hire` and for 14 days after `completed`. A
         `conduct` report never involves money and is always filable
         within the 14-day window. A `claim` states what an issue cost to
@@ -571,6 +572,31 @@ components:
       description: Required on every call that moves money or completes a handover (spec §2)
 
   schemas:
+
+    BookingRoute:
+      type: object
+      nullable: true
+      description: >
+        Truck requests only (PR T2) - where the load is collected and where
+        it goes. Null on every other booking.
+      required: [from, from_county, to, to_county]
+      properties:
+        from: { type: string, example: "Godown 14, Enterprise Road" }
+        from_county: { type: string, example: Nairobi }
+        to: { type: string, example: "Site office, Kitengela" }
+        to_county: { type: string, example: Kajiado }
+
+    BookingCargo:
+      type: object
+      nullable: true
+      description: Truck requests only (PR T2) - what's being moved. Null on every other booking.
+      required: [description, kg]
+      properties:
+        description: { type: string, example: "40 bags of cement" }
+        kg:
+          type: integer
+          nullable: true
+          description: Rough weight in kilograms, if the renter gave one. Shown in tonnes.
     ErrorEnvelope:
       type: object
       properties:
@@ -844,6 +870,8 @@ components:
             dropoff_location: { type: string }
             note_from_hirer: { type: string, nullable: true }
             payout_method: { type: string, enum: [mpesa] }
+            route: { $ref: "#/components/schemas/BookingRoute" }
+            cargo: { $ref: "#/components/schemas/BookingCargo" }
             payout_detail: { type: string }
             payout_account_name: { type: string }
             has_pickup_condition_photos: { type: boolean }

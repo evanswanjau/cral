@@ -42,6 +42,9 @@ export interface AdminBookingDetail extends AdminBookingSummary {
   driver_id: string | null;
   pickup_location: string;
   dropoff_location: string;
+  /** Truck requests only (PR T2) - null on every other booking. */
+  route: { from: string; from_county: string; to: string; to_county: string } | null;
+  cargo: { description: string; kg: number | null } | null;
   note_from_hirer: string | null;
   commission: Money;
   merchant_net: Money;
