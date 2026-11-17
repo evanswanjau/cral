@@ -11,27 +11,36 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
 
 const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
-    head: "HIRING A CAR",
+    head: "MOBILITY & SERVICES",
     links: [
-      ["Find a car", "/browse"],
+      ["Car rental & hire", "/browse"],
+      ["Trucks & commercial haulage", "/browse?category=truck"],
+      ["Hire a verified driver", "/drivers"],
+      ["24/7 Emergency towing", "/services/towing"],
+      ["Garage & repair services", "/services"],
+      ["Auto spare parts", "/parts"],
+    ],
+  },
+  {
+    head: "PARTNER WITH US",
+    links: [
+      ["Merchant portal overview", merchantLandingUrl()],
+      ["List passenger cars", `${merchantLandingUrl()}#cars`],
+      ["List trucks & haulage", `${merchantLandingUrl()}#trucks`],
+      ["Register as a driver", `${merchantLandingUrl()}#drivers`],
+      ["Register your garage", `${merchantLandingUrl()}#garages`],
+      ["Sell spare parts", `${merchantLandingUrl()}#parts`],
+    ],
+  },
+  {
+    head: "HELP & TRUST",
+    links: [
       ["How it works", "/how-it-works"],
       ["How we protect you", "/how-we-protect-you"],
-      ["Corporate hire", "/corporate"],
-    ],
-  },
-  {
-    head: "HELP",
-    links: [
-      ["Questions and answers", "/help"],
-      ["Contact us", "/contact"],
+      ["Corporate accounts", "/corporate"],
+      ["Help & FAQ", "/help"],
+      ["Contact & 24/7 hotline", "/contact"],
       ["Terms & privacy", "/legal"],
-    ],
-  },
-  {
-    head: "CRAL",
-    links: [
-      ["About us", "/about"],
-      ["List your car", merchantLandingUrl()],
     ],
   },
 ];
