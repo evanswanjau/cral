@@ -69,3 +69,18 @@ customerBookingsRouter.post(
     res.status(200).json(result);
   }),
 );
+
+/**
+ * Take the owner's quote (PR T3) - straight to `confirmed`, then payment
+ * as usual. Keyed: it commits the renter to a price.
+ */
+customerBookingsRouter.post(
+  "/bookings/:id/accept-quote",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    const result = await service.acceptQuote(req.auth!.sub, req.params.id as string, ctxOf(req));
+    await req.idempotency!.complete(200, result);
+    res.status(200).json(result);
+  }),
+);

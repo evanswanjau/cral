@@ -13,7 +13,7 @@ export const adminBookingsRouter = Router();
 const guard = requireAdmin({ role: "admin_support", queue: "bookings" });
 
 const ListQuerySchema = z.object({
-  status: z.enum(["requested", "confirmed", "active", "completed", "declined", "expired", "cancelled"]).optional(),
+  status: z.enum(["requested", "quote_requested", "quoted", "confirmed", "active", "completed", "declined", "expired", "cancelled"]).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
 });

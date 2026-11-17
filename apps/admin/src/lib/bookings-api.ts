@@ -2,6 +2,8 @@ import { apiGet } from "./api.js";
 
 export type AdminBookingStatus =
   | "requested"
+  | "quote_requested"
+  | "quoted"
   | "confirmed"
   | "active"
   | "completed"
@@ -42,6 +44,11 @@ export interface AdminBookingDetail extends AdminBookingSummary {
   driver_id: string | null;
   pickup_location: string;
   dropoff_location: string;
+  /** Truck requests only (PR T2) - null on every other booking. */
+  route: { from: string; from_county: string; to: string; to_county: string } | null;
+  cargo: { description: string; kg: number | null } | null;
+  /** The owner's price on a quoted booking (PR T3). */
+  quote: { amount: Money; note: string | null; quoted_at: string; expires_at: string | null } | null;
   note_from_hirer: string | null;
   commission: Money;
   merchant_net: Money;

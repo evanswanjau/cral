@@ -15,20 +15,30 @@ export const HIRING_UNIT_LABEL: Record<CatalogVehicleSummary["hiring_unit"], str
   day: "day",
   hour: "hour",
   trip: "trip",
+  km: "km",
+  tonne: "tonne",
 };
 
 /** The rate that actually prices a booking for this listing - not always `daily_rate`. */
-export function unitRate(car: Pick<CatalogVehicleSummary, "hiring_unit" | "daily_rate" | "hourly_rate" | "trip_rate">): Money {
+export function unitRate(
+  car: Pick<CatalogVehicleSummary, "hiring_unit" | "daily_rate" | "hourly_rate" | "trip_rate"> &
+    Partial<Pick<CatalogVehicleSummary, "km_rate" | "tonne_rate">>,
+): Money {
   if (car.hiring_unit === "hour" && car.hourly_rate) return car.hourly_rate;
   if (car.hiring_unit === "trip" && car.trip_rate) return car.trip_rate;
+  if (car.hiring_unit === "km" && car.km_rate) return car.km_rate;
+  if (car.hiring_unit === "tonne" && car.tonne_rate) return car.tonne_rate;
   return car.daily_rate;
 }
 
 /** The pre-submit total in cents, or null where none can be honestly shown. */
 export function quoteTotal(
-  car: Pick<CatalogVehicleSummary, "hiring_unit" | "daily_rate" | "trip_rate">,
+  car: Pick<CatalogVehicleSummary, "hiring_unit" | "daily_rate" | "trip_rate"> & Partial<Pick<CatalogVehicleSummary, "quoted">>,
   days: number,
 ): number | null {
+  // A quoted listing (per km / per tonne, or "quote me first") has no
+  // pre-submit total at all - the owner names it after seeing the request.
+  if (car.quoted) return null;
   if (car.hiring_unit === "trip") return car.trip_rate ? car.trip_rate.amount : null;
   if (car.hiring_unit === "day") return days > 0 ? car.daily_rate.amount * days : null;
   return null;

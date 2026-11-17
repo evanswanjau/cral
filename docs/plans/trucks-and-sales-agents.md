@@ -1,6 +1,6 @@
 # Trucks (types, routes, per-km/per-tonne, quotes) and sales agents
 
-Status: **T1 built (2026-11-10, branch `feature/truck-types`); the rest is plan only.** Owner's call, 2026-11-10, from client
+Status: **T1 built (2026-11-10, branch `feature/truck-types`); T2 built (2026-11-15, branch `feature/truck-route-load`); T3 built (2026-11-15, branch `feature/truck-quotes`); Part B (sales agents) is plan only.** Owner's call, 2026-11-10, from client
 feedback. A deliberate deviation from `road-to-transactable.md` /
 `pr-delivery-plan.md`, same footing as Drivers and Services.
 

@@ -131,7 +131,7 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
     // running is exactly what "on hire this week" means.
     .where("pickup_at", "<", week.end)
     .where("dropoff_at", ">=", week.start)
-    .whereIn("status", ["requested", "confirmed", "active", "completed"])
+    .whereIn("status", ["requested", "quote_requested", "quoted", "confirmed", "active", "completed"])
     .orderBy("pickup_at", "asc")
     .select("*");
 
@@ -322,7 +322,7 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
       week: {
         booking_count: weekRows.length,
         hire_days: weekRows.reduce((sum, b) => sum + daysInWindow(b, week.start, week.end), 0),
-        request_count: weekRows.filter((b) => b.status === "requested").length,
+        request_count: weekRows.filter((b) => ["requested", "quote_requested", "quoted"].includes(b.status)).length,
       },
       awaiting_payout: {
         // Reads `payoutPosition`, so this is the same figure as the

@@ -177,7 +177,7 @@ export function CarDetail(): JSX.Element {
     { k: "DRIVER", v: car.chauffeured ? "Comes with driver" : "Self-drive", icon: "driver" },
     car.hiring_unit === "day"
       ? { k: "MIN. HIRE", v: `${car.minimum_hire_days} day${car.minimum_hire_days > 1 ? "s" : ""}`, icon: "hire" }
-      : { k: "PRICED", v: `Per ${HIRING_UNIT_LABEL[car.hiring_unit]}`, icon: "hire" },
+      : { k: "PRICED", v: car.quoted ? "By quote" : `Per ${HIRING_UNIT_LABEL[car.hiring_unit]}`, icon: "hire" },
   ];
 
   // Inclusive Nairobi days - the 19th to the 19th is one day, the 19th to
@@ -189,7 +189,9 @@ export function CarDetail(): JSX.Element {
   const carTotal = quoteTotal(car, days);
   const driver = carDrivers?.data.find((d) => d.id === driverId) ?? null;
   // Priced on the car's own unit, so both count the same span.
-  const driverTotal = driver ? driverQuote(driver, car.hiring_unit, days, 0) : null;
+  // Nobody has a per-km driver rate; on a quoted truck the owner prices the driver into the quote (PR T3).
+  const driverTotal =
+    driver && car.hiring_unit !== "km" && car.hiring_unit !== "tonne" ? driverQuote(driver, car.hiring_unit, days, 0) : null;
   const total = carTotal === null ? null : driver ? (driverTotal === null ? null : carTotal + driverTotal) : carTotal;
   const driverIsSeparate = carDrivers?.source === "other_owners";
   // The minimum is enforced *here*, where the dates are picked, not left
@@ -788,8 +790,21 @@ export function CarDetail(): JSX.Element {
                   color: "#5A6373",
                 }}
               >
-                Priced per {HIRING_UNIT_LABEL[car.hiring_unit]} - the exact total is worked out from
-                your pickup and return times once you send the request.
+                {car.quoted ? (
+                  <>
+                    {car.owner.display_name} prices each job once they&apos;ve seen your request
+                    {car.hiring_unit === "km" || car.hiring_unit === "tonne"
+                      ? ` - ${formatMoney(unitRate(car))} per ${HIRING_UNIT_LABEL[car.hiring_unit]} is their guide`
+                      : ""}
+                    {car.minimum_charge ? `, and they don't go out for less than ${formatMoney(car.minimum_charge)}` : ""}.
+                    Nothing is charged until you accept the price.
+                  </>
+                ) : (
+                  <>
+                    Priced per {HIRING_UNIT_LABEL[car.hiring_unit]} - the exact total is worked out from your pickup and
+                    return times once you send the request.
+                  </>
+                )}
               </div>
             )}
 

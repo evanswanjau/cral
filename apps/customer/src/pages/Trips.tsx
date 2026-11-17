@@ -26,6 +26,10 @@ function statusChip(status: BookingStatus): { label: string; bg: string; fg: str
   switch (status) {
     case "requested":
       return { label: "WAITING ON OWNER", bg: "#FFF3DB", fg: "#8A5200", border: "#F5D9A3" };
+    case "quote_requested":
+      return { label: "WAITING FOR A PRICE", bg: "#FFF3DB", fg: "#8A5200", border: "#F5D9A3" };
+    case "quoted":
+      return { label: "PRICE IN", bg: "#E1F1FA", fg: "#075D93", border: "#A9D6EE" };
     case "confirmed":
       return { label: "CONFIRMED", bg: "#E1F1FA", fg: "#075D93", border: "#A9D6EE" };
     case "active":
@@ -169,7 +173,7 @@ export function Trips(): JSX.Element {
                 {chip.label}
               </span>
               <span style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
-                {formatMoney(b.gross)}
+                {b.status === "quote_requested" ? "Price on its way" : formatMoney(b.gross)}
               </span>
             </Link>
           );

@@ -1,5 +1,9 @@
 export type BookingStatus =
   | "requested"
+  /** Waiting for the merchant to price it (PR T3). */
+  | "quote_requested"
+  /** Priced; waiting for the renter to accept (PR T3). */
+  | "quoted"
   | "confirmed"
   | "active"
   | "completed"
@@ -61,6 +65,18 @@ export interface BookingRow {
   rate_unit: string;
   /** Days for a day-unit booking, hours (rounded up) for hour, always 1 for trip. */
   rate_quantity: number;
+  /** Truck requests only (20261115090000): where from / to, all four set or none. */
+  route_from: string | null;
+  route_from_county: string | null;
+  route_to: string | null;
+  route_to_county: string | null;
+  /** Truck requests only: what's being moved, and roughly how heavy (kg). */
+  cargo_description: string | null;
+  cargo_kg: number | null;
+  /** PR T3: when the merchant priced a quote_requested booking, their note, and when the price lapses. */
+  quoted_at: Date | null;
+  quote_note: string | null;
+  quote_expires_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }

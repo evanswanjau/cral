@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { KENYA_COUNTIES } from "../../lib/counties.js";
+import { MAX_PAYLOAD_KG } from "../vehicles/categories.js";
 
 /**
  * A car, a car with one of its merchant's drivers, or a driver alone for
@@ -16,6 +18,15 @@ export const CreateBookingSchema = z
     pickup_at: z.string().datetime({ offset: true }),
     dropoff_at: z.string().datetime({ offset: true }),
     note_from_hirer: z.string().max(1000).optional().nullable(),
+    // Truck listings only (PR T2): where the load goes from and to, and
+    // what it is. Required for a truck, refused for anything else - see
+    // `createBooking`. Weight is optional and in kg (the form asks tonnes).
+    route_from: z.string().trim().min(1).max(200).optional(),
+    route_from_county: z.enum(KENYA_COUNTIES).optional(),
+    route_to: z.string().trim().min(1).max(200).optional(),
+    route_to_county: z.enum(KENYA_COUNTIES).optional(),
+    cargo_description: z.string().trim().min(1).max(300).optional(),
+    cargo_kg: z.number().int().positive().max(MAX_PAYLOAD_KG).optional().nullable(),
   })
   .refine((v) => v.vehicle_id || v.driver_id, { message: "Pick a car or a driver.", path: ["vehicle_id"] });
 

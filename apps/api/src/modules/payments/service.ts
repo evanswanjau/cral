@@ -77,8 +77,10 @@ export async function initiatePayment(
       type: "conflict",
       code: "booking_not_payable",
       message:
-        booking.status === "requested"
+        booking.status === "requested" || booking.status === "quote_requested"
           ? "Wait for the owner to accept this request before paying."
+          : booking.status === "quoted"
+            ? "Accept the quote first, then pay."
           : `A ${booking.status} booking can't be paid.`,
     });
   }

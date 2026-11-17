@@ -70,12 +70,22 @@ export interface VehicleRow {
   daily_rate_currency: string;
   /** "list" | "net" - which price view the merchant used (see 20260904090000). Display only. */
   rate_mode: string;
-  /** "day" | "hour" | "trip" - which rate below governs pricing (owner's call, 2026-09-23). */
+  /** "day" | "hour" | "trip" | "km" | "tonne" - which rate below governs pricing (2026-09-23; km/tonne PR T3). */
   hiring_unit: string;
   hourly_rate_amount: number | null;
   hourly_rate_currency: string | null;
   trip_rate_amount: number | null;
   trip_rate_currency: string | null;
+  /** Trucks only (PR T3): per-km / per-tonne guide rates - such a listing is always quoted. */
+  km_rate_amount: number | null;
+  km_rate_currency: string | null;
+  tonne_rate_amount: number | null;
+  tonne_rate_currency: string | null;
+  /** "I don't move for less than KES X" (PR T3). */
+  minimum_charge_amount: number | null;
+  minimum_charge_currency: string | null;
+  /** "Always quote me first" on a day/trip listing (PR T3). */
+  quote_required: boolean;
   insurance_expiry: string | null;
   status: VehicleStatus;
   listing_ref: string | null;

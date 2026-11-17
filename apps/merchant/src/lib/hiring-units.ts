@@ -2,14 +2,26 @@
  * Hiring cadence (owner's call, 2026-09-23) - mirrors
  * `apps/api/src/modules/vehicles/hiring-units.ts`. Keep the two in step.
  */
-export const HIRING_UNITS = ["day", "hour", "trip"] as const;
+export const HIRING_UNITS = ["day", "hour", "trip", "km", "tonne"] as const;
 export type HiringUnit = (typeof HIRING_UNITS)[number];
 
 export const HIRING_UNIT_LABELS: Record<HiringUnit, string> = {
   day: "Per day",
   hour: "Per hour",
   trip: "Per trip",
+  km: "Per km",
+  tonne: "Per tonne",
 };
+
+/** Per km / per tonne (PR T3): trucks only, and always priced by a quote. */
+export function isQuoteUnit(unit: HiringUnit): boolean {
+  return unit === "km" || unit === "tonne";
+}
+
+/** The units a listing of this category can be priced on. */
+export function selectableUnitsFor(category: string): HiringUnit[] {
+  return category === "truck" ? ["day", "trip", "km", "tonne"] : SELECTABLE_UNITS;
+}
 
 /**
  * What a merchant can pick today. `hour` is refused by the API until the

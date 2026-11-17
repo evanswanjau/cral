@@ -32,18 +32,29 @@ export interface VehicleSummary {
   hiring_unit: HiringUnit;
   hourly_rate: Money | null;
   trip_rate: Money | null;
+  /** Trucks only (PR T3): guide rates for a quoted listing. */
+  km_rate: Money | null;
+  tonne_rate: Money | null;
+  /** "I don't move for less than KES X". */
+  minimum_charge: Money | null;
+  /** "Always quote me first". */
+  quote_required: boolean;
   submitted_at: string | null;
   created_at: string;
 }
 
-export type HiringUnit = "day" | "hour" | "trip";
+export type HiringUnit = "day" | "hour" | "trip" | "km" | "tonne";
 
 /** The rate a listing is actually priced on, and its unit word ("day" / "trip"). */
-export function listingRate(v: Pick<VehicleSummary, "hiring_unit" | "daily_rate" | "hourly_rate" | "trip_rate">): {
+export function listingRate(
+  v: Pick<VehicleSummary, "hiring_unit" | "daily_rate" | "hourly_rate" | "trip_rate" | "km_rate" | "tonne_rate">,
+): {
   rate: Money | null;
   per: string;
 } {
   if (v.hiring_unit === "trip") return { rate: v.trip_rate, per: "trip" };
+  if (v.hiring_unit === "km") return { rate: v.km_rate, per: "km" };
+  if (v.hiring_unit === "tonne") return { rate: v.tonne_rate, per: "tonne" };
   if (v.hiring_unit === "hour") return { rate: v.hourly_rate, per: "hour" };
   return { rate: v.daily_rate, per: "day" };
 }
@@ -139,6 +150,11 @@ export interface PriceAvailabilityInput {
   daily_rate?: string;
   hiring_unit?: HiringUnit;
   trip_rate?: string;
+  km_rate?: string;
+  tonne_rate?: string;
+  /** "" clears it. */
+  minimum_charge?: string;
+  quote_required?: boolean;
   rate_mode?: "list" | "net";
   minimum_hire_days?: number;
   county?: string;

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import {
+  acceptQuote,
   bookingTitle,
   cancelMyBooking,
   getMyBooking,
@@ -13,7 +14,7 @@ import {
 import { getPaymentState, payForBooking } from "../lib/payments-api.js";
 import { BOOKING_STEPS, BookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { VEHICLE_CATEGORY_LABEL, formatPayload } from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
@@ -198,6 +199,102 @@ function WaitingCard({ booking }: { booking: BookingDetail }): JSX.Element {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * A quoted booking before it is confirmed (PR T3). `quote_requested`:
+ * the owner has the route and load and owes a price. `quoted`: the price
+ * is in, held until `expires_at`, and accepting it is what confirms the
+ * booking - the payment card takes over from there. "No thanks" is the
+ * ordinary withdraw below. Not from a canvas file (none has a quote
+ * screen); built in `WaitingCard`'s own idiom.
+ */
+function QuoteCard({ booking, onAccepted }: { booking: BookingDetail; onAccepted: () => Promise<void> }): JSX.Element {
+  const ownerFirst = ownerName(booking).split(" ")[0] ?? "the owner";
+  const [accepting, setAccepting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (booking.status === "quote_requested" || !booking.quote) {
+    return (
+      <div style={CARD}>
+        <Pill tone="amber">{"Waiting for " + ownerFirst + "'s price"}</Pill>
+        <div style={{ font: "700 19px/1.25 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", marginBottom: 6 }}>
+          Request sent. {ownerFirst} is pricing it.
+        </div>
+        <p style={{ margin: "0 0 16px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+          They can see your route and load, and they&apos;ll send you one price for the job. We&apos;ll text and email you
+          when it&apos;s in. Nothing is charged unless you accept it.
+        </p>
+        {booking.response_due_at && (
+          <div style={{ padding: "14px 16px", background: "#F8F9FB", borderRadius: 8 }}>
+            <div style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 7 }}>
+              REQUEST LAPSES IN
+            </div>
+            <div style={{ font: "600 22px/1 'IBM Plex Mono',monospace", color: "#0B0F1A" }}>
+              <Countdown dueAt={booking.response_due_at} />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const accept = async () => {
+    setError(null);
+    setAccepting(true);
+    try {
+      await acceptQuote(booking.id);
+      await onAccepted();
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Couldn't accept that. Try again.");
+    } finally {
+      setAccepting(false);
+    }
+  };
+
+  return (
+    <div style={CARD}>
+      <Pill tone="amber">{ownerFirst + "'s price"}</Pill>
+      <div style={{ font: "700 26px/1.15 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", marginBottom: 6 }}>
+        {formatMoney(booking.quote.amount)}
+      </div>
+      <p style={{ margin: "0 0 14px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+        {booking.quote.note ? `"${booking.quote.note}" ` : ""}
+        Accept it to book, then pay by M-Pesa to lock it in.
+      </p>
+      {booking.quote.expires_at && (
+        <div style={{ padding: "14px 16px", background: "#F8F9FB", borderRadius: 8, marginBottom: 14 }}>
+          <div style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".1em", color: "#9AA2B0", marginBottom: 7 }}>
+            PRICE HELD FOR
+          </div>
+          <div style={{ font: "600 22px/1 'IBM Plex Mono',monospace", color: "#0B0F1A" }}>
+            <Countdown dueAt={booking.quote.expires_at} />
+          </div>
+        </div>
+      )}
+      {error && (
+        <p style={{ margin: "0 0 12px", font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#A50E22" }}>{error}</p>
+      )}
+      <button
+        type="button"
+        onClick={accept}
+        disabled={accepting}
+        style={{
+          width: "100%",
+          height: 48,
+          background: "#0F23A8",
+          color: "#FFFFFF",
+          border: "none",
+          borderRadius: 8,
+          font: "600 15px/1 'Instrument Sans',sans-serif",
+          cursor: accepting ? "default" : "pointer",
+          opacity: accepting ? 0.7 : 1,
+        }}
+      >
+        {accepting ? "Accepting…" : "Accept and pay"}
+      </button>
     </div>
   );
 }
@@ -582,7 +679,9 @@ export function TripDetail(): JSX.Element {
     queryFn: () => getMyBooking(id!),
     enabled: !!id,
     retry: false,
-    refetchInterval: (query) => (query.state.data?.status === "requested" ? 8000 : false),
+    // Quote requests and sent quotes wait on someone too (PR T3).
+    refetchInterval: (query) =>
+      ["requested", "quote_requested", "quoted"].includes(query.state.data?.status ?? "") ? 8000 : false,
     // An answer that lands while the tab was in the background should be
     // on screen the moment they look at it again.
     refetchOnWindowFocus: true,
@@ -622,7 +721,9 @@ export function TripDetail(): JSX.Element {
    */
   const stepIndex = accepted ? (paid ? 3 : 2) : 0;
 
-  const canCancel = booking.status === "requested" || booking.status === "confirmed";
+  // Anything still waiting on an answer is a withdrawal; "no thanks" to a quote is one too (PR T3).
+  const open = booking.status === "requested" || booking.status === "quote_requested" || booking.status === "quoted";
+  const canCancel = open || booking.status === "confirmed";
 
   const cancel = async () => {
     setError(null);
@@ -734,6 +835,14 @@ export function TripDetail(): JSX.Element {
        */}
       {booking.status === "requested" &&
         (paid ? <PaymentCard booking={booking} /> : <WaitingCard booking={booking} />)}
+      {(booking.status === "quote_requested" || booking.status === "quoted") && (
+        <QuoteCard
+          booking={booking}
+          onAccepted={async () => {
+            await queryClient.invalidateQueries({ queryKey: ["bookings", id] });
+          }}
+        />
+      )}
       {(booking.status === "confirmed" || booking.status === "active") && (
         <PaymentCard booking={booking} />
       )}
@@ -832,7 +941,7 @@ export function TripDetail(): JSX.Element {
                 cursor: "pointer",
               }}
             >
-              {booking.status === "requested" ? "Withdraw request" : "Cancel booking"}
+              {booking.status === "quoted" ? "No thanks" : open ? "Withdraw request" : "Cancel booking"}
             </button>
           )}
           {!paid && !canCancel && (
@@ -852,10 +961,10 @@ export function TripDetail(): JSX.Element {
           }}
         >
           <div style={{ font: "600 15px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 6 }}>
-            {booking.status === "requested" ? "Withdraw this request?" : "Cancel this booking?"}
+            {booking.status === "quoted" ? "Turn down this price?" : open ? "Withdraw this request?" : "Cancel this booking?"}
           </div>
           <p style={{ margin: "0 0 16px", font: "400 13.5px/1.55 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-            {booking.status === "requested"
+            {open
               ? "Nothing has been charged, so there's nothing to refund. The owner will no longer see this request."
               : paid
                 ? `You'll be refunded in full - ${formatMoney(booking.total_due)} back to the number you paid with. The dates go back on offer for someone else.`
@@ -880,7 +989,7 @@ export function TripDetail(): JSX.Element {
             >
               {cancelling
                 ? "Cancelling…"
-                : booking.status === "requested"
+                : open
                   ? "Yes, withdraw it"
                   : "Yes, cancel it"}
             </button>
@@ -982,11 +1091,28 @@ export function TripDetail(): JSX.Element {
             <Row label="Status" value={booking.status.replace(/_/g, " ")} />
             <Row label="Pickup" value={dayLabel(booking.pickup_at)} />
             <Row label="Return" value={dayLabel(booking.dropoff_at)} />
-            <Row label="Where" value={booking.pickup_location} />
+            {booking.route ? (
+              <>
+                <Row label="From" value={`${booking.route.from}, ${booking.route.from_county}`} />
+                <Row label="To" value={`${booking.route.to}, ${booking.route.to_county}`} />
+              </>
+            ) : (
+              <Row label="Where" value={booking.pickup_location} />
+            )}
+            {booking.cargo && (
+              <Row
+                label="Load"
+                value={booking.cargo.kg ? `${booking.cargo.description} · ${formatPayload(booking.cargo.kg)}` : booking.cargo.description}
+              />
+            )}
             {booking.note_from_hirer && <Row label="Your note" value={booking.note_from_hirer} />}
             {booking.driver_amount && <Row label="Driver" value={formatMoney(booking.driver_amount)} />}
             <div style={{ borderTop: "1px solid #F1F3F6", paddingTop: 9 }}>
-              <Row bold label="Total" value={formatMoney(booking.total_due)} />
+              <Row
+                bold
+                label="Total"
+                value={booking.status === "quote_requested" ? "Price on its way" : formatMoney(booking.total_due)}
+              />
             </div>
           </div>
         </aside>
