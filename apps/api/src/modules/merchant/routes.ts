@@ -24,7 +24,9 @@ import {
 export const merchantRouter = Router();
 
 function ctxOf(req: Request): RequestContext {
-  return { ip: req.ip ?? null, requestId: req.requestId ?? null };
+  // `assistedBy` is set only by `authenticate()` for a sales agent's assist
+  // session (PR AG3); the services audit and scope by it.
+  return { ip: req.ip ?? null, requestId: req.requestId ?? null, assistedBy: req.assist?.adminId ?? null };
 }
 
 const upload = createUpload();
@@ -35,7 +37,7 @@ merchantRouter.get(
   "/merchant/onboarding",
   authenticate(),
   asyncHandler(async (req, res) => {
-    const result = await merchantService.getOnboardingState(req.auth!.sub);
+    const result = await merchantService.getOnboardingState(req.auth!.sub, req.assist ?? null);
     res.status(200).json(result);
   }),
 );
@@ -131,6 +133,7 @@ merchantRouter.get(
     const doc = await merchantService.readDocument(
       req.auth!.sub,
       req.params.documentId as string,
+      req.assist?.adminId ?? null,
     );
     // The stored type is only ever echoed back through the allowlist, and
     // nosniff stops the browser second-guessing it. Rows written before the
@@ -155,6 +158,17 @@ merchantRouter.delete(
   asyncHandler(async (req, res) => {
     await merchantService.deleteDocument(req.auth!.sub, req.params.documentId as string, ctxOf(req));
     res.status(204).send();
+  }),
+);
+
+// PR AG3. An assist token ends its own session (the banner's "Exit"); the
+// owner's own token ends every live assist on their account.
+merchantRouter.post(
+  "/merchant/onboarding/assist/end",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const result = await merchantService.endAssist(req.auth!.sub, req.assist ?? null, ctxOf(req));
+    res.status(200).json(result);
   }),
 );
 

@@ -85,6 +85,13 @@ separate, unbuilt check. A renter can correct an unverified phone.
   ends all but the caller's, audit-logged. `Session` carries `user_agent`.
 - A revoked session stops working immediately (see `conventions.md`,
   Reliability).
+- **`sessions.kind`** is `user` or `assist` (PR AG3). An assist session is
+  a sales agent filling in onboarding for the owner: `assisted_by` names
+  the agent, it lives 1 hour, has no refresh token, and its token carries
+  `asb`. `authenticate()` reads `kind` from the row and holds an assist to
+  the onboarding allowlist in `lib/assist.ts` (`403 assist_scope`
+  elsewhere). An `asb` claim on a user session is refused. Revoke-all and
+  `POST /merchant/onboarding/assist/end` end it. See `admin-ops.md`.
 
 ## Account status and closing an account
 

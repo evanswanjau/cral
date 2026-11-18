@@ -68,7 +68,11 @@ export function ReviewSection({
     status === "sent_back" && doc?.review_note
       ? doc.review_note
       : doc
-        ? [doc.original_name ?? (doc.state === "missing" ? "Nothing uploaded yet" : null), doc.expires_at ? `expires ${doc.expires_at}` : null]
+        ? [
+            doc.original_name ?? (doc.state === "missing" ? "Nothing uploaded yet" : null),
+            doc.expires_at ? `expires ${doc.expires_at}` : null,
+            doc.uploaded_by_agent ? `uploaded by agent ${doc.uploaded_by_agent}` : null,
+          ]
             .filter(Boolean)
             .join(" · ")
         : section.hint ?? "";

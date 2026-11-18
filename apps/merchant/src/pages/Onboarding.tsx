@@ -5,6 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { O } from "../components/onboarding/styles.js";
 import { ErrorBanner } from "../components/onboarding/primitives.js";
 import { getMe, logout } from "../lib/auth-api.js";
+import { endAssist, fetchAssistInfo, isAssistSession } from "../lib/assist.js";
+import { AssistBanner } from "../components/onboarding/AssistBanner.js";
 import { setSession } from "../lib/auth.js";
 import {
   loadDraftFromServer,
@@ -88,8 +90,13 @@ export function Onboarding(): JSX.Element {
   useEffect(() => {
     if (emailFetched.current) return;
     emailFetched.current = true;
-    getMe()
-      .then((me) => setAccountEmail(me.email ?? null))
+    // An assist token (PR AG3) can't call /me; the onboarding state carries
+    // the email for it instead.
+    const lookup = isAssistSession()
+      ? fetchAssistInfo().then((i) => i.account_email)
+      : getMe().then((me) => me.email);
+    lookup
+      .then((email) => setAccountEmail(email ?? null))
       .catch(() => {
         // Onboarding still works without it - the email field just stays
         // "Loading…" rather than blocking the whole wizard on a /me failure.
@@ -225,6 +232,13 @@ export function Onboarding(): JSX.Element {
   }
 
   async function handleLogout() {
+    if (isAssistSession()) {
+      // An agent's assist (PR AG3) ends rather than signs out.
+      await endAssist().catch(() => {});
+      setSession(null);
+      navigate("/assist?ended=1", { replace: true });
+      return;
+    }
     try {
       await logout();
     } catch {
@@ -306,6 +320,9 @@ export function Onboarding(): JSX.Element {
       )}
 
       <main style={O.content}>
+        {!draft.submitted && (
+          <AssistBanner ownerName={[draft.firstName, draft.surname].filter(Boolean).join(" ") || draft.companyName} />
+        )}
         <div style={O.contentInner}>
         {draft.submitted ? (
           <Done draft={draft} onAddAnother={handleAddAnother} />

@@ -297,9 +297,21 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
   // The checklist, split so each document carries its own accordion block.
   const checksByDocument = splitByDocument(checklist.merged);
 
+  // B3 (PR AG3): a file a sales agent uploaded during an assist session
+  // says so, so the reviewer knows the owner didn't upload it themselves.
+  const agentIds = [...new Set(vehicleDocs.map((d) => d.uploaded_by_admin_id).filter((x): x is string => !!x))];
+  const agentNames = new Map(
+    agentIds.length
+      ? (await db<{ id: string; full_name: string }>("admin_users").whereIn("id", agentIds).select("id", "full_name")).map(
+          (a) => [a.id, a.full_name] as const,
+        )
+      : [],
+  );
+
   const docLine = (kind: string) => {
     const doc = vehicleDocs.find((d) => d.kind === kind);
     return {
+      uploaded_by_agent: doc?.uploaded_by_admin_id ? (agentNames.get(doc.uploaded_by_admin_id) ?? "a CRAL agent") : null,
       kind,
       scope: "vehicle" as const,
       label: DOC_LABEL[kind] ?? kind,
