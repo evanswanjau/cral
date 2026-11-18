@@ -4,6 +4,7 @@
 // CI is billing-locked, so this is the only thing standing between a branch
 // and production. It runs, in order, stopping at the first failure:
 //
+//   links      node tools/check-links.mjs --strict
 //   typecheck  npm run typecheck
 //   lint       npm run lint
 //   test       npm run test -w apps/api
@@ -204,7 +205,13 @@ function buildLines(out) {
   return lines;
 }
 
+// check-links prints one summary line per app, then one line per finding.
+function linkLines(out) {
+  return out.split(/\r?\n/).filter((l) => l.trim() && !/^\w+: \d+ routes, \d+ links read, 0 to look at$/.test(l.trim()));
+}
+
 const STEPS = [
+  { name: "links", cmd: "node tools/check-links.mjs --strict", pick: linkLines },
   { name: "typecheck", cmd: "npm run typecheck", pick: tscLines },
   { name: "lint", cmd: "npm run lint", pick: eslintLines },
   { name: "test", cmd: "npm run test -w apps/api", pick: vitestLines, before: testPreflight, skip: SKIP_TESTS },

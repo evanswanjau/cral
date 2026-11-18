@@ -3,41 +3,47 @@ import { Link } from "react-router-dom";
 import { useSeo } from "../lib/use-seo.js";
 import { PageHero, Section } from "../components/site/marketing.js";
 
+/** Questions across every live service (UI7). Facts only from how the
+ * product works today; see HowItWorks.tsx's header for the sources. */
 const FAQS: Array<{ q: string; a: string }> = [
   {
-    q: "Does CRAL charge a booking fee?",
-    a: "No. You pay the owner's rate directly - CRAL never adds anything on top of it.",
+    q: "Does sending a request cost anything?",
+    a: "No. Requesting a car, a truck, machinery, a driver or a tow is free. You pay only once the price is agreed and you accept it.",
   },
   {
-    q: "Do I need to upload documents before I can request a car?",
-    a: "Yes - your national ID and driving licence, once. Upload them from your documents page before sending your first request; every request after that goes out with them already attached.",
+    q: "How do I pay?",
+    a: "By M-Pesa, through CRAL. Once the owner accepts, or you accept a quote, a prompt comes to your phone. The owner is paid by CRAL after the job.",
   },
   {
-    q: "How long does the owner have to answer my request?",
-    a: "Twelve hours. If they decline or don't answer in time, the request lapses automatically and you haven't paid anything.",
+    q: "What do I need before I can send a request?",
+    a: "A CRAL account with your phone confirmed by SMS and your ID on file. To drive a car or machine yourself, add your driving licence too. The request page walks you through it.",
   },
   {
-    q: "Can I request more than one car for the same dates?",
-    a: "Yes. Since nothing is charged until an owner accepts, you can send requests for a few options and only ever pay for the one you confirm.",
+    q: "How long does the owner have to answer?",
+    a: "Twelve hours. If they decline or don't answer in time, the request lapses and you have paid nothing.",
   },
   {
-    q: "Can the rate change after I book?",
-    a: "No. The rate is agreed on the listing before you book, and it stays the same when you collect the car.",
+    q: "Why does a truck sometimes need a quote?",
+    a: "A truck priced per km or per tonne, or whose owner prices each job, sends you a price instead of showing one up front. The quote holds for 48 hours, and nothing is charged until you accept it.",
   },
   {
-    q: "What does \"verified\" mean on a listing?",
-    a: "That a person at CRAL has read the car's logbook, insurance and tracker certificate and they check out. It is not a mechanical inspection - look the car over yourself before you sign anything.",
+    q: "Can I request more than one option for the same dates?",
+    a: "Yes. Nothing is charged until an owner accepts, so you can send a few requests and pay only for the one you go ahead with.",
   },
   {
-    q: "I have a car. How do I list it?",
-    a: "Listing is free. Hit \"List your car\" from the menu to start in the merchant app - review usually takes about a working day.",
+    q: "What does \"checked by CRAL\" mean?",
+    a: "That a person at CRAL has read the vehicle's logbook and insurance and the owner's ID and KRA PIN, or a driver's licence and ID. It is not a mechanical inspection - look the vehicle over yourself at handover.",
+  },
+  {
+    q: "How do I offer my car, truck, machinery or driving on CRAL?",
+    a: "Listing is free. Choose \"Earn with CRAL\" from the menu to start in the merchant app. A person reviews your papers before you go live.",
   },
 ];
 
 export function Help(): JSX.Element {
   useSeo({
     title: "Questions and answers",
-    description: "Answers to the questions people actually ask before their first hire on Cruz Ride Auto.",
+    description: "Answers to the questions people ask before they first hire a car, truck, machinery or driver, or call a tow, on CRAL.",
     path: "/help",
     jsonLd: {
       "@context": "https://schema.org",

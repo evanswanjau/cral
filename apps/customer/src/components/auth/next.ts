@@ -16,6 +16,20 @@ export function bookingFromNext(next: string): { vehicleId: string; from: string
   return { vehicleId: (match[1] ?? match[2]) as string, from, to };
 }
 
+/** "Back to the truck" and the like: the auth screens' back link names
+ * what was being booked when `next` is a request in progress (UI7, row
+ * U1), so a driver or tow request isn't told it is going back to a car. */
+export function backLabel(next: string): string | null {
+  const listing = /^\/(cars|trucks|machinery|drivers)\/(?!search(?:[/?#]|$))[^/?#]+/.exec(next);
+  if (listing) {
+    const noun = { cars: "car", trucks: "truck", machinery: "machine", drivers: "driver" }[listing[1] as "cars" | "trucks" | "machinery" | "drivers"];
+    return `Back to the ${noun}`;
+  }
+  if (/^\/book\//.test(next)) return "Back to the car";
+  if (/^\/towing(?:[/?#]|$)/.test(next)) return "Back to your tow request";
+  return null;
+}
+
 /** `?next=` is only ever followed as an in-app path - an absolute or
  * protocol-relative value is an open redirect, not a resume. */
 export function safeNext(raw: string | null): string {

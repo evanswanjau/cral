@@ -24,8 +24,8 @@ each one look and feel like its own place.
 | Phase | What the client gets | Status | Sessions (PRs) |
 |-------|----------------------|--------|----------------|
 | 0 | Cheaper, faster build sessions (no client-visible change) | **Built** (P0) | 1 (done) |
-| 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built, in `main`. **Production deploy pending** | 3 (done) |
-| 2 | Each service gets its own sub-site, on the website and the merchant portal | Not started | 1 review + 3-5 builds |
+| 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built. **Production shipped** at `72e3593` | 3 (done) |
+| 2 | Each service gets its own sub-site, on the website and the merchant portal | Built, in `develop`. Production pending (owner says ship phase 2) | 1 review + 3-5 builds |
 | 3 | Sales agents sign up owners in the field | AG1 built (`develop`); AG2, AG3 not started | 3 |
 | 4 | Garage services: quote first, pay through CRAL | Not started | 4 |
 | 5 | Spare parts: quoted against your chassis | Not started | 2 |
@@ -146,7 +146,7 @@ portal shows the sections for what they offer.
 | UI4 | **Built.** Merchant "Earn with CRAL" landing (supplier doors, coming suppliers, shared estimator) and `/join/cars`, `/join/trucks`, `/join/machinery`, `/join/drivers`; `/create-account?offer=` kept in sessionStorage for UI5 | Opus |
 | UI5 | **Built (#92).** Onboarding step 1 "What do you offer?" (multi-select, derived not stored); driver-only gets a Drivers step, no vehicle docs, lands on `/drivers/new`; vehicle form opens on the picked category; step 3 labelled Trucks/Machinery/Drivers | Opus |
 | UI6 | **Built (#94).** Portal nav from `components/portal/nav-sections.ts` (no Vehicles for driver-only; Trucks/Machinery when the whole fleet is one kind); dashboard buttons, greeting, fleet card and per-unit rates by offering; bookings/payouts copy for driver-only | Opus |
-| UI7 | Copy sweep; strict link check in the gate | Sonnet |
+| UI7 | **Built.** Company pages (How it works, How we protect you, Help, About) rewritten for every service; car-only lines swept on trips, auth, footer, truck/machinery pages and merchant payout copy; footer `tel:`/`mailto:`; `check-links --strict` is the gate's first step | Opus |
 
 **Start prompt for 2A:** the full prompt is
 [`docs/prompts/ui-services-review.md`](../prompts/ui-services-review.md).

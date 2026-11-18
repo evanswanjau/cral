@@ -14,7 +14,7 @@ import {
 import { getPaymentState, payForBooking } from "../lib/payments-api.js";
 import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL, formatPayload } from "../lib/vehicle-categories.js";
+import { VEHICLE_CATEGORY_LABEL, formatPayload, listingBase, vehicleNoun } from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
 
 /**
@@ -360,8 +360,8 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
     const tips = [
       ...(booking.vehicle
         ? [
-            `Match the plate on the car to ${booking.vehicle.registration} before anything else.`,
-            "Walk around the car together and make sure you're both happy with its condition before you drive off.",
+            `Match the plate on the ${vehicleNoun(booking.vehicle.category)} to ${booking.vehicle.registration} before anything else.`,
+            `Walk around the ${vehicleNoun(booking.vehicle.category)} together and make sure you're both happy with its condition before it leaves.`,
           ]
         : [`Your driver is ${booking.driver?.display_name ?? "named on this booking"}, from ${ownerName(booking)}. Check that's who turns up.`]),
       "We email you a pickup code when the handover starts - read it to the owner, and never send it to anyone who asks for it first.",
@@ -380,7 +380,7 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
             marginBottom: 6,
           }}
         >
-          {waitingOnOwner ? "Paid. The clock is on the owner now." : "The car is yours for those dates."}
+          {waitingOnOwner ? "Paid. The clock is on the owner now." : booking.vehicle ? `The ${vehicleNoun(booking.vehicle.category)} is yours for those dates.` : "Your driver is booked for those dates."}
         </div>
         <p style={{ margin: "0 0 20px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
           {/*
@@ -507,7 +507,7 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
             (payment?.phone ?? "your phone") +
             ". Enter your M-Pesa PIN there and nowhere else."
           : booking.vehicle
-            ? `${ownerName(booking)} has accepted. One prompt, the owner's rate for your dates, nothing on top - and the car is yours for them.`
+            ? `${ownerName(booking)} has accepted. One prompt, the owner's rate for your dates, nothing on top - and the ${vehicleNoun(booking.vehicle.category)} is yours for them.`
             : `${ownerName(booking)} has accepted. One prompt, the driver's rate for your dates, nothing on top.`}
       </p>
 
@@ -554,7 +554,7 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
           }}
         >
           {payment?.status === "expired"
-            ? "That prompt timed out. Nothing was charged and the car is still held for you."
+            ? `That prompt timed out. Nothing was charged and the ${booking.vehicle ? vehicleNoun(booking.vehicle.category) : "driver"} is still held for you.`
             : (payment?.failure_reason ?? "That prompt didn't go through. Nothing was charged.")}
           {" "}Try again below, or use a different M-Pesa number if this one isn't working.
         </div>
@@ -945,8 +945,8 @@ export function TripDetail(): JSX.Element {
             </button>
           )}
           {!paid && !canCancel && (
-            <Link to="/cars/search" style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0F23A8" }}>
-              Find another car →
+            <Link to={booking.vehicle ? listingBase(booking.vehicle.category) : "/drivers"} style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0F23A8" }}>
+              {booking.vehicle ? `Find another ${vehicleNoun(booking.vehicle.category)}` : "Find another driver"} →
             </Link>
           )}
         </div>

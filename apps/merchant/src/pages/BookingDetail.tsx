@@ -126,15 +126,15 @@ function AcceptModal({ b, onClose }: { b: BookingDetailData; onClose: () => void
             />
             <div style={P.verifyPointText}>
               {b.payment_state === "paid"
-                ? "The hirer has paid CRAL in full. Accepting locks the vehicle for these dates."
+                ? `The hirer has paid CRAL in full. Accepting locks the ${b.vehicle_registration ? "vehicle" : "driver"} for these dates.`
                 : b.payment_state === "pending"
-                  ? "The hirer's payment is in flight but not settled. Accepting locks the vehicle for these dates."
-                  : "Nothing has been charged yet - the hirer pays once you accept. Accepting locks the vehicle for these dates."}
+                  ? `The hirer's payment is in flight but not settled. Accepting locks the ${b.vehicle_registration ? "vehicle" : "driver"} for these dates.`
+                  : `Nothing has been charged yet - the hirer pays once you accept. Accepting locks the ${b.vehicle_registration ? "vehicle" : "driver"} for these dates.`}
             </div>
           </div>
           <div style={P.verifyPoint}>
             <span style={{ ...P.verifyPointDot, background: "#0B8A5B" }} />
-            <div style={P.verifyPointText}>Your money is released 24 hours after you receive the vehicle back, then paid on the next run.</div>
+            <div style={P.verifyPointText}>Your money is released 24 hours after {b.vehicle_registration ? "you receive the vehicle back" : "the job is done"}, then paid on the next run.</div>
           </div>
           <div style={P.verifyPoint}>
             <span style={{ ...P.verifyPointDot, background: "#C77400" }} />

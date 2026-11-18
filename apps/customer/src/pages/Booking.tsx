@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { getCatalogVehicle, formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { isCarCategory, listingBase, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { isCarCategory, listingBase, vehicleNoun, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { createBooking, listMyBookings } from "../lib/bookings-api.js";
 import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 import {
@@ -271,7 +271,7 @@ export function Booking(): JSX.Element {
     setParams(p, { replace: true });
   };
 
-  usePageTitle(car ? `Book ${car.make} ${car.model}` : "Book a car");
+  usePageTitle(car ? `Book ${car.make} ${car.model}` : "Book");
 
   useEffect(() => writeDraft(key, note), [key, note]);
 
@@ -842,7 +842,7 @@ export function Booking(): JSX.Element {
                     )}
                     {driver && driverTotal === null && (
                       <span style={{ display: "block", marginTop: 6, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
-                        This driver doesn't offer a per-{car.hiring_unit} rate for this car. Pick another, or go without.
+                        This driver doesn't offer a per-{car.hiring_unit} rate for this {vehicleNoun(car.category)}. Pick another, or go without.
                       </span>
                     )}
                   </label>
@@ -909,7 +909,7 @@ export function Booking(): JSX.Element {
                       color: "#A50E22",
                     }}
                   >
-                    This car is hired for {car.minimum_hire_days} days at a time.{" "}
+                    This {vehicleNoun(car.category)} is hired for {car.minimum_hire_days} days at a time.{" "}
                     <button
                       type="button"
                       onClick={openDateEditor}

@@ -5,7 +5,7 @@ import { PageHero, Section, SectionTitle, Body } from "../components/site/market
 export function About(): JSX.Element {
   useSeo({
     title: "About CRAL",
-    description: "Cruz Ride Auto is building the place Kenyans go for anything to do with a car. Hiring is live today.",
+    description: "Cruz Ride Auto is one place for everything a vehicle needs in Kenya. Car, truck, machinery and driver hire, and towing, are live today.",
     path: "/about",
     jsonLd: {
       "@context": "https://schema.org",
@@ -22,30 +22,30 @@ export function About(): JSX.Element {
     <div>
       <PageHero
         kicker="ABOUT CRAL"
-        title="Everything cars in Kenya. We start with the keys."
-        sub="Cruz Ride Auto is building the place Kenyans go for anything to do with a car - starting with hiring one."
+        title="One place for everything a vehicle needs in Kenya."
+        sub="Cruz Ride Auto checks every supplier, agrees every price before work starts, and moves the money by M-Pesa."
       />
       <Section>
         <SectionTitle>What's live today</SectionTitle>
         <Body>
-          Hiring is live: search a live-reviewed car, send a request, hear back within twelve
-          hours, and collect - all with no booking fee. Every listing's documents are read by a
-          person before it goes live, and every renter's ID and licence are checked once.
+          Hire a car, machinery, a truck or a driver, or call a tow. A request is free, owners
+          answer within twelve hours, and you pay by M-Pesa only once the price is agreed. Every
+          vehicle's papers and every driver's licence are read by a person before they appear,
+          and every renter's ID is checked once.
         </Body>
         <SectionTitle>What's next</SectionTitle>
         <Body>
-          Cars by the month for families and companies, vetted service and repair, buying and
-          selling, and insurance and paperwork handled inside the account you already have - all
-          pointed at the same idea: the same read documents and the same record, wherever your car
-          needs something next.
+          A garage that agrees the price before it starts, parts that match your vehicle, and
+          buying and selling with the logbook read against the car - all inside the account you
+          already have, with the same checked suppliers and the same record.
         </Body>
       </Section>
       <Section tint>
-        <SectionTitle>Have a car of your own?</SectionTitle>
+        <SectionTitle>Have a vehicle, or drive for a living?</SectionTitle>
         <Body>
-          Put it to work on the days you're not using it.{" "}
+          Cars, trucks, machinery and drivers all earn on CRAL, and listing is free.{" "}
           <a href={merchantLandingUrl()} style={{ color: "#0F23A8" }}>
-            List your car
+            Earn with CRAL
           </a>
           .
         </Body>

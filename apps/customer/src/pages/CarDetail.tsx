@@ -5,7 +5,7 @@ import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js"
 import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
-import { formatPayload, isCarCategory, listingBase, specLine, truckTypeLabel, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { formatPayload, isCarCategory, listingBase, specLine, truckTypeLabel, vehicleNoun, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { HIRING_UNIT_LABEL, unitRate } from "../lib/hiring-units.js";
 import { CarRequestPanel } from "../components/cars/CarRequestPanel.js";
 import { TruckRequestPanel } from "../components/subsite/TruckRequestPanel.js";
@@ -399,7 +399,7 @@ export function CarDetail(): JSX.Element {
                   marginBottom: 14,
                 }}
               >
-                What CRAL checked on this car
+                What CRAL checked on this {vehicleNoun(car.category)}
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(190px,1fr))", gap: 9 }}>
                 {car.documents_cleared.map((d) => (
@@ -545,11 +545,11 @@ export function CarDetail(): JSX.Element {
               </p>
               {car.reviews.length === 0 ? (
                 <p style={{ margin: "12px 0 0", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  No reviews for this car yet.
+                  No reviews for this {vehicleNoun(car.category)} yet.
                   {car.owner_rating
                     ? ` Its owner is rated ${car.owner_rating.average.toFixed(1)} from ${
                         car.owner_rating.count
-                      } hire${car.owner_rating.count === 1 ? "" : "s"} of their other cars.`
+                      } hire${car.owner_rating.count === 1 ? "" : "s"} of their other listings.`
                     : ""}
                 </p>
               ) : (
