@@ -25,7 +25,7 @@ const SITE_URL = process.env.CUSTOMER_SITE_URL ?? "https://cral.co.ke";
 const STATIC_PATHS: Array<{ path: string; changefreq: string; priority: string }> = [
   { path: "/", changefreq: "daily", priority: "1.0" },
   // The service sub-sites (Phase 2 UI rebuild). `/browse` only redirects
-  // now, so it is not listed; `/towing` joins with UI3.
+  // now, so it is not listed, and neither is `/services/towing` (UI3).
   { path: "/cars", changefreq: "daily", priority: "0.9" },
   { path: "/cars/search", changefreq: "hourly", priority: "0.9" },
   { path: "/trucks", changefreq: "daily", priority: "0.8" },
@@ -33,6 +33,7 @@ const STATIC_PATHS: Array<{ path: string; changefreq: string; priority: string }
   { path: "/machinery", changefreq: "daily", priority: "0.8" },
   { path: "/machinery/search", changefreq: "hourly", priority: "0.8" },
   { path: "/drivers", changefreq: "daily", priority: "0.7" },
+  { path: "/towing", changefreq: "weekly", priority: "0.7" },
   { path: "/how-it-works", changefreq: "monthly", priority: "0.5" },
   { path: "/how-we-protect-you", changefreq: "monthly", priority: "0.5" },
   { path: "/corporate", changefreq: "monthly", priority: "0.3" },

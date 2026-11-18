@@ -115,7 +115,7 @@ export const SERVICES: Service[] = [
     lede: "Every driver's licence and ID is read by CRAL before they appear here. Book one for your own car, or add one to a self-drive hire.",
     icon: SteeringWheel,
     photo: "/images/services/drivers.jpg",
-    href: "/drivers", // final: /drivers (UI3)
+    href: "/drivers",
     match: ["/drivers"],
   },
   {
@@ -129,8 +129,8 @@ export const SERVICES: Service[] = [
     lede: "Send your location and what happened. CRAL finds a tow, agrees the price with you on the call, and keeps the request on your account.",
     icon: TruckTrailer,
     photo: "/images/services/towing.jpg",
-    href: "/services/towing", // final: /towing (UI3)
-    match: ["/services/towing", "/towing"],
+    href: "/towing",
+    match: ["/towing"],
   },
   {
     status: "coming",

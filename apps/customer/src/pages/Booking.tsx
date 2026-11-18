@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { CodeInput } from "@cral/ui";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
@@ -10,15 +9,13 @@ import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 import {
   register as registerAccount,
   login,
-  startPhoneVerification,
-  confirmPhoneVerification,
-  updateMyPhone,
   getMe,
 } from "../lib/auth-api.js";
 import { uploadRenterDocument, type RenterDocKind } from "../lib/documents-api.js";
 import { useIsAuthenticated, setSession, deviceId, TERMS_VERSION } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
 import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
+import { PhoneVerify } from "../components/subsite/PhoneVerify.js";
 import { routeFromParams } from "../lib/truck-route.js";
 import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays, hireInstants } from "../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
@@ -236,11 +233,6 @@ export function Booking(): JSX.Element {
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
 
-  const [code, setCode] = useState("");
-  const [maskedPhone, setMaskedPhone] = useState("");
-  const [editingPhone, setEditingPhone] = useState(false);
-  const [newPhone, setNewPhone] = useState("");
-
   const [accountExists, setAccountExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<{ code: string; message: string } | null>(null);
@@ -431,7 +423,8 @@ export function Booking(): JSX.Element {
           // offers /documents, and either can be added there.
         }
       }
-      await sendCode();
+      // PhoneVerify sends the first code itself as it mounts.
+      setStage("verify");
     } catch (e) {
       failWith(e);
     } finally {
@@ -453,51 +446,6 @@ export function Booking(): JSX.Element {
     setEditingDates(false);
   };
 
-  const sendCode = async () => {
-    setError(null);
-    try {
-      const res = await startPhoneVerification();
-      setMaskedPhone(res.masked_destination);
-      setStage("verify");
-    } catch (e) {
-      failWith(e);
-      setStage("verify");
-    }
-  };
-
-  const confirmCode = async () => {
-    setError(null);
-    if (code.trim().length < 4) {
-      setError({ code: "code_required", message: "Enter the code we texted you." });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await confirmPhoneVerification(code.trim());
-      setCode("");
-      setStage("review");
-    } catch (e) {
-      failWith(e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const savePhone = async () => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await updateMyPhone(newPhone);
-      setEditingPhone(false);
-      setNewPhone("");
-      await sendCode();
-    } catch (e) {
-      failWith(e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const submitRequest = async () => {
     setError(null);
     setSubmitting(true);
@@ -515,7 +463,7 @@ export function Booking(): JSX.Element {
       navigate(`/bookings/${result.id}`, { replace: true });
     } catch (e) {
       if (e instanceof ApiClientError && e.code === "phone_verification_required") {
-        await sendCode();
+        setStage("verify");
         return;
       }
       failWith(e);
@@ -736,127 +684,8 @@ export function Booking(): JSX.Element {
               </div>
             )}
 
-            {/* ---- verify the phone ---- */}
-            {stage === "verify" && (
-              <div>
-                <h1
-                  style={{
-                    margin: "0 0 8px",
-                    font: "700 clamp(22px,2.8vw,29px)/1.12 Archivo,sans-serif",
-                    fontVariationSettings: "'wdth' 108",
-                    letterSpacing: "-.025em",
-                    color: "#0B0F1A",
-                  }}
-                >
-                  Confirm your phone number.
-                </h1>
-                <p style={{ margin: "0 0 20px", font: "400 15px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  {maskedPhone
-                    ? `We've sent an SMS code to ${maskedPhone}. Enter it below to continue.`
-                    : "We've sent you an SMS code. Enter it below to continue."}
-                </p>
-
-                {editingPhone ? (
-                  <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
-                    <label style={{ display: "block" }}>
-                      <span style={label}>Your phone number</span>
-                      <input
-                        type="tel"
-                        autoComplete="tel"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        placeholder="0722 000 000"
-                        style={monoField}
-                      />
-                    </label>
-                    {error && <ErrorNote>{error.message}</ErrorNote>}
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={savePhone}
-                        disabled={submitting || !newPhone}
-                        style={{ ...primaryButton, width: "auto", padding: "0 20px" }}
-                      >
-                        {submitting ? "Saving…" : "Save and send a code"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPhone(false);
-                          setError(null);
-                        }}
-                        style={{
-                          height: 50,
-                          padding: "0 20px",
-                          background: "#FFFFFF",
-                          color: "#333B4A",
-                          border: "1px solid #E4E7EC",
-                          borderRadius: 8,
-                          font: "600 15px/1 'Instrument Sans',sans-serif",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: 18 }}>
-                      <span style={label}>The six-digit code</span>
-                      <CodeInput label="The six-digit code" value={code} onChange={setCode} autoFocus />
-                    </div>
-
-                    {error && <ErrorNote>{error.message}</ErrorNote>}
-
-                    <button type="button" onClick={confirmCode} disabled={submitting} style={primaryButton}>
-                      {submitting ? "Checking…" : "Confirm and continue"}
-                    </button>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 14,
-                        justifyContent: "center",
-                        flexWrap: "wrap",
-                        marginTop: 13,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={sendCode}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          font: "500 13px/1 'Instrument Sans',sans-serif",
-                          color: "#0F23A8",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Send it again
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPhone(true);
-                          setError(null);
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          font: "500 13px/1 'Instrument Sans',sans-serif",
-                          color: "#5A6373",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Use a different number
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+            {/* ---- verify the phone (components/subsite/PhoneVerify.tsx) ---- */}
+            {stage === "verify" && <PhoneVerify headingLevel="h1" onVerified={() => setStage("review")} />}
 
             {/* ---- review and send ---- */}
             {stage === "review" && (

@@ -187,7 +187,7 @@ export async function quoteRequest(
           emailParagraph(priceLine),
           input.note ? emailParagraph(escapeHtml(input.note)) : "",
           emailMuted(`Request ${id}`),
-          emailButton("View request", "https://cral.co.ke/services/towing"),
+          emailButton("View request", "https://cral.co.ke/towing"),
         ].join(""),
       }),
     });

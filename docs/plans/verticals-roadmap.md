@@ -142,7 +142,7 @@ portal shows the sections for what they offer.
 | UI1c | **Built.** `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirect (truck and machinery `/browse` stay until UI2a/UI2b) | Sonnet |
 | UI2a | **Built.** `/trucks` landing, `/trucks/search`, `/trucks/:id` (route-first `TruckRequestPanel`), `/trucks/:id/request`; truck `/browse`, `/cars/:id`, `/book/:id` redirect | Opus |
 | UI2b | **Built.** `/machinery` landing, `/machinery/search`, `/machinery/:id`, `/machinery/:id/book`; machinery `/browse`, `/cars/:id`, `/book/:id` redirect; sitemap lists the sub-site paths and each listing under its category | Opus |
-| UI3 | Drivers and towing, public | Opus |
+| UI3 | **Built.** `/drivers` landing (county pick, list, `EarnBand` -> `/join/drivers`), public `/drivers/:id` with inline phone verify (`PhoneVerify`, out of `Booking.tsx`); public `/towing` (form kept through sign-in, your requests); `/services/towing` redirects; quote email and sitemap use `/towing` | Opus |
 | UI4 | **Built.** Merchant "Earn with CRAL" landing (supplier doors, coming suppliers, shared estimator) and `/join/cars`, `/join/trucks`, `/join/machinery`, `/join/drivers`; `/create-account?offer=` kept in sessionStorage for UI5 | Opus |
 | UI5 | **Built (#92).** Onboarding step 1 "What do you offer?" (multi-select, derived not stored); driver-only gets a Drivers step, no vehicle docs, lands on `/drivers/new`; vehicle form opens on the picked category; step 3 labelled Trucks/Machinery/Drivers | Opus |
 | UI6 | Portal nav by offering | Sonnet |
