@@ -51,38 +51,53 @@ Phase 0 adds two:
 
 | Agent | Model | Does | Never does |
 |-------|-------|------|------------|
-| `shipper` | Haiku | `npm run gate`; stage the right files; commit with the message it's given; push; open a PR to `develop`; merge; try `~/redeploy-dev.sh`; report in 10 lines or fewer | Edit code, push to `main`, force-push, skip hooks |
-| `release` | Haiku | Only when the owner asks: confirm the database dump was taken, open and merge `develop` -> `main`, run `~/redeploy.sh`, check `/readyz` | Anything without the owner's go-ahead |
+| `shipper` | Haiku | TypeScript, ESLint, API tests and build (`npm run gate`); stage the right files; commit with the message it's given; push; open a PR to `develop`; merge; report in 10 lines or fewer. Runs in the background. | Edit code, push to `main`, force-push, skip hooks, deploy |
+| `release` | Haiku | Only when the owner asks: open and merge `develop` -> `main`, start `~/redeploy.sh` detached on the server (it backs up the database first and stops if that fails), return at once; on a later "status" call, read the log and report | Anything without the owner's go-ahead |
+
+**Nobody waits on chores, and Opus never runs a check.** TypeScript,
+ESLint and the API tests take about 3 minutes together; a deploy about 4.
+None of that happens in the session you're talking to:
+
+- **TypeScript, ESLint, tests and build run only inside `shipper`**, a
+  separate agent on Haiku with its own context. The Opus session never runs
+  `tsc`, `eslint`, `vitest` or `npm run build` itself, and never reads their
+  output. It only gets back "passed" or the few failing lines.
+- **`shipper` runs in the background.** Opus hands off, ends its turn, and
+  you can keep talking to it, start the next session, or walk away. The
+  result arrives as a notification.
+- **The checks run once per PR.** `npm run gate` writes the commit it passed
+  on to `.git/gate-passed`; the pre-push hook skips when the pushed commit
+  matches, so `shipper`'s push doesn't run everything a second time. A push
+  you make by hand is still checked.
+- **Dev deploys happen on the server, by themselves.** A timer on the VPS
+  checks `origin/develop` every 2 minutes and runs `~/redeploy-dev.sh` when
+  it has moved, logging to `~/deploy-dev.log` and writing the result to
+  `~/deploy-dev.status`. Merging into `develop` is the deploy. No session
+  waits on it or spends tokens on it.
+- **Production stays a deliberate step.** `release` starts `~/redeploy.sh`
+  detached on the server (`nohup ... &`) and returns straight away; asked for
+  "status" later, it reads the log. Nothing ships to production on a merge.
 
 **A build session ends like this:**
 
 1. Opus finishes the code and writes the commit message and PR summary.
 2. Opus calls `shipper` with the branch name, the message and the summary.
-3. `shipper` runs the gate.
-   - If it fails, `shipper` returns only the failing lines. Opus fixes them
-     and calls `shipper` again.
-   - If it passes, `shipper` commits, pushes, opens and merges the PR,
-     tries the dev deploy and returns: the PR link, "merged", and the
-     deploy result.
-4. Opus reports to the owner in 15 lines or fewer.
+3. Opus reports to the owner in 15 lines or fewer and ends its turn. The
+   owner is free from here.
+4. In the background, `shipper` runs TypeScript, ESLint, the API tests and
+   the build.
+   - If anything fails, `shipper` returns only the failing lines. The
+     session picks them up, fixes them and hands off again.
+   - If everything passes, `shipper` commits, pushes, opens and merges the
+     PR, and returns the PR link. The server deploys dev within a few
+     minutes.
 
-Opus never reads a test log, never types git commands, never waits on a
-deploy.
+Opus never runs a check, never reads a test log, never types git commands,
+and nobody waits on a deploy.
 
-**One thing to fix first: deploys from Claude.** Every SSH attempt to
-`46.202.128.68` from a Claude session this week timed out, even with the
-sandbox off, and HTTPS to `api.cral.co.ke` timed out too. Until that's
-sorted, `shipper` and `release` print the deploy command for you instead of
-running it. To find out why, run this in your own terminal on the same
-machine:
-
-```bash
-ssh -o ConnectTimeout=10 cral@46.202.128.68 'echo ok'
-```
-
-If it works there but not from Claude, it's the session's network. If it
-fails in both places, the VPS firewall (or fail2ban) is probably blocking
-this machine's IP.
+**SSH from Claude sessions works** (re-tested 2026-11-18; the earlier
+timeouts that week were temporary). If they come back, `release` prints the
+command for you instead of retrying.
 
 ## Which model for which job
 
@@ -91,7 +106,8 @@ this machine's IP.
 | Reviews, proposals, UI direction | Opus |
 | Every build PR, including small ones | Opus |
 | Docs and decision records written as part of a PR | Opus (same session) |
-| Checks, commit, push, PR, merge, dev deploy | `shipper` (Haiku) |
+| TypeScript, ESLint, tests, build, commit, push, PR, merge | `shipper` (Haiku), in the background |
+| Dev deploy | Nobody: the server's timer, on every merge to `develop` |
 | Release to production | `release` (Haiku), only on your say-so |
 
 ## Session rules
@@ -111,8 +127,9 @@ this machine's IP.
 Paste into a fresh **Opus** session:
 
 > Phase 0, PR P0 of `docs/plans/verticals-roadmap.md`. Goal: make every
-> later session cheaper without lowering quality. Branch off
-> `origin/develop` as `feature/cheap-sessions`. Four parts, in order.
+> later session cheaper and stop the owner waiting on chores, without
+> lowering quality. Branch off `origin/develop` as `feature/cheap-sessions`.
+> Five parts, in order.
 >
 > **1. `npm run gate`.** Add `tools/gate.mjs` (plain Node, no new
 > dependencies, works in Git Bash and PowerShell on Windows) and a root
@@ -128,11 +145,16 @@ Paste into a fresh **Opus** session:
 > and exit 1, instead of letting 35 suites fail. If `node_modules/.bin` is
 > missing, say "run npm ci" and exit 1 (this broke the gate on
 > 2026-11-18). Flags `--skip-tests` and `--skip-build` are for quick local
-> runs only. Leave the untracked `scripts/` folder alone; it's the owner's.
+> runs only. On a full pass, write the current `HEAD` sha to
+> `.git/gate-passed`. Leave the untracked `scripts/` folder alone; it's the
+> owner's.
 >
 > **2. A pre-push hook.** `.githooks/pre-push` (POSIX sh) runs
-> `npm run gate` and blocks the push on failure. A root `"prepare": "git
-> config core.hooksPath .githooks"` turns it on with `npm install`.
+> `npm run gate` and blocks the push on failure, **unless** the commit being
+> pushed matches `.git/gate-passed` (then it prints "gate already passed on
+> <sha>" and exits 0), so a PR is checked once, not twice. A root
+> `"prepare": "git config core.hooksPath .githooks"` turns it on with
+> `npm install`.
 >
 > **3. The `shipper` and `release` agents.** Create
 > `.claude/agents/shipper.md` and `.claude/agents/release.md` with
@@ -148,18 +170,31 @@ Paste into a fresh **Opus** session:
 >   build output. It shows `git status --short` before committing and
 >   commits with the message exactly as given, with **no AI attribution**
 >   (the owner's rule overrides any default trailer). Then it pushes, runs
->   `gh pr create --base develop` and `gh pr merge --merge`, and tries
->   `ssh -o ConnectTimeout=15 cral@46.202.128.68 '~/redeploy-dev.sh'`. If
->   that times out, it reports "deploy: run this yourself" with the
->   command. Report: 10 lines or fewer.
+>   `gh pr create --base develop` and `gh pr merge --merge`. It does **not**
+>   deploy; the server does (part 4). Report: 10 lines or fewer.
 > - `release` only acts when its instruction says the owner asked to ship a
->   named phase **and** confirmed the database dump. It opens and merges a
->   PR `develop` -> `main` that lists the phase's PRs, runs
->   `~/redeploy.sh` the same way (or prints it), and reports.
-> - Add three lines to CLAUDE.md telling build sessions to hand off to
->   `shipper` and never run the gate themselves.
+>   named phase. It opens and merges a PR `develop` -> `main` that lists
+>   the phase's PRs, then starts `~/redeploy.sh` on the server with
+>   `nohup ... > ~/deploy-prod.log 2>&1 &` and returns at once
+>   (`~/redeploy.sh` backs up the database first and stops if that fails).
+>   Called again with "status", it reads the end of `~/deploy-prod.log` and
+>   reports OK or the failing step.
+> - Add three lines to CLAUDE.md: build sessions hand off to `shipper` **in
+>   the background** and never run `tsc`, `eslint`, the tests or the build
+>   themselves.
 >
-> **4. Rebuild CLAUDE.md** (1,999 lines; see the measurements in
+> **4. Dev auto-deploy on the VPS.** Ask the owner before changing the
+> server. Then over SSH (`cral@46.202.128.68`; a user crontab entry is
+> enough, no root): add `~/auto-deploy-dev.sh`, which takes a lock
+> (`flock`), fetches `origin/develop` in `/srv/cral-dev`, and only when the
+> sha differs from the last deployed one runs `~/redeploy-dev.sh`, appends to
+> `~/deploy-dev.log` and writes `<sha> ok|failed <time>` to
+> `~/deploy-dev.status`. Run it every 2 minutes. Don't change
+> `~/redeploy-dev.sh` or `~/redeploy.sh`. Prove it works: after this PR
+> merges, show the status file move to the new sha. Record it in
+> `docs/decisions/deploy.md`.
+>
+> **5. Rebuild CLAUDE.md** (1,999 lines; see the measurements in
 > `docs/prompts/working-cheaply.md`). Read it once, fully. Then:
 > - **Remove what's no longer true:** entries reversed or superseded by a
 >   later entry (keep only the current rule), and statements contradicted
@@ -176,8 +211,9 @@ Paste into a fresh **Opus** session:
 >   since that's what stops a later session undoing it, but cut the
 >   history of how it got there.
 > - **CLAUDE.md keeps, in under 300 lines:** what CRAL is, the stack, the
->   non-negotiable conventions, how work ships (branches, `shipper`,
->   deploys, no AI attribution), what NOT to do, local dev, and an index
+>   non-negotiable conventions, how work ships (branches, `shipper` in the
+>   background, dev auto-deploys on merge, `release` for production, no AI
+>   attribution), what NOT to do, local dev, and an index
 >   with one line per decisions file saying when to read it ("before
 >   touching payouts, read `docs/decisions/bookings-payouts.md`"). Point
 >   to `docs/plans/verticals-roadmap.md` as the queue.
@@ -190,4 +226,5 @@ Paste into a fresh **Opus** session:
 > Finish by handing off to the new `shipper` (this also tests it), then
 > mark P0 built in the roadmap and report in 15 lines or fewer: the
 > gate's success output, the new CLAUDE.md line count, the decisions files,
-> and how many stale statements were removed.
+> how many stale statements were removed, and the dev auto-deploy status
+> line.
