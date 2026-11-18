@@ -231,7 +231,7 @@ export function Notifications(): JSX.Element {
         <div style={P.ntSideCard}>
           <div style={P.ntSideLabel}>WHERE THESE GO</div>
           <div style={P.ntSideText}>{channelLine}</div>
-          <Link to="/settings/notifications" style={P.ntSideBtn}>
+          <Link to="/settings?tab=notifications" style={P.ntSideBtn}>
             Alert settings
           </Link>
         </div>

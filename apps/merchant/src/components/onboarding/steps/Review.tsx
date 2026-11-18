@@ -3,6 +3,7 @@ import { O } from "../styles.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { BackButton, Kes, PlateBadge, PrimaryButton } from "../primitives.js";
 import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
+import { customerLegalUrl } from "../../../lib/customer-site.js";
 import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
 
@@ -140,6 +141,19 @@ export function Review({
         </div>
       </div>
 
+      {draft.driversOnly && draft.vehicles.length === 0 ? (
+        <div style={O.reviewCard}>
+          <div style={O.reviewCardHead}>
+            <div style={O.cardTitle}>Drivers</div>
+            <EditButton onClick={() => onEditStep(1)} />
+          </div>
+          <div style={O.reviewCardBody}>
+            <p style={{ ...O.helper, margin: 0 }}>
+              You offer driving only. You add yourself or your drivers straight after you submit.
+            </p>
+          </div>
+        </div>
+      ) : (
       <div style={O.reviewCard}>
         <div style={O.reviewCardHead}>
           <div style={O.cardTitle}>Vehicles · {draft.vehicles.length}</div>
@@ -178,6 +192,7 @@ export function Review({
           ))}
         </div>
       </div>
+      )}
 
       <div
         style={{
@@ -229,8 +244,8 @@ export function Review({
               <span />
             )}
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <a href="#" style={O.ghostLinkBtn}>Read the merchant terms</a>
-              <a href="#" style={O.ghostLinkBtn}>Privacy notice</a>
+              <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={O.ghostLinkBtn}>Read the merchant terms</a>
+              <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={O.ghostLinkBtn}>Privacy notice</a>
             </div>
           </div>
         </div>

@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { bookingTitle, listMyBookings, type BookingStatus } from "../lib/bookings-api.js";
-import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import { formatMoney } from "../lib/catalog-api.js";
 
 /**
@@ -110,7 +109,7 @@ export function Trips(): JSX.Element {
             No bookings yet.
           </div>
           <Link
-            to="/browse"
+            to="/"
             style={{
               display: "inline-flex",
               height: 42,
@@ -123,11 +122,8 @@ export function Trips(): JSX.Element {
               textDecoration: "none",
             }}
           >
-            Find a car
+            Pick a service
           </Link>
-          <div style={{ marginTop: 18, textAlign: "left" }}>
-            <HireDriverBanner compact />
-          </div>
         </div>
       )}
 

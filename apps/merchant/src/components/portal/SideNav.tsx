@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { P } from "./styles.js";
+import type { NavItem } from "./nav-sections.js";
 
 /**
  * Every screen in the design's canvas is now built, and all six are listed.
@@ -21,19 +22,16 @@ import { P } from "./styles.js";
  * Notifications, Security. It carries no badge: nothing under it is a
  * count a merchant needs to act on. The old `/settings/security` and
  * `/settings/notifications` URLs redirect into it.
+ *
+ * Which items show, and what Vehicles is called, comes from
+ * `nav-sections.ts` (by what the merchant offers). The same list is the
+ * desktop side nav and the mobile strip.
  */
 export function SideNav({
-  vehicleCount,
-  driverActionCount = 0,
-  bookingCount,
-  notificationUnread,
+  items,
   footer,
 }: {
-  vehicleCount: number;
-  /** Drivers sent back by a reviewer - the only driver count worth a badge. */
-  driverActionCount?: number;
-  bookingCount: number;
-  notificationUnread: number;
+  items: NavItem[];
   /** Hangs below the links. Only the dashboard passes one (its status card). */
   footer?: ReactNode;
 }): JSX.Element {
@@ -50,70 +48,24 @@ export function SideNav({
 
   return (
     <nav ref={navRef} className="m-nav" style={P.nav}>
-      <NavLink to="/" end style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Dashboard</span>
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/vehicles" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Vehicles</span>
-            <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{vehicleCount}</span>
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/drivers" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Drivers</span>
-            {driverActionCount > 0 && (
-              <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{driverActionCount}</span>
-            )}
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/bookings" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Bookings</span>
-            <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{bookingCount}</span>
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/payouts" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Payouts</span>
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/notifications" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Notifications</span>
-            {notificationUnread > 0 && (
-              <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{notificationUnread}</span>
-            )}
-          </>
-        )}
-      </NavLink>
-      <NavLink to="/settings" style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}>
-        {({ isActive }) => (
-          <>
-            <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
-            <span style={P.navLabel}>Settings</span>
-          </>
-        )}
-      </NavLink>
+      {items.map((item) => (
+        <NavLink
+          key={item.key}
+          to={item.to}
+          end={item.to === "/"}
+          style={({ isActive }) => ({ ...P.navItem, ...(isActive ? P.navItemActive : { color: "#333B4A" }), textDecoration: "none" })}
+        >
+          {({ isActive }) => (
+            <>
+              <span style={{ ...P.navDot, background: isActive ? "#0F23A8" : "transparent" }} />
+              <span style={P.navLabel}>{item.label}</span>
+              {item.count !== undefined && (
+                <span style={{ ...P.navTag, color: isActive ? "#5B6FE0" : "#A7AEBB" }}>{item.count}</span>
+              )}
+            </>
+          )}
+        </NavLink>
+      ))}
       {footer && <div className="m-nav-footer">{footer}</div>}
     </nav>
   );

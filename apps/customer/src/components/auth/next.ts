@@ -4,15 +4,30 @@
  * on every auth link and is the last thing each flow navigates to.
  */
 
-/** `/book/veh_123?from=2026-10-02&to=2026-10-03` -> its parts, or null. */
+/** `/cars/veh_123/book?from=2026-10-02&to=2026-10-03` (or the legacy
+ * `/book/veh_123?...` still in flight in old sign-in links) -> its parts, or null. */
 export function bookingFromNext(next: string): { vehicleId: string; from: string; to: string } | null {
-  const match = /^\/book\/([^/?]+)\?(.*)$/.exec(next);
+  const match = /^\/(?:cars\/([^/?]+)\/book|book\/([^/?]+))\?(.*)$/.exec(next);
   if (!match) return null;
-  const params = new URLSearchParams(match[2]);
+  const params = new URLSearchParams(match[3]);
   const from = params.get("from") ?? "";
   const to = params.get("to") ?? "";
   if (!from || !to) return null;
-  return { vehicleId: match[1] as string, from, to };
+  return { vehicleId: (match[1] ?? match[2]) as string, from, to };
+}
+
+/** "Back to the truck" and the like: the auth screens' back link names
+ * what was being booked when `next` is a request in progress (UI7, row
+ * U1), so a driver or tow request isn't told it is going back to a car. */
+export function backLabel(next: string): string | null {
+  const listing = /^\/(cars|trucks|machinery|drivers)\/(?!search(?:[/?#]|$))[^/?#]+/.exec(next);
+  if (listing) {
+    const noun = { cars: "car", trucks: "truck", machinery: "machine", drivers: "driver" }[listing[1] as "cars" | "trucks" | "machinery" | "drivers"];
+    return `Back to the ${noun}`;
+  }
+  if (/^\/book\//.test(next)) return "Back to the car";
+  if (/^\/towing(?:[/?#]|$)/.test(next)) return "Back to your tow request";
+  return null;
 }
 
 /** `?next=` is only ever followed as an in-app path - an absolute or

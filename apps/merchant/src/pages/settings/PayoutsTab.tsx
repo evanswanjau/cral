@@ -228,7 +228,7 @@ export function PayoutsTab(): JSX.Element {
               <div>
                 <span style={P.setFieldLabel}>Long bookings</span>
                 <p style={{ margin: "0 0 10px", font: "400 12px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: "64ch", textWrap: "pretty" }}>
-                  Ordinary hires pay out on completion, 24 hours after you receive the vehicle. Only
+                  Ordinary bookings pay out on completion, 24 hours after the vehicle is back or the job is done. Only
                   bookings of a month or longer pay in instalments.
                 </p>
                 {payByBank ? (
@@ -297,7 +297,7 @@ export function PayoutsTab(): JSX.Element {
             </div>
             <div style={P.setPaidTitle}>On completion, every time</div>
             <p style={P.setPaidBody}>
-              Hirers pay CRAL upfront. Your payout clears 24 hours after you receive the vehicle, then
+              Hirers pay CRAL upfront. Your payout clears 24 hours after the vehicle is back or the job is done, then
               leaves on the next run. Only long bookings follow the rhythm you set.
             </p>
           </div>

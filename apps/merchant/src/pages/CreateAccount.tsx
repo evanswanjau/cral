@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
 import {
   CodeInput,
@@ -15,6 +15,8 @@ import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { customerLegalUrl } from "../lib/customer-site.js";
+import { rememberOffer } from "../lib/supplier-types.js";
 
 /**
  * Create account - the design's `isRegister` / `isRegisterVerify` branches,
@@ -29,10 +31,17 @@ import { usePageTitle } from "../lib/use-page-title.js";
  * The one departure from the canvas copy is the password minimum: the
  * design says eight, spec §6 sets ten and checks it against a breach list,
  * so eight would be rejected server-side and the copy would be lying.
+ *
+ * `?offer=<type>` (from a `/join/<type>` page) is kept in sessionStorage
+ * for onboarding's "What do you offer?" step to pre-select. No API change.
  */
 export function CreateAccount(): JSX.Element {
   usePageTitle("Create your account");
   const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const offer = params.get("offer");
+  // sessionStorage outlives the email-code round trip into onboarding.
+  useEffect(() => rememberOffer(offer), [offer]);
   const [step, setStep] = useState<"details" | "verify">("details");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -93,7 +102,7 @@ export function CreateAccount(): JSX.Element {
       <AuthShell
         panel="register"
         heading="Confirm your email"
-        subheading="Enter the six-digit code we sent. Then we'll start on your company papers."
+        subheading="Enter the six-digit code we sent. Then we'll start on your details."
         error={error}
         footer={{ text: "Already have an account?", linkLabel: "Sign in", to: "/sign-in" }}
       >
@@ -146,7 +155,7 @@ export function CreateAccount(): JSX.Element {
     <AuthShell
       panel="register"
       heading="Create your account"
-      subheading="Email and a password to start. Company papers and vehicles come next."
+      subheading="Email and a password to start. Your details and what you offer come next."
       showGoogle
       error={error}
       footer={{ text: "Already have an account?", linkLabel: "Sign in", to: "/sign-in" }}
@@ -194,11 +203,11 @@ export function CreateAccount(): JSX.Element {
 
         <p style={S.terms}>
           By creating an account you agree to the CRAL merchant{" "}
-          <a href="#" style={S.termsLink}>
+          <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
             terms
           </a>{" "}
           and{" "}
-          <a href="#" style={S.termsLink}>
+          <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
             privacy notice
           </a>
           .

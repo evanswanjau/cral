@@ -4,6 +4,7 @@ import { O } from "../styles.js";
 import { BackButton, PlateBadge, PrimaryButton, TextInput } from "../primitives.js";
 import { formatFileSize } from "../../../lib/format.js";
 import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
+import { FLEET_WORDS, type FleetKind } from "../../../lib/onboarding-offer.js";
 import {
   deleteDocument,
   updateVehicleOnServer,
@@ -193,11 +194,14 @@ function DocRow({
 
 export function Documents({
   draft,
+  fleet,
   onChange,
   onBack,
   onContinue,
 }: {
   draft: OnboardingDraft;
+  /** "drivers" = Driving only: no vehicle documents; drivers' papers come in the portal. */
+  fleet: FleetKind;
   onChange: (patch: Partial<OnboardingDraft>) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -248,9 +252,13 @@ export function Documents({
       <div style={O.stepEyebrow}>STEP 4 OF 5</div>
       <h1 style={O.h1Step}>Documents</h1>
       <p style={{ ...O.stepLede, marginBottom: 20 }}>
-        {isCompany
-          ? "Company papers, then the contact person's ID, then the papers for each vehicle."
-          : "Your own papers first, then the papers for each vehicle."}{" "}
+        {fleet === "drivers"
+          ? isCompany
+            ? "Company papers, then the contact person's ID. Each driver's papers come when you add them, after you submit."
+            : "Your own papers. Each driver's papers come when you add them, after you submit."
+          : isCompany
+            ? `Company papers, then the contact person's ID, then the papers for each ${FLEET_WORDS[fleet].one}.`
+            : `Your own papers first, then the papers for each ${FLEET_WORDS[fleet].one}.`}{" "}
         Photos are fine - every corner readable, including expiry dates. {ACCEPTED_DOC_LABEL} up to
         10MB.
       </p>
@@ -406,7 +414,7 @@ export function Documents({
       })}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <BackButton onClick={onBack}>← Back to vehicles</BackButton>
+        <BackButton onClick={onBack}>← Back to {FLEET_WORDS[fleet].many}</BackButton>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {showErrors && !allComplete && (
             <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>

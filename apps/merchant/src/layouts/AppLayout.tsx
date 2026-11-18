@@ -5,11 +5,12 @@ import { loadDraftFromServer } from "../lib/onboarding-draft.js";
 import { getMe } from "../lib/auth-api.js";
 import { AppHeader } from "../components/portal/AppHeader.js";
 import { SideNav } from "../components/portal/SideNav.js";
+import { navSections } from "../components/portal/nav-sections.js";
+import { useOffering } from "../lib/use-offering.js";
 import { MerchantStatusCard } from "../components/portal/MerchantStatusCard.js";
 import { ToastProvider } from "../components/portal/Toast.js";
 import { ErrorBoundary } from "../components/ErrorBoundary.js";
 import { P } from "../components/portal/styles.js";
-import { useVehicleList } from "../lib/vehicles-api.js";
 import { useBookingList } from "../lib/bookings-api.js";
 import { useDriverList } from "../lib/drivers-api.js";
 import { useNotificationUnread } from "../lib/notifications-api.js";
@@ -21,7 +22,6 @@ export function AppLayout(): ReactNode {
   // is just reading the merchant's name/company for the header chip.
   const { data: draft } = useQuery({ queryKey: ["onboarding"], queryFn: loadDraftFromServer });
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe });
-  const { data: vehicles } = useVehicleList("all");
   const { data: bookings } = useBookingList("all");
   const { data: drivers } = useDriverList();
   const { data: notificationUnread } = useNotificationUnread();
@@ -31,6 +31,7 @@ export function AppLayout(): ReactNode {
   const { pathname } = useLocation();
   const onDashboard = pathname === "/";
   const { data: profile } = useProfile();
+  const offering = useOffering();
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
   const company = draft?.ownerType === "company" ? draft.companyName || null : null;
@@ -48,10 +49,11 @@ export function AppLayout(): ReactNode {
         <div style={P.body}>
           <div style={P.bodyInner}>
             <SideNav
-              vehicleCount={vehicles?.counts.all ?? 0}
-              driverActionCount={drivers?.counts.needs_action ?? 0}
-              bookingCount={bookings?.counts.all ?? 0}
-              notificationUnread={notificationUnread ?? 0}
+              items={navSections(offering, {
+                driverActionCount: drivers?.counts.needs_action ?? 0,
+                bookingCount: bookings?.counts.all ?? 0,
+                notificationUnread: notificationUnread ?? 0,
+              })}
               footer={onDashboard ? <MerchantStatusCard /> : null}
             />
             <div style={P.main}>

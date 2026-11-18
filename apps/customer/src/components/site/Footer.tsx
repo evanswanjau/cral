@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { merchantLandingUrl } from "../../lib/merchant-app.js";
+import { LIVE_SERVICES } from "../../lib/services.js";
 
 /**
  * Public footer, reproduced from the "Cruz Ride Auto - Website" canvas.
@@ -9,11 +10,17 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
  * server-side; the client just doesn't surface it.
  */
 
+// The SERVICES column comes from the registry's live entries (UI1a,
+// docs/plans/ui-services-proposal.md 1.1 F1-F9 and 4.5): coming services
+// are never a column, only the one "What's coming" link to `/#coming`.
 const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
-    head: "HIRING A CAR",
+    head: "SERVICES",
+    links: [...LIVE_SERVICES.map((s): [string, string] => [s.label, s.href]), ["What's coming", "/#coming"]],
+  },
+  {
+    head: "HIRING WITH CRAL",
     links: [
-      ["Find a car", "/browse"],
       ["How it works", "/how-it-works"],
       ["How we protect you", "/how-we-protect-you"],
       ["Corporate hire", "/corporate"],
@@ -31,7 +38,7 @@ const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
     head: "CRAL",
     links: [
       ["About us", "/about"],
-      ["List your car", merchantLandingUrl()],
+      ["Earn with CRAL", merchantLandingUrl()],
     ],
   },
 ];
@@ -103,14 +110,18 @@ export function Footer(): JSX.Element {
                 maxWidth: 280,
               }}
             >
-              Kenya's one-stop shop for everything cars. We start with hire: each car's paperwork
-              is verified by our team to ensure your safety, and the licence and ID behind every
-              booking checked once.
+              One place for everything a vehicle needs in Kenya. Every vehicle's papers and every
+              driver's licence are read by our team before they appear, and every price is agreed
+              before you pay.
             </p>
-            <div style={{ font: "500 14px/1.6 'IBM Plex Mono',monospace", color: "#A7B0BE" }}>
-              +254 735 656066
-              <br />
-              hello@cral.co.ke
+            {/* tel: and mailto: links (UI7), each a 44px tap target. */}
+            <div style={{ display: "grid", justifyItems: "start", font: "500 14px/1.6 'IBM Plex Mono',monospace" }}>
+              <a href="tel:+254735656066" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+                +254 735 656066
+              </a>
+              <a href="mailto:hello@cral.co.ke" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+                hello@cral.co.ke
+              </a>
             </div>
           </div>
 

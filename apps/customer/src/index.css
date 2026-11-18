@@ -69,6 +69,40 @@ input::placeholder {
 }
 
 /*
+ * Masthead layout (UI1a): two rows on a phone (logo + account, then the
+ * service tabs scrolling sideways), one row from 960px (logo, tabs,
+ * account), per docs/plans/ui-services-proposal.md 5.1 and 5.2.
+ */
+.cral-mast {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    "logo . actions"
+    "tabs tabs tabs";
+  align-items: center;
+  column-gap: clamp(12px, 3vw, 34px);
+}
+.cral-mast-logo {
+  grid-area: logo;
+}
+.cral-mast-tabs {
+  grid-area: tabs;
+  min-width: 0;
+  margin: 0 -12px;
+}
+.cral-mast-actions {
+  grid-area: actions;
+}
+@media (min-width: 960px) {
+  .cral-mast {
+    grid-template-areas: "logo tabs actions";
+  }
+  .cral-mast-tabs {
+    margin: 0;
+  }
+}
+
+/*
  * Hero search bar: segmented fields with real hover/focus affordance.
  * Inline styles (used everywhere else on this page) can't express
  * :hover/:focus-within/::-webkit-calendar-picker-indicator, so this one
@@ -528,5 +562,29 @@ input::placeholder {
 @media (max-width: 560px) {
   .cral-spec-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/*
+ * Front door (pages/Home.tsx). On `/` the masthead is fixed and floats
+ * over the ink hero: two rows (111px) below 960px, one row (67px) from
+ * 960px. The hero's top padding clears it, and the in-page anchors
+ * (`/#how`, `/#coming`, the `/services` and `/parts` redirects) stop
+ * below it instead of under it.
+ */
+.cral-front-hero {
+  padding-top: 140px;
+}
+#how,
+#coming {
+  scroll-margin-top: 120px;
+}
+@media (min-width: 960px) {
+  .cral-front-hero {
+    padding-top: 128px;
+  }
+  #how,
+  #coming {
+    scroll-margin-top: 76px;
   }
 }

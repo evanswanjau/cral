@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const ADMIN_ROLES = ["admin_reviewer", "admin_finance", "admin_support", "admin_super"] as const;
+export const ADMIN_ROLES = [
+  "admin_reviewer",
+  "admin_finance",
+  "admin_support",
+  "admin_sales",
+  "admin_super",
+] as const;
 
 export const CreateAdminSchema = z.object({
   email: z.string().trim().toLowerCase().email(),

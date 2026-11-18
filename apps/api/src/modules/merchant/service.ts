@@ -1201,7 +1201,17 @@ export async function runDailyReminderSweep(): Promise<{
   accountsDeleted: number;
   idempotencyKeysPurged: number;
 }> {
-  const stalled = await db<MerchantRow>("merchants").where({ onboarding_submitted: false });
+  // An account a sales agent created and whose owner hasn't set a password
+  // yet is skipped: "Continue onboarding" would land on a sign-in they
+  // can't pass. The invite email is their way in, and the agent nudges.
+  const stalled = await db<MerchantRow>("merchants")
+    .where({ onboarding_submitted: false })
+    .whereNotExists(
+      db("users")
+        .whereRaw("users.id = merchants.user_id")
+        .whereNotNull("users.invited_at")
+        .whereNull("users.invite_accepted_at"),
+    );
   let sent = 0;
   for (const merchant of stalled) {
     const tier = await findDueTierForMerchant(merchant, new Date());

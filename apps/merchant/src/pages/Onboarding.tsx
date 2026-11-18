@@ -13,20 +13,35 @@ import {
   syncDraftToServer,
   type OnboardingDraft,
 } from "../lib/onboarding-draft.js";
-import { Welcome } from "../components/onboarding/steps/Welcome.js";
+import { WhatYouOffer } from "../components/onboarding/steps/WhatYouOffer.js";
+import { Drivers } from "../components/onboarding/steps/Drivers.js";
 import { YourDetails } from "../components/onboarding/steps/YourDetails.js";
 import { Vehicles } from "../components/onboarding/steps/Vehicles.js";
 import { Documents } from "../components/onboarding/steps/Documents.js";
 import { Review } from "../components/onboarding/steps/Review.js";
 import { Done } from "../components/onboarding/steps/Done.js";
 
-const STEPS = [
-  { n: 1, label: "Welcome" },
-  { n: 2, label: "Your details" },
-  { n: 3, label: "Vehicles" },
-  { n: 4, label: "Documents" },
-  { n: 5, label: "Review" },
-];
+import {
+  defaultCategory,
+  FLEET_WORDS,
+  fleetKind,
+  initialOffers,
+  isDriversOnlyChoice,
+  lockedOffers,
+  rememberPickedOffers,
+  type Offer,
+} from "../lib/onboarding-offer.js";
+
+/** Step 3's label follows what the merchant offers (lib/onboarding-offer.ts). */
+function stepsFor(fleetLabel: string) {
+  return [
+    { n: 1, label: "What you offer" },
+    { n: 2, label: "Your details" },
+    { n: 3, label: fleetLabel },
+    { n: 4, label: "Documents" },
+    { n: 5, label: "Review" },
+  ];
+}
 
 /**
  * Merchant onboarding wizard, built to the design bundle's rendered output
@@ -49,6 +64,11 @@ export function Onboarding(): JSX.Element {
   });
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [saved, setSaved] = useState(false);
+  // What the merchant offers: derived from the draft, never stored
+  // server-side (only Driving alone becomes `drivers_only`).
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const fleet = draft ? fleetKind(draft, offers) : "vehicles";
+  const STEPS = stepsFor(FLEET_WORDS[fleet].step);
   usePageTitle(
     draft ? `Onboarding - ${STEPS.find((s) => s.n === draft.step)?.label ?? "Set up"}` : "Onboarding",
   );
@@ -59,6 +79,7 @@ export function Onboarding(): JSX.Element {
   useEffect(() => {
     if (initialDraft && !draft) {
       resuming.current = initialDraft.step > 1 || initialDraft.vehicles.length > 0;
+      setOffers(initialOffers(initialDraft));
       setDraft(initialDraft);
     }
   }, [initialDraft, draft]);
@@ -150,9 +171,21 @@ export function Onboarding(): JSX.Element {
       });
   }
 
-  function goStep(n: number) {
-    commitAndSync({ step: n, maxStepReached: Math.max(draft?.maxStepReached ?? n, n) });
+  function goStep(n: number, extra: Partial<OnboardingDraft> = {}) {
+    commitAndSync({ ...extra, step: n, maxStepReached: Math.max(draft?.maxStepReached ?? n, n) });
     window.scrollTo({ top: 0 });
+  }
+
+  function pickOffers(next: Offer[]) {
+    setOffers(next);
+    rememberPickedOffers(next);
+  }
+
+  /** Leaving step 1: Driving alone (and no vehicle yet) is the one choice the server hears about. */
+  function continueFromOffer() {
+    if (!draft) return;
+    const driversOnly = isDriversOnlyChoice(offers) && draft.vehicles.length === 0;
+    goStep(2, { driversOnly });
   }
 
   const [submitting, setSubmitting] = useState(false);
@@ -170,6 +203,13 @@ export function Onboarding(): JSX.Element {
       await syncDraftToServer(draft);
       const next = await submitDraft();
       setDraft(next);
+      if (next.driversOnly && next.vehicles.length === 0) {
+        // Nothing to list but drivers: straight on to adding the first one.
+        // The cache is set first so RequireOnboarding sees "submitted".
+        queryClient.setQueryData(["onboarding"], next);
+        navigate("/drivers/new", { replace: true });
+        return;
+      }
       window.scrollTo({ top: 0 });
     } catch (err) {
       // The wizard's own client-side gates should normally prevent this - 
@@ -270,13 +310,28 @@ export function Onboarding(): JSX.Element {
         {draft.submitted ? (
           <Done draft={draft} onAddAnother={handleAddAnother} />
         ) : draft.step === 1 ? (
-          <Welcome onStart={() => goStep(2)} resuming={resuming.current} />
+          <WhatYouOffer
+            offers={offers}
+            locked={lockedOffers(draft)}
+            resuming={resuming.current}
+            onChange={pickOffers}
+            onContinue={continueFromOffer}
+          />
         ) : draft.step === 2 ? (
           <YourDetails draft={draft} onChange={patch} onBack={() => goStep(1)} onContinue={() => goStep(3)} />
+        ) : draft.step === 3 && fleet === "drivers" ? (
+          <Drivers onBack={() => goStep(2)} onContinue={() => goStep(4)} />
         ) : draft.step === 3 ? (
-          <Vehicles draft={draft} onChange={patch} onBack={() => goStep(2)} onContinue={() => goStep(4)} />
+          <Vehicles
+            draft={draft}
+            fleet={fleet}
+            newVehicleType={defaultCategory(offers)}
+            onChange={patch}
+            onBack={() => goStep(2)}
+            onContinue={() => goStep(4)}
+          />
         ) : draft.step === 4 ? (
-          <Documents draft={draft} onChange={patch} onBack={() => goStep(3)} onContinue={() => goStep(5)} />
+          <Documents draft={draft} fleet={fleet} onChange={patch} onBack={() => goStep(3)} onContinue={() => goStep(5)} />
         ) : (
           <>
             {submitError && <div style={{ marginBottom: 16 }}><ErrorBanner message={submitError} /></div>}

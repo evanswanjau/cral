@@ -1,104 +1,126 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
-import { PageHero, Section, Card, Body } from "../components/site/marketing.js";
-import { listDrivers, rateLine } from "../lib/drivers-api.js";
+import { getService, type LiveService } from "../lib/services.js";
+import { listDrivers } from "../lib/drivers-api.js";
+import { SubsiteHero } from "../components/subsite/SubsiteHero.js";
+import { HowItWorksSteps, type Step } from "../components/subsite/HowItWorksSteps.js";
+import { PriceExplainer, type PriceRow } from "../components/subsite/PriceExplainer.js";
+import { FaqList, type Faq } from "../components/subsite/FaqList.js";
+import { EarnBand } from "../components/subsite/EarnBand.js";
+import { DriverCountyPicker } from "../components/drivers/DriverCountyPicker.js";
+import { DriverList } from "../components/drivers/DriverList.js";
 
 /**
- * Hire a driver (owner's call, 2026-10-18 - docs/plans/drivers.md): a
- * driver for your own car. Not pulled from a canvas file - no driver
- * screen exists in any design bundle - so it is built in the same
- * confirmed-token idiom as Towing.tsx and the marketing pages.
+ * `/drivers`: the hire-a-driver sub-site landing (UI3). A checked driver
+ * for your own car (owner's call, 2026-10-18 - docs/plans/drivers.md).
+ * Public: the list and each driver's page at `/drivers/:id` open without
+ * an account; only sending a request asks for one.
  *
- * Every driver here is checked by CRAL (licence, ID, KRA PIN) and drives
- * for an approved merchant. A driver with one of the merchant's own cars
- * is booked from that car's page instead.
+ * Not from a canvas; built from tokens.ts and
+ * docs/plans/ui-services-proposal.md section 4.3 (Drivers column).
+ *
+ * Copy holds to how driver hire works today (docs/decisions/drivers.md,
+ * bookings-payouts.md): per day, per hour or per trip, whichever the
+ * driver offers; the owner they drive for has twelve hours to accept;
+ * M-Pesa once they do; the hirer's own insurance has to cover another
+ * driver. Only the public projection of a driver is ever shown. The
+ * supplier band points at the merchant site's `/join/drivers` (UI4).
  */
+
+const STEPS: Step[] = [
+  {
+    title: "Pick a driver",
+    body: "Choose a county and open a driver to see their rates. Each one drives for an owner CRAL has checked.",
+  },
+  {
+    title: "Say when, and what car",
+    body: "Pick the days, or the hours or trip, and tell the driver what car they will be driving. Sending a request is free.",
+  },
+  {
+    title: "The owner accepts, you pay",
+    body: "The owner the driver works for has twelve hours to say yes. Once they do, an M-Pesa prompt comes to your phone.",
+  },
+  {
+    title: "The driver arrives",
+    body: "Your booking holds the dates, the times and the price. The driver comes to you and drives your car.",
+  },
+];
+
+const PRICES: PriceRow[] = [
+  {
+    label: "Per day",
+    body: "The daily rate times the days you need the driver, from 09:00 on the first day to 17:00 on the last.",
+  },
+  {
+    label: "Per hour",
+    body: "The hourly rate times the hours between the start and end you pick, rounded up to the next hour.",
+  },
+  {
+    label: "Per trip",
+    body: "One price for a single trip on one day, whatever the time it takes. Only some drivers offer it.",
+  },
+  {
+    label: "When you pay",
+    body: "Nothing is charged for a request. You pay by M-Pesa only after the owner accepts, and the total does not change once they do.",
+  },
+];
+
+const FAQS: Faq[] = [
+  {
+    q: "Do I need an account to look at drivers?",
+    a: "No. You can see every driver and their rates without signing in. You sign in only to send a request.",
+  },
+  {
+    q: "What does CRAL check before a driver appears here?",
+    a: "A person at CRAL reads the driver's licence and ID, and the driver works for an owner CRAL has approved. Their documents stay private: you see their name, county and rates.",
+  },
+  {
+    q: "Whose car does the driver drive?",
+    a: "Yours. Tell them the make, colour and number plate when you send the request. Your own insurance needs to cover another driver.",
+  },
+  {
+    q: "What do I need before I can send a request?",
+    a: "A CRAL account with your phone number confirmed by SMS and a photo of your ID on file. The request page walks you through both.",
+  },
+  {
+    q: "Can I hire a car and a driver together?",
+    a: "Yes. Many cars on CRAL come with a driver, or let you add one. Pick the car first, and the car's page shows the drivers you can add.",
+  },
+];
+
 export function Drivers(): JSX.Element {
   useSeo({
-    title: "Hire a driver",
-    description: "A checked driver for your own car - by the day, the hour or the trip.",
+    title: "Hire a driver in Kenya",
+    description: "A checked driver for your own car, by the day, the hour or the trip. Pay by M-Pesa once the owner accepts.",
     path: "/drivers",
   });
-  const [county, setCounty] = useState("");
+  const service = getService("drivers") as LiveService;
+  const [params, setParams] = useSearchParams();
+  const county = params.get("county") ?? "";
   const { data, isLoading, error } = useQuery({ queryKey: ["catalog", "drivers"], queryFn: () => listDrivers() });
 
-  const counties = [...new Set((data?.data ?? []).map((d) => d.county))].sort();
-  const shown = (data?.data ?? []).filter((d) => !county || d.county === county);
+  const all = data?.data ?? [];
+  const counties = [...new Set(all.map((d) => d.county))].sort();
+  const shown = all.filter((d) => !county || d.county === county);
+
+  const pickCounty = (c: string) => setParams(c ? { county: c } : {}, { replace: true });
 
   return (
     <div>
-      <PageHero
-        kicker="HIRE A DRIVER"
-        title="A driver for your own car."
-        sub="Every driver is checked by CRAL - licence, ID and KRA PIN - and drives for an approved owner. Book by the day, the hour or the trip, and pay by M-Pesa once they accept."
+      <SubsiteHero service={service}>
+        <DriverCountyPicker counties={counties} county={county} onChange={pickCounty} total={data ? shown.length : null} />
+      </SubsiteHero>
+      <DriverList drivers={shown} isLoading={isLoading} failed={!!error} county={county} />
+      <HowItWorksSteps heading="A driver for your car in four steps." steps={STEPS} />
+      <PriceExplainer heading="You see the total before you send." rows={PRICES} />
+      <FaqList heading="Hiring a driver on CRAL" items={FAQS} />
+      <EarnBand
+        heading="Drive for a living?"
+        body="Join CRAL with your licence and ID, or add the drivers you already employ. You set the rates, and you are paid after each booking."
+        cta="Drive with CRAL"
+        joinPath="/join/drivers"
       />
-      <Section>
-        {counties.length > 1 && (
-          <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBottom: 16 }}>
-            {["", ...counties].map((c) => (
-              <button
-                key={c || "all"}
-                type="button"
-                onClick={() => setCounty(c)}
-                style={{
-                  height: 34,
-                  padding: "0 13px",
-                  borderRadius: 999,
-                  border: `1px solid ${county === c ? "#0B0F1A" : "#E4E7EC"}`,
-                  background: county === c ? "#0B0F1A" : "#FFFFFF",
-                  color: county === c ? "#FFFFFF" : "#333B4A",
-                  font: "600 13px/1 'Instrument Sans',sans-serif",
-                  cursor: "pointer",
-                }}
-              >
-                {c || "All counties"}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {isLoading && <Body>Loading drivers…</Body>}
-        {error && <Body>Couldn't load drivers. Try again in a moment.</Body>}
-        {data && shown.length === 0 && (
-          <Card>
-            <Body>No drivers are taking bookings here yet. Check back soon, or hire a car with a driver from Browse.</Body>
-          </Card>
-        )}
-
-        {shown.map((d) => (
-          <Link key={d.id} to={`/drivers/${d.id}`} style={{ textDecoration: "none", display: "block" }}>
-            <Card>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-                <span
-                  style={{
-                    width: 44,
-                    height: 44,
-                    borderRadius: 999,
-                    background: "#EDEFFC",
-                    color: "#0F23A8",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    font: "700 16px/1 Archivo,sans-serif",
-                    flex: "none",
-                  }}
-                >
-                  {d.display_name.charAt(0)}
-                </span>
-                <div style={{ flex: 1, minWidth: 180 }}>
-                  <div style={{ font: "600 16px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>{d.display_name}</div>
-                  <div style={{ font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                    {d.county} · drives for {d.merchant_name}
-                  </div>
-                </div>
-                <div style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", textAlign: "right" }}>{rateLine(d)}</div>
-              </div>
-            </Card>
-          </Link>
-        ))}
-      </Section>
     </div>
   );
 }

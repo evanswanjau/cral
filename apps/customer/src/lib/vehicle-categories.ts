@@ -65,10 +65,37 @@ export function specLine(car: {
   seats: number;
   transmission: string;
 }): string {
+  // Machinery is picked by what it is, not by seats (UI2b).
+  if (car.category === "machinery") return car.transmission === "manual" ? "Manual" : "Automatic";
   if (car.category === "truck" && (car.truck_type || car.payload_kg)) {
     return [truckTypeLabel(car.truck_type), car.payload_kg ? `carries ${formatPayload(car.payload_kg)}` : ""]
       .filter(Boolean)
       .join(" · ");
   }
   return `${car.seats} seats · ${car.transmission === "manual" ? "Manual" : "Auto"}`;
+}
+
+/**
+ * Where a listing lives on the site: trucks and machinery each have a
+ * sub-site of their own (UI2a, UI2b), everything else is a car. The
+ * detail page is `${base}/:id`; the booking is `${base}/:id/request` for a
+ * truck and `${base}/:id/book` otherwise.
+ */
+export function listingBase(category: string): "/trucks" | "/machinery" | "/cars" {
+  if (category === "truck") return "/trucks";
+  if (category === "machinery") return "/machinery";
+  return "/cars";
+}
+
+/** Cars are picked by seats and offered self-drive; trucks and machinery are not. */
+export function isCarCategory(category: string): boolean {
+  return category !== "truck" && category !== "machinery";
+}
+
+/** "car", "truck" or "machine": the noun for a listing in running copy
+ * (UI7), so a truck booking isn't told "the car is yours". */
+export function vehicleNoun(category: string): "car" | "truck" | "machine" {
+  if (category === "truck") return "truck";
+  if (category === "machinery") return "machine";
+  return "car";
 }

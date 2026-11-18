@@ -59,6 +59,8 @@ export const CheckPasswordResetSchema = z.object({
 export const ResetPasswordSchema = z.object({
   token: z.string().min(1),
   new_password: z.string().min(10),
+  // Only an agent-created account has no terms on file; ignored otherwise.
+  accepted_terms_version: z.string().trim().min(1).max(40).optional(),
 });
 
 export const ChangePasswordSchema = z.object({

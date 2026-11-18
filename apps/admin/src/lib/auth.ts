@@ -42,7 +42,7 @@ export function getRefreshToken(): string | null {
 
 export interface AdminClaims {
   sub: string;
-  role: "admin_reviewer" | "admin_finance" | "admin_support" | "admin_super";
+  role: "admin_reviewer" | "admin_finance" | "admin_support" | "admin_sales" | "admin_super";
 }
 
 /**

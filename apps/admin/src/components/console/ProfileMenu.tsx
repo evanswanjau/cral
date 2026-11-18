@@ -104,7 +104,10 @@ export function ProfileMenu({
                     note: "What reaches your phone vs inbox",
                     to: "/settings/notifications",
                   },
-                ].map((it) => (
+                ]
+                  // A sales agent's console is two screens; Settings isn't one.
+                  .filter((it) => role !== "admin_sales" || !it.to.startsWith("/settings"))
+                  .map((it) => (
                   <button
                     key={it.to}
                     type="button"

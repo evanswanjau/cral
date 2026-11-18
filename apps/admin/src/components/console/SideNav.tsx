@@ -20,6 +20,10 @@ interface Leaf {
   kind: "leaf";
   to: string;
   label: string;
+  /** What `admin_super` reads instead, where the role's own wording would be wrong for an owner. */
+  superLabel?: string;
+  /** Match the path exactly, so a parent doesn't light up on its child's page. */
+  end?: boolean;
   roles: AdminRole[];
   built: boolean;
 }
@@ -42,6 +46,18 @@ const ITEMS: Item[] = [
   { kind: "leaf", to: "/bookings", label: "Bookings", roles: ["admin_support"], built: true },
   { kind: "leaf", to: "/services", label: "Services", roles: ["admin_support", "admin_reviewer"], built: true },
   { kind: "leaf", to: "/payouts", label: "Payouts", roles: ["admin_finance"], built: true },
+  // A sales agent (`admin_sales`) sees these two and nothing else (Phase 3,
+  // PR AG1). An owner sees every agent's sign-ups under the first.
+  {
+    kind: "leaf",
+    to: "/my-merchants",
+    label: "My merchants",
+    superLabel: "Agent sign-ups",
+    end: true,
+    roles: ["admin_sales"],
+    built: true,
+  },
+  { kind: "leaf", to: "/my-merchants/new", label: "Add merchant", roles: ["admin_sales"], built: true },
   { kind: "leaf", to: "/invoicing", label: "Invoicing", roles: ["admin_finance"], built: false },
   { kind: "leaf", to: "/disputes", label: "Disputes", roles: ["admin_support"], built: false },
   // `admin_super`-only, same reach as Team/Settings — real money, every
@@ -78,7 +94,7 @@ export function SideNav({ role }: { role: AdminRole }): JSX.Element {
             <NavLink
               key={it.to}
               to={it.to}
-              end={it.to === "/"}
+              end={it.end ?? it.to === "/"}
               style={({ isActive }) => ({
                 ...C.navItem,
                 background: isActive ? "#F1F3F6" : "transparent",
@@ -88,7 +104,7 @@ export function SideNav({ role }: { role: AdminRole }): JSX.Element {
               {({ isActive }) => (
                 <>
                   <span style={{ ...C.navDot, background: isActive ? "#0F23A8" : "#E4E7EC" }} />
-                  <span style={C.navLabel}>{it.label}</span>
+                  <span style={C.navLabel}>{role === "admin_super" && it.superLabel ? it.superLabel : it.label}</span>
                 </>
               )}
             </NavLink>

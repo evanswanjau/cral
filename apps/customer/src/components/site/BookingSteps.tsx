@@ -19,6 +19,19 @@ export const BOOKING_STEPS = ["Request", "Owner accepts", "Pay", "Confirmed"] as
 /** A first-timer signs up inline, which pushes everything along one. */
 export const NEW_ACCOUNT_BOOKING_STEPS = ["Your account", "Request", "Owner accepts", "Pay"] as const;
 
+/**
+ * A truck job (UI2a, proposal 5.4) starts with the route. A quoted truck
+ * - per km, per tonne, or "quote me first" - then waits on the owner's
+ * price, which the renter accepts and pays in one go; a flat-priced truck
+ * waits on the owner accepting, like a car. Same four slots either way,
+ * so `doneIndex` means the same thing on every rail.
+ */
+export function bookingSteps(kind: "car" | "truck" | "quote", newAccount: boolean): readonly string[] {
+  if (kind === "car") return newAccount ? NEW_ACCOUNT_BOOKING_STEPS : BOOKING_STEPS;
+  const middle = kind === "quote" ? "Price" : "Owner accepts";
+  return newAccount ? ["Your account", "Route", middle, "Pay"] : ["Route", middle, "Pay", "Booked"];
+}
+
 export function BookingSteps({
   steps,
   doneIndex,

@@ -1,0 +1,9 @@
+Placeholder hero photos for the service sub-sites (lib/services.ts `photo`).
+Unsplash photos are under the Unsplash License - free to use, no attribution required.
+Swap for real CRAL photography by replacing the file with the same name.
+
+cars.jpg - reused from apps/customer/src/assets/hero/xtrail.jpg (the home hero's X-Trail)
+trucks.jpg - "white and blue truck on road during daytime" by Tiry Nelson Gono - https://unsplash.com/photos/h-kD4142VIQ
+machinery.jpg - "yellow Caterpillar excavator digging up dirt" by Jamar Penny - https://unsplash.com/photos/ZgmGq_eFmUs
+drivers.jpg - "a man driving a car with his hand on the steering wheel" by Harry Borrett - https://unsplash.com/photos/HX-bfYDSXlA
+towing.jpg - "a black car is being transported by a flatbed truck" by Nazar Dremach - https://unsplash.com/photos/wevZ9CYl4KM

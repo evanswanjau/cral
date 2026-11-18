@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { searchCatalog, getCounties, type CatalogSearchParams } from "../lib/catalog-api.js";
@@ -7,8 +7,8 @@ import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import { Dropdown, PIN_ICON, type DropdownOption } from "../components/site/Dropdown.js";
 import { Popover, PopoverGroup, ChoiceRow } from "../components/site/Popover.js";
 import { Skeleton, VehicleCardSkeletonGrid } from "../components/site/Skeleton.js";
+import { DatePill } from "../components/site/DatePill.js";
 import { TRUCK_TYPES, VEHICLE_CATEGORIES, type VehicleCategory } from "../lib/vehicle-categories.js";
-import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import { earliestPickupDay } from "../lib/hire-dates.js";
 
 /**
@@ -52,6 +52,12 @@ const CATEGORY_OPTIONS: DropdownOption[] = [
   ...VEHICLE_CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
 ];
 
+// `/cars/search` offers car categories only; trucks and machinery have
+// searches of their own (`/trucks/search`, `/machinery/search`).
+const CAR_CATEGORY_OPTIONS: DropdownOption[] = CATEGORY_OPTIONS.filter(
+  (o) => o.value !== "truck" && o.value !== "machinery",
+);
+
 // Truck-only filters (PR T1) - shown once "Truck & trailers" is picked.
 const TRUCK_TYPE_OPTIONS: DropdownOption[] = [
   { value: "", label: "Any truck" },
@@ -93,13 +99,6 @@ const SORT_OPTIONS: DropdownOption[] = [
   { value: "rating_desc", label: "Best-rated owners" },
 ];
 
-const CALENDAR_ICON = (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="5" width="18" height="16" rx="2" />
-    <path d="M3 10h18M8 3v4M16 3v4" />
-  </svg>
-);
-
 const SLIDERS_ICON = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h10M18 18h2" />
@@ -115,87 +114,6 @@ const SORT_ICON = (
     <path d="M18 8v12l3.5-3.5" />
   </svg>
 );
-
-/** "23 Sep" - a tag and a pill have no room for a full date. */
-function shortDay(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-").map(Number);
-  if (!y || !m || !d) return iso;
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-KE", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  });
-}
-
-/**
- * A date field wearing the pill shape - so "where", "when" and "what
- * kind" are three controls of the same weight on one line. The native
- * `<input type="date">` is the real control (keyboard, and a phone's own
- * picker), laid over the pill at zero opacity; the pill's click opens it
- * through `showPicker()` rather than making the renter hit the tiny
- * calendar glyph. Browsers without `showPicker` still focus the input.
- */
-function DatePill({
-  label,
-  value,
-  min,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  min?: string | undefined;
-  onChange: (value: string) => void;
-}): JSX.Element {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const open = () => {
-    const el = inputRef.current;
-    if (!el) return;
-    try {
-      el.showPicker();
-    } catch {
-      el.focus();
-    }
-  };
-  return (
-    <label className="cral-pill cral-pill-date" data-active={value ? "true" : undefined} onClick={open}>
-      {CALENDAR_ICON}
-      <span className="cral-pill-date-label">{label}</span>
-      <span>{value ? shortDay(value) : "Any day"}</span>
-      <input
-        ref={inputRef}
-        type="date"
-        aria-label={label}
-        value={value}
-        min={min}
-        onChange={(e) => onChange(e.target.value)}
-      />
-      {value && (
-        <span
-          role="button"
-          tabIndex={0}
-          aria-label={`Clear ${label.toLowerCase()} date`}
-          className="cral-pill-clear"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onChange("");
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onChange("");
-            }
-          }}
-        >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6">
-            <path d="M18 6 6 18M6 6l12 12" />
-          </svg>
-        </span>
-      )}
-    </label>
-  );
-}
 
 /** Every panel closes the same way: reset this group, or done. */
 function PanelFoot({
@@ -255,6 +173,7 @@ function PanelFoot({
 }
 
 export function Browse(): JSX.Element {
+  const carsOnly = useLocation().pathname.startsWith("/cars/search");
   useSeo({
     title: "Find a car",
     // The tab reads "Find a car", with no site suffix after it.
@@ -264,7 +183,7 @@ export function Browse(): JSX.Element {
       // the review the same way the page's own line is - the two say one
       // thing, not two different ones.
       "Hire a car anywhere in Kenya, self-drive or with a driver. Every car is reviewed by CRAL before it's listed.",
-    path: "/browse",
+    path: carsOnly ? "/cars/search" : "/browse",
   });
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -426,10 +345,6 @@ export function Browse(): JSX.Element {
           </p>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <HireDriverBanner compact />
-        </div>
-
         {/* ---- filters, on top ---- */}
         <div
           className="cral-filterbar"
@@ -500,7 +415,7 @@ export function Browse(): JSX.Element {
                     <ChoiceRow
                       name="Body type"
                       value={category}
-                      options={CATEGORY_OPTIONS}
+                      options={carsOnly ? CAR_CATEGORY_OPTIONS : CATEGORY_OPTIONS}
                       onChange={(v) =>
                         set({
                           category: v || undefined,

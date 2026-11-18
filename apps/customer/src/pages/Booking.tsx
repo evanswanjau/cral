@@ -1,38 +1,25 @@
 import { useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { CodeInput } from "@cral/ui";
 import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { getCatalogVehicle, formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { isCarCategory, listingBase, vehicleNoun, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { createBooking, listMyBookings } from "../lib/bookings-api.js";
 import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 import {
   register as registerAccount,
   login,
-  startPhoneVerification,
-  confirmPhoneVerification,
-  updateMyPhone,
   getMe,
 } from "../lib/auth-api.js";
 import { uploadRenterDocument, type RenterDocKind } from "../lib/documents-api.js";
 import { useIsAuthenticated, setSession, deviceId, TERMS_VERSION } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
-import {
-  BOOKING_STEPS,
-  BookingSteps,
-  NEW_ACCOUNT_BOOKING_STEPS,
-} from "../components/site/BookingSteps.js";
-import {
-  earliestPickupDay,
-  earliestReturnDay,
-  formatHireDate,
-  hireDays,
-  hireInstants,
-} from "../lib/hire-dates.js";
+import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
+import { PhoneVerify } from "../components/subsite/PhoneVerify.js";
+import { routeFromParams } from "../lib/truck-route.js";
+import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays, hireInstants } from "../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
 import {
-  EMPTY_TRUCK_ROUTE,
   TruckRouteFields,
   truckRequestFields,
   truckRouteProblem,
@@ -216,8 +203,9 @@ export function Booking(): JSX.Element {
 
   const key = draftKey(id ?? "", from, to);
   const [note, setNote] = useState(() => readDraft(key));
-  // Truck listings only (PR T2): where from, where to, and what.
-  const [route, setRoute] = useState<TruckRouteDraft>(EMPTY_TRUCK_ROUTE);
+  // Truck listings only (PR T2): where from, where to, and what - filled
+  // in from the query `/trucks/:id` sends (UI2a, lib/truck-route.ts).
+  const [route, setRoute] = useState<TruckRouteDraft>(() => routeFromParams(params));
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -244,11 +232,6 @@ export function Booking(): JSX.Element {
   const [editingDates, setEditingDates] = useState(false);
   const [draftFrom, setDraftFrom] = useState(from);
   const [draftTo, setDraftTo] = useState(to);
-
-  const [code, setCode] = useState("");
-  const [maskedPhone, setMaskedPhone] = useState("");
-  const [editingPhone, setEditingPhone] = useState(false);
-  const [newPhone, setNewPhone] = useState("");
 
   const [accountExists, setAccountExists] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -288,13 +271,20 @@ export function Booking(): JSX.Element {
     setParams(p, { replace: true });
   };
 
-  usePageTitle(car ? `Book ${car.make} ${car.model}` : "Book a car");
+  usePageTitle(car ? `Book ${car.make} ${car.model}` : "Book");
 
   useEffect(() => writeDraft(key, note), [key, note]);
 
+  // A truck is requested at `/trucks/:id/request`, machinery at
+  // `/machinery/:id/book`, a car at `/cars/:id/book` (UI2a, UI2b); the
+  // wrong one forwards, query kept. No dates: back to the listing's page.
+  const base = `${car ? listingBase(car.category) : "/cars"}/${id}`;
+  const own = car?.category === "truck" ? `${base}/request` : `${base}/book`;
   useEffect(() => {
-    if (!isLoading && (!from || !to) && id) navigate(`/cars/${id}`, { replace: true });
-  }, [isLoading, from, to, id, navigate]);
+    if (isLoading || !id) return;
+    if (!from || !to) navigate(base, { replace: true });
+    else if (car && !window.location.pathname.startsWith(own)) navigate(`${own}?${params}`, { replace: true });
+  }, [isLoading, from, to, id, car, base, own, params, navigate]);
 
   useEffect(() => {
     if (!mine || !id) return;
@@ -348,8 +338,8 @@ export function Booking(): JSX.Element {
   // A truck request isn't sendable until it says from where, to where and what.
   const isTruck = car.category === "truck";
   const routeProblem = isTruck ? truckRouteProblem(route, car.payload_kg) : null;
-  const here = `/book/${id}?from=${from}&to=${to}`;
-  const steps = isAuthenticated ? BOOKING_STEPS : NEW_ACCOUNT_BOOKING_STEPS;
+  const here = `${own}?${params}`;
+  const steps = bookingSteps(isTruck ? (car.quoted ? "quote" : "truck") : "car", !isAuthenticated);
   const doneIndex = isAuthenticated ? 0 : stage === "account" ? 0 : 1;
 
   const failWith = (e: unknown) => {
@@ -433,7 +423,8 @@ export function Booking(): JSX.Element {
           // offers /documents, and either can be added there.
         }
       }
-      await sendCode();
+      // PhoneVerify sends the first code itself as it mounts.
+      setStage("verify");
     } catch (e) {
       failWith(e);
     } finally {
@@ -455,51 +446,6 @@ export function Booking(): JSX.Element {
     setEditingDates(false);
   };
 
-  const sendCode = async () => {
-    setError(null);
-    try {
-      const res = await startPhoneVerification();
-      setMaskedPhone(res.masked_destination);
-      setStage("verify");
-    } catch (e) {
-      failWith(e);
-      setStage("verify");
-    }
-  };
-
-  const confirmCode = async () => {
-    setError(null);
-    if (code.trim().length < 4) {
-      setError({ code: "code_required", message: "Enter the code we texted you." });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await confirmPhoneVerification(code.trim());
-      setCode("");
-      setStage("review");
-    } catch (e) {
-      failWith(e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const savePhone = async () => {
-    setError(null);
-    setSubmitting(true);
-    try {
-      await updateMyPhone(newPhone);
-      setEditingPhone(false);
-      setNewPhone("");
-      await sendCode();
-    } catch (e) {
-      failWith(e);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const submitRequest = async () => {
     setError(null);
     setSubmitting(true);
@@ -517,7 +463,7 @@ export function Booking(): JSX.Element {
       navigate(`/bookings/${result.id}`, { replace: true });
     } catch (e) {
       if (e instanceof ApiClientError && e.code === "phone_verification_required") {
-        await sendCode();
+        setStage("verify");
         return;
       }
       failWith(e);
@@ -731,138 +677,15 @@ export function Booking(): JSX.Element {
                 >
                   Creating an account accepts our{" "}
                   <Link to="/legal" style={{ color: "#5A6373", textDecoration: "underline" }}>
-                    terms and conditions
-                  </Link>{" "}
-                  and{" "}
-                  <Link to="/legal" style={{ color: "#5A6373", textDecoration: "underline" }}>
-                    privacy policy
+                    terms and privacy policy
                   </Link>
                   .
                 </p>
               </div>
             )}
 
-            {/* ---- verify the phone ---- */}
-            {stage === "verify" && (
-              <div>
-                <h1
-                  style={{
-                    margin: "0 0 8px",
-                    font: "700 clamp(22px,2.8vw,29px)/1.12 Archivo,sans-serif",
-                    fontVariationSettings: "'wdth' 108",
-                    letterSpacing: "-.025em",
-                    color: "#0B0F1A",
-                  }}
-                >
-                  Confirm your phone number.
-                </h1>
-                <p style={{ margin: "0 0 20px", font: "400 15px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  {maskedPhone
-                    ? `We've sent an SMS code to ${maskedPhone}. Enter it below to continue.`
-                    : "We've sent you an SMS code. Enter it below to continue."}
-                </p>
-
-                {editingPhone ? (
-                  <div style={{ display: "grid", gap: 12, marginBottom: 18 }}>
-                    <label style={{ display: "block" }}>
-                      <span style={label}>Your phone number</span>
-                      <input
-                        type="tel"
-                        autoComplete="tel"
-                        value={newPhone}
-                        onChange={(e) => setNewPhone(e.target.value)}
-                        placeholder="0722 000 000"
-                        style={monoField}
-                      />
-                    </label>
-                    {error && <ErrorNote>{error.message}</ErrorNote>}
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                      <button
-                        type="button"
-                        onClick={savePhone}
-                        disabled={submitting || !newPhone}
-                        style={{ ...primaryButton, width: "auto", padding: "0 20px" }}
-                      >
-                        {submitting ? "Saving…" : "Save and send a code"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPhone(false);
-                          setError(null);
-                        }}
-                        style={{
-                          height: 50,
-                          padding: "0 20px",
-                          background: "#FFFFFF",
-                          color: "#333B4A",
-                          border: "1px solid #E4E7EC",
-                          borderRadius: 8,
-                          font: "600 15px/1 'Instrument Sans',sans-serif",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div style={{ marginBottom: 18 }}>
-                      <span style={label}>The six-digit code</span>
-                      <CodeInput label="The six-digit code" value={code} onChange={setCode} autoFocus />
-                    </div>
-
-                    {error && <ErrorNote>{error.message}</ErrorNote>}
-
-                    <button type="button" onClick={confirmCode} disabled={submitting} style={primaryButton}>
-                      {submitting ? "Checking…" : "Confirm and continue"}
-                    </button>
-                    <div
-                      style={{
-                        display: "flex",
-                        gap: 14,
-                        justifyContent: "center",
-                        flexWrap: "wrap",
-                        marginTop: 13,
-                      }}
-                    >
-                      <button
-                        type="button"
-                        onClick={sendCode}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          font: "500 13px/1 'Instrument Sans',sans-serif",
-                          color: "#0F23A8",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Send it again
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditingPhone(true);
-                          setError(null);
-                        }}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          padding: 0,
-                          font: "500 13px/1 'Instrument Sans',sans-serif",
-                          color: "#5A6373",
-                          cursor: "pointer",
-                        }}
-                      >
-                        Use a different number
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
+            {/* ---- verify the phone (components/subsite/PhoneVerify.tsx) ---- */}
+            {stage === "verify" && <PhoneVerify headingLevel="h1" onVerified={() => setStage("review")} />}
 
             {/* ---- review and send ---- */}
             {stage === "review" && (
@@ -1019,7 +842,7 @@ export function Booking(): JSX.Element {
                     )}
                     {driver && driverTotal === null && (
                       <span style={{ display: "block", marginTop: 6, font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#8A5200" }}>
-                        This driver doesn't offer a per-{car.hiring_unit} rate for this car. Pick another, or go without.
+                        This driver doesn't offer a per-{car.hiring_unit} rate for this {vehicleNoun(car.category)}. Pick another, or go without.
                       </span>
                     )}
                   </label>
@@ -1086,7 +909,7 @@ export function Booking(): JSX.Element {
                       color: "#A50E22",
                     }}
                   >
-                    This car is hired for {car.minimum_hire_days} days at a time.{" "}
+                    This {vehicleNoun(car.category)} is hired for {car.minimum_hire_days} days at a time.{" "}
                     <button
                       type="button"
                       onClick={openDateEditor}
@@ -1210,9 +1033,9 @@ export function Booking(): JSX.Element {
               {car.registration} · {car.county ?? "Location on request"}
             </div>
             <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
-              {VEHICLE_CATEGORY_LABEL[car.category] ?? car.category} · {car.seats} seats ·{" "}
-              {car.transmission === "manual" ? "Manual" : "Auto"} · {car.fuel} ·{" "}
-              {car.chauffeured ? "With driver" : "Self-drive"}
+              {VEHICLE_CATEGORY_LABEL[car.category] ?? car.category} · {isCarCategory(car.category) ? `${car.seats} seats · ` : ""}
+              {car.transmission === "manual" ? "Manual" : "Auto"} · {car.fuel}
+              {car.chauffeured ? " · With driver" : isCarCategory(car.category) ? " · Self-drive" : ""}
             </div>
             <div style={{ display: "grid", gap: 9, paddingTop: 14, borderTop: "1px solid #F1F3F6" }}>
               <Row label={`${formatHireDate(from)} - ${formatHireDate(to)}`} value={`${days} day${days > 1 ? "s" : ""}`} />
