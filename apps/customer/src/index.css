@@ -564,3 +564,27 @@ input::placeholder {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/*
+ * Front door (pages/Home.tsx). On `/` the masthead is fixed and floats
+ * over the ink hero: two rows (111px) below 960px, one row (67px) from
+ * 960px. The hero's top padding clears it, and the in-page anchors
+ * (`/#how`, `/#coming`, the `/services` and `/parts` redirects) stop
+ * below it instead of under it.
+ */
+.cral-front-hero {
+  padding-top: 140px;
+}
+#how,
+#coming {
+  scroll-margin-top: 120px;
+}
+@media (min-width: 960px) {
+  .cral-front-hero {
+    padding-top: 128px;
+  }
+  #how,
+  #coming {
+    scroll-margin-top: 76px;
+  }
+}

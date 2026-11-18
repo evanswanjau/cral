@@ -8,7 +8,8 @@ import { Section, bodyText } from "./Section.js";
  *
  * Rows are not links: there is no page behind them yet. Each row has one
  * real "Tell me when it opens" `mailto:` hand-off, the same decision
- * `VerticalPage.tsx` records (no fake sign-up form that goes nowhere).
+ * `VerticalPage.tsx` recorded before UI1b removed it (no fake sign-up
+ * form that goes nowhere).
  * The pill is neutral grey with a word, never a status colour.
  *
  * Not from a canvas; built from tokens.ts and
