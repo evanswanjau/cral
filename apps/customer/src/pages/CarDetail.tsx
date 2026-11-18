@@ -5,7 +5,7 @@ import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js"
 import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
-import { formatPayload, specLine, truckTypeLabel, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { formatPayload, isCarCategory, listingBase, specLine, truckTypeLabel, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { HIRING_UNIT_LABEL, unitRate } from "../lib/hiring-units.js";
 import { CarRequestPanel } from "../components/cars/CarRequestPanel.js";
 import { TruckRequestPanel } from "../components/subsite/TruckRequestPanel.js";
@@ -39,12 +39,13 @@ export function CarDetail(): JSX.Element {
    * state, so that case falls back to the unfiltered search rather than
    * `history.back()`, which would leave the site.
    */
-  // `/trucks/:id` renders this page too (UI2a) and goes back to the truck
-  // search; machinery keeps `/browse` until UI2b.
-  const onTrucks = location.pathname.startsWith("/trucks/");
-  const state = location.state as { browseSearch?: string; truckSearch?: string } | null;
-  const backSearch = (onTrucks ? state?.truckSearch : state?.browseSearch) ?? "";
-  const backBase = onTrucks ? "/trucks/search" : /(^|&)category=machinery(&|$)/.test(backSearch) ? "/browse" : "/cars/search";
+  // `/trucks/:id` (UI2a) and `/machinery/:id` (UI2b) render this page too,
+  // each going back to its own sub-site's search.
+  const path = location.pathname;
+  const base = path.startsWith("/trucks/") ? "/trucks" : path.startsWith("/machinery/") ? "/machinery" : "/cars";
+  const state = location.state as { browseSearch?: string; truckSearch?: string; machinerySearch?: string } | null;
+  const backSearch = (base === "/trucks" ? state?.truckSearch : base === "/machinery" ? state?.machinerySearch : state?.browseSearch) ?? "";
+  const backBase = `${base}/search`;
   const backTo = backSearch ? `${backBase}?${backSearch}` : backBase;
   const navigate = useNavigate();
   const { data: car, isLoading, isError } = useQuery({
@@ -60,7 +61,7 @@ export function CarDetail(): JSX.Element {
     description: car
       ? `${carName} in ${car.county ?? "Kenya"} - ${formatMoney(unitRate(car))} / ${HIRING_UNIT_LABEL[car.hiring_unit]}. Documents read, no booking fee.`
       : undefined,
-    path: id ? `/${onTrucks ? "trucks" : "cars"}/${id}` : undefined,
+    path: id ? `${base}/${id}` : undefined,
     // AggregateRating only when this CAR has a real rating. Deliberately
     // `car.rating`, not `car.owner_rating`: the enclosing type is
     // `Vehicle`, so reporting the owner's whole-account reviewCount here
@@ -138,13 +139,11 @@ export function CarDetail(): JSX.Element {
     );
   }
 
-  // A truck lives at `/trucks/:id` and nothing else does (UI2a). Kept
-  // forever: old links and the sitemap still say `/cars/:id`.
+  // A truck lives at `/trucks/:id`, machinery at `/machinery/:id` (UI2a,
+  // UI2b). Kept forever: old links and the sitemap said `/cars/:id`.
   const isTruck = car.category === "truck";
-  if (isTruck !== onTrucks) {
-    const home = isTruck ? `/trucks/${car.id}` : `/cars/${car.id}`;
-    return <Navigate to={`${home}${location.search}`} replace />;
-  }
+  const isCar = isCarCategory(car.category);
+  if (listingBase(car.category) !== base) return <Navigate to={`${listingBase(car.category)}/${car.id}${location.search}`} replace />;
 
   const name = `${car.make} ${car.model} ${car.year}`;
   // The icon reinforces the overline, never replaces it - every cell
@@ -161,9 +160,9 @@ export function CarDetail(): JSX.Element {
       : []),
     { k: "TRANSMISSION", v: car.transmission === "manual" ? "Manual" : "Automatic", icon: "transmission" },
     { k: "FUEL", v: car.fuel, icon: "fuel" },
-    // Seats and "Self-drive" are how a car is picked, not a truck (UI2a).
-    ...(isTruck ? [] : [{ k: "SEATS", v: String(car.seats), icon: "seats" as SpecIconName }]),
-    ...(isTruck && !car.chauffeured
+    // Seats and "Self-drive" are how a car is picked, not a truck or machinery (UI2a, UI2b).
+    ...(isCar ? [{ k: "SEATS", v: String(car.seats), icon: "seats" as SpecIconName }] : []),
+    ...(!isCar && !car.chauffeured
       ? []
       : [{ k: "DRIVER", v: car.chauffeured ? "Comes with driver" : "Self-drive", icon: "driver" as SpecIconName }]),
     car.hiring_unit === "day"
@@ -188,7 +187,7 @@ export function CarDetail(): JSX.Element {
             marginBottom: 14,
           }}
         >
-          ← All {isTruck ? "trucks" : "cars"}{car.county ? ` in ${car.county}` : ""}
+          ← All {isTruck ? "trucks" : isCar ? "cars" : "machinery"}{car.county ? ` in ${car.county}` : ""}
         </button>
 
         <div style={{ display: "flex", gap: "clamp(18px,2.6vw,30px)", alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -326,7 +325,7 @@ export function CarDetail(): JSX.Element {
                */}
               <span style={{ font: "400 14px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
                 {specLine(car)}
-                {car.chauffeured ? " · With driver" : isTruck ? "" : " · Self-drive"}
+                {car.chauffeured ? " · With driver" : isCar ? " · Self-drive" : ""}
               </span>
               <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
               {/*

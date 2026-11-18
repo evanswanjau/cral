@@ -24,7 +24,7 @@ afterAll(async () => {
   await db.destroy();
 });
 
-async function merchantWithVehicle(opts: { approved?: boolean; status?: string }) {
+async function merchantWithVehicle(opts: { approved?: boolean; status?: string; type?: string }) {
   const userId = generateId("user");
   await db("users").insert({
     id: userId,
@@ -56,7 +56,7 @@ async function merchantWithVehicle(opts: { approved?: boolean; status?: string }
   await db("vehicles").insert({
     id: vehicleId,
     merchant_id: merchantId,
-    type: "sedan",
+    type: opts.type ?? "sedan",
     make: "Toyota",
     model: "Axio",
     year: "2019",
@@ -86,10 +86,25 @@ describe("GET /sitemap.xml", () => {
     expect(res.status).toBe(200);
     expect(res.headers["content-type"]).toContain("application/xml");
     expect(res.text).toContain("<urlset");
-    expect(res.text).toContain("https://cral.co.ke/browse");
+    expect(res.text).not.toContain("https://cral.co.ke/browse");
     expect(res.text).toContain("https://cral.co.ke/how-it-works");
+    for (const path of ["/cars", "/cars/search", "/trucks", "/trucks/search", "/machinery", "/machinery/search", "/drivers"]) {
+      expect(res.text).toContain(`<loc>https://cral.co.ke${path}</loc>`);
+    }
     expect(res.text).toContain(`/cars/${visible}`);
     expect(res.text).not.toContain(`/cars/${pausedOne}`);
     expect(res.text).not.toContain(`/cars/${unapprovedOne}`);
+  });
+
+  it("lists each vehicle under its sub-site's path", async () => {
+    const truck = await merchantWithVehicle({ type: "truck" });
+    const machine = await merchantWithVehicle({ type: "machinery" });
+
+    const res = await request(app).get("/sitemap.xml");
+
+    expect(res.text).toContain(`https://cral.co.ke/trucks/${truck}`);
+    expect(res.text).toContain(`https://cral.co.ke/machinery/${machine}`);
+    expect(res.text).not.toContain(`/cars/${truck}`);
+    expect(res.text).not.toContain(`/cars/${machine}`);
   });
 });

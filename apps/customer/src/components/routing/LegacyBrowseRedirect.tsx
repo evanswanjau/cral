@@ -1,5 +1,4 @@
 import { Navigate, useLocation } from "react-router-dom";
-import { Browse } from "../../pages/Browse.js";
 
 /**
  * `/browse?...` -> `/cars/search?...`, query kept. Kept forever: shared
@@ -10,8 +9,8 @@ import { Browse } from "../../pages/Browse.js";
  * `payload_min_kg` -> `tonnes`, `truck_type` and `sort` as they are.
  * Dates and car-only filters are dropped; the truck search has neither.
  *
- * Machinery has no search of its own yet, so `?category=machinery` keeps
- * rendering Browse in place.
+ * `?category=machinery` goes to `/machinery/search` (UI2b), keeping the
+ * county, dates and sort; its search has no other filter.
  */
 export function LegacyBrowseRedirect(): JSX.Element {
   const { search } = useLocation();
@@ -29,7 +28,13 @@ export function LegacyBrowseRedirect(): JSX.Element {
     }
     return <Navigate to={`/trucks/search${q.toString() ? `?${q}` : ""}`} replace />;
   }
-  // TODO(UI2b): `category=machinery` redirects to /machinery likewise.
-  if (category === "machinery") return <Browse />;
+  if (category === "machinery") {
+    const q = new URLSearchParams();
+    for (const k of ["county", "from", "to", "sort"]) {
+      const v = params.get(k);
+      if (v) q.set(k, v);
+    }
+    return <Navigate to={`/machinery/search${q.toString() ? `?${q}` : ""}`} replace />;
+  }
   return <Navigate to={`/cars/search${search}`} replace />;
 }
