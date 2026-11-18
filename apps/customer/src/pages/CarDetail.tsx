@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js";
@@ -477,9 +477,9 @@ export function CarDetail(): JSX.Element {
               </div>
               <p style={{ margin: "14px 0 0", font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373" }}>
                 A cleared document set is not a mechanical inspection.{" "}
-                <a href="/how-we-protect-you" style={{ color: "#0F23A8" }}>
+                <Link to="/how-we-protect-you" style={{ color: "#0F23A8" }}>
                   What verification does and does not cover →
-                </a>
+                </Link>
               </p>
             </div>
 

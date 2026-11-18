@@ -17,7 +17,7 @@ Model: **Sonnet**. Size: S. Branch: `feature/ui0-link-fixes`.
 >
 > **Build.**
 >
-> 1. `scripts/check-links.mjs` (Node, no new dependency). For each of
+> 1. `tools/check-links.mjs` (Node, no new dependency). For each of
 >    `apps/customer/src` and `apps/merchant/src`: collect route paths from
 >    every `path="..."` / `path: '...'` literal in the app's route files
 >    (today `App.tsx`; UI1a moves customer routes to `routes.tsx`, so read
@@ -29,7 +29,7 @@ Model: **Sonnet**. Size: S. Branch: `feature/ui0-link-fixes`.
 >    on the same page. Report `file:line link reason` for the rest, and
 >    every `href="#"`. Default mode prints and exits 0; `--strict` exits 1
 >    on any finding (UI7 wires strict into the gate; don't do it now).
->    Add `"check:links": "node scripts/check-links.mjs"` to the root
+>    Add `"check:links": "node tools/check-links.mjs"` to the root
 >    `package.json`.
 > 2. Fix these rows (IDs from proposal section 1):
 >    - **C3** `CarDetail.tsx:480`: plain `<a href="/how-we-protect-you">`
@@ -50,14 +50,14 @@ Model: **Sonnet**. Size: S. Branch: `feature/ui0-link-fixes`.
 >      tab. Label "Read the terms" / "Privacy notice" unchanged.
 >    - **P18** merchant `Notifications.tsx:234`: `/settings/notifications`
 >      -> `/settings?tab=notifications`. Keep the old redirect route.
-> 3. Run `node scripts/check-links.mjs`. Paste its summary (count per
+> 3. Run `node tools/check-links.mjs`. Paste its summary (count per
 >    app) into the PR summary as the baseline. Fix nothing else it finds:
 >    later prompts own those.
 >
 > **Don't touch:** `Masthead.tsx`, `Footer.tsx`, `AccountMenu.tsx`,
 > `Home.tsx`, `Landing.tsx`, `DriverBook.tsx` (D4 is UI3), the API.
 >
-> **Acceptance.** `node scripts/check-links.mjs` runs on both apps and
+> **Acceptance.** `node tools/check-links.mjs` runs on both apps and
 > lists no `href="#"`; the four merchant terms links open the customer
 > `/legal`; booking a car still reaches the payment step; no banner on
 > `/browse` or `/bookings`.

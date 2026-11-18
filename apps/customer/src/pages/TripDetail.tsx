@@ -905,7 +905,7 @@ export function TripDetail(): JSX.Element {
                   textDecoration: "none",
                 }}
               >
-                Manage this booking
+                All my bookings
               </Link>
               <Link
                 to="/"

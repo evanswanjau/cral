@@ -9,7 +9,7 @@ into `develop`.
 
 | # | Prompt | What | Size | Model | Shows up on |
 |---|--------|------|------|-------|-------------|
-| 1 | [UI0](./UI0.md) | Link fixes that need no new page, and `scripts/check-links.mjs` (report mode) | S | Sonnet | Vercel + dev merchant |
+| 1 | [UI0](./UI0.md) | Link fixes that need no new page, and `tools/check-links.mjs` (report mode) | S | Sonnet | Vercel + dev merchant |
 | 2 | [UI1a](./UI1a.md) | Service registry, `components/subsite/*`, route table out of `App.tsx`, masthead/footer/account menu from the registry | M | Opus | Vercel |
 | 3 | [UI1b](./UI1b.md) | Front door at `/`, `/cars` landing, coming services block, `/services` and `/parts` redirects | M | Opus | Vercel |
 | 4 | [UI1c](./UI1c.md) | `/cars/search`, `/cars/:id/book`, `/browse` and `/book/:id` redirects | M | Sonnet | Vercel |
@@ -72,7 +72,7 @@ Each prompt says "read the README rules". These are they.
    that real data doesn't back.
 8. **Copy** is final and written out, in CRAL's voice: plain, short,
    Kenyan English, shillings as `KES`. No placeholders, no lorem.
-9. **Links.** Run `node scripts/check-links.mjs` (from UI0 on) before
+9. **Links.** Run `node tools/check-links.mjs` (from UI0 on) before
    handing off; it must report no new broken link.
 10. **Checks.** Verify fonts and colours with `getComputedStyle` in the
     running app, not screenshots. Don't run `tsc`, `eslint`, tests or the

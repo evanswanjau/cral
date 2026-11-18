@@ -6,6 +6,7 @@ import { S } from "../components/auth/styles.js";
 import { checkPasswordReset, resetPassword, TERMS_VERSION } from "../lib/auth-api.js";
 import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { customerLegalUrl } from "../lib/customer-site.js";
 
 type View = "checking" | "form" | "expired" | "done";
 
@@ -203,11 +204,11 @@ export function ResetPassword(): JSX.Element {
           <p style={S.terms}>
             Only you know this password - nobody from CRAL will ever ask for it. By setting it you agree to the CRAL
             merchant{" "}
-            <a href="#" style={S.termsLink}>
+            <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
               terms
             </a>{" "}
             and{" "}
-            <a href="#" style={S.termsLink}>
+            <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
               privacy notice
             </a>
             .

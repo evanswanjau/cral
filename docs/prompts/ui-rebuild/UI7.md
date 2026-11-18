@@ -13,7 +13,7 @@ Needs UI6 merged. Last PR of Phase 2; after it the owner decides
 >
 > **Read only:** proposal (`docs/plans/ui-services-proposal.md`) sections
 > 1.1 rows F2, G1-G8, T1, U1-U6, 2 (all leakage tables), 6.3;
-> `scripts/check-links.mjs`; `tools/gate.mjs`; the files named below.
+> `tools/check-links.mjs`; `tools/gate.mjs`; the files named below.
 >
 > **Build.**
 >
@@ -28,14 +28,14 @@ Needs UI6 merged. Last PR of Phase 2; after it the owner decides
 >    `BrandPanel.tsx` U6 merged.
 > 4. Every remaining section-2 leakage line on both apps.
 > 5. Footer phone and email become `tel:` / `mailto:` links.
-> 6. `scripts/check-links.mjs --strict` passes on both apps; fix what it
+> 6. `tools/check-links.mjs --strict` passes on both apps; fix what it
 >    finds. Add it as a step in `tools/gate.mjs` (before typecheck,
 >    quiet on success like the other steps).
 >
 > **Don't touch:** `Legal.tsx` (stale payment line is the owner's text to
 > approve), the API, payments, flows.
 >
-> **Acceptance.** `node scripts/check-links.mjs --strict` exits 0;
+> **Acceptance.** `node tools/check-links.mjs --strict` exits 0;
 > `grep -rni "\bcar\b"` over customer pages for trucks, machinery,
 > drivers and towing, and over merchant copy shown to driver-only or
 > truck merchants, shows no car-only wording on a non-car surface. Book a

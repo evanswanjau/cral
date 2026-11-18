@@ -21,6 +21,7 @@
     "test": "npm run test --workspaces --if-present",
     "build": "npm run build --workspaces --if-present",
     "gate": "node tools/gate.mjs",
+    "check:links": "node tools/check-links.mjs",
     "prepare": "node tools/install-hooks.mjs",
     "migrate": "npm run migrate -w apps/api",
     "migrate:rollback": "npm run migrate:rollback -w apps/api"

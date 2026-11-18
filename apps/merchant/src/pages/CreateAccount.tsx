@@ -15,6 +15,7 @@ import { setSession } from "../lib/auth.js";
 import { deviceId } from "../lib/device.js";
 import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { customerLegalUrl } from "../lib/customer-site.js";
 
 /**
  * Create account - the design's `isRegister` / `isRegisterVerify` branches,
@@ -194,11 +195,11 @@ export function CreateAccount(): JSX.Element {
 
         <p style={S.terms}>
           By creating an account you agree to the CRAL merchant{" "}
-          <a href="#" style={S.termsLink}>
+          <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
             terms
           </a>{" "}
           and{" "}
-          <a href="#" style={S.termsLink}>
+          <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={S.termsLink}>
             privacy notice
           </a>
           .
