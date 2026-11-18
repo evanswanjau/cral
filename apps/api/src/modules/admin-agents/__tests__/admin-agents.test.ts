@@ -24,7 +24,11 @@ afterAll(async () => {
 });
 
 const emailSpy = vi.spyOn(emailAdapter, "send");
-beforeEach(() => emailSpy.mockClear());
+// Braces matter: a function returned from beforeEach is run as its teardown,
+// and the spy is a function - it would be "called" as send(undefined).
+beforeEach(() => {
+  emailSpy.mockClear();
+});
 
 const bearer = (t: string) => ({ Authorization: `Bearer ${t}` });
 const idem = () => ({ "Idempotency-Key": `test-${ulid()}` });
