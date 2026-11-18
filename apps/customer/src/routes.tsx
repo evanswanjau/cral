@@ -5,6 +5,8 @@ import { Browse } from "./pages/Browse.js";
 import { LegacyBrowseRedirect } from "./components/routing/LegacyBrowseRedirect.js";
 import { LegacyBookRedirect } from "./components/routing/LegacyBookRedirect.js";
 import { CarsHome } from "./pages/cars/CarsHome.js";
+import { TrucksHome } from "./pages/trucks/TrucksHome.js";
+import { TrucksSearch } from "./pages/trucks/TrucksSearch.js";
 import { Towing } from "./pages/Towing.js";
 import { Drivers } from "./pages/Drivers.js";
 import { DriverBook } from "./pages/DriverBook.js";
@@ -61,6 +63,14 @@ export const routes: RouteObject[] = [
       { path: "/browse", element: <LegacyBrowseRedirect /> },
       { path: "/cars/search", element: <Browse /> },
       { path: "/cars", element: <CarsHome /> },
+      // Trucks' own sub-site (UI2a). `/trucks/:id` is CarDetail with the
+      // route-first TruckRequestPanel, and `/trucks/:id/request` is the
+      // same Booking flow; each forwards to the other path when the
+      // listing isn't (or is) a truck.
+      { path: "/trucks", element: <TrucksHome /> },
+      { path: "/trucks/search", element: <TrucksSearch /> },
+      { path: "/trucks/:id", element: <CarDetail /> },
+      { path: "/trucks/:id/request", element: <Booking /> },
       // Not live yet: both land on the front door's "Coming to CRAL"
       // block (owner decision 2, 2026-11-18) until their own phase builds
       // the real sub-site. `/services/towing` stays below until UI3.

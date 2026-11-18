@@ -145,7 +145,9 @@ export function VehicleCard({
             marginBottom: 12,
           }}
         >
-          {specLine(car)} · {car.chauffeured ? "With driver" : "Self-drive"}
+          {specLine(car)}
+          {/* A truck is never "Self-drive" (UI2a): it says so only when a driver comes with it. */}
+          {car.chauffeured ? " · With driver" : car.category === "truck" ? "" : " · Self-drive"}
         </div>
         <div
           style={{

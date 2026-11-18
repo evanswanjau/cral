@@ -18,21 +18,11 @@ import {
 import { uploadRenterDocument, type RenterDocKind } from "../lib/documents-api.js";
 import { useIsAuthenticated, setSession, deviceId, TERMS_VERSION } from "../lib/auth.js";
 import { ApiClientError } from "../lib/api.js";
-import {
-  BOOKING_STEPS,
-  BookingSteps,
-  NEW_ACCOUNT_BOOKING_STEPS,
-} from "../components/site/BookingSteps.js";
-import {
-  earliestPickupDay,
-  earliestReturnDay,
-  formatHireDate,
-  hireDays,
-  hireInstants,
-} from "../lib/hire-dates.js";
+import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
+import { routeFromParams } from "../lib/truck-route.js";
+import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays, hireInstants } from "../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
 import {
-  EMPTY_TRUCK_ROUTE,
   TruckRouteFields,
   truckRequestFields,
   truckRouteProblem,
@@ -216,8 +206,9 @@ export function Booking(): JSX.Element {
 
   const key = draftKey(id ?? "", from, to);
   const [note, setNote] = useState(() => readDraft(key));
-  // Truck listings only (PR T2): where from, where to, and what.
-  const [route, setRoute] = useState<TruckRouteDraft>(EMPTY_TRUCK_ROUTE);
+  // Truck listings only (PR T2): where from, where to, and what - filled
+  // in from the query `/trucks/:id` sends (UI2a, lib/truck-route.ts).
+  const [route, setRoute] = useState<TruckRouteDraft>(() => routeFromParams(params));
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
@@ -292,9 +283,16 @@ export function Booking(): JSX.Element {
 
   useEffect(() => writeDraft(key, note), [key, note]);
 
+  // A truck is requested at `/trucks/:id/request`, everything else at
+  // `/cars/:id/book` (UI2a); the wrong one forwards, query kept. No dates:
+  // back to the listing's own page to pick them.
+  const base = car?.category === "truck" ? `/trucks/${id}` : `/cars/${id}`;
+  const own = car?.category === "truck" ? `${base}/request` : `${base}/book`;
   useEffect(() => {
-    if (!isLoading && (!from || !to) && id) navigate(`/cars/${id}`, { replace: true });
-  }, [isLoading, from, to, id, navigate]);
+    if (isLoading || !id) return;
+    if (!from || !to) navigate(base, { replace: true });
+    else if (car && !window.location.pathname.startsWith(own)) navigate(`${own}?${params}`, { replace: true });
+  }, [isLoading, from, to, id, car, base, own, params, navigate]);
 
   useEffect(() => {
     if (!mine || !id) return;
@@ -348,8 +346,8 @@ export function Booking(): JSX.Element {
   // A truck request isn't sendable until it says from where, to where and what.
   const isTruck = car.category === "truck";
   const routeProblem = isTruck ? truckRouteProblem(route, car.payload_kg) : null;
-  const here = `/cars/${id}/book?from=${from}&to=${to}`;
-  const steps = isAuthenticated ? BOOKING_STEPS : NEW_ACCOUNT_BOOKING_STEPS;
+  const here = `${own}?${params}`;
+  const steps = bookingSteps(isTruck ? (car.quoted ? "quote" : "truck") : "car", !isAuthenticated);
   const doneIndex = isAuthenticated ? 0 : stage === "account" ? 0 : 1;
 
   const failWith = (e: unknown) => {
