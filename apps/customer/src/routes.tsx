@@ -1,9 +1,8 @@
-import type { RouteObject } from "react-router-dom";
+import { Navigate, type RouteObject } from "react-router-dom";
 import { SiteShell } from "./components/site/SiteShell.js";
 import { Home } from "./pages/Home.js";
 import { Browse } from "./pages/Browse.js";
-import { Parts } from "./pages/Parts.js";
-import { Services } from "./pages/Services.js";
+import { CarsHome } from "./pages/cars/CarsHome.js";
 import { Towing } from "./pages/Towing.js";
 import { Drivers } from "./pages/Drivers.js";
 import { DriverBook } from "./pages/DriverBook.js";
@@ -58,8 +57,12 @@ export const routes: RouteObject[] = [
     children: [
       { path: "/", element: <Home /> },
       { path: "/browse", element: <Browse /> },
-      { path: "/parts", element: <Parts /> },
-      { path: "/services", element: <Services /> },
+      { path: "/cars", element: <CarsHome /> },
+      // Not live yet: both land on the front door's "Coming to CRAL"
+      // block (owner decision 2, 2026-11-18) until their own phase builds
+      // the real sub-site. `/services/towing` stays below until UI3.
+      { path: "/parts", element: <Navigate to="/#coming" replace /> },
+      { path: "/services", element: <Navigate to="/#coming" replace /> },
       { path: "/cars/:id", element: <CarDetail /> },
       { path: "/drivers", element: <Drivers /> },
       { path: "/how-it-works", element: <HowItWorks /> },

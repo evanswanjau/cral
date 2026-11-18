@@ -72,8 +72,9 @@ export const SERVICES: Service[] = [
     lede: "Self-drive or with a driver, from owners CRAL has checked. Sending a request is free, and you pay by M-Pesa only once the owner accepts your dates.",
     icon: Car,
     photo: "/images/services/cars.jpg",
-    href: "/browse", // final: /cars (UI1b)
-    match: ["/browse", "/cars", "/book"],
+    href: "/cars",
+    // `/browse` and `/book` until UI1c moves them under `/cars`.
+    match: ["/cars", "/browse", "/book"],
   },
   {
     status: "live",
