@@ -87,8 +87,8 @@ export const SERVICES: Service[] = [
     lede: "Tippers, flatbeds and box bodies from owners CRAL has checked. You pay only once you accept a price.",
     icon: Truck,
     photo: "/images/services/trucks.jpg",
-    href: "/browse?category=truck", // final: /trucks (UI2a)
-    match: ["/browse?category=truck", "/trucks"],
+    href: "/trucks",
+    match: ["/trucks"],
   },
   {
     status: "live",

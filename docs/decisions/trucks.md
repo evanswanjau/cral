@@ -64,3 +64,22 @@ Phase 1 of `docs/plans/verticals-roadmap.md` (PRs T1-T3); plan
 - The commission percentage is never shown in the quote modal, only
   shilling amounts. Quote modal and trip quote card aren't from a canvas
   file.
+
+## Trucks sub-site (UI2a)
+
+- Customer truck hire lives under `/trucks`: landing, `/trucks/search`
+  (filters from county, to county, load, truck type), `/trucks/:id` and
+  `/trucks/:id/request`. Old `/browse?category=truck`, `/cars/<truck>`
+  and `/book/<truck>` links redirect there, forever.
+- **The route comes first.** `/trucks/:id` asks from, to, what and the
+  day (`components/subsite/TruckRequestPanel.tsx`, same
+  `truckRouteProblem` validation); only a per-day truck asks UNTIL. The
+  route travels to the request page by query
+  (`lib/truck-route.ts`: `from_place`, `from_county`, `to_place`,
+  `to_county`, `cargo`, `tonnes`; `from`/`to` stay the dates).
+- The search's TO county filters nothing (CRAL doesn't route trucks); it
+  is carried into the request. FROM filters on the truck's county.
+- The booking rail on a truck reads Route · Price · Pay · Booked (quoted)
+  or Route · Owner accepts · Pay · Booked (flat), `BookingSteps.tsx#bookingSteps`.
+- A truck page shows no seats and never "Self-drive"; it says "With
+  driver" only when one comes with it. Not from a canvas.

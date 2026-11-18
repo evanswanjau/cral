@@ -35,7 +35,7 @@ export const EMPTY_TRUCK_ROUTE: TruckRouteDraft = {
 };
 
 /** Tonnes as typed -> kg, or null for blank. NaN for something that isn't a positive number. */
-function tonnesToKg(tonnes: string): number | null {
+export function tonnesToKg(tonnes: string): number | null {
   const t = tonnes.trim().replace(",", ".");
   if (!t) return null;
   const n = Number(t);

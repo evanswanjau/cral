@@ -12,7 +12,7 @@ import {
   type HandoverStatus,
 } from "../lib/bookings-api.js";
 import { getPaymentState, payForBooking } from "../lib/payments-api.js";
-import { BOOKING_STEPS, BookingSteps } from "../components/site/BookingSteps.js";
+import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
 import { VEHICLE_CATEGORY_LABEL, formatPayload } from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
@@ -719,7 +719,7 @@ export function TripDetail(): JSX.Element {
    * accepted it moves to Pay, and paying is what completes it. Request
    * is always behind us by the time a booking exists, so the floor is 0.
    */
-  const stepIndex = accepted ? (paid ? 3 : 2) : 0;
+  const stepIndex = accepted ? (paid ? 3 : 2) : booking.status === "quoted" ? 1 : 0;
 
   // Anything still waiting on an answer is a withdrawal; "no thanks" to a quote is one too (PR T3).
   const open = booking.status === "requested" || booking.status === "quote_requested" || booking.status === "quoted";
@@ -812,7 +812,7 @@ export function TripDetail(): JSX.Element {
        * rail is what says so, instead of the trip page reading as an
        * unrelated screen they were dumped on.
        */}
-      <BookingSteps steps={BOOKING_STEPS} doneIndex={stepIndex} />
+      <BookingSteps steps={bookingSteps(booking.route ? (booking.quote || booking.status === "quote_requested" ? "quote" : "truck") : "car", false)} doneIndex={stepIndex} />
 
       {/*
        * Two columns, the same shape as `/book/:vehicleId`: what to do now
