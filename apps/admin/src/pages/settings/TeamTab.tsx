@@ -32,7 +32,7 @@ import { ROLE_LABEL } from "../../components/console/styles.js";
  * a queue that gates nothing.
  */
 const QUEUES = ["vehicles", "drivers", "merchants", "renters", "bookings"] as const;
-const ROLES: AdminRole[] = ["admin_reviewer", "admin_finance", "admin_support", "admin_super"];
+const ROLES: AdminRole[] = ["admin_reviewer", "admin_finance", "admin_support", "admin_sales", "admin_super"];
 
 type Modal =
   | { kind: "add" }
@@ -215,7 +215,13 @@ function Row({
         {ROLE_LABEL[a.role] ?? a.role}
       </span>
       <span style={S.sub}>
-        {a.role === "admin_super" ? "All" : a.assigned_queues.length ? a.assigned_queues.join(", ") : "—"}
+        {a.role === "admin_super"
+          ? "All"
+          : a.role === "admin_sales"
+            ? "Own merchants"
+            : a.assigned_queues.length
+              ? a.assigned_queues.join(", ")
+              : "—"}
       </span>
       <span>
         <span
@@ -268,6 +274,14 @@ function QueuePicker({
 }): JSX.Element {
   if (role === "admin_super") {
     return <p style={S.hint}>An owner sees every queue - nothing to assign.</p>;
+  }
+  if (role === "admin_sales") {
+    return (
+      <p style={S.hint}>
+        A sales agent works no review queue. They see two screens, My merchants and Add merchant, and
+        only the merchants they brought in. They can't approve anyone.
+      </p>
+    );
   }
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

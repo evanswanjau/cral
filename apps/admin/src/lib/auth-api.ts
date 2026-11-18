@@ -13,7 +13,7 @@ export interface TwoFactorRequired {
   expires_in: number;
 }
 
-export type AdminRole = "admin_reviewer" | "admin_finance" | "admin_support" | "admin_super";
+export type AdminRole = "admin_reviewer" | "admin_finance" | "admin_support" | "admin_sales" | "admin_super";
 
 export interface AdminMe {
   id: string;

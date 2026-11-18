@@ -191,15 +191,21 @@ export function logout(allDevices = false) {
   return apiPost<void>("/auth/logout", { all_devices: allDevices });
 }
 
+/**
+ * `purpose: "invite"` is a CRAL sales agent's "Set your password and finish
+ * setting up" email - same link shape, same screen, different words.
+ */
 export function checkPasswordReset(input: { token: string }) {
-  return apiPost<{ valid: boolean; masked_identifier?: string | null; requires_2fa?: boolean }>(
-    "/auth/password/reset/check",
-    input,
-    { auth: false },
-  );
+  return apiPost<{
+    valid: boolean;
+    masked_identifier?: string | null;
+    requires_2fa?: boolean;
+    purpose?: "reset" | "invite";
+  }>("/auth/password/reset/check", input, { auth: false });
 }
 
-export function resetPassword(input: { token: string; new_password: string }) {
+/** `accepted_terms_version` only counts for an agent-created account, which has none on file yet. */
+export function resetPassword(input: { token: string; new_password: string; accepted_terms_version?: string }) {
   return apiPost<{ status: string; sessions_revoked: number }>("/auth/password/reset", input, {
     auth: false,
   });

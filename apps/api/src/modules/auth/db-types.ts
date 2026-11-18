@@ -28,6 +28,10 @@ export interface UserRow {
   status: string;
   status_changed_at: Date | null;
   suspended_reason: string | null;
+  /** Set when a sales agent creates the account (20261118090000); the password is unusable until the invite is accepted. */
+  invited_at: Date | null;
+  /** When the owner first set a password by an emailed link. Null + `invited_at` set = invite pending. */
+  invite_accepted_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -65,6 +69,8 @@ export interface PasswordResetTokenRow {
   id: string;
   user_id: string;
   token_hash: string;
+  /** "reset" (30 min) | "invite" (a sales agent's set-your-password link, 7 days) - 20261118090000. */
+  purpose: string;
   expires_at: Date;
   consumed_at: Date | null;
   created_at: Date;

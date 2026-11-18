@@ -1,0 +1,302 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto — Sales Agents API (Ops console)
+  version: "1.0.0"
+  description: >
+    The two screens a field sales agent (`admin_sales`, "Sales agent") gets
+    in the Ops console: **My merchants** and **Add merchant**. Phase 3, PR
+    AG1 of `docs/plans/verticals-roadmap.md`; the design is Part B of
+    `docs/plans/trucks-and-sales-agents.md` (which calls this PR S1).
+
+
+    **An agent never approves anyone.** Nothing here touches
+    `merchants.approved_at`, a document's `review_state` or a vehicle's
+    status - the two-gate rule (account approved, then each vehicle /
+    driver approved) stays with the reviewer queues, which `admin_sales`
+    can't reach (`403 insufficient_scope`).
+
+
+    **An agent never sees or sets a password.** Adding a merchant creates
+    the `users` + `merchants` rows with an unusable random password hash
+    and emails the owner a one-time "Set your password and finish setting
+    up" link. That link is a `password_reset_tokens` row with
+    `purpose = "invite"` (7-day life instead of the reset link's 30
+    minutes) and opens the merchant portal's existing
+    `/reset-password?token=` screen, which reads the purpose from
+    `POST /auth/password/reset/check` (see `identity.yaml`). The raw token
+    only ever exists in that email.
+
+
+    **Scoping.** Every endpoint is `requireAdmin({ role: "admin_sales" })`,
+    and every read and write is limited to `merchants.onboarded_by = <the
+    caller>`. A merchant another agent brought in reads as
+    `404 merchant_not_found`, not 403, so an agent can't probe for other
+    agents' merchants. `admin_super` clears the role check (as on every
+    `/admin/*` route) and sees every agent-onboarded merchant, with the
+    agent named on each row.
+
+
+    Personal sign-up links (`onboarding_source = "agent_link"`) are PR AG2
+    and the assist session is AG3; neither is in this file yet. Agents earn
+    no commission - attribution is for reporting only.
+servers:
+  - url: https://api.cral.co.ke/v1
+  - url: https://api.staging.cral.co.ke/v1
+  - url: https://api.sandbox.cral.co.ke/v1
+
+tags:
+  - name: admin-agents
+    description: Field sales agents - add a merchant, track who they brought in
+
+paths:
+  /admin/agents/merchants:
+    get:
+      tags: [admin-agents]
+      summary: My merchants - the merchants this agent brought in, newest first
+      description: >
+        An agent sees only `onboarded_by = me`; `admin_super` sees every
+        merchant any agent brought in. `total` is the whole-set count for
+        the same scope and search, not the page's length.
+      operationId: adminAgentListMerchants
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: q
+          in: query
+          description: >
+            Search by name (person or company) or phone. Digits match the
+            phone number anywhere in it, so `0712 345`, `712345` and
+            `+254712345` all find `+254712345678`.
+          schema: { type: string, maxLength: 100 }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: A page of the agent's merchants
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, next_cursor, has_more, total]
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AgentMerchant" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    post:
+      tags: [admin-agents]
+      summary: Add merchant - create the account and email the set-your-password invite
+      description: >
+        Creates the `users` row (role `merchant`, an unusable password,
+        email unverified, phone unverified) and the `merchants` row
+        (`onboarded_by` = the caller, `onboarding_source = "agent_invite"`),
+        writes the `merchant.agent_invite` audit row in the same
+        transaction, then emails the invite after the commit. A failed
+        email does not undo the account: the response says
+        `invite_sent: false` and **Resend invite** is the way to try again.
+
+
+        For an individual, `name` is the owner's full name and pre-fills
+        onboarding's first / middle / surname. For a company it is the
+        company name, and the payout method is set to bank (companies are
+        locked to bank, same as onboarding's owner-type switch). The owner
+        can correct either in the wizard; the phone still has to pass the
+        SMS check there before onboarding can be submitted.
+
+
+        Rate-limited to 30 an hour per agent (`429 rate_limited`), since
+        each one sends an email.
+      operationId: adminAgentAddMerchant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMerchantRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteResult" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409":
+          description: >
+            `account_exists` (field `email` or `phone`) - that email or
+            phone is already on a CRAL account. The owner signs in and
+            starts onboarding themselves; an agent can't take over an
+            existing account.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "422":
+          description: "`invalid_phone`, or a validation error on any field"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/agents/merchants/{id}/resend-invite:
+    post:
+      tags: [admin-agents]
+      summary: Resend the set-your-password invite
+      description: >
+        Only while the invite is still pending (the owner hasn't set a
+        password yet). Any earlier unused invite or reset link stops
+        working, and a fresh 7-day link goes out. Once the owner has a
+        password this is `409 invite_already_accepted` - they use "Forgot
+        password" like anyone else. Rate-limited to 5 an hour per merchant
+        per agent.
+      operationId: adminAgentResendInvite
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, example: mer_01J9Z3M5X8K2P4T6V8W0Y2A4C6 } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Sent (or tried to - see `invite_sent`)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InviteResult" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: "`merchant_not_found` - not one this agent brought in"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "409":
+          description: "`invite_already_accepted`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Scoped per admin; a replay within 24h returns the stored response.
+      schema: { type: string, maxLength: 255 }
+
+  responses:
+    BadRequest:
+      description: "`idempotency_key_required` or a malformed body"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Unauthorized:
+      description: Missing / wrong-audience / expired / revoked ops token
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    Forbidden:
+      description: "`insufficient_scope` - the caller is not `admin_sales` (or `admin_super`)"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+    RateLimited:
+      description: "`rate_limited`"
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  schemas:
+    ErrorEnvelope:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [type, code, message, request_id]
+          properties:
+            type: { type: string }
+            code: { type: string, example: account_exists }
+            message: { type: string }
+            field: { type: string }
+            request_id: { type: string }
+
+    AddMerchantRequest:
+      type: object
+      required: [owner_type, name, email, phone]
+      properties:
+        owner_type: { type: string, enum: [individual, company] }
+        name:
+          type: string
+          minLength: 2
+          maxLength: 200
+          description: The owner's full name, or the company's name.
+        email: { type: string, format: email, maxLength: 320 }
+        phone:
+          type: string
+          description: A Kenyan mobile number in any common form; stored as E.164.
+          example: "0712345678"
+
+    InviteResult:
+      type: object
+      required: [merchant, invite_sent]
+      properties:
+        merchant: { $ref: "#/components/schemas/AgentMerchant" }
+        invite_sent:
+          type: boolean
+          description: >
+            False when the account was saved (or the invite re-issued) but
+            the email provider refused the message. The link in it is
+            already void-able by a resend.
+
+    AgentMerchantStatus:
+      type: string
+      description: >
+        One chip per merchant, first match wins: `verified` (the account
+        is approved by a reviewer) -> `changes_requested` (a reviewer
+        asked for business-level changes) -> `submitted` (onboarding sent
+        for review) -> `invited` (no password set yet and onboarding not
+        started) -> `onboarding` (see `onboarding.step`).
+      enum: [invited, onboarding, submitted, changes_requested, verified]
+
+    AgentMerchant:
+      type: object
+      required:
+        - id
+        - owner_type
+        - name
+        - email
+        - phone
+        - status
+        - onboarding
+        - invite_pending
+        - invited_at
+        - onboarding_source
+        - agent
+        - created_at
+        - last_activity_at
+      properties:
+        id: { type: string, example: mer_01J9Z3M5X8K2P4T6V8W0Y2A4C6 }
+        owner_type: { type: string, enum: [individual, company] }
+        name:
+          type: string
+          nullable: true
+          description: Company name for a company, else the owner's name. Null only if neither is on file.
+        email: { type: string }
+        phone: { type: string, nullable: true, description: E.164, for Call / WhatsApp }
+        status: { $ref: "#/components/schemas/AgentMerchantStatus" }
+        onboarding:
+          type: object
+          required: [step, of, label]
+          description: >
+            The furthest wizard step reached (`merchants.onboarding_max_step`).
+            The merchant portal's wizard has five steps - Welcome, Your
+            details, Vehicles, Documents, Review - so `of` is 5.
+          properties:
+            step: { type: integer, minimum: 1, maximum: 5 }
+            of: { type: integer, example: 5 }
+            label: { type: string, example: Vehicles }
+        invite_pending:
+          type: boolean
+          description: True until the owner sets a password by an emailed link. Resend invite is offered only while true.
+        invited_at: { type: string, format: date-time, nullable: true }
+        onboarding_source: { type: string, enum: [self, agent_invite, agent_link] }
+        agent:
+          type: object
+          nullable: true
+          description: Who brought the merchant in. Always the caller for an agent; varies for `admin_super`.
+          properties:
+            id: { type: string }
+            name: { type: string }
+        created_at: { type: string, format: date-time }
+        last_activity_at: { type: string, format: date-time }

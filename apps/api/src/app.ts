@@ -18,6 +18,7 @@ import { adminTeamRouter } from "./modules/admin-team/routes.js";
 import { adminCommsRouter } from "./modules/admin-comms/routes.js";
 import { adminServiceRequestsRouter } from "./modules/admin-service-requests/routes.js";
 import { adminPayoutsRouter } from "./modules/admin-payouts/routes.js";
+import { adminAgentsRouter } from "./modules/admin-agents/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { driversRouter } from "./modules/drivers/routes.js";
@@ -122,6 +123,7 @@ export function createApp(): Express {
   app.use(adminCommsRouter);
   app.use(adminServiceRequestsRouter);
   app.use(adminPayoutsRouter);
+  app.use(adminAgentsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
   app.use(driversRouter);

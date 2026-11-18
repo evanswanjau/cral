@@ -1,3 +1,4 @@
+import type { Knex } from "knex";
 import { ApiError } from "@cral/types";
 import { db } from "../../db/client.js";
 import { generateId } from "../../lib/ids.js";
@@ -31,6 +32,13 @@ import type { ResetLinkApp } from "./schemas.js";
 const OTP_TTL_MINUTES = 10;
 const OTP_MAX_ATTEMPTS = 5;
 const RESET_TOKEN_TTL_MINUTES = 30;
+/**
+ * A sales agent's "Set your password and finish setting up" link. Longer
+ * than a reset link on purpose: it goes to someone who didn't ask for it,
+ * standing beside an agent in the field, who may not open it until that
+ * evening. Resend invite voids the old one.
+ */
+export const INVITE_TOKEN_TTL_DAYS = 7;
 const REFRESH_TOKEN_TTL_DAYS = Number(process.env.REFRESH_TOKEN_TTL_DAYS ?? 30);
 const LOCKOUT_THRESHOLD = 10;
 const LOCKOUT_MINUTES = 15;
@@ -1527,21 +1535,56 @@ interface ResetLookupInput {
   token: string;
 }
 
-async function lookupResetTarget(
-  input: ResetLookupInput,
-): Promise<{ userId: string; consume: () => Promise<void> } | null> {
+async function lookupResetTarget(input: ResetLookupInput): Promise<{
+  userId: string;
+  purpose: "reset" | "invite";
+  consume: (trx: Knex.Transaction) => Promise<void>;
+} | null> {
   const row = await db<PasswordResetTokenRow>("password_reset_tokens")
     .where({ token_hash: hashToken(input.token), consumed_at: null })
     .first();
   if (!row || row.expires_at < new Date()) return null;
   return {
     userId: row.user_id,
-    consume: async () => {
-      await db<PasswordResetTokenRow>("password_reset_tokens")
+    purpose: row.purpose === "invite" ? "invite" : "reset",
+    consume: async (trx) => {
+      await trx<PasswordResetTokenRow>("password_reset_tokens")
         .where({ id: row.id })
         .update({ consumed_at: new Date() });
     },
   };
+}
+
+/**
+ * Issues a sales agent's set-your-password link for an account it just
+ * created (or re-sends one), inside the caller's transaction. Any earlier
+ * unused link for the account - invite or reset - stops working, the same
+ * rule `forgotPassword` applies. Returns the raw token, which only ever
+ * goes into the email; the table holds its hash.
+ */
+export async function issueInviteToken(trx: Knex.Transaction, userId: string): Promise<string> {
+  const rawToken = generateOpaqueToken();
+  await trx<PasswordResetTokenRow>("password_reset_tokens")
+    .where({ user_id: userId, consumed_at: null })
+    .update({ consumed_at: new Date() });
+  await trx<PasswordResetTokenRow>("password_reset_tokens").insert({
+    id: generateId("passwordResetToken"),
+    user_id: userId,
+    token_hash: hashToken(rawToken),
+    purpose: "invite",
+    expires_at: new Date(Date.now() + INVITE_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000),
+  });
+  return rawToken;
+}
+
+/** Where an invite opens: the merchant portal's existing reset screen, which reads the purpose. */
+export function merchantInviteLink(rawToken: string): string {
+  return `${merchantAppUrl()}/reset-password?token=${rawToken}`;
+}
+
+/** An agent created the account and the owner hasn't set a password yet. */
+export function isInvitePending(user: Pick<UserRow, "invited_at" | "invite_accepted_at">): boolean {
+  return user.invited_at !== null && user.invite_accepted_at === null;
 }
 
 export async function checkPasswordReset(input: ResetLookupInput) {
@@ -1553,11 +1596,12 @@ export async function checkPasswordReset(input: ResetLookupInput) {
     valid: true,
     masked_identifier: user ? maskIdentifier(user.email) : null,
     requires_2fa: false,
+    purpose: target.purpose,
   };
 }
 
 export async function resetPassword(
-  input: ResetLookupInput & { new_password: string },
+  input: ResetLookupInput & { new_password: string; accepted_terms_version?: string | undefined },
   ctx: RequestContext,
 ) {
   const target = await lookupResetTarget(input);
@@ -1581,20 +1625,38 @@ export async function resetPassword(
   }
 
   const passwordHash = await hashPassword(input.new_password);
-  await db<UserRow>("users").where({ id: target.userId }).update({ password_hash: passwordHash });
-  await target.consume();
+  const before = await db<UserRow>("users").where({ id: target.userId }).first();
+  // An agent-created account accepts its invite the first time a password
+  // is set by an emailed link - the invite itself, or a "Forgot password"
+  // link the owner asked for instead. Either way the link proved the inbox,
+  // which is why any emailed-link password also marks the email verified.
+  const acceptsInvite = before ? isInvitePending(before) : false;
 
   const { revoked } = await db.transaction(async (trx) => {
+    const now = new Date();
+    const update: Partial<UserRow> = { password_hash: passwordHash, email_verified: true };
+    if (acceptsInvite) update.invite_accepted_at = now;
+    // Self sign-up records the terms at /auth/register; an agent-created
+    // account has none until its owner agrees on the set-password screen.
+    if (input.accepted_terms_version && before && before.terms_accepted_version === null) {
+      update.terms_accepted_version = input.accepted_terms_version;
+      update.terms_accepted_at = now;
+      update.terms_accepted_ip = ctx.ip;
+    }
+    await trx<UserRow>("users").where({ id: target.userId }).update(update);
+    await target.consume(trx);
+
     const revokedRows = await trx<SessionRow>("sessions")
       .where({ user_id: target.userId, revoked_at: null })
-      .update({ revoked_at: new Date(), revoked_reason: "password_reset" });
+      .update({ revoked_at: now, revoked_reason: "password_reset" });
 
     await writeAuditEntry(trx, {
       actorId: target.userId,
       actorType: "user",
-      action: "user.password_reset",
+      action: acceptsInvite ? "user.invite_accepted" : "user.password_reset",
       entityType: "user",
       entityId: target.userId,
+      ...(acceptsInvite ? { after: { via: target.purpose } } : {}),
       requestId: ctx.requestId,
       ip: ctx.ip,
     });
@@ -1603,7 +1665,9 @@ export async function resetPassword(
   });
 
   const user = await db<UserRow>("users").where({ id: target.userId }).first();
-  if (user) {
+  // "Your password was reset" reads as an alarm to someone who just chose
+  // their first one.
+  if (user && !acceptsInvite) {
     const notice =
       "Your CRAL password was just reset. If this wasn't you, contact support immediately.";
     // Notify on every channel the account actually has — an email-first

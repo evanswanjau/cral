@@ -202,7 +202,7 @@ components:
 
     AdminRole:
       type: string
-      enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+      enum: [admin_reviewer, admin_finance, admin_support, admin_sales, admin_super]
 
     AdminRow:
       type: object

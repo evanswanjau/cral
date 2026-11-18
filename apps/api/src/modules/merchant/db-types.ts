@@ -41,6 +41,10 @@ export interface MerchantRow {
   review_changes_requested_at: Date | null;
   /** What the merchant was told with that request. */
   review_note: string | null;
+  /** The sales agent (`admin_users`) who brought this merchant in - null for a self sign-up (20261118090000). */
+  onboarded_by: string | null;
+  /** "self" | "agent_invite" | "agent_link" (the last is PR AG2). */
+  onboarding_source: string;
   last_activity_at: Date;
   created_at: Date;
   updated_at: Date;
