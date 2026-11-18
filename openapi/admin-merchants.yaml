@@ -52,6 +52,15 @@ paths:
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
+        - name: agent
+          in: query
+          description: >
+            `admin_super` only (any other role gets `403
+            insufficient_scope`). An admin id narrows the directory to the
+            merchants that sales agent brought in (by invite or by their
+            sign-up link); `none` narrows it to owners who signed up on
+            their own. `total` follows the filter. Phase 3, PR AG2.
+          schema: { type: string, example: adm_01J9Z3M5X8K2P4T6V8W0Y2A4C6 }
       responses:
         "200":
           description: A page of the directory
@@ -274,6 +283,17 @@ components:
         drivers: { type: integer, description: Whole-set submitted-driver count. A merchant with drivers and no car is listed too. }
         live: { type: integer }
         waiting: { type: integer, description: "`pending` + `review`" }
+        agent:
+          type: object
+          nullable: true
+          description: >
+            Present only for `admin_super` (Phase 3, PR AG2): the sales
+            agent who brought the merchant in, or null for an owner who
+            signed up on their own. Other roles don't get the field.
+          properties:
+            id: { type: string }
+            name: { type: string }
+            via: { type: string, enum: [agent_invite, agent_link], description: Added by the agent, or signed up through the agent's link }
 
     FleetRow:
       type: object

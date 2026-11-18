@@ -17,6 +17,7 @@ import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { customerLegalUrl } from "../lib/customer-site.js";
 import { rememberOffer } from "../lib/supplier-types.js";
+import { forgetAgentCode, readAgentCode } from "../lib/agent-link.js";
 
 /**
  * Create account - the design's `isRegister` / `isRegisterVerify` branches,
@@ -34,6 +35,9 @@ import { rememberOffer } from "../lib/supplier-types.js";
  *
  * `?offer=<type>` (from a `/join/<type>` page) is kept in sessionStorage
  * for onboarding's "What do you offer?" step to pre-select. No API change.
+ *
+ * A sales agent's `?a=` code (PR AG2, kept by `App.tsx` from whichever page
+ * the link opened) goes with the sign-up, so the agent gets the credit.
  */
 export function CreateAccount(): JSX.Element {
   usePageTitle("Create your account");
@@ -69,7 +73,8 @@ export function CreateAccount(): JSX.Element {
 
   const createAccount = () =>
     run(async () => {
-      await register(email.trim(), pw);
+      await register(email.trim(), pw, readAgentCode());
+      forgetAgentCode();
       setStep("verify");
     }, "We couldn't create that account. Please try again.");
 

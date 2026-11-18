@@ -36,9 +36,20 @@ info:
     agent named on each row.
 
 
-    Personal sign-up links (`onboarding_source = "agent_link"`) are PR AG2
-    and the assist session is AG3; neither is in this file yet. Agents earn
-    no commission - attribution is for reporting only.
+    **Personal sign-up link** (PR AG2). Each agent has a short code
+    (`admin_users.signup_code`, issued the first time they open My
+    merchants) and a link `<merchant portal>/join?a=<code>` to share on
+    WhatsApp. An owner who creates an account after arriving through it is
+    credited to that agent (`onboarding_source = "agent_link"`) without the
+    agent typing anything - see `agent_code` on `POST /auth/register` in
+    `identity.yaml`. **First credit wins and is never moved**: an owner an
+    agent already invited has an account, so another agent's link can't
+    re-credit them (sign-up is `409 account_exists`), and nothing in this
+    API reassigns `onboarded_by`.
+
+
+    The assist session is AG3 and is not in this file yet. Agents earn no
+    commission - attribution is for reporting only.
 servers:
   - url: https://api.cral.co.ke/v1
   - url: https://api.staging.cral.co.ke/v1
@@ -137,6 +148,62 @@ paths:
           description: "`invalid_phone`, or a validation error on any field"
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
         "429": { $ref: "#/components/responses/RateLimited" }
+
+  /admin/agents/link:
+    get:
+      tags: [admin-agents]
+      summary: The caller's personal sign-up link
+      description: >
+        Returns the caller's sign-up code and link. The code is issued on
+        the first call (a conditional write, so two tabs can't issue two;
+        `admin.signup_code_issued` audit row in the same transaction) and
+        never changes after that. Six characters from an alphabet with no
+        0/O or 1/I, matched case-insensitively. A disabled agent's code
+        stops crediting anyone; an owner arriving through it still signs
+        up.
+      operationId: adminAgentGetLink
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The link
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SignupLink" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /admin/agents:
+    get:
+      tags: [admin-agents]
+      summary: Every sales agent, for the Ops Merchants agent filter
+      description: >
+        `admin_super` only - an agent gets `403 insufficient_scope`. Every
+        `admin_sales` admin (active or disabled, since a disabled agent's
+        merchants are still theirs in the reports), by name. A closed,
+        team-sized set, so it isn't paged.
+      operationId: adminListAgents
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: The agents
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, name, status, merchants]
+                      properties:
+                        id: { type: string, example: adm_01J9Z3M5X8K2P4T6V8W0Y2A4C6 }
+                        name: { type: string }
+                        status: { type: string, enum: [active, disabled] }
+                        merchants: { type: integer, description: Every merchant credited to this agent, invite and link }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /admin/agents/merchants/{id}/resend-invite:
     post:
@@ -238,6 +305,13 @@ components:
             False when the account was saved (or the invite re-issued) but
             the email provider refused the message. The link in it is
             already void-able by a resend.
+
+    SignupLink:
+      type: object
+      required: [code, url]
+      properties:
+        code: { type: string, example: K7P2QX }
+        url: { type: string, example: "https://merchant.cral.co.ke/join?a=K7P2QX" }
 
     AgentMerchantStatus:
       type: string

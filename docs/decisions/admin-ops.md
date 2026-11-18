@@ -253,6 +253,29 @@ reasoning: `docs/plans/trucks-and-sales-agents.md`, "B1 as built".
   `merchant.agent_invite`, `merchant.invite_resent`, `user.invite_accepted`.
 - Screens not from a canvas file (none exists); console idiom, phone-first.
 
+### Attribution (AG2, 2026-11-19)
+
+Migration `20261119090000_agent_signup_codes`; `lib/agent-codes.ts`. Detail:
+`docs/plans/trucks-and-sales-agents.md`, "B2 as built".
+
+- **Personal link `<merchant portal>/join?a=<code>`.** `admin_users.signup_code`,
+  six characters without 0/O/1/I, issued on the agent's first
+  `GET /admin/agents/link` (conditional write, audited
+  `admin.signup_code_issued`), never changed. The portal keeps `?a=` from
+  any page in `localStorage` for 30 days and sends it as `agent_code` on
+  `POST /auth/register`.
+- **Credit is fixed at sign-up and first credit wins.** A code naming an
+  active `admin_sales` / `admin_super` creates the `merchants` row at
+  register with `onboarded_by` + `onboarding_source = agent_link` and
+  `merchant.agent_link_signup` audit, one transaction. Unknown, disabled or
+  customer-side codes are ignored silently (same response). An existing
+  account is never re-credited (409 `account_exists`), so an owner another
+  agent invited stays theirs; nothing reassigns `onboarded_by`.
+- **Who sees it**: attribution is the owner's report. Ops Merchants shows
+  the Agent column and `?agent=<id>|none` filter to `admin_super` only;
+  other roles get no `agent` field and 403 on the filter.
+  `GET /admin/agents` (the filter's roster) is owner-only.
+
 ## Code anchors
 
 - Contract for `/admin/auth/*`: `openapi/admin-identity.yaml`. Team: `GET/POST/PATCH /admin/team`, `.../deactivate`, `.../reactivate`, `.../reset-invite`.

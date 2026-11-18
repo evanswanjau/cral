@@ -8,6 +8,9 @@ export const RegisterSchema = z.object({
   // Optional: onboarding collects these, so sign-up stays email + password.
   full_name: z.string().min(1).optional(),
   phone: z.string().optional(),
+  // A sales agent's sign-up code from `/join?a=` (PR AG2). Never rejected:
+  // an unknown code just credits nobody.
+  agent_code: z.string().max(20).optional(),
 });
 
 export const OtpRequestSchema = z.object({

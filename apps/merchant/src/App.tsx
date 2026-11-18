@@ -21,6 +21,11 @@ import { CreateAccount } from "./pages/CreateAccount.js";
 import { ForgotPassword } from "./pages/ForgotPassword.js";
 import { ResetPassword } from "./pages/ResetPassword.js";
 import { JoinPage } from "./pages/join/JoinPage.js";
+import { rememberAgentCode } from "./lib/agent-link.js";
+
+// A sales agent's sign-up link (`/join?a=<code>`, PR AG2) can land on any
+// page, so the code is kept before routing, whatever the path.
+rememberAgentCode(new URLSearchParams(window.location.search).get("a"));
 
 const router = createBrowserRouter([
   { path: "/sign-in", element: <SignIn /> },
@@ -29,6 +34,9 @@ const router = createBrowserRouter([
   { path: "/reset-password", element: <ResetPassword /> },
   // Supplier pages, public like the landing at `/` (UI4).
   { path: "/join/:type", element: <JoinPage /> },
+  // An agent's personal link. The code is already kept above; the landing
+  // shows every way to earn.
+  { path: "/join", element: <Navigate to="/" replace /> },
   {
     element: <RequireAuth />,
     children: [

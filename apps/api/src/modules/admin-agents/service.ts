@@ -26,6 +26,8 @@ import {
   merchantInviteLink,
 } from "../auth/service.js";
 import type { UserRow } from "../auth/db-types.js";
+import type { AdminUserRow } from "../admin-auth/db-types.js";
+import { generateSignupCode, signupLink } from "../../lib/agent-codes.js";
 import type { MerchantRow } from "../merchant/db-types.js";
 import type { AddMerchantInput } from "./schemas.js";
 
@@ -403,4 +405,76 @@ export async function resendInvite(merchantId: string, ctx: AgentCtx) {
 
   const inviteSent = await sendInviteEmail(row.email, ctx.adminName, displayName(row) ?? row.email, rawToken);
   return { merchant: serialize(await loadScoped(merchantId, ctx)), invite_sent: inviteSent };
+}
+
+// ---------------------------------------------------------------------
+// Personal sign-up link (PR AG2)
+// ---------------------------------------------------------------------
+
+/**
+ * The caller's code and link, issuing the code on first use. The write is
+ * conditional on `signup_code IS NULL`, so two tabs opening My merchants
+ * at once can't hand out two codes: the loser re-reads the winner's.
+ */
+export async function getSignupLink(ctx: AgentCtx): Promise<{ code: string; url: string }> {
+  const existing = await db<AdminUserRow>("admin_users").where({ id: ctx.adminId }).first("signup_code");
+  if (existing?.signup_code) return { code: existing.signup_code, url: signupLink(existing.signup_code) };
+
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = generateSignupCode();
+    try {
+      const issued = await db.transaction(async (trx) => {
+        const n = await trx<AdminUserRow>("admin_users")
+          .where({ id: ctx.adminId })
+          .whereNull("signup_code")
+          .update({ signup_code: code, updated_at: new Date() });
+        if (n === 0) return false;
+        await writeAuditEntry(trx, {
+          actorId: ctx.adminId,
+          actorType: "admin",
+          action: "admin.signup_code_issued",
+          entityType: "admin_user",
+          entityId: ctx.adminId,
+          after: { signup_code: code },
+          requestId: ctx.requestId,
+          ip: ctx.ip,
+        });
+        return true;
+      });
+      if (!issued) break; // Someone else issued it first; read theirs.
+      return { code, url: signupLink(code) };
+    } catch (err) {
+      if (!isUniqueViolation(err)) throw err;
+      // Another agent already holds this code. Draw again.
+    }
+  }
+
+  const row = await db<AdminUserRow>("admin_users").where({ id: ctx.adminId }).first("signup_code");
+  if (!row?.signup_code) throw new Error("Could not issue a sign-up code");
+  return { code: row.signup_code, url: signupLink(row.signup_code) };
+}
+
+/** Every sales agent, for Ops Merchants' agent filter (`admin_super` only). */
+export async function listAgents() {
+  const rows = (await db("admin_users as a")
+    .leftJoin("merchants as m", "m.onboarded_by", "a.id")
+    .where("a.role", "admin_sales")
+    .groupBy("a.id", "a.full_name", "a.status")
+    .orderBy("a.full_name", "asc")
+    .orderBy("a.id", "asc")
+    .select("a.id", "a.full_name", "a.status")
+    .count<{ id: string; full_name: string; status: string; merchants: string }[]>({ merchants: "m.id" })) as {
+    id: string;
+    full_name: string;
+    status: string;
+    merchants: string | number;
+  }[];
+  return {
+    data: rows.map((r) => ({
+      id: r.id,
+      name: r.full_name,
+      status: r.status === "disabled" ? "disabled" : "active",
+      merchants: Number(r.merchants),
+    })),
+  };
 }

@@ -1,5 +1,6 @@
 import { Router, type Request } from "express";
 import { z } from "zod";
+import { ApiError } from "@cral/types";
 import { requireAdmin } from "../../middleware/require-admin.js";
 import { requireIdempotencyKey } from "../../middleware/idempotency.js";
 import { asyncHandler } from "../../lib/async-handler.js";
@@ -25,6 +26,8 @@ function ctxOf(req: Request): AdminCtx {
 const ListQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(25),
+  // An admin id, or `none` for owners who signed up on their own. Owner only (PR AG2).
+  agent: z.string().trim().min(1).max(40).optional(),
 });
 const DocDecisionSchema = z.object({
   decision: z.enum(["accept", "reject", "reset"]),
@@ -44,7 +47,23 @@ adminMerchantsRouter.get(
   guard,
   asyncHandler(async (req, res) => {
     const q = ListQuerySchema.parse(req.query);
-    const result = await admin.listMerchants({ limit: q.limit, ...(q.cursor ? { cursor: q.cursor } : {}) });
+    const isOwner = req.admin!.role === "admin_super";
+    // Who brought a merchant in is the owner's report (B2), so a reviewer
+    // neither sees the Agent column nor filters by it.
+    if (q.agent && !isOwner) {
+      throw new ApiError({
+        status: 403,
+        type: "auth_error",
+        code: "insufficient_scope",
+        message: "Only the owner can filter merchants by agent.",
+      });
+    }
+    const result = await admin.listMerchants({
+      limit: q.limit,
+      withAgent: isOwner,
+      ...(q.cursor ? { cursor: q.cursor } : {}),
+      ...(q.agent ? { agent: q.agent } : {}),
+    });
     res.status(200).json(result);
   }),
 );
