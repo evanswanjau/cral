@@ -1,0 +1,4 @@
+# Shell scripts run on Linux (the VPS) and under Git for Windows' sh.
+# A CRLF checkout breaks them, so keep LF whatever core.autocrlf says.
+*.sh text eol=lf
+.githooks/* text eol=lf

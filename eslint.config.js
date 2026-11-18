@@ -34,6 +34,13 @@ export default [
     },
   },
   {
+    // Repo tooling (npm run gate, the hook installer) runs under Node.
+    files: ["tools/**/*.mjs"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+  {
     // Frontend apps + the UI package's preview run in the browser.
     files: ["apps/{customer,merchant,admin}/**/*.{ts,tsx}", "packages/ui/**/*.{ts,tsx}"],
     languageOptions: {
