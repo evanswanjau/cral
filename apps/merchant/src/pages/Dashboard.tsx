@@ -1,13 +1,15 @@
-import { useState, type CSSProperties, type ReactNode } from "react";
+import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
-import { BOOKING_STATUS, DOC_STATE, NOTIFICATION_KIND, STATUS, money } from "../components/portal/status.js";
+import { BOOKING_STATUS, NOTIFICATION_KIND, money } from "../components/portal/status.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { Card, CardEmpty, HoverRow, plural } from "../components/dashboard/DashboardParts.js";
+import { FleetCard, HeadButtons } from "../components/dashboard/FleetCard.js";
+import { useOffering, type Offering } from "../lib/use-offering.js";
 import {
   useDashboard,
   type Dashboard as DashboardData,
   type DashboardActivityItem,
-  type DashboardFleetVehicle,
   type DashboardPayoutLine,
   type DashboardWeekBooking,
 } from "../lib/dashboard-api.js";
@@ -68,9 +70,6 @@ function daysUntil(day: string, today: string): number {
   return Math.max(0, Math.round((Date.parse(`${day}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / DAY_MS));
 }
 
-function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n} ${n === 1 ? one : many}`;
-}
 
 /** "vs August" - the month the paid-out delta is measured against. */
 function previousMonthLabel(data: DashboardData): string {
@@ -83,16 +82,18 @@ function previousMonthLabel(data: DashboardData): string {
 }
 
 /** The greeting's second line: today, then a clause per fact that has one. */
-function subheading(data: DashboardData): string {
+function subheading(data: DashboardData, offering: Offering): string {
+  const fleet = offering.driverOnly ? { one: "driver", many: "drivers" } : offering.fleet;
   const clauses: string[] = [];
   const { on_hire_count: onHire, next_payout_date: payoutDate } = data.greeting;
 
-  if (onHire > 0) clauses.push(`${plural(onHire, "vehicle")} ${onHire === 1 ? "is" : "are"} on hire today`);
+  if (onHire > 0) clauses.push(`${plural(onHire, fleet.one, fleet.many)} ${onHire === 1 ? "is" : "are"} on hire today`);
   if (payoutDate) clauses.push(`your next payout lands on ${formatShortDay(payoutDate)}`);
 
   if (clauses.length === 0) {
-    return data.fleet.vehicle_count === 0
-      ? `${formatLongDay(data.greeting.today)}. Add your first vehicle to start taking bookings.`
+    const count = offering.driverOnly ? offering.driverCount : data.fleet.vehicle_count;
+    return count === 0
+      ? `${formatLongDay(data.greeting.today)}. Add your first ${fleet.one} to start taking bookings.`
       : `${formatLongDay(data.greeting.today)}. Nothing is on hire today and nothing is waiting to be paid out.`;
   }
   const joined = clauses.length === 2 ? `${clauses[0]} and ${clauses[1]}` : clauses[0];
@@ -108,12 +109,6 @@ function needsActionBody(data: DashboardData): string {
   if (rest > 0) parts.push(`and ${plural(rest, "other")}`);
   return parts.join(" ");
 }
-
-const DOC_KIND_LABEL: Record<DashboardFleetVehicle["documents"][number]["kind"], string> = {
-  logbook: "Logbook",
-  comprehensive_insurance: "Comprehensive insurance",
-  tracker_certificate: "Tracker certificate",
-};
 
 // ---------------------------------------------------------------------
 // Pieces
@@ -145,41 +140,6 @@ function Tile({
         <span style={{ ...P.dashTileDelta, color: deltaColor }}>{delta}</span>
         <span style={P.dashTileNote}>{note}</span>
       </div>
-    </div>
-  );
-}
-
-function Card({ children }: { children: ReactNode }): JSX.Element {
-  return <div style={P.dashCard}>{children}</div>;
-}
-
-function CardEmpty({ title, body }: { title: string; body: string }): JSX.Element {
-  return (
-    <div style={P.dashCardEmpty}>
-      <div style={P.dashCardEmptyTitle}>{title}</div>
-      <p style={P.dashCardEmptyBody}>{body}</p>
-    </div>
-  );
-}
-
-function HoverRow({
-  onClick,
-  children,
-  style,
-}: {
-  onClick?: () => void;
-  children: ReactNode;
-  style?: CSSProperties;
-}): JSX.Element {
-  const [hover, setHover] = useState(false);
-  return (
-    <div
-      onClick={onClick}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{ ...P.dashRow, ...style, background: hover ? "#FAFBFC" : "transparent" }}
-    >
-      {children}
     </div>
   );
 }
@@ -250,39 +210,6 @@ function BookingRow({
             <span style={P.dashRowGross}>of {money(booking.gross.amount)}</span>
           </>
         )}
-      </span>
-      <span style={P.dashChevron}>›</span>
-    </HoverRow>
-  );
-}
-
-function FleetRow({ vehicle, onOpen }: { vehicle: DashboardFleetVehicle; onOpen: () => void }): JSX.Element {
-  const skin = STATUS[vehicle.status];
-  const fleetRate = vehicle.hiring_unit === "trip" ? vehicle.trip_rate : vehicle.daily_rate;
-  return (
-    <HoverRow onClick={onOpen}>
-      <span style={P.dashPlate}>{vehicle.registration}</span>
-      <div style={P.dashFleetMain}>
-        <div style={P.dashFleetTitleLine}>
-          <span style={P.dashFleetTitle}>{vehicle.title}</span>
-          {vehicle.verification_badge === "active" && <span style={P.dashFleetBadge}>✓ VERIFIED</span>}
-        </div>
-        <div style={P.dashDocBands}>
-          {vehicle.documents.map((doc) => (
-            <span
-              key={doc.kind}
-              title={`${DOC_KIND_LABEL[doc.kind]} · ${DOC_STATE[doc.state].label}`}
-              style={{ ...P.dashDocBand, background: DOC_STATE[doc.state].core }}
-            />
-          ))}
-        </div>
-      </div>
-      <span style={{ ...P.dashPill, background: skin.tint, border: `1px solid ${skin.border}`, color: skin.text }}>
-        <span style={{ ...P.dashPillDot, background: skin.core }} />
-        {skin.label}
-      </span>
-      <span style={{ ...P.dashFleetRate, color: fleetRate ? "#0B0F1A" : "#A7AEBB" }}>
-        {fleetRate ? `KES ${money(fleetRate.amount)} / ${vehicle.hiring_unit === "trip" ? "trip" : "day"}` : "No rate yet"}
       </span>
       <span style={P.dashChevron}>›</span>
     </HoverRow>
@@ -367,6 +294,7 @@ function Skeleton(): JSX.Element {
 export function Dashboard(): JSX.Element {
   usePageTitle("Dashboard");
   const navigate = useNavigate();
+  const offering = useOffering();
   const { data, isLoading } = useDashboard();
 
   if (isLoading || !data) return <Skeleton />;
@@ -389,15 +317,10 @@ export function Dashboard(): JSX.Element {
       <div style={P.dashHead}>
         <div>
           <h1 style={P.dashH1}>{greeting.first_name ? `Karibu, ${greeting.first_name}` : "Karibu"}</h1>
-          <p style={P.dashLede}>{subheading(data)}</p>
+          <p style={P.dashLede}>{subheading(data, offering)}</p>
         </div>
         <div style={P.dashHeadBtns}>
-          <button type="button" onClick={() => navigate("/vehicles")} style={P.dashGhostBtn}>
-            Your vehicles
-          </button>
-          <button type="button" onClick={() => navigate("/vehicles/new")} style={P.dashPrimaryBtn}>
-            Add a vehicle
-          </button>
+          <HeadButtons />
         </div>
       </div>
 
@@ -446,7 +369,11 @@ export function Dashboard(): JSX.Element {
           delta={tiles.on_hire.live_vehicle_count > 0 ? `of ${tiles.on_hire.live_vehicle_count} live` : "No live listings"}
           deltaColor="#333B4A"
           note={
-            tiles.on_hire.live_vehicle_count > 0 ? (tiles.on_hire.live_vehicle_count === 1 ? "vehicle" : "vehicles") : ""
+            tiles.on_hire.live_vehicle_count > 0
+              ? tiles.on_hire.live_vehicle_count === 1
+                ? offering.fleet.one
+                : offering.fleet.many
+              : ""
           }
         />
         <Tile
@@ -502,35 +429,7 @@ export function Dashboard(): JSX.Element {
             )}
           </Card>
 
-          <Card>
-            <div style={P.dashCardHead}>
-              <span style={P.dashCardTitle}>Your fleet</span>
-              <span style={P.dashCardTag}>
-                {plural(data.fleet.vehicle_count, "VEHICLE").toUpperCase()}
-                {data.fleet.outstanding_document_count > 0 &&
-                  ` · ${plural(data.fleet.outstanding_document_count, "DOCUMENT").toUpperCase()} OUTSTANDING`}
-              </span>
-            </div>
-            {data.fleet.vehicles.length === 0 ? (
-              <CardEmpty
-                title="No vehicles yet"
-                body="Add your first vehicle and it will appear here with its documents and status."
-              />
-            ) : (
-              <>
-                {data.fleet.vehicles.map((vehicle) => (
-                  <FleetRow key={vehicle.id} vehicle={vehicle} onOpen={() => navigate(`/vehicles/${vehicle.id}`)} />
-                ))}
-                {data.fleet.vehicle_count > data.fleet.vehicles.length && (
-                  <div style={P.dashCardFoot}>
-                    <button type="button" onClick={() => navigate("/vehicles")} style={P.dashFootBtn}>
-                      See all {plural(data.fleet.vehicle_count, "vehicle")}
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </Card>
+          <FleetCard fleet={data.fleet} />
         </div>
 
         <div style={P.dashColSide}>
@@ -575,7 +474,11 @@ export function Dashboard(): JSX.Element {
             )}
             <div style={P.dashPayoutFoot}>
               <span style={P.dashPayoutFootDot} />
-              <span style={P.dashPayoutFootText}>Each hire clears 24 hours after you receive the vehicle</span>
+              <span style={P.dashPayoutFootText}>
+                {offering.driverOnly
+                  ? "Each job clears 24 hours after it is complete"
+                  : `Each hire clears 24 hours after you receive the ${offering.fleet.one} back`}
+              </span>
             </div>
           </Card>
 

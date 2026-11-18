@@ -10,6 +10,7 @@ import {
   type PayoutTile,
 } from "../lib/payouts-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { useOffering } from "../lib/use-offering.js";
 
 /** Nairobi's calendar month, which is what the statement endpoint expects. */
 function currentMonth(): string {
@@ -125,6 +126,7 @@ function EmptyState(): JSX.Element {
 
 export function PayoutList(): JSX.Element {
   usePageTitle("Payouts");
+  const { driverOnly, fleet } = useOffering();
   const navigate = useNavigate();
   const toast = useToast();
   const { data, isLoading } = usePayoutList();
@@ -150,7 +152,10 @@ export function PayoutList(): JSX.Element {
       <div style={P.listHead}>
         <div>
           <h1 style={P.h1}>Payouts</h1>
-          <p style={P.lede}>Hirers pay CRAL upfront. Your payout clears 24 hours after the vehicle comes back.</p>
+          <p style={P.lede}>
+            Hirers pay CRAL upfront. Your payout clears 24 hours after{" "}
+            {driverOnly ? "each job is complete" : `the ${fleet.one} comes back`}.
+          </p>
         </div>
         <button
           type="button"

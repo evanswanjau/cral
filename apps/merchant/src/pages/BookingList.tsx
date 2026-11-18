@@ -6,6 +6,7 @@ import { RatingBadge } from "../components/portal/RatingBadge.js";
 import { useToast } from "../components/portal/Toast.js";
 import { useBookingList, type BookingFilter, type BookingSummary } from "../lib/bookings-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { useOffering } from "../lib/use-offering.js";
 
 function isSameDay(a: Date, b: Date): boolean {
   return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -44,10 +45,11 @@ function FilterPill({
 }
 
 function TableHead(): JSX.Element {
+  const { driverOnly } = useOffering();
   return (
     <div className="m-thead" style={{ ...P.tableHead, gridTemplateColumns: "minmax(96px,1fr) minmax(min(100%,200px),2.6fr) minmax(96px,1.1fr) minmax(84px,1fr) 16px" }}>
-      <span style={P.tableHeadPlate}>VEHICLE</span>
-      <span style={P.tableHeadTitle}>HIRER · MODEL · DATES</span>
+      <span style={P.tableHeadPlate}>{driverOnly ? "DRIVER" : "VEHICLE"}</span>
+      <span style={P.tableHeadTitle}>{driverOnly ? "HIRER · DRIVER · DATES" : "HIRER · MODEL · DATES"}</span>
       <span style={{ ...P.tableHeadRate, textAlign: "right" }}>YOU KEEP</span>
       <span style={P.tableHeadStatus}>STATUS</span>
       <span style={P.tableHeadSpacer} />
@@ -88,6 +90,7 @@ function TableSkeleton(): JSX.Element {
 
 function EmptyState({ filter }: { filter: BookingFilter }): JSX.Element {
   const isAll = filter === "all";
+  const { driverOnly, fleet } = useOffering();
   return (
     <div style={P.emptyWrap}>
       <span style={P.emptyIcon}>
@@ -99,7 +102,7 @@ function EmptyState({ filter }: { filter: BookingFilter }): JSX.Element {
       <div style={P.emptyTitle}>{isAll ? "No bookings yet" : `Nothing in ${bookingFilterLabel(filter).toLowerCase()}`}</div>
       <p style={P.emptyBody}>
         {isAll
-          ? "Requests show up here once a hirer books one of your vehicles."
+          ? `Requests show up here once a hirer books one of your ${driverOnly ? "drivers" : fleet.many}.`
           : "Bookings show up here once they match this filter."}
       </p>
     </div>
@@ -149,6 +152,7 @@ function Row({ b, onOpen }: { b: BookingSummary; onOpen: () => void }): JSX.Elem
 
 export function BookingList(): JSX.Element {
   usePageTitle("Bookings");
+  const { driverOnly, fleet } = useOffering();
   const navigate = useNavigate();
   const flash = useToast();
   const [filter, setFilterState] = useState<BookingFilter>("all");
@@ -167,7 +171,8 @@ export function BookingList(): JSX.Element {
           <h1 style={P.h1}>Bookings</h1>
           <p style={P.lede}>
             Requests waiting on you, hires running now, and everything already finished. Hirers pay
-            CRAL upfront - your payout clears 24 hours after you receive the vehicle.
+            CRAL upfront. Your payout clears 24 hours after{" "}
+            {driverOnly ? "each job is complete" : `you receive the ${fleet.one} back`}.
           </p>
         </div>
         <button
