@@ -8,13 +8,13 @@ import { Dropdown, PIN_ICON } from "../site/Dropdown.js";
 /**
  * The car search (county, from, until) and its county quick-picks, moved
  * unchanged from the old home page's hero (proposal 1.1 H1) to the
- * `/cars` hero in UI1b. Until UI1c builds `/cars/search` it still submits
- * to `/browse?county&from&to`.
+ * `/cars` hero in UI1b. It submits to
+ * `/cars/search?county&from&to`.
  *
  * Counties come from `GET /catalog/counties` - only the ones that have a
  * live listing, busiest first. `COUNTY_CHIPS` caps the quick-pick row; the
  * dropdown lists them all. Until the list arrives (or if nothing is listed
- * anywhere) the field reads "Any county" and the search goes to /browse
+ * anywhere) the field reads "Any county" and the search goes to /cars/search
  * unfiltered, rather than pre-filling a county that may have nothing in it.
  *
  * No count badge on a chip: a number next to a place name reads as "cars
@@ -40,7 +40,7 @@ export function CarSearch(): JSX.Element {
       const v = form.get(key);
       if (typeof v === "string" && v) params.set(key, v);
     }
-    navigate(`/browse${params.toString() ? `?${params}` : ""}`);
+    navigate(`/cars/search${params.toString() ? `?${params}` : ""}`);
   };
 
   return (

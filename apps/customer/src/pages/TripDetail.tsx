@@ -945,7 +945,7 @@ export function TripDetail(): JSX.Element {
             </button>
           )}
           {!paid && !canCancel && (
-            <Link to="/browse" style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0F23A8" }}>
+            <Link to="/cars/search" style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0F23A8" }}>
               Find another car →
             </Link>
           )}

@@ -74,7 +74,7 @@ export const SERVICES: Service[] = [
     photo: "/images/services/cars.jpg",
     href: "/cars",
     // `/browse` and `/book` until UI1c moves them under `/cars`.
-    match: ["/cars", "/browse", "/book"],
+    match: ["/cars"],
   },
   {
     status: "live",

@@ -2,6 +2,8 @@ import { Navigate, type RouteObject } from "react-router-dom";
 import { SiteShell } from "./components/site/SiteShell.js";
 import { Home } from "./pages/Home.js";
 import { Browse } from "./pages/Browse.js";
+import { LegacyBrowseRedirect } from "./components/routing/LegacyBrowseRedirect.js";
+import { LegacyBookRedirect } from "./components/routing/LegacyBookRedirect.js";
 import { CarsHome } from "./pages/cars/CarsHome.js";
 import { Towing } from "./pages/Towing.js";
 import { Drivers } from "./pages/Drivers.js";
@@ -56,7 +58,8 @@ export const routes: RouteObject[] = [
     element: <SiteShell />,
     children: [
       { path: "/", element: <Home /> },
-      { path: "/browse", element: <Browse /> },
+      { path: "/browse", element: <LegacyBrowseRedirect /> },
+      { path: "/cars/search", element: <Browse /> },
       { path: "/cars", element: <CarsHome /> },
       // Not live yet: both land on the front door's "Coming to CRAL"
       // block (owner decision 2, 2026-11-18) until their own phase builds
@@ -64,6 +67,8 @@ export const routes: RouteObject[] = [
       { path: "/parts", element: <Navigate to="/#coming" replace /> },
       { path: "/services", element: <Navigate to="/#coming" replace /> },
       { path: "/cars/:id", element: <CarDetail /> },
+      // Not behind RequireAuth: see the note on the booking route below.
+      { path: "/cars/:id/book", element: <Booking /> },
       { path: "/drivers", element: <Drivers /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
@@ -75,7 +80,7 @@ export const routes: RouteObject[] = [
       // Not behind RequireAuth: a signed-out visitor lands here straight
       // from "Request these dates" and signs up inline as part of sending
       // the request - see Booking.tsx.
-      { path: "/book/:id", element: <Booking /> },
+      { path: "/book/:id", element: <LegacyBookRedirect /> },
 
       {
         element: <RequireAuth />,

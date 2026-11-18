@@ -41,7 +41,9 @@ export function CarDetail(): JSX.Element {
    * `history.back()`, which would leave the site.
    */
   const backSearch = (location.state as { browseSearch?: string } | null)?.browseSearch ?? "";
-  const backTo = backSearch ? `/browse?${backSearch}` : "/browse";
+  // Trucks and machinery keep `/browse` until UI2a/UI2b give them their own search.
+  const backBase = /(^|&)category=(truck|machinery)(&|$)/.test(backSearch) ? "/browse" : "/cars/search";
+  const backTo = backSearch ? `${backBase}?${backSearch}` : backBase;
   const navigate = useNavigate();
   const [params] = useSearchParams();
   // Seeded from the search the renter already did, so the dates they
@@ -206,7 +208,7 @@ export function CarDetail(): JSX.Element {
     if (!from || !to || belowMinimum) return;
     // No sign-in gate here - an unauthenticated visitor signs up inline on
     // the booking page itself as part of sending the request.
-    navigate(`/book/${car.id}?from=${from}&to=${to}${driver ? `&driver=${driver.id}` : ""}`);
+    navigate(`/cars/${car.id}/book?from=${from}&to=${to}${driver ? `&driver=${driver.id}` : ""}`);
   };
 
   return (

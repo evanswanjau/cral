@@ -6,8 +6,7 @@ import { VehicleCard, CARD_TINTS } from "../site/VehicleCard.js";
 /**
  * One collection rail (real data from GET /catalog/collections), moved
  * from the old home page to `/cars` in UI1b (proposal 1.1 H3, H4). "See
- * all" still goes to `/browse?collection=` until UI1c builds
- * `/cars/search`.
+ * all" goes to `/cars/search?collection=`.
  *
  * The rail's own kicker carries no skewed bar: the `/cars` hero already
  * holds the page's one skewed rule.
@@ -100,7 +99,7 @@ export function CarRail({ collection }: { collection: CatalogCollection }): JSX.
         <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 4 }}>
           <button
             type="button"
-            onClick={() => navigate(`/browse?collection=${collection.key}`)}
+            onClick={() => navigate(`/cars/search?collection=${collection.key}`)}
             style={{
               minHeight: 44,
               background: "none",

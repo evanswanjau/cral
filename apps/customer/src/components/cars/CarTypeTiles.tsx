@@ -8,8 +8,8 @@ import vanPhoto from "../../assets/category-tiles/van.jpg";
 /**
  * The car-type tiles, moved from the old home page to `/cars` in UI1b
  * (proposal 1.1 H5-H7). Only the three car categories: trucks and
- * machinery are front-door doors of their own now (H8, H9). Until UI1c
- * each tile still goes to `/browse?category=`.
+ * machinery are front-door doors of their own now (H8, H9). Each tile
+ * goes to `/cars/search?category=`.
  *
  * Photos are freely licensed Wikimedia Commons shots of what this market
  * really hires (sedan: Corolla Fielder, CC0; SUV: Prado 150, CC0; van:
@@ -36,7 +36,7 @@ export function CarTypeTiles({ minPriceByCategory }: { minPriceByCategory: Map<s
             <button
               key={b.slug}
               type="button"
-              onClick={() => navigate(`/browse?category=${b.slug}`)}
+              onClick={() => navigate(`/cars/search?category=${b.slug}`)}
               style={{
                 // A column so the photo pins to the top when the grid
                 // stretches every tile to the tallest one.

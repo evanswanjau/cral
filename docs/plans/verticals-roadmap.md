@@ -139,7 +139,7 @@ portal shows the sections for what they offer.
 | UI0 | **Built.** Link fixes that need no new page; `tools/check-links.mjs` | Sonnet |
 | UI1a | **Built.** Service registry, sub-site components, service tabs in the masthead | Opus |
 | UI1b | **Built.** Front door at `/`; `/cars` landing; coming block; `/services` and `/parts` redirect to `/#coming` | Opus |
-| UI1c | `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirects | Sonnet |
+| UI1c | **Built.** `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirect (truck and machinery `/browse` stay until UI2a/UI2b) | Sonnet |
 | UI2a | Trucks sub-site, route-first request | Opus |
 | UI2b | Machinery sub-site; sitemap paths | Sonnet |
 | UI3 | Drivers and towing, public | Opus |
