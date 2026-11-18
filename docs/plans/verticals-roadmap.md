@@ -44,16 +44,19 @@ reuses. Car sales (6) moves no money, so it carries the least risk.
 3. **Each PR** branches off `develop` as `feature/<name>`. When the code is
    done, the build session hands off to `shipper`, which runs
    `npm run gate`, commits, pushes, opens and merges the PR to `develop`,
-   tries the dev deploy, and reports back in a few lines. If the gate fails,
-   it returns only the failing lines, Opus fixes them and hands off again.
-4. **After each PR the owner deploys dev:**
-   `ssh cral@46.202.128.68 '~/redeploy-dev.sh'`, then smoke-tests on
-   `app-cral.vercel.app` and the dev merchant/admin.
-5. **At the end of each phase the owner ships production:** new env keys
-   into `/srv/cral/.env` first; a database dump if the phase has a
-   migration; PR `develop` -> `main` and merge; then
-   `ssh cral@46.202.128.68 '~/redeploy.sh'` and a browser check on
-   `cral.co.ke`, `merchant.cral.co.ke` and `admin.cral.co.ke`. The next
+   and reports back. It runs in the background, so the owner never waits,
+   and the Opus session never runs TypeScript, ESLint or the tests itself.
+   If anything fails, `shipper` returns only the failing lines, Opus fixes
+   them and hands off again.
+4. **Dev deploys itself.** After Phase 0, a timer on the VPS deploys
+   `develop` within a few minutes of each merge (`~/deploy-dev.status`
+   shows the result). The owner smoke-tests on `app-cral.vercel.app` and the
+   dev merchant/admin.
+5. **At the end of each phase the owner says "ship phase N".** New env
+   keys go into `/srv/cral/.env` first. The `release` agent merges
+   `develop` -> `main` and starts `~/redeploy.sh` detached (it backs up the
+   database before migrating). The owner checks `cral.co.ke`,
+   `merchant.cral.co.ke` and `admin.cral.co.ke` in the browser. The next
    phase starts only after that check.
 
 ### The standard start prompt
@@ -79,7 +82,7 @@ Every phase below gives a short prompt. They all expand to this:
 
 | PR | What | Model |
 |----|------|-------|
-| P0 | `npm run gate` (quiet), a pre-push hook, the `shipper` and `release` agents on Haiku, and CLAUDE.md cut from ~2,000 lines to an index (stale and reversed entries removed, current decisions moved into `docs/decisions/`) | Opus |
+| P0 | `npm run gate` (quiet, once per PR), a pre-push hook, the `shipper` and `release` agents on Haiku in the background, dev auto-deploy on the VPS, and CLAUDE.md cut from ~2,000 lines to an index (stale and reversed entries removed, current decisions moved into `docs/decisions/`) | Opus |
 
 **Start prompt:** the full P0 prompt is in
 [`docs/prompts/working-cheaply.md`](../prompts/working-cheaply.md#the-p0-session-prompt).
