@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { merchantLandingUrl } from "../lib/merchant-app.js";
@@ -7,7 +7,6 @@ import { earliestPickupDay } from "../lib/hire-dates.js";
 import { getCollections, getCounties, formatMoney, type CatalogCollection } from "../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../components/site/VehicleCard.js";
 import { Dropdown, PIN_ICON } from "../components/site/Dropdown.js";
-import { COUNTIES } from "../lib/kenya.js";
 import sedanPhoto from "../assets/category-tiles/sedan.jpg";
 import suvPhoto from "../assets/category-tiles/suv.jpg";
 import vanPhoto from "../assets/category-tiles/van.jpg";
@@ -19,141 +18,129 @@ import heroCx5 from "../assets/hero/cx5.jpg";
 import heroLandCruiser from "../assets/hero/land-cruiser.jpg";
 import heroMercedes from "../assets/hero/mercedes.jpg";
 import trustDriverPhoto from "../assets/trust-driver.jpg";
+import { HireDriverBanner } from "../components/site/HireDriverBanner.js";
 import keyHandoffPhoto from "../assets/keyhandoff.jpg";
 
 /**
- * Service modes supported on the CRAL multi-service platform.
+ * The home page, rebuilt against the real canvas source pulled 2026-09-17
+ * (`docs/brand/canvas/Cruz Ride Auto - Website.dc.html`, its "home" page
+ * state) - the earlier version of this file predated that pull and, despite
+ * its own header comment, was not actually checked against it (its facts
+ * strip and hero copy don't exist anywhere in the real source - see
+ * CLAUDE.md's "a plan document is not evidence" rule, which applies just as
+ * much to an earlier session's confident file comment).
+ *
+ * Deliberate departures from the canvas copy, per recorded product
+ * decisions:
+ *
+ *  - Deposit visibility. The deposit is never surfaced to the renter on
+ *    this page (or anywhere in the marketing/help copy) - mirrors the
+ *    merchant portal's "deposit never shown" rule. It still exists and is
+ *    enforced server-side; the client just never mentions it.
+ *  - The rate is fixed once agreed. Copy states plainly that the rate is
+ *    agreed before booking and does not change afterwards.
+ *  - The M-Pesa pay step. Daraja STK push is real now (2026-09-22, see
+ *    docs/plans/payments-daraja.md) - the flow is request -> owner
+ *    accepts -> renter pays via the M-Pesa prompt -> confirmed. The
+ *    canvas's trust-band clause ("the M-Pesa prompt only appears once
+ *    they have accepted") is accurate again; this page's copy should
+ *    match it rather than the earlier no-Daraja departure.
+ *  - The canvas's body-type tiles are a 7-way fixture taxonomy (Saloon,
+ *    Hatchback, SUV, Large SUV, Double cab, Van, Executive) with no
+ *    backing in our schema - `vehicles.category` is the real, fixed
+ *    5-slug set (CLAUDE.md's vehicle-model-changes note). Kept as 5 real
+ *    categories rather than fabricating the canvas's 7; each tile's price
+ *    tag is a real `FROM <min> / DAY` computed from whatever's already
+ *    loaded in the rails below, shown only when the data supports it.
+ *  - The "selling" door/hero-mode (buy and sell, canvas status "NEXT") has
+ *    no page to open - same as the AccountMenu's inert "Sell a car" row.
+ *
+ * The collection rails are real data from GET /catalog/collections.
  */
-type ServiceMode = "hire" | "trucks" | "driver" | "towing" | "service" | "parts" | "sales";
 
-interface ServiceTab {
-  id: ServiceMode;
-  label: string;
-  badge?: string;
-  icon: JSX.Element;
-  tagline: string;
-}
+/**
+ * Counties come from `GET /catalog/counties` - only the ones that have a
+ * live listing, busiest first. The canvas's hero hard-codes seven, which
+ * meant five of the seven quick-picks led to an empty results page.
+ * `HERO_COUNTY_CHIPS` caps the quick-pick row; the dropdown lists them
+ * all.
+ */
+const HERO_COUNTY_CHIPS = 7;
 
-const SERVICE_TABS: ServiceTab[] = [
-  {
-    id: "hire",
-    label: "Car Rental",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="2" y="10" width="20" height="9" rx="2" />
-        <path d="M5 10l2-5h10l2 5M6 19v2M18 19v2" />
-        <circle cx="7.5" cy="14.5" r="1.5" />
-        <circle cx="16.5" cy="14.5" r="1.5" />
-      </svg>
-    ),
-    tagline: "Sedans, SUVs and vans from verified Kenyan hosts",
-  },
-  {
-    id: "trucks",
-    label: "Haulage & Trucks",
-    badge: "QUOTES",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <rect x="1" y="4" width="14" height="12" rx="1" />
-        <path d="M15 9h4l3 3v4h-7V9zM5 18v2M18 18v2" />
-        <circle cx="5" cy="16" r="2" />
-        <circle cx="18" cy="16" r="2" />
-      </svg>
-    ),
-    tagline: "Tippers, canters, trailers and plant with per-km and per-tonne rates",
-  },
-  {
-    id: "driver",
-    label: "Hire a Driver",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="7" r="4" />
-        <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
-      </svg>
-    ),
-    tagline: "Vetted professional drivers with verified NTSA licences",
-  },
-  {
-    id: "towing",
-    label: "24/7 Towing SOS",
-    badge: "24/7",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="10" />
-        <path d="M12 6v6l4 2" />
-      </svg>
-    ),
-    tagline: "Fast emergency breakdown and accident flatbed recovery",
-  },
-  {
-    id: "service",
-    label: "Garage & Repairs",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-      </svg>
-    ),
-    tagline: "Inspected physical workshop premises with guaranteed itemised quotes",
-  },
-  {
-    id: "parts",
-    label: "Spare Parts",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </svg>
-    ),
-    tagline: "Genuine and OEM replacement parts quoted against your chassis / VIN",
-  },
-  {
-    id: "sales",
-    label: "Buy a Car",
-    icon: (
-      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
-        <line x1="7" y1="7" x2="7.01" y2="7" />
-      </svg>
-    ),
-    tagline: "Verified vehicles with encumbrance and bank caveats checked",
-  },
+/**
+ * Photos: the canvas's own body-type stock photography was replaced
+ * 2026-09-20 (owner's call) - those images were plainly foreign cars (a
+ * BMW M4, a US-market Expedition, a VW camper) and read as stock, not as
+ * what anyone actually hires in Kenya. These five are freely-licensed
+ * photos of the vehicles this market really runs, pulled from Wikimedia
+ * Commons, same sourcing standard the hero photos already follow:
+ *
+ *  - sedan     Toyota Corolla Fielder Hybrid (CC0)
+ *  - suv       Toyota Land Cruiser Prado 150 (CC0)
+ *  - van       Toyota HiAce high-roof 14-seater (public domain)
+ *  - truck     Isuzu Forward FRR cab and chassis (CC BY-SA 4.0)
+ *  - machinery tracked excavator on a site (public domain)
+ *
+ * Each is cropped to 720x460, the tile's own ratio, so the photo fills
+ * the tile edge to edge - full bleed, right up to the card's top corners.
+ * An earlier pass letterboxed them (whole photo, blurred bands top and
+ * bottom) to avoid cropping any vehicle; the bands read as dead space
+ * above the car, which is exactly what the tile must not have. Where a
+ * photo is taller than the tile the crop is biased slightly downward, so
+ * what gets cut is sky rather than wheels.
+ *
+ * They're decorative category illustrations, not tied to any specific
+ * listing - same category as Airbnb's "browse by type" tiles, and
+ * meaningfully different from the fabricated-badge precedent this codebase
+ * avoids elsewhere: no factual claim is made about any particular vehicle
+ * or account. The two CC BY-SA images need an attribution credit before
+ * this ships - same open flag the trust-band photo below carries.
+ */
+const CATEGORY_TILES: Array<{ slug: string; label: string; note: string; photo: string }> = [
+  { slug: "sedan", label: "Sedans & small cars", note: "City runs and airport hops", photo: sedanPhoto },
+  { slug: "suv", label: "SUV, 4x4 & pickup", note: "Potholes, game parks, weekends away", photo: suvPhoto },
+  { slug: "van", label: "Vans & minibuses", note: "Eight to fourteen people", photo: vanPhoto },
+  { slug: "truck", label: "Trucks & trailers", note: "Moves, deliveries, hardware runs", photo: truckPhoto },
+  { slug: "machinery", label: "Construction & machinery", note: "Sites, plant and equipment", photo: machineryPhoto },
 ];
 
-const HERO_COUNTY_CHIPS = 7;
+/**
+ * Hero background crossfade. The canvas's own hero has a photo carousel
+ * (`cralHeroFade`, 36s loop, staggered) behind resource ids that turned out
+ * not to be in any canvas bundle available this session - see the
+ * conversation this was built from. X-Trail and Demio are real,
+ * freely-licensed (CC BY-SA) photos pulled from Wikimedia Commons; CX-5,
+ * the Land Cruiser lineup and the Mercedes were supplied directly by the
+ * owner (the Mercedes shot is evidently taken in a Kenyan car yard). Not
+ * the canvas's own photography, but real cars, not fabricated ones.
+ */
 const HERO_PHOTOS = [heroXtrail, heroMercedes, heroCx5, heroLandCruiser, heroDemio];
 
-const TRUST_COLS = [
+/**
+ * From the canvas's `trustCols` fixture, verbatim except item [1] - the
+ * canvas's "Nothing leaves your M-Pesa until the owner has accepted your
+ * dates" describes the STK flow, which isn't live (see file header). Kept
+ * the same title and shape, reworded the body to what's actually true
+ * today: nothing is *owed*, because settlement is still owner-direct.
+ */
+const TRUST_COLS: Array<{ n: string; title: string; body: string }> = [
   {
     n: "01",
-    title: "Paperwork verified first",
-    body: "Real compliance officers check logbooks, NTSA licences, tracker certificates, and workshop premises before anything is listed.",
+    title: "Checked before it goes live",
+    body: "A real person checks every car's details and paperwork before it is listed.",
   },
   {
     n: "02",
-    title: "Zero money risk",
-    body: "You pay only once an owner accepts your dates, and maintenance/parts funds are held securely in escrow until you confirm delivery.",
+    title: "Paid only after a yes",
+    body: "You don't pay anything until the owner accepts your dates. If they don't reply in time, you pay nothing.",
   },
   {
     n: "03",
-    title: "Evidence-backed protection",
-    body: "Handover photos, GPS timestamps, and binding quotes ensure fair, evidence-based dispute arbitration with no hidden fees.",
+    title: "Decided with evidence",
+    body: "If something gets damaged, a CRAL reviewer looks at photos from both sides before deciding who pays.",
   },
 ];
 
-const CATEGORY_TILES = [
-  { slug: "sedan", label: "Sedans & small cars", note: "City runs, daily commutes and airport hops", photo: sedanPhoto },
-  { slug: "suv", label: "SUV, 4x4 & pickup", note: "Upcountry trips, game parks and safari cruisers", photo: suvPhoto },
-  { slug: "van", label: "Vans & minibuses", note: "8 to 14-seater passenger transport and tours", photo: vanPhoto },
-  { slug: "truck", label: "Trucks & trailers", note: "Tipper trucks, canters, flatbeds and haulage", photo: truckPhoto },
-  { slug: "machinery", label: "Construction & plant", note: "Excavators, backhoes, rollers and machinery", photo: machineryPhoto },
-];
-
-const TRUCK_SHOWCASE = [
-  { type: "Canter / 3-5t", desc: "Hardware, food distribution & urban deliveries", price: "From KES 8,000 / trip" },
-  { type: "Tipper / 14-20t", desc: "Sand, ballast, quarry stone & excavation", price: "From KES 14,000 / trip" },
-  { type: "Flatbed / Low-loader", desc: "Containers, machinery & oversized transport", price: "Quoted per km / tonne" },
-  { type: "Prime Mover 28-32t", desc: "Long-haul freight, transit & cross-county logistics", price: "Corridor quote on route" },
-];
 
 function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
   const navigate = useNavigate();
@@ -161,9 +148,8 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
   const scroll = (dir: 1 | -1) => {
     ref.current?.scrollBy({ left: dir * 560, behavior: "smooth" });
   };
-
   return (
-    <div style={{ padding: "clamp(16px,2.5vw,26px) 0" }}>
+    <div style={{ padding: "clamp(14px,2.2vw,22px) 0" }}>
       <div
         style={{
           maxWidth: 1320,
@@ -191,7 +177,7 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
             />
             <span
               style={{
-                font: "500 10.5px/1 'IBM Plex Mono',monospace",
+                font: "500 10px/1 'IBM Plex Mono',monospace",
                 letterSpacing: ".12em",
                 color: "#838C9B",
               }}
@@ -202,7 +188,7 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
           <h2
             style={{
               margin: "0 0 5px",
-              font: "700 clamp(22px,2.8vw,32px)/1.1 Archivo,sans-serif",
+              font: "700 clamp(21px,2.8vw,30px)/1.1 Archivo,sans-serif",
               fontVariationSettings: "'wdth' 108",
               letterSpacing: "-.026em",
               color: "#0B0F1A",
@@ -277,7 +263,7 @@ function Rail({ collection }: { collection: CatalogCollection }): JSX.Element {
               borderBottom: "1px solid rgba(15,35,168,.3)",
             }}
           >
-            See all in {collection.title} →
+            See all
           </button>
         </div>
       </div>
@@ -289,7 +275,7 @@ export function Home(): JSX.Element {
   useSeo({
     title: null,
     description:
-      "CRAL is Kenya's complete automotive ecosystem: passenger vehicle hire, commercial haulage trucks, vetted professional drivers, 24/7 roadside towing, inspected garage repairs, and chassis-matched spare parts.",
+      "CRAL is Kenya's one-stop shop for all your vehicle-based needs - hire, parts and services, all in one place. Every listing's paperwork is verified by our team.",
     path: "/",
     jsonLd: {
       "@context": "https://schema.org",
@@ -302,23 +288,26 @@ export function Home(): JSX.Element {
       address: { "@type": "PostalAddress", addressLocality: "Nairobi", addressCountry: "KE" },
     },
   });
-
   const navigate = useNavigate();
-  const [activeMode, setActiveMode] = useState<ServiceMode>("hire");
   const [city, setCity] = useState<string | undefined>(undefined);
-
   const { data, isLoading, isError } = useQuery({
     queryKey: ["catalog", "collections"],
     queryFn: getCollections,
   });
-
+  // Only counties that have something live in them - see HERO_COUNTY_CHIPS.
   const { data: countyData } = useQuery({
     queryKey: ["catalog", "counties"],
     queryFn: getCounties,
   });
   const counties = (countyData?.counties ?? []).map((c) => c.county);
+
   const rails = (data?.collections ?? []).filter((c) => c.vehicles.length > 0);
 
+  // A real (if partial - only whatever's already loaded for the rails
+  // below) minimum price per category, for the "FROM <price> / DAY" tag
+  // on the body-type tiles. `category` is the fixed 5-slug enum, so this
+  // grouping is exact - unlike a free-text `county` match, which is why
+  // the hero's city quick-picks below carry no count.
   const uniqueVehicles = new Map(rails.flatMap((c) => c.vehicles).map((v) => [v.id, v]));
   const minPriceByCategory = new Map<string, { amount: number; currency: string }>();
   for (const v of uniqueVehicles.values()) {
@@ -326,14 +315,15 @@ export function Home(): JSX.Element {
     if (!cur || v.daily_rate.amount < cur.amount) minPriceByCategory.set(v.category, v.daily_rate);
   }
 
+
   return (
     <div>
-      {/* ===================== HERO SECTION ===================== */}
+      {/* ---- hero ---- */}
       <div
         style={{
           background: "#0B0F1A",
-          minHeight: "clamp(640px, 92vh, 880px)",
-          padding: "clamp(74px,8vw,110px) 0 clamp(36px,5vw,60px)",
+          minHeight: "100vh",
+          padding: "clamp(30px,4.6vw,58px) 0 clamp(26px,3.6vw,44px)",
           position: "relative",
           overflow: "hidden",
           display: "flex",
@@ -341,7 +331,6 @@ export function Home(): JSX.Element {
           justifyContent: "center",
         }}
       >
-        {/* Background photo crossfade */}
         {HERO_PHOTOS.map((photo, i) => (
           <div
             key={photo}
@@ -358,19 +347,16 @@ export function Home(): JSX.Element {
             }}
           />
         ))}
-
-        {/* Ambient Dark Gradient Layer */}
         <div
           style={{
             position: "absolute",
             inset: 0,
             background:
-              "linear-gradient(100deg, rgba(11,15,26,.97) 0%, rgba(11,15,26,.88) 38%, rgba(11,15,26,.55) 70%, rgba(11,15,26,.82) 100%)",
+              // True black, not the brand ink (#0B0F1A reads blue over a photo).
+              "linear-gradient(100deg, rgba(0,0,0,.93) 0%, rgba(0,0,0,.8) 32%, rgba(0,0,0,.5) 62%, rgba(0,0,0,.72) 100%)",
             pointerEvents: "none",
           }}
         />
-
-        {/* Accent Red Slices */}
         <div
           style={{
             position: "absolute",
@@ -397,8 +383,6 @@ export function Home(): JSX.Element {
             pointerEvents: "none",
           }}
         />
-
-        {/* Main Hero Container */}
         <div
           style={{
             width: "100%",
@@ -406,808 +390,229 @@ export function Home(): JSX.Element {
             margin: "0 auto",
             padding: "0 clamp(16px,4vw,40px)",
             position: "relative",
+            display: "flex",
+            gap: "clamp(22px,4vw,54px)",
+            flexWrap: "wrap",
+            alignItems: "flex-start",
             boxSizing: "border-box",
           }}
         >
-          {/* Eyebrow & Headline */}
-          <div style={{ maxWidth: 880, marginBottom: "clamp(22px,3vw,34px)" }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <span
-                style={{
-                  display: "block",
-                  width: 16,
-                  height: 4,
-                  background: "#D81E32",
-                  transform: "skewX(-14deg)",
-                }}
-              />
-              <span
-                style={{
-                  font: "600 11px/1 'IBM Plex Mono',monospace",
-                  letterSpacing: ".14em",
-                  color: "#B6C0F4",
-                  textTransform: "uppercase",
-                }}
-              >
-                Kenya&apos;s Verified Automotive Marketplace
-              </span>
-            </div>
-
+          <div style={{ flex: "1 1 520px", minWidth: 300 }}>
             <h1
               style={{
                 margin: "0 0 16px",
-                font: "700 clamp(36px,5.8vw,68px)/1.02 Archivo,sans-serif",
+                font: "700 clamp(36px,6.2vw,72px)/.98 Archivo,sans-serif",
                 fontVariationSettings: "'wdth' 112",
-                letterSpacing: "-.035em",
+                letterSpacing: "-.037em",
                 color: "#FFFFFF",
+                maxWidth: 840,
               }}
             >
-              Everything your vehicle needs. All in one place.
+              Kenya's one-stop shop for cars.
             </h1>
-
             <p
               style={{
-                margin: 0,
-                font: "400 clamp(15.5px,1.8vw,19px)/1.55 'Instrument Sans',sans-serif",
-                color: "#C3CAD5",
-                maxWidth: 720,
+                margin: "0 0 clamp(32px,4.5vw,48px)",
+                font: "400 clamp(16px,1.9vw,20px)/1.5 'Instrument Sans',sans-serif",
+                color: "#A7B0BE",
+                maxWidth: 840,
               }}
             >
-              Hire passenger cars, contract heavy haulage trucks, book vetted drivers, dispatch 24/7 towing, service at inspected garages, or source genuine spare parts. Every provider verified by CRAL.
+              One account for everything your car needs: hire one today, order the right part,
+              book a garage that quotes first, or sell the car you are done with. Every car's
+              papers are read by a person before it is listed, and you pay nothing until an owner
+              says yes.
             </p>
-          </div>
 
-          {/* ================= MULTI-SERVICE CONSOLE ================= */}
-          <div style={{ maxWidth: 1040 }}>
-            {/* Service Mode Tabs */}
-            <div
-              className="cral-rail"
-              style={{
-                display: "flex",
-                gap: 6,
-                overflowX: "auto",
-                paddingBottom: 10,
-                marginBottom: 2,
-              }}
-            >
-              {SERVICE_TABS.map((tab) => {
-                const active = activeMode === tab.id;
+            <SearchBar city={city} counties={counties} />
+            {/* City quick-picks - the busiest counties that actually have a
+                live listing. No count badge (unlike the canvas's own
+                `cityCounts`): the number is real now, but a count next to a
+                place name reads as "cars available on your dates", which it
+                is not. The row is empty until the query lands rather than
+                showing places that might have nothing. */}
+            <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>
+              {counties.slice(0, HERO_COUNTY_CHIPS).map((c) => {
+                const on = city === c;
                 return (
                   <button
-                    key={tab.id}
+                    key={c}
                     type="button"
-                    onClick={() => setActiveMode(tab.id)}
+                    onClick={() => setCity(c)}
                     style={{
-                      flex: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      height: 40,
-                      padding: "0 14px",
-                      borderRadius: "999px",
-                      background: active ? "#FFFFFF" : "rgba(255,255,255,.07)",
-                      color: active ? "#0B0F1A" : "#DCE1FA",
-                      border: active ? "1px solid #FFFFFF" : "1px solid rgba(255,255,255,.16)",
+                      height: 32,
+                      padding: "0 12px",
+                      background: on ? "rgba(255,255,255,.09)" : "transparent",
+                      border: `1px solid ${on ? "#5F6B7D" : "#252B3A"}`,
+                      borderRadius: 999,
                       cursor: "pointer",
-                      font: `${active ? 600 : 500} 13.5px/1 'Instrument Sans',sans-serif`,
-                      transition: "all .15s ease",
-                      boxShadow: active ? "0 4px 14px rgba(0,0,0,.25)" : "none",
+                      font: `${on ? 600 : 500} 13px/1 'Instrument Sans',sans-serif`,
+                      color: on ? "#FFFFFF" : "#C7CED8",
                     }}
                   >
-                    <span style={{ display: "flex", color: active ? "#0F23A8" : "#B6C0F4" }}>
-                      {tab.icon}
-                    </span>
-                    <span>{tab.label}</span>
-                    {tab.badge && (
-                      <span
-                        style={{
-                          fontSize: 9,
-                          fontFamily: "'IBM Plex Mono',monospace",
-                          fontWeight: 700,
-                          padding: "2px 5px",
-                          borderRadius: 4,
-                          background: active ? "#D81E32" : "rgba(216,30,50,.35)",
-                          color: "#FFFFFF",
-                          letterSpacing: ".06em",
-                        }}
-                      >
-                        {tab.badge}
-                      </span>
-                    )}
+                    {c}
                   </button>
                 );
               })}
             </div>
-
-            {/* Dynamic Console Input Box */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                borderRadius: 18,
-                boxShadow: "0 24px 64px rgba(0,0,0,.45)",
-                overflow: "hidden",
-                border: "1px solid #E4E7EC",
-              }}
-            >
-              {activeMode === "hire" && (
-                <HireConsole city={city} counties={counties} onSelectCity={setCity} />
-              )}
-              {activeMode === "trucks" && <TrucksConsole counties={counties} />}
-              {activeMode === "driver" && <DriversConsole counties={counties} />}
-              {activeMode === "towing" && <TowingConsole counties={counties} />}
-              {activeMode === "service" && <GarageConsole counties={counties} />}
-              {activeMode === "parts" && <PartsConsole />}
-              {activeMode === "sales" && <SalesConsole counties={counties} />}
-            </div>
-
-            {/* Active Mode Subtext & Quick Link */}
-            <div
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                flexWrap: "wrap",
-                gap: 12,
-                marginTop: 12,
-                padding: "0 6px",
-              }}
-            >
-              <span style={{ font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#A7B0BE" }}>
-                {SERVICE_TABS.find((t) => t.id === activeMode)?.tagline}
-              </span>
-              {activeMode === "hire" && counties.length > 0 && (
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
-                  <span style={{ font: "500 11.5px/1 'IBM Plex Mono',monospace", color: "#7A8494" }}>
-                    POPULAR:
-                  </span>
-                  {counties.slice(0, HERO_COUNTY_CHIPS).map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setCity(c)}
-                      style={{
-                        background: city === c ? "rgba(255,255,255,.18)" : "rgba(255,255,255,.06)",
-                        border: `1px solid ${city === c ? "#9AA6B8" : "rgba(255,255,255,.12)"}`,
-                        borderRadius: 999,
-                        color: "#E2E7EE",
-                        fontSize: 12,
-                        padding: "3px 9px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
           </div>
         </div>
       </div>
 
-      {/* ===================== SERVICES SHOWCASE GRID ===================== */}
-      <div style={{ padding: "clamp(36px,5vw,60px) clamp(16px,4vw,40px) 0" }}>
+      {/* ---- book a driver (docs/plans/drivers.md) ---- */}
+      <div style={{ padding: "clamp(18px,2.6vw,28px) clamp(16px,4vw,40px) 0" }}>
         <div style={{ maxWidth: 1240, margin: "0 auto" }}>
-          <div style={{ marginBottom: 22 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 7 }}>
-              <span
-                style={{
-                  display: "block",
-                  width: 18,
-                  height: 5,
-                  background: "#D81E32",
-                  transform: "skewX(-14deg)",
-                }}
-              />
-              <span
-                style={{
-                  font: "600 11px/1 'IBM Plex Mono',monospace",
-                  letterSpacing: ".12em",
-                  color: "#838C9B",
-                }}
-              >
-                THE CRAL ECOSYSTEM
-              </span>
-            </div>
-            <h2
-              style={{
-                margin: "0 0 6px",
-                font: "700 clamp(24px,3.2vw,36px)/1.1 Archivo,sans-serif",
-                fontVariationSettings: "'wdth' 108",
-                letterSpacing: "-.025em",
-                color: "#0B0F1A",
-              }}
-            >
-              Every automotive need, covered under one roof
-            </h2>
-            <p style={{ margin: 0, font: "400 15px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: 620 }}>
-              Whether you need to move people, transport heavy freight, repair your engine, or buy replacement parts, CRAL brings trust and verification to Kenya&apos;s roads.
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-              gap: 16,
-            }}
-          >
-            {/* Service 1: Passenger Vehicle Rental */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #E4E7EC",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                position: "relative",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "#EDEFFC",
-                    color: "#0F23A8",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="10" width="20" height="9" rx="2" />
-                    <path d="M5 10l2-5h10l2 5M6 19v2M18 19v2" />
-                    <circle cx="7.5" cy="14.5" r="1.5" />
-                    <circle cx="16.5" cy="14.5" r="1.5" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: "0 0 8px", font: "700 19px/1.2 Archivo,sans-serif", color: "#0B0F1A" }}>
-                  Passenger Car Hire
-                </h3>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  City runarounds, executive saloons, rough-road SUVs and family vans. 4-digit pickup handover OTP and zero cancellation fees before acceptance.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/browse"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#0F23A8",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  Browse available cars →
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 2: Commercial Haulage & Heavy Plant */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #E4E7EC",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "#FCEEEF",
-                    color: "#D81E32",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="1" y="4" width="14" height="12" rx="1" />
-                    <path d="M15 9h4l3 3v4h-7V9zM5 18v2M18 18v2" />
-                    <circle cx="5" cy="16" r="2" />
-                    <circle cx="18" cy="16" r="2" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: "0 0 8px", font: "700 19px/1.2 Archivo,sans-serif", color: "#0B0F1A" }}>
-                  Commercial Haulage & Plant
-                </h3>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  Canters, tippers, flatbeds, low loaders and construction machinery. Priced per km, per tonne or flat route quotes. Verified tonnage capacity.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/browse?category=truck"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#0F23A8",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  View commercial trucks →
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 3: Professional Drivers */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #E4E7EC",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "#EDEFFC",
-                    color: "#0F23A8",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="7" r="4" />
-                    <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: "0 0 8px", font: "700 19px/1.2 Archivo,sans-serif", color: "#0B0F1A" }}>
-                  Vetted Professional Drivers
-                </h3>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  Hire an accredited driver for your personal car or book a chauffeured vehicle. NTSA licences, national ID and background vetted by CRAL.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/drivers"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#0F23A8",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  Explore driver roster →
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 4: 24/7 Roadside Towing */}
-            <div
-              style={{
-                background: "#0B0F1A",
-                color: "#FFFFFF",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-                position: "relative",
-                overflow: "hidden",
-              }}
-            >
-              <div
-                style={{
-                  position: "absolute",
-                  top: -15,
-                  right: -25,
-                  width: 140,
-                  height: 10,
-                  background: "#D81E32",
-                  transform: "skewX(-14deg)",
-                  opacity: 0.6,
-                }}
-              />
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "rgba(216,30,50,.2)",
-                    color: "#D81E32",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 4 }}>
-                  <h3 style={{ margin: 0, font: "700 19px/1.2 Archivo,sans-serif", color: "#FFFFFF" }}>
-                    24/7 Roadside Towing
-                  </h3>
-                  <span style={{ font: "700 9px/1 'IBM Plex Mono',monospace", background: "#D81E32", color: "#fff", padding: "3px 6px", borderRadius: 4 }}>
-                    HOTLINE
-                  </span>
-                </div>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#C3CAD5" }}>
-                  Stuck on the road? Immediate flatbed recovery and breakdown winching dispatched across all 47 counties.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/services/towing"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#FFFFFF",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  Call dispatch or book online →
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 5: Inspected Garage Services */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #E4E7EC",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "#EDEFFC",
-                    color: "#0F23A8",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: "0 0 8px", font: "700 19px/1.2 Archivo,sans-serif", color: "#0B0F1A" }}>
-                  Inspected Garage Services
-                </h3>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  Every workshop premises physically visited. Request competitive itemised quotes for routine service, diagnostics and bodywork. Escrow protected.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/services"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#0F23A8",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  Request a garage quote →
-                </Link>
-              </div>
-            </div>
-
-            {/* Service 6: Genuine Spare Parts */}
-            <div
-              style={{
-                background: "#FFFFFF",
-                border: "1px solid #E4E7EC",
-                borderRadius: 14,
-                padding: "24px 22px",
-                display: "flex",
-                flexDirection: "column",
-                justifyContent: "space-between",
-              }}
-            >
-              <div>
-                <div
-                  style={{
-                    width: 42,
-                    height: 42,
-                    borderRadius: 10,
-                    background: "#EDEFFC",
-                    color: "#0F23A8",
-                    display: "grid",
-                    placeItems: "center",
-                    marginBottom: 16,
-                  }}
-                >
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="3" />
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: "0 0 8px", font: "700 19px/1.2 Archivo,sans-serif", color: "#0B0F1A" }}>
-                  Chassis-Matched Spare Parts
-                </h3>
-                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  Dealers quote genuine, OEM and quality replacement parts matched to your chassis number. Payment released only when the part is in your hands.
-                </p>
-              </div>
-              <div style={{ marginTop: 20 }}>
-                <Link
-                  to="/parts"
-                  style={{
-                    font: "600 13.5px/1 'Instrument Sans',sans-serif",
-                    color: "#0F23A8",
-                    textDecoration: "none",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 6,
-                  }}
-                >
-                  Order parts by chassis →
-                </Link>
-              </div>
-            </div>
-          </div>
+          <HireDriverBanner />
         </div>
       </div>
 
-      {/* ===================== PASSENGER RAILS ===================== */}
-      {isLoading && <RailsMessage>Loading verified vehicles…</RailsMessage>}
+      {/* ---- collection rails ---- */}
+      {isLoading && <RailsMessage>Loading cars…</RailsMessage>}
       {isError && (
         <RailsMessage>
-          We couldn&apos;t load the listings right now. Refresh in a moment.
+          We couldn't load the listings just now. Refresh in a moment.
         </RailsMessage>
       )}
       {!isLoading && !isError && rails.length === 0 && (
         <RailsMessage>
-          Listings are being added across counties. Check back shortly.
+          Listings are being added. Check back soon - or list your own car.
         </RailsMessage>
       )}
       {rails.map((c) => (
         <Rail key={c.key} collection={c} />
       ))}
 
-      {/* ===================== COMMERCIAL TRUCKS SPOTLIGHT ===================== */}
-      <div style={{ padding: "clamp(24px,3.6vw,44px) clamp(16px,4vw,40px)" }}>
-        <div
-          style={{
-            maxWidth: 1240,
-            margin: "0 auto",
-            background: "#0B0F1A",
-            borderRadius: 16,
-            padding: "clamp(28px,4vw,48px)",
-            color: "#FFFFFF",
-            position: "relative",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              position: "absolute",
-              top: -24,
-              right: -50,
-              width: 300,
-              height: 16,
-              background: "#D81E32",
-              transform: "skewX(-14deg)",
-              opacity: 0.5,
-            }}
-          />
-
-          <div style={{ maxWidth: 780, marginBottom: 28 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-              <span style={{ width: 14, height: 4, background: "#D81E32", transform: "skewX(-14deg)" }} />
-              <span style={{ font: "600 10.5px/1 'IBM Plex Mono',monospace", letterSpacing: ".14em", color: "#B6C0F4" }}>
-                COMMERCIAL LOGISTICS
-              </span>
-            </div>
-            <h2
-              style={{
-                margin: "0 0 10px",
-                font: "700 clamp(26px,3.6vw,40px)/1.06 Archivo,sans-serif",
-                fontVariationSettings: "'wdth' 108",
-                letterSpacing: "-.025em",
-                color: "#FFFFFF",
-              }}
-            >
-              Need heavy haulage, moving or construction plant?
-            </h2>
-            <p style={{ margin: 0, font: "400 15.5px/1.55 'Instrument Sans',sans-serif", color: "#C3CAD5" }}>
-              From 3-tonne canters for local distribution to 20-tonne tippers and 32-tonne prime movers, CRAL connects you directly with verified truck owners. Transparent route quotes—fuel, cargo weight and driver fees agreed upfront.
-            </p>
-          </div>
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: 14,
-              marginBottom: 28,
-            }}
-          >
-            {TRUCK_SHOWCASE.map((t) => (
-              <div
-                key={t.type}
-                style={{
-                  background: "rgba(255,255,255,.05)",
-                  border: "1px solid rgba(255,255,255,.12)",
-                  borderRadius: 12,
-                  padding: "18px 16px",
-                }}
-              >
-                <div style={{ font: "600 16px/1.2 Archivo,sans-serif", color: "#FFFFFF", marginBottom: 6 }}>
-                  {t.type}
-                </div>
-                <div style={{ font: "400 13px/1.45 'Instrument Sans',sans-serif", color: "#9EABC0", marginBottom: 12 }}>
-                  {t.desc}
-                </div>
-                <div style={{ font: "600 11.5px/1 'IBM Plex Mono',monospace", color: "#B6C0F4" }}>
-                  {t.price}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-            <button
-              type="button"
-              onClick={() => navigate("/browse?category=truck")}
-              style={{
-                height: 44,
-                padding: "0 22px",
-                background: "#0F23A8",
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: 8,
-                font: "600 14.5px/1 'Instrument Sans',sans-serif",
-                cursor: "pointer",
-              }}
-            >
-              Browse commercial trucks & plant
-            </button>
-            <a
-              href={`${merchantLandingUrl()}#trucks`}
-              style={{
-                font: "600 14px/1 'Instrument Sans',sans-serif",
-                color: "#FFFFFF",
-                textDecoration: "underline",
-                textUnderlineOffset: 4,
-              }}
-            >
-              List your commercial truck or fleet →
-            </a>
-          </div>
-        </div>
-      </div>
-
-      {/* ===================== CATEGORY TILES ===================== */}
-      <div style={{ padding: "clamp(24px,3.6vw,42px) clamp(16px,4vw,40px) clamp(14px,2.2vw,22px)" }}>
+      {/* ---- category tiles ---- */}
+      <div
+        style={{
+          padding:
+            "clamp(24px,3.6vw,42px) clamp(16px,4vw,40px) clamp(14px,2.2vw,22px)",
+        }}
+      >
         <div style={{ maxWidth: 1240, margin: "0 auto" }}>
           <h2
             style={{
-              margin: "0 0 6px",
-              font: "700 clamp(22px,2.8vw,32px)/1.1 Archivo,sans-serif",
+              margin: "0 0 15px",
+              font: "700 clamp(21px,2.8vw,30px)/1.1 Archivo,sans-serif",
               fontVariationSettings: "'wdth' 108",
               letterSpacing: "-.026em",
               color: "#0B0F1A",
             }}
           >
-            Explore vehicles by category
+            Browse by car type
           </h2>
           <p
             style={{
-              margin: "0 0 18px",
+              margin: "0 0 15px",
               font: "400 14.5px/1.5 'Instrument Sans',sans-serif",
               color: "#5A6373",
               maxWidth: 560,
             }}
           >
-            Five verified categories. Select one to see what is currently stationed and available near you.
+            Five categories, from a saloon for the school run to a lorry or an
+            excavator. Pick one to see what is available near you.
           </p>
-
           <div
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))",
+              gridTemplateColumns: "repeat(auto-fit,minmax(158px,1fr))",
               gap: 12,
             }}
           >
             {CATEGORY_TILES.map((b) => {
               const minPrice = minPriceByCategory.get(b.slug);
               return (
-                <button
-                  key={b.slug}
-                  type="button"
-                  onClick={() => navigate(`/browse?category=${b.slug}`)}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "stretch",
-                    width: "100%",
-                    textAlign: "left",
-                    padding: 0,
-                    background: "#FFFFFF",
-                    border: "1px solid #E4E7EC",
-                    borderRadius: 12,
-                    overflow: "hidden",
-                    cursor: "pointer",
-                  }}
-                >
-                  <div style={{ flex: "none", height: 140, position: "relative", borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
-                    <img
-                      src={b.photo}
-                      alt={b.label}
-                      loading="lazy"
-                      style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
-                    />
+              <button
+                key={b.slug}
+                type="button"
+                onClick={() => navigate(`/browse?category=${b.slug}`)}
+                style={{
+                  // A column, not `display: block`. The grid stretches every
+                  // tile to the tallest one's height, and Chrome centres a
+                  // button's content in the leftover space - which showed as
+                  // card background above the photo and below the price on
+                  // every tile except the tallest. A flex column pins the
+                  // photo to the top edge.
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  width: "100%",
+                  textAlign: "left",
+                  padding: 0,
+                  background: "#FFFFFF",
+                  border: "1px solid #E4E7EC",
+                  borderRadius: 12,
+                  overflow: "hidden",
+                  cursor: "pointer",
+                }}
+              >
+                {/* A plain img, no overlay chip - the label lives below it. */}
+                <div style={{ flex: "none", height: 150, position: "relative", borderBottom: "1px solid #E4E7EC", background: "#E7EAEF" }}>
+                  <img
+                    src={b.photo}
+                    alt={b.label}
+                    loading="lazy"
+                    style={{ display: "block", position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+                  />
+                </div>
+                <div style={{ padding: "14px 15px 15px" }}>
+                  <div
+                    style={{
+                      font: "600 15px/1.3 'Instrument Sans',sans-serif",
+                      color: "#0B0F1A",
+                      marginBottom: 5,
+                    }}
+                  >
+                    {b.label}
                   </div>
-                  <div style={{ padding: "14px 15px 15px" }}>
-                    <div style={{ font: "600 15px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 5 }}>
-                      {b.label}
-                    </div>
-                    <div style={{ font: "400 12.5px/1.45 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: minPrice ? 10 : 0 }}>
-                      {b.note}
-                    </div>
-                    {minPrice && (
-                      <div style={{ font: "600 11px/1 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#0F23A8" }}>
-                        FROM {formatMoney(minPrice)} / DAY
-                      </div>
-                    )}
+                  <div
+                    style={{
+                      font: "400 12.5px/1.45 'Instrument Sans',sans-serif",
+                      color: "#5A6373",
+                      marginBottom: minPrice ? 11 : 0,
+                    }}
+                  >
+                    {b.note}
                   </div>
-                </button>
+                  {minPrice && (
+                    <div
+                      style={{
+                        font: "500 11px/1 'IBM Plex Mono',monospace",
+                        letterSpacing: ".06em",
+                        color: "#0F23A8",
+                      }}
+                    >
+                      FROM {formatMoney(minPrice)} / DAY
+                    </div>
+                  )}
+                </div>
+              </button>
               );
             })}
           </div>
         </div>
       </div>
 
-      {/* ===================== TRUST & VERIFICATION BAND ===================== */}
+      {/* ---- verification / trust band ---- */}
       <div style={{ padding: "clamp(24px,3.6vw,44px) clamp(16px,4vw,40px)" }}>
         <div
           style={{
             maxWidth: 1240,
             margin: "0 auto",
-            minHeight: "clamp(420px,46vw,540px)",
+            minHeight: "clamp(420px,48vw,560px)",
             borderRadius: 14,
-            padding: "clamp(26px,4vw,48px)",
+            padding: "clamp(24px,3.6vw,44px)",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
             position: "relative",
             overflow: "hidden",
-            backgroundImage: `linear-gradient(90deg, rgba(11,15,26,.97) 0%, rgba(11,15,26,.8) 55%, rgba(11,15,26,.4) 100%), url(${trustDriverPhoto})`,
+            // A real photo, not a design-canvas element - the owner asked for
+            // one showing a happy renter behind the wheel, as the card's own
+            // background. Sourced directly by the owner (Freepik-family CDN);
+            // flagged in case that image's free-tier licence needs an
+            // attribution credit before this ships.
+            backgroundImage: `linear-gradient(90deg, rgba(11,15,26,.96) 0%, rgba(11,15,26,.75) 55%, rgba(11,15,26,.35) 100%), url(${trustDriverPhoto})`,
             backgroundSize: "cover",
             backgroundPosition: "center right",
           }}
@@ -1224,31 +629,32 @@ export function Home(): JSX.Element {
               opacity: 0.45,
             }}
           />
-
           <h2
             style={{
-              margin: "0 0 10px",
-              font: "700 clamp(26px,3.4vw,40px)/1.08 Archivo,sans-serif",
+              margin: "clamp(16px,3vw,32px) 0 10px",
+              font: "700 clamp(24px,3.2vw,36px)/1.08 Archivo,sans-serif",
               fontVariationSettings: "'wdth' 110",
               letterSpacing: "-.028em",
               color: "#FFFFFF",
-              maxWidth: 680,
+              maxWidth: 660,
             }}
           >
-            Real paperwork. Real people. No hidden fees.
+            You don't pay until the owner says yes.
           </h2>
-
           <p
             style={{
-              margin: "0 0 clamp(22px,3vw,34px)",
-              font: "400 clamp(15px,1.7vw,17.5px)/1.55 'Instrument Sans',sans-serif",
+              margin: "0 0 clamp(22px,3vw,32px)",
+              font: "400 clamp(15px,1.7vw,17px)/1.55 'Instrument Sans',sans-serif",
               color: "#C7CED8",
-              maxWidth: 600,
+              maxWidth: 560,
             }}
           >
-            Mobility and vehicle services in Kenya often go wrong when money changes hands without verified documentation. On CRAL, every logbook, NTSA licence, tracker certificate, and workshop is checked before it can transact.
+            {/* Canvas headline verbatim; body reworded - the canvas's own
+                copy here assumes the STK flow (see file header comment). */}
+            Car hire in Kenya often goes wrong when money changes hands too early. On CRAL, sending
+            a request is free. The owner has twelve hours to reply, and you only pay once they say
+            yes - at a price that never changes after that.
           </p>
-
           <div
             style={{
               display: "grid",
@@ -1258,19 +664,28 @@ export function Home(): JSX.Element {
           >
             {TRUST_COLS.map((t) => (
               <div key={t.n}>
+                {/*
+                 * The canvas sets this overline to #D81E32 (cruzRed) on
+                 * the #0B0F1A card. At 10px that is 3.7:1 - under AA - so
+                 * an earlier pass lightened it to #F28FA0, a colour in
+                 * neither the brand doc nor the canvas. This is the brand
+                 * doc's own light red (`status.rejected.border` in
+                 * packages/ui/src/tokens.ts) instead: 11.7:1, and back
+                 * inside the documented palette.
+                 */}
                 <div
                   style={{
-                    font: "600 11px/1 'IBM Plex Mono',monospace",
+                    font: "500 10px/1 'IBM Plex Mono',monospace",
                     letterSpacing: ".11em",
                     color: "#F7BDC5",
-                    marginBottom: 10,
+                    marginBottom: 11,
                   }}
                 >
                   {t.n}
                 </div>
                 <div
                   style={{
-                    font: "600 16.5px/1.3 Archivo,sans-serif",
+                    font: "600 16px/1.3 Archivo,sans-serif",
                     fontVariationSettings: "'wdth' 106",
                     color: "#FFFFFF",
                     marginBottom: 8,
@@ -1278,7 +693,13 @@ export function Home(): JSX.Element {
                 >
                   {t.title}
                 </div>
-                <p style={{ margin: 0, font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#C7CED8" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    font: "400 14px/1.6 'Instrument Sans',sans-serif",
+                    color: "#C7CED8",
+                  }}
+                >
                   {t.body}
                 </p>
               </div>
@@ -1287,7 +708,8 @@ export function Home(): JSX.Element {
         </div>
       </div>
 
-      {/* ===================== CLOSING CTAS ===================== */}
+
+      {/* ---- closing CTAs ---- */}
       <div style={{ padding: "0 clamp(16px,4vw,40px) clamp(34px,5vw,60px)" }}>
         <div
           style={{
@@ -1300,30 +722,45 @@ export function Home(): JSX.Element {
         >
           <div
             style={{
-              flex: "1 1 540px",
+              flex: "1 1 560px",
               minWidth: 300,
               background: "#FFFFFF",
               border: "1px solid #E4E7EC",
-              borderRadius: 14,
-              padding: "clamp(24px,3.2vw,36px)",
+              borderRadius: 12,
+              padding: "clamp(22px,3vw,32px)",
             }}
           >
-            <div style={{ font: "600 10.5px/1 'IBM Plex Mono',monospace", letterSpacing: ".11em", color: "#9AA2B0", marginBottom: 12 }}>
-              CLEAR PROCESS
+            <div
+              style={{
+                font: "500 10px/1 'IBM Plex Mono',monospace",
+                letterSpacing: ".11em",
+                color: "#9AA2B0",
+                marginBottom: 14,
+              }}
+            >
+              YOUR NEXT HIRE, START TO FINISH
             </div>
             <h3
               style={{
                 margin: "0 0 10px",
-                font: "700 clamp(20px,2.4vw,28px)/1.15 Archivo,sans-serif",
+                font: "700 clamp(20px,2.4vw,26px)/1.15 Archivo,sans-serif",
                 fontVariationSettings: "'wdth' 106",
                 letterSpacing: "-.02em",
                 color: "#0B0F1A",
               }}
             >
-              Transparent quotes. Zero hidden booking markups.
+              Three simple steps. No hidden booking fee.
             </h3>
-            <p style={{ margin: "0 0 20px", font: "400 15px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-              Whether renting a saloon, moving 14 tonnes of cargo, booking a driver or servicing your car: send a request, get verified quotes, and transact with complete peace of mind.
+            <p
+              style={{
+                margin: "0 0 20px",
+                font: "400 15px/1.6 'Instrument Sans',sans-serif",
+                color: "#5A6373",
+              }}
+            >
+              Search for cars that are actually free on your dates. Send a request. Once the owner
+              says yes, go and collect the car - the price never changes, and CRAL never adds a
+              booking fee on top.
             </p>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <button
@@ -1331,7 +768,7 @@ export function Home(): JSX.Element {
                 onClick={() => navigate("/how-it-works")}
                 style={{
                   height: 44,
-                  padding: "0 20px",
+                  padding: "0 19px",
                   background: "#0F23A8",
                   color: "#FFFFFF",
                   border: "none",
@@ -1347,7 +784,7 @@ export function Home(): JSX.Element {
                 onClick={() => navigate("/how-we-protect-you")}
                 style={{
                   height: 44,
-                  padding: "0 20px",
+                  padding: "0 19px",
                   background: "#FFFFFF",
                   color: "#0F23A8",
                   border: "1px solid #B6C0F4",
@@ -1360,39 +797,45 @@ export function Home(): JSX.Element {
               </button>
             </div>
           </div>
-
           <div
             style={{
-              flex: "1 1 340px",
+              flex: "1 1 300px",
               minWidth: 280,
               position: "relative",
               border: "1px solid #B6C0F4",
-              borderRadius: 14,
-              padding: "clamp(24px,3.2vw,36px)",
+              borderRadius: 12,
+              padding: "clamp(22px,3vw,32px)",
               display: "flex",
               flexDirection: "column",
               justifyContent: "space-between",
               gap: 18,
               overflow: "hidden",
-              backgroundImage: `linear-gradient(180deg, rgba(11,27,133,.45) 0%, rgba(11,27,133,.85) 100%), url(${keyHandoffPhoto})`,
+              backgroundImage: `linear-gradient(180deg, rgba(11,27,133,.42) 0%, rgba(11,27,133,.82) 100%), url(${keyHandoffPhoto})`,
               backgroundSize: "cover",
               backgroundPosition: "center 30%",
             }}
           >
             <div>
-              <div style={{ font: "600 10.5px/1 'IBM Plex Mono',monospace", letterSpacing: ".11em", color: "#DCE1FA", marginBottom: 12 }}>
-                BECOME A MERCHANT PARTNER
+              <div
+                style={{
+                  font: "500 10px/1 'IBM Plex Mono',monospace",
+                  letterSpacing: ".11em",
+                  color: "#DCE1FA",
+                  marginBottom: 14,
+                }}
+              >
+                HAVE A CAR OF YOUR OWN?
               </div>
               <h3
                 style={{
                   margin: 0,
-                  font: "700 clamp(20px,2.4vw,26px)/1.18 Archivo,sans-serif",
+                  font: "700 clamp(19px,2.2vw,24px)/1.18 Archivo,sans-serif",
                   fontVariationSettings: "'wdth' 106",
                   letterSpacing: "-.02em",
                   color: "#FFFFFF",
                 }}
               >
-                Own a car, truck, driver agency, garage or parts shop?
+                Put it to work on the days you are not using it.
               </h3>
             </div>
             <a
@@ -1402,17 +845,16 @@ export function Home(): JSX.Element {
                 alignItems: "center",
                 alignSelf: "flex-start",
                 height: 44,
-                padding: "0 22px",
+                padding: "0 19px",
                 background: "#FFFFFF",
                 color: "#0F23A8",
                 border: "none",
                 borderRadius: 8,
                 font: "600 14px/1 'Instrument Sans',sans-serif",
                 textDecoration: "none",
-                boxShadow: "0 4px 14px rgba(0,0,0,.15)",
               }}
             >
-              Explore Merchant Portal →
+              List your car
             </a>
           </div>
         </div>
@@ -1424,30 +866,38 @@ export function Home(): JSX.Element {
 function RailsMessage({ children }: { children: ReactNode }): JSX.Element {
   return (
     <div style={{ maxWidth: 1240, margin: "0 auto", padding: "40px clamp(16px,4vw,40px)" }}>
-      <p style={{ margin: 0, font: "400 15px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+      <p
+        style={{
+          margin: 0,
+          font: "400 15px/1.6 'Instrument Sans',sans-serif",
+          color: "#5A6373",
+        }}
+      >
         {children}
       </p>
     </div>
   );
 }
 
-/* =========================================================================
- * SUB-CONSOLES FOR EACH SERVICE MODE
- * ========================================================================= */
-
-/** Mode 1: Car Rental */
-function HireConsole({
+/**
+ * COUNTY defaults to `city` when passed - the hero's city quick-picks set
+ * it. `counties` is whatever has a live listing; until it arrives (or if
+ * nothing is listed anywhere) the field reads "Any county" and the search
+ * simply goes to /browse unfiltered, rather than pre-filling a county
+ * that may have nothing in it.
+ */
+function SearchBar({
   city,
   counties,
-  onSelectCity,
 }: {
   city?: string | undefined;
   counties: string[];
-  onSelectCity: (c: string) => void;
 }): JSX.Element {
   const navigate = useNavigate();
   const [county, setCounty] = useState<string>(city ?? "");
   const [fromDate, setFromDate] = useState("");
+  // Nairobi's clock, not the browser's, and never today once six in the
+  // evening has passed - cars are back with their owner by then.
   const min = earliestPickupDay();
 
   useEffect(() => {
@@ -1458,7 +908,7 @@ function HireConsole({
     e.preventDefault();
     const form = new FormData(e.currentTarget);
     const params = new URLSearchParams();
-    for (const key of ["county", "from", "to", "category"] as const) {
+    for (const key of ["county", "from", "to"] as const) {
       const v = form.get(key);
       if (typeof v === "string" && v) params.set(key, v);
     }
@@ -1466,418 +916,54 @@ function HireConsole({
   };
 
   return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <input type="hidden" name="county" value={county} />
-      <Dropdown
-        variant="field"
-        label="COUNTY"
-        icon={PIN_ICON}
-        value={county}
-        placeholder="Any county"
-        disabled={counties.length === 0}
-        options={counties.map((c) => ({ value: c, label: c }))}
-        onChange={(val) => {
-          setCounty(val);
-          onSelectCity(val);
-        }}
-      />
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">FROM</span>
-          <input
-            name="from"
-            type="date"
-            min={min}
-            className="cral-search-input"
-            onChange={(e) => setFromDate(e.target.value)}
-          />
-        </span>
-      </label>
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">UNTIL</span>
-          <input name="to" type="date" min={fromDate || min} className="cral-search-input" />
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="10" width="20" height="9" rx="2" />
-          <path d="M5 10l2-5h10l2 5" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">VEHICLE TYPE</span>
-          <select name="category" className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="">All Categories</option>
-            <option value="sedan">Sedan / Small Cars</option>
-            <option value="suv">SUV / 4x4 / Pickup</option>
-            <option value="van">Van / Minibus</option>
-          </select>
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Search Cars
-      </button>
-    </form>
-  );
-}
-
-/** Mode 2: Haulage & Commercial Trucks */
-function TrucksConsole({ counties }: { counties: string[] }): JSX.Element {
-  const navigate = useNavigate();
-  const [fromCounty, setFromCounty] = useState("Nairobi");
-  const [toCounty, setToCounty] = useState("");
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const params = new URLSearchParams();
-    params.set("category", "truck");
-    if (fromCounty) params.set("county", fromCounty);
-    navigate(`/browse?${params.toString()}`);
-  };
-
-  const countyOptions = (counties.length > 0 ? counties : COUNTIES).map((c) => ({ value: c, label: c }));
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <Dropdown
-        variant="field"
-        label="FROM (COUNTY)"
-        icon={PIN_ICON}
-        value={fromCounty}
-        placeholder="Pickup county"
-        options={countyOptions}
-        onChange={setFromCounty}
-      />
-      <Dropdown
-        variant="field"
-        label="TO (DESTINATION)"
-        icon={PIN_ICON}
-        value={toCounty}
-        placeholder="Destination county"
-        options={countyOptions}
-        onChange={setToCounty}
-      />
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">CARGO TYPE</span>
-          <input
-            type="text"
-            placeholder="e.g. Building materials, 10t"
-            className="cral-search-input"
-          />
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">DATE NEEDED</span>
-          <input type="date" min={earliestPickupDay()} className="cral-search-input" />
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit" style={{ background: "#0F23A8" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Get Truck Quotes
-      </button>
-    </form>
-  );
-}
-
-/** Mode 3: Professional Drivers */
-function DriversConsole({ counties }: { counties: string[] }): JSX.Element {
-  const navigate = useNavigate();
-  const [county, setCounty] = useState("Nairobi");
-  const countyOptions = (counties.length > 0 ? counties : COUNTIES).map((c) => ({ value: c, label: c }));
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    navigate(`/drivers?county=${encodeURIComponent(county)}`);
-  };
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <Dropdown
-        variant="field"
-        label="LOCATION"
-        icon={PIN_ICON}
-        value={county}
-        placeholder="County"
-        options={countyOptions}
-        onChange={setCounty}
-      />
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="7" r="4" />
-          <path d="M5.5 21a6.5 6.5 0 0 1 13 0" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">ASSIGNMENT TYPE</span>
-          <select className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="own_car">Drive my own car (Daily gig)</option>
-            <option value="chauffeur">Chauffeured car + driver package</option>
-            <option value="long_distance">Long distance / Upcountry trip</option>
-          </select>
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="5" width="18" height="16" rx="2" />
-          <path d="M3 10h18M8 3v4M16 3v4" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">START DATE</span>
-          <input type="date" min={earliestPickupDay()} className="cral-search-input" />
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Find Vetted Drivers
-      </button>
-    </form>
-  );
-}
-
-/** Mode 4: 24/7 Roadside Towing SOS */
-function TowingConsole({ counties }: { counties: string[] }): JSX.Element {
-  const navigate = useNavigate();
-  const [county, setCounty] = useState("Nairobi");
-  const countyOptions = (counties.length > 0 ? counties : COUNTIES).map((c) => ({ value: c, label: c }));
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    navigate(`/services/towing?county=${encodeURIComponent(county)}`);
-  };
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <Dropdown
-        variant="field"
-        label="BREAKDOWN LOCATION"
-        icon={PIN_ICON}
-        value={county}
-        placeholder="County"
-        options={countyOptions}
-        onChange={setCounty}
-      />
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#D81E32" strokeWidth="2">
-          <circle cx="12" cy="12" r="10" />
-          <line x1="12" y1="8" x2="12" y2="12" />
-          <line x1="12" y1="16" x2="12.01" y2="16" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label" style={{ color: "#D81E32" }}>EMERGENCY ISSUE</span>
-          <select className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="mechanical">Mechanical Breakdown (Won&apos;t start)</option>
-            <option value="accident">Accident / Off-road Recovery</option>
-            <option value="flat">Flat Tyre / Battery / Fuel</option>
-            <option value="heavy">Heavy Truck / Bus Recovery</option>
-          </select>
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-          <circle cx="12" cy="10" r="3" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">LANDMARK OR HIGHWAY</span>
-          <input type="text" placeholder="e.g. Waiyaki Way near ABC" className="cral-search-input" />
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit" style={{ background: "#D81E32" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-        </svg>
-        Dispatch Towing
-      </button>
-    </form>
-  );
-}
-
-/** Mode 5: Garage Services & Maintenance */
-function GarageConsole({ counties }: { counties: string[] }): JSX.Element {
-  const navigate = useNavigate();
-  const [county, setCounty] = useState("Nairobi");
-  const countyOptions = (counties.length > 0 ? counties : COUNTIES).map((c) => ({ value: c, label: c }));
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    navigate(`/services?county=${encodeURIComponent(county)}`);
-  };
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <Dropdown
-        variant="field"
-        label="GARAGE LOCATION"
-        icon={PIN_ICON}
-        value={county}
-        placeholder="County"
-        options={countyOptions}
-        onChange={setCounty}
-      />
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="10" width="20" height="9" rx="2" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">VEHICLE MAKE & MODEL</span>
-          <input type="text" placeholder="e.g. Toyota Prado, Mazda CX-5" className="cral-search-input" />
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">SERVICE NEEDED</span>
-          <select className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="routine">Routine Oil & Filter Service</option>
-            <option value="brakes">Brakes & Suspension Overhaul</option>
-            <option value="diagnostics">Computer Engine Diagnostics</option>
-            <option value="bodywork">Bodywork, Denting & Spray</option>
-            <option value="ac">AC Refill & Electricals</option>
-          </select>
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Find Inspected Garages
-      </button>
-    </form>
-  );
-}
-
-/** Mode 6: Spare Parts Quoted Against Chassis */
-function PartsConsole(): JSX.Element {
-  const navigate = useNavigate();
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    navigate("/parts");
-  };
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <label className="cral-search-field" style={{ flex: "1.2 1 200px" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="3" y="4" width="18" height="16" rx="2" />
-          <line x1="7" y1="8" x2="17" y2="8" />
-          <line x1="7" y1="12" x2="17" y2="12" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">CHASSIS (VIN) OR PLATE NUMBER</span>
-          <input type="text" placeholder="e.g. KDL 442N or NZE141-xxxx" className="cral-search-input" />
-        </span>
-      </label>
-      <label className="cral-search-field" style={{ flex: "1.5 1 240px", borderRight: "none" }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">PART YOU NEED</span>
-          <input type="text" placeholder="e.g. Front shock absorbers, alternator" className="cral-search-input" />
-        </span>
-      </label>
-      <button type="submit" className="cral-search-submit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Request Dealer Quotes
-      </button>
-    </form>
-  );
-}
-
-/** Mode 7: Verified Car Sales */
-function SalesConsole({ counties }: { counties: string[] }): JSX.Element {
-  const navigate = useNavigate();
-  const [county, setCounty] = useState("");
-  const countyOptions = [{ value: "", label: "Any County" }, ...(counties.length > 0 ? counties : COUNTIES).map((c) => ({ value: c, label: c }))];
-
-  const submit = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    navigate("/browse?intent=sale");
-  };
-
-  return (
-    <form onSubmit={submit} className="cral-search" style={{ width: "100%" }}>
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <line x1="12" y1="1" x2="12" y2="23" />
-          <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">PRICE BUDGET</span>
-          <select className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="">Any Budget</option>
-            <option value="under_1m">Under KES 1,000,000</option>
-            <option value="1m_2.5m">KES 1M - 2.5M</option>
-            <option value="2.5m_5m">KES 2.5M - 5M</option>
-            <option value="above_5m">Above KES 5,000,000</option>
-          </select>
-        </span>
-      </label>
-      <label className="cral-search-field">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <rect x="2" y="10" width="20" height="9" rx="2" />
-        </svg>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span className="cral-search-label">BODY TYPE</span>
-          <select className="cral-search-input" style={{ cursor: "pointer" }}>
-            <option value="">All Body Types</option>
-            <option value="sedan">Sedan / Saloon</option>
-            <option value="suv">SUV / 4WD</option>
-            <option value="pickup">Double Cab / Pickup</option>
-            <option value="van">Van / Commercial</option>
-          </select>
-        </span>
-      </label>
-      <Dropdown
-        variant="field"
-        label="VIEWING LOCATION"
-        icon={PIN_ICON}
-        value={county}
-        placeholder="Any County"
-        options={countyOptions}
-        onChange={setCounty}
-      />
-      <button type="submit" className="cral-search-submit">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-          <circle cx="11" cy="11" r="7" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        Explore Cars For Sale
-      </button>
-    </form>
+    <div>
+      <div className="cral-search-kicker">Hire a car</div>
+      <form onSubmit={submit} className="cral-search" style={{ maxWidth: 900 }}>
+        <input type="hidden" name="county" value={county} />
+        <Dropdown
+          variant="field"
+          label="COUNTY"
+          icon={PIN_ICON}
+          value={county}
+          placeholder="Any county"
+          disabled={counties.length === 0}
+          options={counties.map((c) => ({ value: c, label: c }))}
+          onChange={setCounty}
+        />
+        <label className="cral-search-field">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="cral-search-label">FROM</span>
+            <input
+              name="from"
+              type="date"
+              min={min}
+              className="cral-search-input"
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+          </span>
+        </label>
+        <label className="cral-search-field" style={{ borderRight: "none" }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <rect x="3" y="5" width="18" height="16" rx="2" />
+            <path d="M3 10h18M8 3v4M16 3v4" />
+          </svg>
+          <span style={{ flex: 1, minWidth: 0 }}>
+            <span className="cral-search-label">UNTIL</span>
+            <input name="to" type="date" min={fromDate || min} className="cral-search-input" />
+          </span>
+        </label>
+        <button type="submit" className="cral-search-submit">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          Search cars
+        </button>
+      </form>
+    </div>
   );
 }
