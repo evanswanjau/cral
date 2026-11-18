@@ -145,7 +145,7 @@ portal shows the sections for what they offer.
 | UI3 | **Built (#93).** `/drivers` landing (county pick, list, `EarnBand` -> `/join/drivers`), public `/drivers/:id` with inline phone verify (`PhoneVerify`, out of `Booking.tsx`); public `/towing` (form kept through sign-in, your requests); `/services/towing` redirects; quote email and sitemap use `/towing` | Opus |
 | UI4 | **Built.** Merchant "Earn with CRAL" landing (supplier doors, coming suppliers, shared estimator) and `/join/cars`, `/join/trucks`, `/join/machinery`, `/join/drivers`; `/create-account?offer=` kept in sessionStorage for UI5 | Opus |
 | UI5 | **Built (#92).** Onboarding step 1 "What do you offer?" (multi-select, derived not stored); driver-only gets a Drivers step, no vehicle docs, lands on `/drivers/new`; vehicle form opens on the picked category; step 3 labelled Trucks/Machinery/Drivers | Opus |
-| UI6 | **Built.** Portal nav from `components/portal/nav-sections.ts` (no Vehicles for driver-only; Trucks/Machinery when the whole fleet is one kind); dashboard buttons, greeting, fleet card and per-unit rates by offering; bookings/payouts copy for driver-only | Opus |
+| UI6 | **Built (#94).** Portal nav from `components/portal/nav-sections.ts` (no Vehicles for driver-only; Trucks/Machinery when the whole fleet is one kind); dashboard buttons, greeting, fleet card and per-unit rates by offering; bookings/payouts copy for driver-only | Opus |
 | UI7 | Copy sweep; strict link check in the gate | Sonnet |
 
 **Start prompt for 2A:** the full prompt is
