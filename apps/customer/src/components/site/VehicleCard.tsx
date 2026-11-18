@@ -1,6 +1,6 @@
 import { photoSrc, formatMoney, type CatalogVehicleSummary } from "../../lib/catalog-api.js";
 import { HIRING_UNIT_LABEL, unitRate } from "../../lib/hiring-units.js";
-import { specLine } from "../../lib/vehicle-categories.js";
+import { isCarCategory, specLine } from "../../lib/vehicle-categories.js";
 
 /**
  * A listing card, reproduced from the design's card markup (used on the
@@ -146,8 +146,8 @@ export function VehicleCard({
           }}
         >
           {specLine(car)}
-          {/* A truck is never "Self-drive" (UI2a): it says so only when a driver comes with it. */}
-          {car.chauffeured ? " · With driver" : car.category === "truck" ? "" : " · Self-drive"}
+          {/* Trucks and machinery are never "Self-drive" (UI2a, UI2b): only "With driver" when one comes. */}
+          {car.chauffeured ? " · With driver" : isCarCategory(car.category) ? " · Self-drive" : ""}
         </div>
         <div
           style={{

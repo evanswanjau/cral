@@ -141,7 +141,7 @@ portal shows the sections for what they offer.
 | UI1b | **Built.** Front door at `/`; `/cars` landing; coming block; `/services` and `/parts` redirect to `/#coming` | Opus |
 | UI1c | **Built.** `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirect (truck and machinery `/browse` stay until UI2a/UI2b) | Sonnet |
 | UI2a | **Built.** `/trucks` landing, `/trucks/search`, `/trucks/:id` (route-first `TruckRequestPanel`), `/trucks/:id/request`; truck `/browse`, `/cars/:id`, `/book/:id` redirect | Opus |
-| UI2b | Machinery sub-site; sitemap paths | Sonnet |
+| UI2b | **Built.** `/machinery` landing, `/machinery/search`, `/machinery/:id`, `/machinery/:id/book`; machinery `/browse`, `/cars/:id`, `/book/:id` redirect; sitemap lists the sub-site paths and each listing under its category | Opus |
 | UI3 | Drivers and towing, public | Opus |
 | UI4 | Merchant "Earn with CRAL" landing, `/join/:type` | Sonnet |
 | UI5 | Onboarding "What do you offer?" | Opus |

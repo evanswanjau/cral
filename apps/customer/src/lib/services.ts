@@ -101,8 +101,8 @@ export const SERVICES: Service[] = [
     lede: "Machinery for site work from owners CRAL has checked. Sending a request is free, and you pay by M-Pesa only once the owner accepts your dates.",
     icon: Tractor,
     photo: "/images/services/machinery.jpg",
-    href: "/browse?category=machinery", // final: /machinery (UI2b)
-    match: ["/browse?category=machinery", "/machinery"],
+    href: "/machinery",
+    match: ["/machinery"],
   },
   {
     status: "live",

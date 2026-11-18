@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { formatMoney, type CatalogVehicleDetail } from "../../lib/catalog-api.js";
 import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays } from "../../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../../lib/hiring-units.js";
+import { listingBase } from "../../lib/vehicle-categories.js";
 import { driverQuote, driversForCar, rateLine } from "../../lib/drivers-api.js";
 
 /**
@@ -63,7 +64,7 @@ export function CarRequestPanel({ car }: { car: CatalogVehicleDetail }): JSX.Ele
     if (!from || !to || belowMinimum) return;
     // No sign-in gate here - an unauthenticated visitor signs up inline on
     // the booking page itself as part of sending the request.
-    navigate(`/cars/${car.id}/book?from=${from}&to=${to}${driver ? `&driver=${driver.id}` : ""}`);
+    navigate(`${listingBase(car.category)}/${car.id}/book?from=${from}&to=${to}${driver ? `&driver=${driver.id}` : ""}`);
   };
 
   return (

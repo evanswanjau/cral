@@ -7,6 +7,8 @@ import { LegacyBookRedirect } from "./components/routing/LegacyBookRedirect.js";
 import { CarsHome } from "./pages/cars/CarsHome.js";
 import { TrucksHome } from "./pages/trucks/TrucksHome.js";
 import { TrucksSearch } from "./pages/trucks/TrucksSearch.js";
+import { MachineryHome } from "./pages/machinery/MachineryHome.js";
+import { MachinerySearch } from "./pages/machinery/MachinerySearch.js";
 import { Towing } from "./pages/Towing.js";
 import { Drivers } from "./pages/Drivers.js";
 import { DriverBook } from "./pages/DriverBook.js";
@@ -71,6 +73,13 @@ export const routes: RouteObject[] = [
       { path: "/trucks/search", element: <TrucksSearch /> },
       { path: "/trucks/:id", element: <CarDetail /> },
       { path: "/trucks/:id/request", element: <Booking /> },
+      // Machinery's own sub-site (UI2b): the cars pattern with the
+      // category locked. Detail and booking are CarDetail and Booking, which
+      // forward a listing to its own sub-site's path.
+      { path: "/machinery", element: <MachineryHome /> },
+      { path: "/machinery/search", element: <MachinerySearch /> },
+      { path: "/machinery/:id", element: <CarDetail /> },
+      { path: "/machinery/:id/book", element: <Booking /> },
       // Not live yet: both land on the front door's "Coming to CRAL"
       // block (owner decision 2, 2026-11-18) until their own phase builds
       // the real sub-site. `/services/towing` stays below until UI3.

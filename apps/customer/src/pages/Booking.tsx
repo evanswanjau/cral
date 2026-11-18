@@ -4,7 +4,7 @@ import { useNavigate, useParams, useSearchParams, Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { getCatalogVehicle, formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { isCarCategory, listingBase, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { createBooking, listMyBookings } from "../lib/bookings-api.js";
 import { driverQuote, driversForCar, rateLine } from "../lib/drivers-api.js";
 import {
@@ -283,10 +283,10 @@ export function Booking(): JSX.Element {
 
   useEffect(() => writeDraft(key, note), [key, note]);
 
-  // A truck is requested at `/trucks/:id/request`, everything else at
-  // `/cars/:id/book` (UI2a); the wrong one forwards, query kept. No dates:
-  // back to the listing's own page to pick them.
-  const base = car?.category === "truck" ? `/trucks/${id}` : `/cars/${id}`;
+  // A truck is requested at `/trucks/:id/request`, machinery at
+  // `/machinery/:id/book`, a car at `/cars/:id/book` (UI2a, UI2b); the
+  // wrong one forwards, query kept. No dates: back to the listing's page.
+  const base = `${car ? listingBase(car.category) : "/cars"}/${id}`;
   const own = car?.category === "truck" ? `${base}/request` : `${base}/book`;
   useEffect(() => {
     if (isLoading || !id) return;
@@ -1204,9 +1204,9 @@ export function Booking(): JSX.Element {
               {car.registration} · {car.county ?? "Location on request"}
             </div>
             <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
-              {VEHICLE_CATEGORY_LABEL[car.category] ?? car.category} · {car.seats} seats ·{" "}
-              {car.transmission === "manual" ? "Manual" : "Auto"} · {car.fuel} ·{" "}
-              {car.chauffeured ? "With driver" : "Self-drive"}
+              {VEHICLE_CATEGORY_LABEL[car.category] ?? car.category} · {isCarCategory(car.category) ? `${car.seats} seats · ` : ""}
+              {car.transmission === "manual" ? "Manual" : "Auto"} · {car.fuel}
+              {car.chauffeured ? " · With driver" : isCarCategory(car.category) ? " · Self-drive" : ""}
             </div>
             <div style={{ display: "grid", gap: 9, paddingTop: 14, borderTop: "1px solid #F1F3F6" }}>
               <Row label={`${formatHireDate(from)} - ${formatHireDate(to)}`} value={`${days} day${days > 1 ? "s" : ""}`} />

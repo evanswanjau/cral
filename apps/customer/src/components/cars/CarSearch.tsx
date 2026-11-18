@@ -19,10 +19,20 @@ import { Dropdown, PIN_ICON } from "../site/Dropdown.js";
  *
  * No count badge on a chip: a number next to a place name reads as "cars
  * available on your dates", which it is not.
+ *
+ * `/machinery` reuses it (UI2b) with `searchPath="/machinery/search"` and
+ * its own button word; the counties are the catalog's, not per category.
  */
 const COUNTY_CHIPS = 7;
 
-export function CarSearch(): JSX.Element {
+export function CarSearch({
+  searchPath = "/cars/search",
+  noun = "cars",
+}: {
+  searchPath?: string;
+  /** Button and form label word: "Search cars", "Search machinery". */
+  noun?: string;
+} = {}): JSX.Element {
   const navigate = useNavigate();
   const { data: countyData } = useQuery({ queryKey: ["catalog", "counties"], queryFn: getCounties });
   const counties = (countyData?.counties ?? []).map((c) => c.county);
@@ -40,12 +50,12 @@ export function CarSearch(): JSX.Element {
       const v = form.get(key);
       if (typeof v === "string" && v) params.set(key, v);
     }
-    navigate(`/cars/search${params.toString() ? `?${params}` : ""}`);
+    navigate(`${searchPath}${params.toString() ? `?${params}` : ""}`);
   };
 
   return (
     <div>
-      <form onSubmit={submit} className="cral-search" aria-label="Search cars">
+      <form onSubmit={submit} className="cral-search" aria-label={`Search ${noun}`}>
         <input type="hidden" name="county" value={county} />
         <Dropdown
           variant="field"
@@ -82,7 +92,7 @@ export function CarSearch(): JSX.Element {
             <circle cx="11" cy="11" r="7" />
             <path d="m21 21-4.3-4.3" />
           </svg>
-          Search cars
+          Search {noun}
         </button>
       </form>
       <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginTop: 13 }}>

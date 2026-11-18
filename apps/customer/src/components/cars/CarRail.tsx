@@ -2,6 +2,7 @@ import { useRef, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import type { CatalogCollection } from "../../lib/catalog-api.js";
 import { VehicleCard, CARD_TINTS } from "../site/VehicleCard.js";
+import { listingBase } from "../../lib/vehicle-categories.js";
 
 /**
  * One collection rail (real data from GET /catalog/collections), moved
@@ -91,7 +92,7 @@ export function CarRail({ collection }: { collection: CatalogCollection }): JSX.
               key={car.id}
               car={car}
               tint={CARD_TINTS[i % CARD_TINTS.length] as string}
-              onOpen={() => navigate(`/cars/${car.id}`)}
+              onOpen={() => navigate(`${listingBase(car.category)}/${car.id}`)}
               width={262}
             />
           ))}
