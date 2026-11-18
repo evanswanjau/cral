@@ -119,6 +119,7 @@ export function TrucksHome(): JSX.Element {
         heading="Have a truck that could be working more days?"
         body="List it on CRAL. A person checks the papers, you say how you charge, and you are paid after each job."
         cta="List your truck"
+        joinPath="/join/trucks"
       />
     </div>
   );

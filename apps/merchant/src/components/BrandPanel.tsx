@@ -7,8 +7,6 @@ import { Wallet } from "@phosphor-icons/react/dist/ssr/Wallet";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { Prohibit } from "@phosphor-icons/react/dist/ssr/Prohibit";
 import { Tag } from "@phosphor-icons/react/dist/ssr/Tag";
-import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr/WhatsappLogo";
-import { SUPPORT_PHONE_DISPLAY, whatsappLink } from "../lib/support.js";
 
 export type BrandPanelVariant = "signin" | "register";
 
@@ -18,22 +16,22 @@ const COPY: Record<
 > = {
   signin: {
     eyebrow: "WELCOME BACK",
-    h1: "Your vehicles, your money, in one place.",
-    lede: "Sign in to answer booking requests, see what each vehicle earns and follow every payout.",
+    h1: "Your work, your money, in one place.",
+    lede: "Sign in to answer requests, see what each car, truck, machine or driver earns and follow every payout.",
     proof: [
-      { icon: Coins, title: "See every shilling", body: "What each vehicle earned, what's clearing and what's already been paid." },
-      { icon: Key, title: "Handovers you can trust", body: "Check the hirer's pickup code before the keys change hands." },
+      { icon: Coins, title: "See every shilling", body: "What each job earned, what's clearing and what's already been paid." },
+      { icon: Key, title: "Handovers you can trust", body: "Check the hirer's one-time code before anything changes hands." },
       { icon: Wallet, title: "Payouts to M-Pesa or bank", body: "A receipt and a statement for every payout run." },
     ],
   },
   register: {
-    eyebrow: "LIST WITH CRAL",
-    h1: "Start earning from your vehicle.",
-    lede: "An email and a password is all it takes to begin. Your details, documents and first vehicle come next.",
+    eyebrow: "EARN WITH CRAL",
+    h1: "Start earning with CRAL.",
+    lede: "An email and a password is all it takes to begin. Then say what you offer: cars, trucks, machinery or driving. Your details and documents come next.",
     proof: [
-      { icon: ShieldCheck, title: "Checked by a real person", body: "A CRAL reviewer reads every listing's papers before it goes live." },
-      { icon: Prohibit, title: "No listing fee", body: "Nothing is charged while a vehicle sits idle. We only earn when you do." },
-      { icon: Tag, title: "You set the rate", body: "Per day or per trip, and you choose which requests to accept." },
+      { icon: ShieldCheck, title: "Checked by a real person", body: "A CRAL reviewer reads every supplier's papers before they go live." },
+      { icon: Prohibit, title: "No sign-up fee", body: "Nothing is charged while you're not working. We only earn when you do." },
+      { icon: Tag, title: "You set the rate", body: "Per day, trip, hour, km or tonne, depending on what you offer. You choose which requests to accept." },
     ],
   },
 };
@@ -42,7 +40,7 @@ const COPY: Record<
  * The dark panel beside every auth form. Started as a verbatim copy of the
  * design canvas ("Cruz Merchant Login.dc.html"); redesigned at the owner's
  * request (2026-09-23) with a photo backdrop, icons, per-page copy and a
- * WhatsApp help link. The type scale, 14° skewed rule and Archivo
+ * WhatsApp help link (since merged into the AuthShell one, UI4). The type scale, 14° skewed rule and Archivo
  * 'wdth' 110 display axis are kept from the canvas.
  */
 export function BrandPanel({ variant = "signin" }: { variant?: BrandPanelVariant }): JSX.Element {
@@ -88,10 +86,6 @@ export function BrandPanel({ variant = "signin" }: { variant?: BrandPanelVariant
 
       <div style={S.footer}>
         <span style={S.footerLeft}>© 2026 CRAL · CRAL.CO.KE</span>
-        <a href={whatsappLink("Hi CRAL - I need help with my merchant account")} target="_blank" rel="noreferrer" style={S.footerRight}>
-          <WhatsappLogo size={16} weight="fill" color="#25D366" />
-          Stuck? WhatsApp {SUPPORT_PHONE_DISPLAY}
-        </a>
       </div>
 
       <div style={S.glow} />
@@ -207,14 +201,6 @@ const S: Record<string, CSSProperties> = {
     font: "500 11px/1.6 'IBM Plex Mono',monospace",
     letterSpacing: ".08em",
     color: "#7C8697",
-  },
-  footerRight: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 7,
-    font: "500 13px/1.5 'Instrument Sans',sans-serif",
-    color: "#E6EAF0",
-    textDecoration: "none",
   },
 
   glow: {

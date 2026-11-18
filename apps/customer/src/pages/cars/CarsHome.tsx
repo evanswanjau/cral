@@ -143,6 +143,7 @@ export function CarsHome(): JSX.Element {
         heading="Have a car you are not using every day?"
         body="List it on CRAL. A person checks the papers, you set the rate and the dates, and you are paid after each hire."
         cta="List your car"
+        joinPath="/join/cars"
       />
     </div>
   );

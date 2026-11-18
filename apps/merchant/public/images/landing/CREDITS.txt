@@ -12,3 +12,11 @@ cta.webp - "a bridge with a city in the background" by Wambui - https://unsplash
 cat-sedan.webp - "white sedan parked on gray pavement during daytime" by Mr Dibo - https://unsplash.com/photos/pZL9h3rIxLI
 step-list.webp - "a woman smiles while holding a cell phone" by Hassan Kibwana - https://unsplash.com/photos/pkrVTwflG-E
 auth.webp - "a white car on a dirt road" by Mr Dibo - https://unsplash.com/photos/PrD-ocyzzZ8
+
+Added for the supplier pages (/join/:type, UI4, 2026-11-18). Each starts as a copy
+of an existing placeholder above, under its own name, so a real photo can replace
+one page's hero without touching the others:
+join-cars.webp - copy of cat-suv.webp (Tim Vegas, Unsplash) - https://unsplash.com/photos/r3cA8C6a-UA
+join-trucks.webp - copy of cat-truck.webp (Tiry Nelson Gono, Unsplash) - https://unsplash.com/photos/h-kD4142VIQ
+join-machinery.webp - copy of cat-machinery.webp (Jamar Penny, Unsplash) - https://unsplash.com/photos/ZgmGq_eFmUs
+join-drivers.webp - copy of auth.webp (Mr Dibo, Unsplash) - https://unsplash.com/photos/PrD-ocyzzZ8. Wants a real photo of a CRAL driver.
