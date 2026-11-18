@@ -1,0 +1,41 @@
+#!/bin/sh
+# Runs `npm run gate` before a push and blocks it on failure - unless the
+# gate already passed on exactly what is being pushed. tools/gate.mjs
+# records the tree it tested in `.git/gate-passed`; a pushed commit with the
+# same tree has been checked, so a PR is checked once, not twice.
+#
+# Turned on by `npm install` (root "prepare" -> tools/install-hooks.mjs).
+# Don't bypass it with --no-verify: CI is billing-locked, this is the gate.
+
+record_file=$(git rev-parse --git-path gate-passed 2>/dev/null)
+recorded_tree=""
+if [ -n "$record_file" ] && [ -f "$record_file" ]; then
+  recorded_tree=$(cut -d' ' -f1 "$record_file")
+fi
+
+zero="0000000000000000000000000000000000000000"
+need_gate=0
+checked=""
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref.
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_sha" ] && continue
+  [ "$local_sha" = "$zero" ] && continue # deleting a remote branch
+  tree=$(git rev-parse "$local_sha^{tree}" 2>/dev/null)
+  if [ -n "$recorded_tree" ] && [ "$tree" = "$recorded_tree" ]; then
+    checked="$local_sha"
+  else
+    need_gate=1
+  fi
+done
+
+if [ "$need_gate" -eq 0 ]; then
+  [ -n "$checked" ] && echo "gate already passed on $(git rev-parse --short "$checked")"
+  exit 0
+fi
+
+echo "pre-push: running npm run gate"
+npm run --silent gate || {
+  echo "pre-push: gate failed - push blocked"
+  exit 1
+}

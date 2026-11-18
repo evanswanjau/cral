@@ -18,7 +18,7 @@ each one look and feel like its own place.
 
 | Phase | What the client gets | Status | Sessions (PRs) |
 |-------|----------------------|--------|----------------|
-| 0 | Cheaper, faster build sessions (no client-visible change) | **Next** | 1 |
+| 0 | Cheaper, faster build sessions (no client-visible change) | **Built** (P0) | 1 (done) |
 | 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built, in `main`. **Production deploy pending** | 3 (done) |
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Not started | 1 review + 3-5 builds |
 | 3 | Sales agents sign up owners in the field | Not started | 3 |
