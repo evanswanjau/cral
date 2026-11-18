@@ -31,7 +31,9 @@ the Vercel project. Why it works this way:
 
 ## How a PR ships
 
-1. The build session (Opus) finishes the code, the roadmap status and the
+1. The build session (Opus for design-heavy PRs and anything later PRs
+   build on; Sonnet for mechanical PRs against a written spec, owner's
+   call 2026-11-18; the build prompt names the model) finishes the code, the roadmap status and the
    matching decisions file, then hands off to the **`shipper` agent**
    (`.claude/agents/shipper.md`, Haiku) **in the background** with the
    branch name, commit message and PR summary. Build sessions never run
