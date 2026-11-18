@@ -1,3 +1,8 @@
+**Start prompts for UI0 onward:** one per PR in
+[`docs/prompts/ui-rebuild/`](../prompts/ui-rebuild/README.md), in the
+README's order, each in a fresh session on the model in the table. Each
+build ticks its row here.
+
 # CRAL roadmap - every service, one phase at a time
 
 Last rewritten 2026-11-18. **This file is the queue.** Every build session
@@ -130,8 +135,18 @@ portal shows the sections for what they offer.
 
 | PR | What | Model |
 |----|------|-------|
-| 2A | **Review and proposal only.** Audit every page and link, propose the sub-site structure, wireframes and the PR split, write the build prompts. No code. Stops for owner approval. | Opus |
-| 2B... | The build PRs that 2A proposes (expected: customer hub + shared sub-site shell; one PR per live service sub-site; merchant landing + "what do you offer"; merchant portal nav by offering; link cleanup + redirects) | Opus |
+| 2A | **Built** ([#83](https://github.com/evanswanjau/cral/pull/83)). **Review and proposal only.** Audit every page and link, propose the sub-site structure, wireframes and the PR split, write the build prompts. No code. Stops for owner approval. | Opus |
+| UI0 | Link fixes that need no new page; `scripts/check-links.mjs` | Sonnet |
+| UI1a | Service registry, sub-site components, service tabs in the masthead | Opus |
+| UI1b | Front door at `/`; `/cars` landing; coming block | Opus |
+| UI1c | `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirects | Sonnet |
+| UI2a | Trucks sub-site, route-first request | Opus |
+| UI2b | Machinery sub-site; sitemap paths | Sonnet |
+| UI3 | Drivers and towing, public | Opus |
+| UI4 | Merchant "Earn with CRAL" landing, `/join/:type` | Sonnet |
+| UI5 | Onboarding "What do you offer?" | Opus |
+| UI6 | Portal nav by offering | Sonnet |
+| UI7 | Copy sweep; strict link check in the gate | Sonnet |
 
 **Start prompt for 2A:** the full prompt is
 [`docs/prompts/ui-services-review.md`](../prompts/ui-services-review.md).

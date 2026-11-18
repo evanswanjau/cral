@@ -1,11 +1,13 @@
 # UI services proposal - Phase 2A review
 
-**Status:** proposal for owner approval. No application code changed.
+**Status:** approved by the owner 2026-11-18, all five decisions as
+recommended (see "Decisions for the owner"). No application code changed.
 **Written:** 2026-11-18, against `develop` after Phase 0 (design rules in
 `docs/decisions/design.md`).
-**Next:** owner answers the five decisions at the bottom; Stage B
-(`docs/prompts/ui-services-review.md`) turns section 7 into one build prompt
-per PR.
+**Build:** section 7's seven PRs are split into eleven smaller ones (UI0,
+UI1a-c, UI2a-b, UI3-UI7) so each fits one Pro usage window. The build
+prompts are in [`docs/prompts/ui-rebuild/`](../prompts/ui-rebuild/README.md);
+where a prompt and this document differ, the prompt wins.
 
 ---
 
@@ -904,8 +906,9 @@ config change. Production only sees them at "ship phase 2".
 
 ## 7. Build plan
 
-Opus builds every PR; `shipper` runs the gate and merges to `develop`.
-Order: UI1 -> (UI2 and UI4 in parallel) -> (UI3 and UI5) -> UI6 -> UI7.
+Superseded for building by the eleven prompts in `docs/prompts/ui-rebuild/`
+(UI1 became UI0 + UI1a-c, UI2 became UI2a-b; built in order, Opus or
+Sonnet per prompt). Kept as the record of what each area needs.
 
 ### UI1 - Shell, front door, cars sub-site (L)
 
@@ -1047,3 +1050,9 @@ Order: UI1 -> (UI2 and UI4 in parallel) -> (UI3 and UI5) -> UI6 -> UI7.
    the **owner supplies real photos before UI2/UI3** (one hero and one
    tile each). Otherwise licensed stock placeholders, flagged for swap,
    as the merchant landing already does.
+
+**Owner's answers (2026-11-18):** all five as recommended. Doors only;
+one "Coming to CRAL" block with `/parts` and `/services` redirecting to
+`/#coming`; machinery its own sub-site; no per-service colour; no photos
+yet, so Unsplash placeholders with credits, swapped by keeping the file
+name.
