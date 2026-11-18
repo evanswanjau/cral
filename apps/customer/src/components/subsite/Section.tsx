@@ -12,11 +12,11 @@ export function Section({
   children,
   style,
 }: {
-  id?: string;
+  id?: string | undefined;
   overline: string;
-  heading?: string;
+  heading?: string | undefined;
   children: ReactNode;
-  style?: CSSProperties;
+  style?: CSSProperties | undefined;
 }): JSX.Element {
   return (
     <section id={id} style={{ padding: "clamp(30px,4.4vw,56px) clamp(16px,4vw,40px)", ...style }}>
