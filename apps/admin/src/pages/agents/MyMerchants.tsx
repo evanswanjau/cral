@@ -1,9 +1,10 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { Link } from "react-router-dom";
-import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   displayPhone,
   fetchAgentMerchants,
+  fetchSignupLink,
   resendAgentInvite,
   whatsappHref,
   type AgentMerchant,
@@ -77,6 +78,8 @@ export function MyMerchants(): JSX.Element {
           Add merchant
         </Link>
       </div>
+
+      <SignupLinkCard />
 
       <div style={{ marginBottom: 14, maxWidth: 420 }}>
         <input
@@ -155,6 +158,77 @@ export function MyMerchants(): JSX.Element {
   );
 }
 
+/**
+ * The agent's personal sign-up link (PR AG2). An owner who creates an
+ * account after opening it is credited to the agent; nothing to type.
+ */
+function SignupLinkCard(): JSX.Element | null {
+  const link = useQuery({ queryKey: ["admin", "agents", "link"], queryFn: fetchSignupLink, staleTime: Infinity });
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 2000);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+
+  if (link.error) return null;
+  const url = link.data?.url ?? "";
+  const share = `Sign up to earn with CRAL: ${url}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // Clipboard blocked (an http page, an old browser): the link is
+      // selectable text right beside the button.
+    }
+  }
+
+  return (
+    <div style={{ ...A.card, padding: "14px 18px", marginBottom: 14, overflow: "visible" }}>
+      <div style={A.label}>YOUR SIGN-UP LINK</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <code style={L.url}>{link.isLoading ? "Loading…" : url}</code>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button type="button" style={A.smallBtn} disabled={!url} onClick={() => void copy()}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+          {url && (
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(share)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={A.smallBtn}
+            >
+              Share on WhatsApp
+            </a>
+          )}
+        </div>
+      </div>
+      <p style={A.hint}>
+        Owners who create an account through this link show up here as yours. If someone already has an account,
+        the link doesn't move them.
+      </p>
+    </div>
+  );
+}
+
+const L = {
+  url: {
+    flex: "1 1 240px",
+    minWidth: 0,
+    padding: "9px 11px",
+    background: "#FAFBFC",
+    border: "1px solid #E4E7EC",
+    borderRadius: "var(--r-sm)",
+    font: "500 13px/1.3 'IBM Plex Mono',monospace",
+    color: "#1A1F2B",
+    overflowWrap: "anywhere",
+    userSelect: "all",
+  },
+} satisfies Record<string, CSSProperties>;
+
 function Row({
   m,
   showAgent,
@@ -173,6 +247,11 @@ function Row({
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={R.name}>{m.name ?? m.email}</span>
           {m.owner_type === "company" && <span style={R.tag}>COMPANY</span>}
+          {m.onboarding_source === "agent_link" && (
+            <span style={R.tag} title="Signed up through a personal sign-up link">
+              {showAgent ? "VIA LINK" : "VIA YOUR LINK"}
+            </span>
+          )}
         </div>
         <div style={R.sub}>{contact}</div>
         {showAgent && m.agent && <div style={R.sub}>Signed up by {m.agent.name}</div>}

@@ -129,13 +129,20 @@ export function verifyLoginOtp(identifier: string, code: string, deviceId: strin
  * onboarding - the phone at payout setup, where the reason for asking is
  * obvious - rather than gating the signup form behind an SMS.
  */
-export function register(email: string, password: string) {
+/** `agentCode`: a sales agent's sign-up code from `?a=` (PR AG2); the API ignores one it doesn't know. */
+export function register(email: string, password: string, agentCode?: string | null) {
   return apiPost<{
     user: { id: string; email: string };
     next: "verify_email" | "verify_phone" | null;
   }>(
     "/auth/register",
-    { email, password, role: "merchant", accepted_terms_version: TERMS_VERSION },
+    {
+      email,
+      password,
+      role: "merchant",
+      accepted_terms_version: TERMS_VERSION,
+      ...(agentCode ? { agent_code: agentCode } : {}),
+    },
     { auth: false },
   );
 }

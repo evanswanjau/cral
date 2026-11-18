@@ -237,6 +237,46 @@ API `apps/api/src/modules/admin-agents/`; console
 - **Agents earn no commission** (client's call, 2026-11-10). Attribution is
   for reporting only, so no agent payout lines are needed.
 
+### B2 as built (S2 / roadmap AG2, 2026-11-19)
+
+Migration `20261119090000_agent_signup_codes` (`admin_users.signup_code`);
+`lib/agent-codes.ts`; contracts `admin-agents.yaml` (`GET /admin/agents/link`,
+`GET /admin/agents`), `identity.yaml` (`agent_code` on register),
+`admin-merchants.yaml` (`agent` filter + row field). Calls made:
+
+- **The code**: six characters from an alphabet without 0/O or 1/I (read
+  aloud, copied by hand), case-insensitive, unique. Issued the first time
+  the agent opens My merchants, by a conditional write so two tabs can't
+  issue two; audited `admin.signup_code_issued`. It never changes. An
+  `admin_super`'s code credits too (the owner signs people up as well).
+- **The link** is `<merchant portal>/join?a=<code>`; `/join` lands on the
+  supplier landing. The portal keeps `?a=` from *any* page (so `?a=` on a
+  `/join/<type>` page works too) in `localStorage` for 30 days, since an
+  owner often opens it in WhatsApp and signs up later in a fresh tab. Sent
+  as `agent_code` on `POST /auth/register` and cleared once the account
+  exists.
+- **Credit is fixed at sign-up.** A code naming an active agent makes the
+  `merchants` row at register (normally made lazily by onboarding) with
+  `onboarded_by` and `onboarding_source = agent_link`, plus a
+  `merchant.agent_link_signup` audit row, in one transaction. An unknown,
+  mistyped or disabled agent's code is ignored and the response is the
+  same, so a stale link never blocks a sign-up and register can't test
+  codes. Customer sign-ups ignore it.
+- **First credit wins; nothing moves it.** An owner an agent already
+  invited has an account, so signing up through another agent's link is
+  `409 account_exists` and the inviter keeps them. An owner who signed up
+  on their own earlier is **not** credited by later opening a link (a
+  signed-in claim was left out: it would let any link re-badge a merchant,
+  and attribution is reporting only). No endpoint reassigns `onboarded_by`.
+- **Who sees what.** The agent sees their link (Copy, Share on WhatsApp) on
+  My merchants, and a "VIA YOUR LINK" tag on those rows. Ops Merchants'
+  Agent column and filter (`?agent=<admin id>` or `none`) are
+  `admin_super` only: a reviewer gets no `agent` field and 403 on the
+  filter. `GET /admin/agents` (the filter's roster, with a credited-merchant
+  count per agent) is owner-only. The directory still lists only merchants
+  who have submitted a vehicle or driver; agents' merchants still
+  onboarding are on "Agent sign-ups".
+
 ### B3. Filling in onboarding for the merchant (client's call: yes)
 
 The agent can do the whole onboarding from their own phone, including

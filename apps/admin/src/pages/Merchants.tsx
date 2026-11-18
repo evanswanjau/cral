@@ -1,19 +1,36 @@
-import { type CSSProperties } from "react";
+import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { fetchMerchants, type MerchantRow } from "../lib/merchants-api.js";
+import { fetchAgents } from "../lib/agents-api.js";
+import { getAdminClaims } from "../lib/auth.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 import { MERCHANT_BADGE } from "../components/console/status.js";
 
 const GRID = "minmax(0,1fr) 190px 96px 74px 62px 96px 14px";
+/** The owner's view adds the Agent column (PR AG2). */
+const OWNER_GRID = "minmax(0,1fr) 190px 150px 96px 74px 62px 96px 14px";
 
 export function Merchants(): JSX.Element {
   usePageTitle("Merchants");
   const navigate = useNavigate();
+  // Who brought a merchant in is the owner's report (B2); a reviewer's
+  // directory is unchanged.
+  const isOwner = getAdminClaims()?.role === "admin_super";
+  const [agent, setAgent] = useState("");
   const { data, isLoading, error } = useQuery({
-    queryKey: ["admin", "merchants", "list"],
-    queryFn: () => fetchMerchants(),
+    queryKey: ["admin", "merchants", "list", agent],
+    queryFn: () => fetchMerchants(undefined, agent || undefined),
   });
+  const agents = useQuery({
+    queryKey: ["admin", "agents", "roster"],
+    queryFn: fetchAgents,
+    enabled: isOwner,
+  });
+  const grid = isOwner ? OWNER_GRID : GRID;
+  const heads = isOwner
+    ? ["MERCHANT", "CONTACT", "AGENT", "JOINED", "FLEET", "LIVE", "WITH US", ""]
+    : ["MERCHANT", "CONTACT", "JOINED", "FLEET", "LIVE", "WITH US", ""];
 
   return (
     <div>
@@ -30,11 +47,29 @@ export function Merchants(): JSX.Element {
         </button>
       </div>
 
+      {isOwner && (
+        <div style={{ marginBottom: 14, maxWidth: 320 }}>
+          <label htmlFor="agent-filter" style={S.filterLabel}>
+            AGENT
+          </label>
+          <select id="agent-filter" value={agent} onChange={(e) => setAgent(e.target.value)} style={S.select}>
+            <option value="">Everyone</option>
+            <option value="none">Signed up on their own</option>
+            {agents.data?.data.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+                {a.status === "disabled" ? " (disabled)" : ""} · {a.merchants}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <div style={S.tableWrap}>
         <div style={{ overflowX: "auto" }}>
-          <div style={{ minWidth: 780 }}>
-            <div style={{ ...S.rowGrid, ...S.tableHead }}>
-              {["MERCHANT", "CONTACT", "JOINED", "FLEET", "LIVE", "WITH US", ""].map((h, i) => (
+          <div style={{ minWidth: isOwner ? 940 : 780 }}>
+            <div style={{ ...S.rowGrid, gridTemplateColumns: grid, ...S.tableHead }}>
+              {heads.map((h, i) => (
                 <span key={i} style={S.th}>
                   {h}
                 </span>
@@ -43,10 +78,14 @@ export function Merchants(): JSX.Element {
 
             {isLoading && <div style={S.empty}>Loading merchants…</div>}
             {error && <div style={S.empty}>Couldn't load merchants. Try again.</div>}
-            {data && data.data.length === 0 && <div style={S.empty}>No merchants have submitted a vehicle yet.</div>}
+            {data && data.data.length === 0 && (
+              <div style={S.empty}>
+                {agent ? "Nobody from this filter has submitted a vehicle yet." : "No merchants have submitted a vehicle yet."}
+              </div>
+            )}
 
             {data?.data.map((m) => (
-              <Row key={m.id} m={m} onOpen={() => navigate(`/merchants/${m.id}`)} />
+              <Row key={m.id} m={m} grid={grid} showAgent={isOwner} onOpen={() => navigate(`/merchants/${m.id}`)} />
             ))}
           </div>
         </div>
@@ -65,10 +104,20 @@ export function Merchants(): JSX.Element {
   );
 }
 
-function Row({ m, onOpen }: { m: MerchantRow; onOpen: () => void }): JSX.Element {
+function Row({
+  m,
+  grid,
+  showAgent,
+  onOpen,
+}: {
+  m: MerchantRow;
+  grid: string;
+  showAgent: boolean;
+  onOpen: () => void;
+}): JSX.Element {
   const b = MERCHANT_BADGE[m.badge];
   return (
-    <div onClick={onOpen} style={{ ...S.rowGrid, ...S.row }}>
+    <div onClick={onOpen} style={{ ...S.rowGrid, gridTemplateColumns: grid, ...S.row }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, minWidth: 0 }}>
         <span style={S.avatar}>{m.initials}</span>
         <div style={{ minWidth: 0 }}>
@@ -80,6 +129,18 @@ function Row({ m, onOpen }: { m: MerchantRow; onOpen: () => void }): JSX.Element
         </div>
       </div>
       <span style={S.ellipsis}>{m.contact}</span>
+      {showAgent && (
+        <span style={{ minWidth: 0 }}>
+          {m.agent ? (
+            <>
+              <span style={{ ...S.ellipsis, display: "block", color: "#1A1F2B" }}>{m.agent.name}</span>
+              <span style={S.towns}>{m.agent.via === "agent_link" ? "Through their link" : "Added by them"}</span>
+            </>
+          ) : (
+            <span style={{ ...S.ellipsis, color: "#9AA2B0" }}>On their own</span>
+          )}
+        </span>
+      )}
       <span style={{ font: "400 13px/1.4 'Instrument Sans',sans-serif", color: "#838C9B" }}>
         {new Date(m.joined).toLocaleDateString("en-GB", { month: "short", year: "numeric" })}
       </span>
@@ -120,6 +181,23 @@ const S = {
     color: "#1A1F2B",
   },
   lede: { margin: 0, font: "400 14px/1.55 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: 600 },
+  filterLabel: {
+    display: "block",
+    marginBottom: 7,
+    font: "600 11px/1 'IBM Plex Mono',monospace",
+    letterSpacing: ".04em",
+    color: "#5A6373",
+  },
+  select: {
+    height: 44,
+    width: "100%",
+    padding: "0 12px",
+    border: "1px solid #E4E7EC",
+    borderRadius: "var(--r)",
+    font: "400 14px/1 'Instrument Sans',sans-serif",
+    color: "#1A1F2B",
+    background: "#FFFFFF",
+  },
   backBtn: {
     height: 44,
     padding: "0 16px",

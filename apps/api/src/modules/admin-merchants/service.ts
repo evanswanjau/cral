@@ -127,6 +127,10 @@ function contactLine(a: MerchantAggregate): string {
 export interface ListMerchantsQuery {
   cursor?: string;
   limit: number;
+  /** Include each row's `agent` (owner only, PR AG2). */
+  withAgent?: boolean;
+  /** An admin id, or `none` for self sign-ups (owner only, PR AG2). */
+  agent?: string;
 }
 
 /**
@@ -137,7 +141,20 @@ export interface ListMerchantsQuery {
  * design's own client.
  */
 export async function listMerchants(query: ListMerchantsQuery) {
-  const aggregates = await loadAggregates();
+  let aggregates = await loadAggregates();
+  if (query.agent === "none") aggregates = aggregates.filter((a) => a.merchant.onboarded_by === null);
+  else if (query.agent) aggregates = aggregates.filter((a) => a.merchant.onboarded_by === query.agent);
+
+  const agentIds = query.withAgent
+    ? [...new Set(aggregates.map((a) => a.merchant.onboarded_by).filter((x): x is string => !!x))]
+    : [];
+  const agentNames = new Map(
+    agentIds.length
+      ? (
+          await db<{ id: string; full_name: string }>("admin_users").whereIn("id", agentIds).select("id", "full_name")
+        ).map((r) => [r.id, r.full_name])
+      : [],
+  );
   aggregates.sort((a, b) => b.waiting - a.waiting || (a.merchant.id < b.merchant.id ? 1 : -1));
 
   let start = 0;
@@ -176,6 +193,17 @@ export async function listMerchants(query: ListMerchantsQuery) {
         drivers: a.drivers,
         live: a.live,
         waiting: a.waiting,
+        ...(query.withAgent
+          ? {
+              agent: a.merchant.onboarded_by
+                ? {
+                    id: a.merchant.onboarded_by,
+                    name: agentNames.get(a.merchant.onboarded_by) ?? "",
+                    via: a.merchant.onboarding_source,
+                  }
+                : null,
+            }
+          : {}),
       };
     }),
     next_cursor: nextCursor,

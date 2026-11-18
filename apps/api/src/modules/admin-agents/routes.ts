@@ -33,6 +33,25 @@ adminAgentsRouter.get(
   }),
 );
 
+// The caller's personal sign-up link (PR AG2), issued on first call.
+adminAgentsRouter.get(
+  "/admin/agents/link",
+  guard,
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await agents.getSignupLink(ctxOf(req)));
+  }),
+);
+
+// Ops Merchants' agent filter. Owner only: an agent doesn't get a roster
+// of the sales team.
+adminAgentsRouter.get(
+  "/admin/agents",
+  requireAdmin({ role: "admin_super" }),
+  asyncHandler(async (_req, res) => {
+    res.status(200).json(await agents.listAgents());
+  }),
+);
+
 // Each add sends an email to someone who didn't ask for it, so it's capped
 // per agent. Mounted after `guard`, so the bucket is the admin, not the IP
 // a field team may be sharing.

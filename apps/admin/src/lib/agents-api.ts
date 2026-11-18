@@ -41,6 +41,28 @@ export function fetchAgentMerchants(params: { q?: string; cursor?: string } = {}
   return apiGet<AgentMerchantsResponse>(`/admin/agents/merchants${qs ? `?${qs}` : ""}`);
 }
 
+/** The caller's personal sign-up link (PR AG2). The code is issued on the first call. */
+export interface SignupLink {
+  code: string;
+  url: string;
+}
+
+export function fetchSignupLink() {
+  return apiGet<SignupLink>("/admin/agents/link");
+}
+
+/** Every sales agent, for Ops Merchants' agent filter. Owner only. */
+export interface AgentSummary {
+  id: string;
+  name: string;
+  status: "active" | "disabled";
+  merchants: number;
+}
+
+export function fetchAgents() {
+  return apiGet<{ data: AgentSummary[] }>("/admin/agents");
+}
+
 const idem = () => ({ headers: { "Idempotency-Key": `adm-${crypto.randomUUID()}` } });
 
 export function addAgentMerchant(input: {

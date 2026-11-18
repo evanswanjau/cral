@@ -10,6 +10,8 @@ export interface AdminUserRow {
   assigned_queues: string[];
   /** "active" | "disabled" */
   status: string;
+  /** A sales agent's personal sign-up code (`/join?a=`), issued on first use. PR AG2. */
+  signup_code: string | null;
   last_login_at: Date | null;
   created_at: Date;
   updated_at: Date;

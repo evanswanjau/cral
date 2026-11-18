@@ -24,6 +24,8 @@ export interface MerchantRow {
   fleet: number;
   live: number;
   waiting: number;
+  /** Owner only (PR AG2): who brought them in, null for a self sign-up. Absent for other roles. */
+  agent?: { id: string; name: string; via: "agent_invite" | "agent_link" } | null;
 }
 
 export interface MerchantsResponse {
@@ -111,8 +113,13 @@ export interface MerchantFile {
   drivers?: Array<{ id: string; full_name: string; status: string; county: string }>;
 }
 
-export function fetchMerchants(cursor?: string) {
-  return apiGet<MerchantsResponse>(`/admin/merchants${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ""}`);
+/** `agent` (owner only): an admin id, or `none` for owners who signed up on their own. */
+export function fetchMerchants(cursor?: string, agent?: string) {
+  const q = new URLSearchParams();
+  if (cursor) q.set("cursor", cursor);
+  if (agent) q.set("agent", agent);
+  const qs = q.toString();
+  return apiGet<MerchantsResponse>(`/admin/merchants${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchMerchantFile(merchantId: string) {

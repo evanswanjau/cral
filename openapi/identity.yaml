@@ -67,6 +67,25 @@ paths:
                 accepted_terms_version: { type: string }
                 full_name: { type: string, minLength: 1 }
                 phone: { $ref: "#/components/schemas/E164Phone" }
+                agent_code:
+                  type: string
+                  maxLength: 20
+                  example: K7P2QX
+                  description: >
+                    A sales agent's personal sign-up code, from a link like
+                    `merchant.cral.co.ke/join?a=K7P2QX` (Phase 3, PR AG2;
+                    see `admin-agents.yaml`). Only read for
+                    `role: merchant`. When it names an active agent, the
+                    `merchants` row is created now with `onboarded_by` =
+                    that agent and `onboarding_source = "agent_link"`, and
+                    a `merchant.agent_link_signup` audit row lands in the
+                    same transaction. An unknown, mistyped or disabled
+                    agent's code is ignored (the owner still signs up,
+                    credited to nobody) and the response is identical
+                    either way, so the endpoint can't be used to test
+                    codes. An existing account is never re-credited: an
+                    email or phone already on CRAL is the usual 409, and
+                    whoever brought that owner in first keeps the credit.
       responses:
         "201":
           description: Account created
