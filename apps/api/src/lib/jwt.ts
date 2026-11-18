@@ -11,7 +11,16 @@ export interface AccessTokenClaims {
   aud: "public"; // spec §8: admin tokens carry aud: "ops" and are issued by a wholly separate flow
 }
 
-export type AdminRole = "admin_reviewer" | "admin_finance" | "admin_support" | "admin_super";
+/**
+ * `admin_sales` ("Sales agent", 2026-11-18) adds merchants and tracks the
+ * ones it brought in - `modules/admin-agents`. It reaches nothing else.
+ */
+export type AdminRole =
+  | "admin_reviewer"
+  | "admin_finance"
+  | "admin_support"
+  | "admin_sales"
+  | "admin_super";
 
 export interface AdminAccessTokenClaims {
   sub: string; // admin_users.id

@@ -3,7 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { AuthShell } from "../components/auth/AuthShell.jsx";
 import { Field, InfoBanner, PrimaryButton, TextInput } from "../components/auth/primitives.jsx";
 import { S } from "../components/auth/styles.js";
-import { checkPasswordReset, resetPassword } from "../lib/auth-api.js";
+import { checkPasswordReset, resetPassword, TERMS_VERSION } from "../lib/auth-api.js";
 import { ApiClientError } from "../lib/api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
@@ -17,14 +17,21 @@ type View = "checking" | "form" | "expired" | "done";
  * up front via /auth/password/reset/check, so an expired link says so *before* the
  * person types a new password twice - the delivery plan calls that dead end
  * out explicitly as a gap in the original designs.
+ *
+ * The same screen opens a CRAL sales agent's invite (`purpose: "invite"`,
+ * 2026-11-18): the agent created the account, and this is where its owner
+ * chooses their first password and agrees to the terms. Only the words
+ * change - "set" rather than "reset", no signed-out-elsewhere notice.
  */
 export function ResetPassword(): JSX.Element {
-  usePageTitle("Set a new password");
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const token = params.get("token");
 
   const [view, setView] = useState<View>(token ? "checking" : "expired");
+  const [purpose, setPurpose] = useState<"reset" | "invite">("reset");
+  const invite = purpose === "invite";
+  usePageTitle(invite ? "Set your password" : "Set a new password");
   const [masked, setMasked] = useState<string | null>(null);
   const [pw, setPw] = useState("");
   const [reveal, setReveal] = useState(false);
@@ -39,6 +46,7 @@ export function ResetPassword(): JSX.Element {
       .then((r) => {
         if (cancelled) return;
         setMasked(r.masked_identifier ?? null);
+        setPurpose(r.purpose === "invite" ? "invite" : "reset");
         setView(r.valid ? "form" : "expired");
       })
       .catch(() => {
@@ -53,7 +61,11 @@ export function ResetPassword(): JSX.Element {
     setError(null);
     setBusy(true);
     try {
-      const res = await resetPassword({ token: token!, new_password: pw });
+      const res = await resetPassword({
+        token: token!,
+        new_password: pw,
+        ...(invite ? { accepted_terms_version: TERMS_VERSION } : {}),
+      });
       setRevoked(res.sessions_revoked);
       setView("done");
     } catch (err) {
@@ -97,6 +109,21 @@ export function ResetPassword(): JSX.Element {
     );
   }
 
+  if (view === "done" && invite) {
+    return (
+      <AuthShell
+        heading="Your password is set"
+        subheading="Sign in with your email and new password to finish setting up your account."
+      >
+        <div style={S.formStack}>
+          <PrimaryButton type="button" onClick={() => navigate("/sign-in", { replace: true })}>
+            Sign in
+          </PrimaryButton>
+        </div>
+      </AuthShell>
+    );
+  }
+
   if (view === "done") {
     return (
       <AuthShell
@@ -126,10 +153,20 @@ export function ResetPassword(): JSX.Element {
 
   return (
     <AuthShell
-      heading="Choose a new password"
-      subheading={masked ? `Setting a new password for ${masked}.` : "Pick something new."}
+      heading={invite ? "Set your password" : "Choose a new password"}
+      subheading={
+        invite
+          ? `A CRAL agent started your merchant account${masked ? ` for ${masked}` : ""}. Choose a password to finish setting up.`
+          : masked
+            ? `Setting a new password for ${masked}.`
+            : "Pick something new."
+      }
       error={error}
-      footer={{ text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }}
+      footer={
+        invite
+          ? { text: "Already set one?", linkLabel: "Sign in", to: "/sign-in" }
+          : { text: "Remembered it?", linkLabel: "Back to sign in", to: "/sign-in" }
+      }
     >
       <form
         style={S.formStack}
@@ -140,7 +177,7 @@ export function ResetPassword(): JSX.Element {
       >
         <Field
           id="new-pw"
-          label="NEW PASSWORD"
+          label={invite ? "PASSWORD" : "NEW PASSWORD"}
           helper="Ten characters or more, and not one you've used on a site that's been breached."
           action={
             <button type="button" onClick={() => setReveal((v) => !v)} style={S.inlineBtn}>
@@ -159,10 +196,25 @@ export function ResetPassword(): JSX.Element {
         </Field>
 
         <PrimaryButton type="submit" disabled={busy}>
-          {busy ? "Saving…" : "Save new password"}
+          {busy ? "Saving…" : invite ? "Set password" : "Save new password"}
         </PrimaryButton>
 
-        <p style={S.terms}>Setting a new password signs you out on every other device.</p>
+        {invite ? (
+          <p style={S.terms}>
+            Only you know this password - nobody from CRAL will ever ask for it. By setting it you agree to the CRAL
+            merchant{" "}
+            <a href="#" style={S.termsLink}>
+              terms
+            </a>{" "}
+            and{" "}
+            <a href="#" style={S.termsLink}>
+              privacy notice
+            </a>
+            .
+          </p>
+        ) : (
+          <p style={S.terms}>Setting a new password signs you out on every other device.</p>
+        )}
       </form>
     </AuthShell>
   );

@@ -157,7 +157,8 @@ export function emailNotice(text: string): string {
   </table>`;
 }
 
-function escapeHtml(value: string): string {
+/** For text a person typed - `emailParagraph`/`emailMuted` take HTML and don't escape. */
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

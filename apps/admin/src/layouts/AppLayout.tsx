@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { getAdminMe } from "../lib/auth-api.js";
 import { setSession } from "../lib/auth.js";
@@ -8,6 +8,8 @@ import { Masthead } from "../components/console/Masthead.js";
 import { SideNav } from "../components/console/SideNav.js";
 import { ErrorBoundary } from "../components/ErrorBoundary.js";
 import { C } from "../components/console/styles.js";
+
+const AGENT_PATHS = ["/my-merchants", "/profile"];
 
 export function AppLayout(): ReactNode {
   const navigate = useNavigate();
@@ -36,6 +38,14 @@ export function AppLayout(): ReactNode {
         </span>
       </div>
     );
+  }
+
+  // A sales agent has two screens. Any other URL (a bookmark, `/`, a typed
+  // path) lands on My merchants instead of a page whose API answers 403.
+  // The API is what actually enforces this; this only keeps the agent off
+  // dead ends.
+  if (me.role === "admin_sales" && !AGENT_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return <Navigate to="/my-merchants" replace />;
   }
 
   return (

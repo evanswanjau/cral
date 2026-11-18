@@ -46,9 +46,13 @@ function generatePassword(): string {
   return randomBytes(18).toString("base64url");
 }
 
-/** `admin_super` sees every queue, so it's stored with none assigned. */
+/**
+ * `admin_super` sees every queue, so it's stored with none assigned. A
+ * sales agent works no review queue at all - its two screens are scoped
+ * by `merchants.onboarded_by`, not by a queue - so it gets none either.
+ */
 function normalizeQueues(role: AdminRole, queues: string[]): string[] {
-  return role === "admin_super" ? [] : queues;
+  return role === "admin_super" || role === "admin_sales" ? [] : queues;
 }
 
 export async function listAdmins(cursor: string | undefined, limit: number) {

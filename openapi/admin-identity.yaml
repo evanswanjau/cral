@@ -285,7 +285,7 @@ components:
         full_name: { type: string }
         role:
           type: string
-          enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+          enum: [admin_reviewer, admin_finance, admin_support, admin_sales, admin_super]
         assigned_queues:
           type: array
           items: { type: string, example: vehicles }

@@ -14,8 +14,8 @@ merchant review, team, communications or Ops payouts. Plans:
   public path has; separate tables mean a public-login compromise can't
   reach Ops and `authenticate()` never branches on audience.
 - **Roles** are their own closed set: `admin_reviewer` / `admin_finance` /
-  `admin_support` / `admin_super` (labelled Compliance reviewer / Finance
-  / Support / Owner), plus per-admin queues (`drivers`, `renters`,
+  `admin_support` / `admin_sales` / `admin_super` (labelled Compliance
+  reviewer / Finance / Support / Sales agent / Owner), plus per-admin queues (`drivers`, `renters`,
   `bookings`, `services`, …).
 - **`aud: "ops"` tokens sign with `JWT_ADMIN_SECRET`**, a different key
   from the public one (`lib/jwt.ts#signAdminAccessToken` /
@@ -225,6 +225,33 @@ SMS, every merchant reachable at once).
   end.
 - **No "Schedule" button**: there's no scheduler behind it. A one-off
   send to a merchant without the deep link means pasting an id.
+
+## Sales agents (`admin_sales`, Phase 3 AG1, 2026-11-18)
+
+Contract `openapi/admin-agents.yaml`, module `modules/admin-agents/`,
+console `pages/agents/`, migration `20261118090000_sales_agents`. Full
+reasoning: `docs/plans/trucks-and-sales-agents.md`, "B1 as built".
+
+- **An agent never approves and never touches a password.** Add merchant
+  creates `users` + `merchants` (`onboarded_by`, `onboarding_source =
+  agent_invite`) with an unusable random argon2 hash and emails a 7-day
+  invite: a `password_reset_tokens` row with `purpose = 'invite'`, opened by
+  the merchant portal's existing `/reset-password` screen.
+- **Invite pending = `users.invited_at` set, `invite_accepted_at` null.**
+  Any emailed-link password set accepts it and marks the email verified;
+  the "password was reset" notice is skipped; terms are recorded then.
+  Onboarding reminders skip invite-pending accounts.
+- **Scoping**: `requireAdmin({ role: "admin_sales" })` + `onboarded_by = me`
+  in every query; another agent's merchant is 404, not 403. `admin_super`
+  sees all agent-brought merchants ("Agent sign-ups"). Agents get no queues
+  and 403 on every other `/admin/*` router; the console keeps them on
+  `/my-merchants`.
+- **Status chip is derived**: verified -> changes_requested -> submitted ->
+  invited -> onboarding (step n of **5**, the wizard's real count).
+- Existing email/phone -> 409 `account_exists`. Rate limits per admin: add
+  30/h, resend 5/h per merchant. Both POSTs keyed. Audit:
+  `merchant.agent_invite`, `merchant.invite_resent`, `user.invite_accepted`.
+- Screens not from a canvas file (none exists); console idiom, phone-first.
 
 ## Code anchors
 
