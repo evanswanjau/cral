@@ -37,12 +37,15 @@ reuses. Car sales (6) moves no money, so it carries the least risk.
 
 1. **One PR = one fresh session.** Never continue a long chat into the next
    PR. The roadmap and the plan files carry the context, not the chat.
-2. **Start the session with the phase's start prompt** (below), on the
-   model the phase names. See [`docs/prompts/working-cheaply.md`](../prompts/working-cheaply.md)
-   for why each model.
-3. **Each PR** branches off `develop` as `feature/<name>`, runs
-   `npm run gate` once at the end (Phase 0 adds it), opens a PR to
-   `develop`, merges it, and stops with a report of 15 lines or fewer.
+2. **Start the session with the phase's start prompt** (below). **Opus
+   builds every PR.** Only the chores at the end (checks, commit, push, PR,
+   merge, dev deploy) go to the `shipper` agent on Haiku, which Phase 0
+   adds. See [`docs/prompts/working-cheaply.md`](../prompts/working-cheaply.md).
+3. **Each PR** branches off `develop` as `feature/<name>`. When the code is
+   done, the build session hands off to `shipper`, which runs
+   `npm run gate`, commits, pushes, opens and merges the PR to `develop`,
+   tries the dev deploy, and reports back in a few lines. If the gate fails,
+   it returns only the failing lines, Opus fixes them and hands off again.
 4. **After each PR the owner deploys dev:**
    `ssh cral@46.202.128.68 '~/redeploy-dev.sh'`, then smoke-tests on
    `app-cral.vercel.app` and the dev merchant/admin.
@@ -60,12 +63,13 @@ Every phase below gives a short prompt. They all expand to this:
 > Read `docs/plans/verticals-roadmap.md`, Phase {N}, PR {ID}, and only the
 > files that section points to. Build PR {ID} and nothing else. Branch off
 > `origin/develop` as `feature/{name}`. Contract first if the PR adds or
-> changes an endpoint. Run `npm run gate` once when the code is done, fix
-> what it reports, then commit (no AI attribution), push, open a PR to
-> `develop` and merge it. Update this roadmap's status for {ID} and the
-> matching CLAUDE.md decisions entry in the same PR. Finish with a report of
-> 15 lines or fewer: what changed, what the owner must check on dev, anything
-> left open. Do not start the next PR.
+> changes an endpoint. Update this roadmap's status for {ID} and the
+> matching `docs/decisions/` entry as part of the change. Don't run the
+> checks yourself: when the code is done, hand off to the `shipper` agent
+> with the branch name and a one-paragraph PR summary. If it reports gate
+> failures, fix them and hand off again. Finish with a report of 15 lines
+> or fewer: what changed, the PR link, what the owner must check on dev,
+> anything left open. Do not start the next PR.
 
 ---
 
@@ -75,14 +79,16 @@ Every phase below gives a short prompt. They all expand to this:
 
 | PR | What | Model |
 |----|------|-------|
-| P0 | `npm run gate` (quiet, one summary line per check), a pre-push hook that runs it, and CLAUDE.md slimmed from ~2,000 lines to an index with the decisions moved into `docs/decisions/` | Sonnet |
+| P0 | `npm run gate` (quiet), a pre-push hook, the `shipper` and `release` agents on Haiku, and CLAUDE.md cut from ~2,000 lines to an index (stale and reversed entries removed, current decisions moved into `docs/decisions/`) | Opus |
 
 **Start prompt:** the full P0 prompt is in
 [`docs/prompts/working-cheaply.md`](../prompts/working-cheaply.md#the-p0-session-prompt).
 
 **Done when:** `npm run gate` passes and prints under 20 lines on success;
-`git push` runs it automatically; CLAUDE.md is under 300 lines and nothing
-was lost (every decision heading is findable in `docs/decisions/`).
+`git push` runs it automatically; an Opus session can hand a finished branch
+to `shipper` and get back a merged PR link; CLAUDE.md is under 300 lines;
+every current decision is findable in `docs/decisions/`, and every removed
+stale entry is listed in the PR for the owner to check.
 
 ---
 
@@ -122,7 +128,7 @@ portal shows the sections for what they offer.
 | PR | What | Model |
 |----|------|-------|
 | 2A | **Review and proposal only.** Audit every page and link, propose the sub-site structure, wireframes and the PR split, write the build prompts. No code. Stops for owner approval. | Opus |
-| 2B... | The build PRs that 2A proposes (expected: customer hub + shared sub-site shell; one PR per live service sub-site; merchant landing + "what do you offer"; merchant portal nav by offering; link cleanup + redirects) | Opus for the shell and merchant onboarding, Sonnet for the per-service pages that follow the shell |
+| 2B... | The build PRs that 2A proposes (expected: customer hub + shared sub-site shell; one PR per live service sub-site; merchant landing + "what do you offer"; merchant portal nav by offering; link cleanup + redirects) | Opus |
 
 **Start prompt for 2A:** the full prompt is
 [`docs/prompts/ui-services-review.md`](../prompts/ui-services-review.md).
@@ -148,9 +154,9 @@ paperwork with the owner beside them. Agents never approve anyone.
 
 | PR | What | Model |
 |----|------|-------|
-| AG1 | `admin_sales` role, "Add merchant" + emailed set-your-password invite, "My merchants" list | Sonnet |
-| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Sonnet |
-| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | **Opus** (a scoped token is a security boundary) |
+| AG1 | `admin_sales` role, "Add merchant" + emailed set-your-password invite, "My merchants" list | Opus |
+| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Opus |
+| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | Opus |
 
 **Start prompt:** the standard prompt with Phase 3, PR AG1/AG2/AG3. Detail:
 [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md) Part B (it calls
@@ -171,10 +177,10 @@ job stays on the car's service record.
 
 | PR | What | Model |
 |----|------|-------|
-| GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist | Sonnet |
-| GS2 | My cars (customer) + request for quote + itemised quotes | **Opus** |
-| GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines | **Opus** (money) |
-| GS4 | Service record, garage sub-site made real | Sonnet |
+| GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist | Opus |
+| GS2 | My cars (customer) + request for quote + itemised quotes | Opus |
+| GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines | Opus |
+| GS4 | Service record, garage sub-site made real | Opus |
 
 **Before GS1 the owner answers** open questions 1, 2 and 5 at the bottom of
 this file (payment timing, auto-confirm window, commission rate).
@@ -195,8 +201,8 @@ once you confirm it's the right part.
 
 | PR | What | Model |
 |----|------|-------|
-| PT1 | Parts outlets, condition + fitted/delivered, delivery address, "right part" confirm, wrong-part dispute | Sonnet |
-| PT2 | Parts sub-site made real, request sent to dealers in the county | Sonnet |
+| PT1 | Parts outlets, condition + fitted/delivered, delivery address, "right part" confirm, wrong-part dispute | Opus |
+| PT2 | Parts sub-site made real, request sent to dealers in the county | Opus |
 
 **Before PT1 the owner answers** open question 3 (who delivers).
 
@@ -213,10 +219,10 @@ buyer and seller pay each other directly.
 
 | PR | What | Model |
 |----|------|-------|
-| CS1 | Sale listings, merchant side (`sal_`, `S-YYMMDD-NNN` ref) | Sonnet |
-| CS2 | Ops sale-listing review + report-a-listing | Sonnet |
-| CS3 | Buy sub-site + enquiries | Opus (new public pages) |
-| CS4 | Listing fees and paid boosts by M-Pesa | Sonnet |
+| CS1 | Sale listings, merchant side (`sal_`, `S-YYMMDD-NNN` ref) | Opus |
+| CS2 | Ops sale-listing review + report-a-listing | Opus |
+| CS3 | Buy sub-site + enquiries | Opus |
+| CS4 | Listing fees and paid boosts by M-Pesa | Opus |
 
 **Before CS1 the owner answers** open question 4 (free listings or a fee).
 
