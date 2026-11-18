@@ -9,7 +9,7 @@ import { TrucksHome } from "./pages/trucks/TrucksHome.js";
 import { TrucksSearch } from "./pages/trucks/TrucksSearch.js";
 import { MachineryHome } from "./pages/machinery/MachineryHome.js";
 import { MachinerySearch } from "./pages/machinery/MachinerySearch.js";
-import { Towing } from "./pages/Towing.js";
+import { TowingHome } from "./pages/towing/TowingHome.js";
 import { Drivers } from "./pages/Drivers.js";
 import { DriverBook } from "./pages/DriverBook.js";
 import { CarDetail } from "./pages/CarDetail.js";
@@ -82,13 +82,20 @@ export const routes: RouteObject[] = [
       { path: "/machinery/:id/book", element: <Booking /> },
       // Not live yet: both land on the front door's "Coming to CRAL"
       // block (owner decision 2, 2026-11-18) until their own phase builds
-      // the real sub-site. `/services/towing` stays below until UI3.
+      // the real sub-site.
       { path: "/parts", element: <Navigate to="/#coming" replace /> },
       { path: "/services", element: <Navigate to="/#coming" replace /> },
       { path: "/cars/:id", element: <CarDetail /> },
       // Not behind RequireAuth: see the note on the booking route below.
       { path: "/cars/:id/book", element: <Booking /> },
+      // Drivers and towing (UI3): public, like the other sub-sites. Only
+      // sending a request asks for an account; `GET /catalog/drivers/:id`
+      // never needed one. `/services/towing` redirects forever: the quote
+      // email's "View request" button pointed there.
       { path: "/drivers", element: <Drivers /> },
+      { path: "/drivers/:id", element: <DriverBook /> },
+      { path: "/towing", element: <TowingHome /> },
+      { path: "/services/towing", element: <Navigate to="/towing" replace /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
       { path: "/corporate", element: <Corporate /> },
@@ -104,8 +111,6 @@ export const routes: RouteObject[] = [
       {
         element: <RequireAuth />,
         children: [
-          { path: "/services/towing", element: <Towing /> },
-          { path: "/drivers/:id", element: <DriverBook /> },
           { path: "/documents", element: <Documents /> },
           { path: "/bookings", element: <Trips /> },
           { path: "/bookings/:id", element: <TripDetail /> },

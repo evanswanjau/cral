@@ -31,7 +31,11 @@ older delivery plan; the queue for what comes next is
 - `contact_phone` is normalised to E.164 (`lib/identifier.ts#normalizePhone`,
   422 `invalid_phone`); `POST /services/towing` is limited to 5 an hour
   per renter, since each one emails dispatch.
-- Customer UI `/services/towing` (`pages/Towing.tsx`), linked from
-  `/services` by a banner rather than the "opening soon" `VerticalPage`
-  template, which is built for offerings that aren't real yet. Ops UI
+- Customer UI `/towing` (`pages/towing/TowingHome.tsx`, UI3), its own
+  public sub-site: the request form is open to visitors, kept in
+  `sessionStorage` through sign-in and sent on return (the POST still
+  needs an account), with CRAL's phone number for the urgent case and a
+  signed-in renter's requests below. `/services/towing` redirects there
+  forever, because the quote email's "View request" button pointed at it;
+  the email now links `/towing` (still a hardcoded production host). Ops UI
   `pages/services/`, list-and-file idiom.
