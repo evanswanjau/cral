@@ -98,9 +98,7 @@ approval in between.
 >    front door, (b) one PR per live service sub-site, (c) merchant landing
 >    + "what do you offer", (d) portal nav by offering, (e) link cleanup +
 >    redirects. For each PR: files touched, new components, what is
->    deleted, acceptance checks, size (S/M/L), and which model should build
->    it (Opus for the shell and merchant onboarding, Sonnet for pages that
->    follow an approved shell).
+>    deleted, acceptance checks, and size (S/M/L). Opus builds every PR.
 > 8. **Rules for the builders,** which the Stage B prompts will repeat:
 >    no page file over ~400 lines (compose from components in
 >    `components/site/` or a new `components/subsite/`); reuse existing
@@ -140,9 +138,9 @@ approval in between.
 >   font family, size and colour (exact token values); 375px layout has
 >   no horizontal scroll; the specific flows that must still work
 >   (book a car, request a truck, request a tow, merchant sign-up).
-> - **Model:** Opus or Sonnet, per the proposal.
-> - **Finish:** `npm run gate` once, PR to `develop`, merge, report in 15
->   lines or fewer, update the roadmap's Phase 2 table.
+> - **Finish:** hand off to the `shipper` agent (gate, commit, PR, merge,
+>   dev deploy), report in 15 lines or fewer, update the roadmap's Phase 2
+>   table.
 >
 > Also add a `docs/prompts/ui-rebuild/README.md` listing the prompts in
 > build order with one line each. Update `docs/plans/verticals-roadmap.md`
