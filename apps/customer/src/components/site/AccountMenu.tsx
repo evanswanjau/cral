@@ -5,7 +5,6 @@ import { getMe, logout } from "../../lib/auth-api.js";
 import { setSession } from "../../lib/auth.js";
 import { listMyNotifications } from "../../lib/notifications-api.js";
 import { listMyBookings } from "../../lib/bookings-api.js";
-import { merchantLandingUrl } from "../../lib/merchant-app.js";
 
 /**
  * The masthead's account avatar + dropdown, pulled from
@@ -21,18 +20,20 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
  * fabricate" rule rather than silently dropped:
  *   - "Payments and receipts" has no dedicated screen (receipts live on
  *     each trip's own detail page) - omitted.
- *   - "Sell a car" is tagged SOON in the design itself - kept inert (no
- *     navigation), not linked to a page that doesn't exist.
+ *   - "Sell a car" is tagged SOON in the design itself - was kept inert
+ *     (no navigation); cut in UI1a, see below.
  * "Notifications" is NOT in the canvas's link list at all (the design's
  * masthead has no bell), but C8's renter feed is real and needs to stay
- * reachable, so it's added as the first Hiring-tab row - same reasoning
+ * reachable, so it's added as the first row - same reasoning
  * as the standalone-bell button this component replaces.
+ *
+ * UI1a (docs/plans/ui-services-proposal.md 1.1 A1-A8) cut "Parts and
+ * service orders" (no orders exist) and the inert "Sell a car", and
+ * dropped "List your car" and "What CRAL checks first", twins of the
+ * masthead's "Earn with CRAL" and the footer's "How we protect you".
+ * That emptied the canvas's Listing tab, so the Hiring / Listing switch
+ * went with it: the menu is now one list.
  */
-
-const TABS: Array<{ key: "hiring" | "listing"; label: string }> = [
-  { key: "hiring", label: "Hiring" },
-  { key: "listing", label: "Listing" },
-];
 
 interface LinkRowDef {
   label: string;
@@ -77,7 +78,6 @@ function LinkRow({ label, go, tag, tagColor = "#8C97A8" }: LinkRowDef): JSX.Elem
 export function AccountMenu(): JSX.Element {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"hiring" | "listing">("hiring");
   const rootRef = useRef<HTMLDivElement>(null);
 
   const { data: me } = useQuery({ queryKey: ["me"], queryFn: getMe, staleTime: 60_000 });
@@ -131,12 +131,7 @@ export function AccountMenu(): JSX.Element {
     close();
     navigate(path);
   };
-  const goExternal = (url: string) => () => {
-    close();
-    window.location.assign(url);
-  };
-
-  const hiringLinks: LinkRowDef[] = [
+  const links: LinkRowDef[] = [
     {
       label: "Notifications",
       go: goTo("/notifications"),
@@ -144,28 +139,8 @@ export function AccountMenu(): JSX.Element {
       tagColor: "#D81E32",
     },
     { label: "My bookings", go: goTo("/bookings"), tag: bookingCount > 0 ? String(bookingCount) : "" },
-    { label: "Parts and service orders", go: goTo("/parts"), tag: "SOON" },
     { label: "My documents", go: goTo("/documents"), tag: docTag, tagColor: verified ? "#1B8A5A" : "#C77400" },
   ];
-  const listingLinks: LinkRowDef[] = [
-    { label: "List your car", go: goExternal(merchantLandingUrl()), tag: "FREE", tagColor: "#1B8A5A" },
-    { label: "What CRAL checks first", go: goTo("/how-we-protect-you"), tag: "" },
-    { label: "Sell a car", go: null, tag: "SOON" },
-  ];
-
-  const tabStyle = (active: boolean) =>
-    ({
-      flex: 1,
-      height: 32,
-      background: active ? "#FFFFFF" : "transparent",
-      color: active ? "#0B0F1A" : "#5A6373",
-      border: "none",
-      borderRadius: 6,
-      font: `${active ? 600 : 500} 12.5px/1 'Instrument Sans',sans-serif`,
-      cursor: "pointer",
-      boxShadow: active ? "0 1px 3px rgba(11,15,26,.12)" : "none",
-    }) as const;
-
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
       <button
@@ -246,15 +221,7 @@ export function AccountMenu(): JSX.Element {
             </span>
           </div>
 
-          <div style={{ display: "flex", gap: 4, padding: 4, background: "#F1F3F6", borderRadius: 9, marginBottom: 6 }}>
-            {TABS.map((t) => (
-              <button key={t.key} type="button" onClick={() => setTab(t.key)} style={tabStyle(tab === t.key)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-
-          {(tab === "hiring" ? hiringLinks : listingLinks).map((row) => (
+          {links.map((row) => (
             <LinkRow key={row.label} {...row} />
           ))}
 

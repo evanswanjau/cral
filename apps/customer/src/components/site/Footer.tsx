@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import { merchantLandingUrl } from "../../lib/merchant-app.js";
+import { LIVE_SERVICES } from "../../lib/services.js";
 
 /**
  * Public footer, reproduced from the "Cruz Ride Auto - Website" canvas.
@@ -9,11 +10,17 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
  * server-side; the client just doesn't surface it.
  */
 
+// The SERVICES column comes from the registry's live entries (UI1a,
+// docs/plans/ui-services-proposal.md 1.1 F1-F9 and 4.5): coming services
+// are never a column, only the one "What's coming" link to `/#coming`.
 const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
-    head: "HIRING A CAR",
+    head: "SERVICES",
+    links: [...LIVE_SERVICES.map((s): [string, string] => [s.label, s.href]), ["What's coming", "/#coming"]],
+  },
+  {
+    head: "HIRING WITH CRAL",
     links: [
-      ["Find a car", "/browse"],
       ["How it works", "/how-it-works"],
       ["How we protect you", "/how-we-protect-you"],
       ["Corporate hire", "/corporate"],
@@ -31,7 +38,7 @@ const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
     head: "CRAL",
     links: [
       ["About us", "/about"],
-      ["List your car", merchantLandingUrl()],
+      ["Earn with CRAL", merchantLandingUrl()],
     ],
   },
 ];
