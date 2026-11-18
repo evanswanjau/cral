@@ -83,7 +83,7 @@ export function HowItWorks(): JSX.Element {
       <Section>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           <Link
-            to="/browse"
+            to="/cars/search"
             style={{
               height: 44,
               padding: "0 19px",

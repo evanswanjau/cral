@@ -14,9 +14,8 @@ import { CarTypeTiles } from "../../components/cars/CarTypeTiles.js";
 /**
  * `/cars`: the car-hire landing (UI1b). The car search, the collection
  * rails and the car-type tiles moved here from the old home page, which
- * is now the front door. Until UI1c builds `/cars/search` and
- * `/cars/:id/book`, every search, tile and "See all" still goes to
- * `/browse?...`.
+ * is now the front door. Every search, tile and "See all" goes to
+ * `/cars/search?...`.
  *
  * Not from a canvas; built from tokens.ts and
  * docs/plans/ui-services-proposal.md section 4.3 (Cars column).

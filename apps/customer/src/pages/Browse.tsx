@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { searchCatalog, getCounties, type CatalogSearchParams } from "../lib/catalog-api.js";
@@ -50,6 +50,12 @@ const CATEGORY_OPTIONS: DropdownOption[] = [
   { value: "", label: "Any type" },
   ...VEHICLE_CATEGORIES.map((c) => ({ value: c.value, label: c.label })),
 ];
+
+// `/cars/search` offers car categories only; trucks and machinery stay on
+// the legacy `/browse?category=` until UI2a/UI2b give them their own search.
+const CAR_CATEGORY_OPTIONS: DropdownOption[] = CATEGORY_OPTIONS.filter(
+  (o) => o.value !== "truck" && o.value !== "machinery",
+);
 
 // Truck-only filters (PR T1) - shown once "Truck & trailers" is picked.
 const TRUCK_TYPE_OPTIONS: DropdownOption[] = [
@@ -254,6 +260,7 @@ function PanelFoot({
 }
 
 export function Browse(): JSX.Element {
+  const carsOnly = useLocation().pathname.startsWith("/cars/search");
   useSeo({
     title: "Find a car",
     // The tab reads "Find a car", with no site suffix after it.
@@ -263,7 +270,7 @@ export function Browse(): JSX.Element {
       // the review the same way the page's own line is - the two say one
       // thing, not two different ones.
       "Hire a car anywhere in Kenya, self-drive or with a driver. Every car is reviewed by CRAL before it's listed.",
-    path: "/browse",
+    path: carsOnly ? "/cars/search" : "/browse",
   });
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -495,7 +502,7 @@ export function Browse(): JSX.Element {
                     <ChoiceRow
                       name="Body type"
                       value={category}
-                      options={CATEGORY_OPTIONS}
+                      options={carsOnly ? CAR_CATEGORY_OPTIONS : CATEGORY_OPTIONS}
                       onChange={(v) =>
                         set({
                           category: v || undefined,

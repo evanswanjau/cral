@@ -348,7 +348,7 @@ export function Booking(): JSX.Element {
   // A truck request isn't sendable until it says from where, to where and what.
   const isTruck = car.category === "truck";
   const routeProblem = isTruck ? truckRouteProblem(route, car.payload_kg) : null;
-  const here = `/book/${id}?from=${from}&to=${to}`;
+  const here = `/cars/${id}/book?from=${from}&to=${to}`;
   const steps = isAuthenticated ? BOOKING_STEPS : NEW_ACCOUNT_BOOKING_STEPS;
   const doneIndex = isAuthenticated ? 0 : stage === "account" ? 0 : 1;
 
