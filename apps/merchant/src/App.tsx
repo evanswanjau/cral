@@ -20,12 +20,15 @@ import { SignIn } from "./pages/SignIn.js";
 import { CreateAccount } from "./pages/CreateAccount.js";
 import { ForgotPassword } from "./pages/ForgotPassword.js";
 import { ResetPassword } from "./pages/ResetPassword.js";
+import { JoinPage } from "./pages/join/JoinPage.js";
 
 const router = createBrowserRouter([
   { path: "/sign-in", element: <SignIn /> },
   { path: "/create-account", element: <CreateAccount /> },
   { path: "/forgot-password", element: <ForgotPassword /> },
   { path: "/reset-password", element: <ResetPassword /> },
+  // Supplier pages, public like the landing at `/` (UI4).
+  { path: "/join/:type", element: <JoinPage /> },
   {
     element: <RequireAuth />,
     children: [
