@@ -319,6 +319,75 @@ The reviewer still approves separately, so the two-gate rule doesn't
 change: an agent can bring a merchant all the way to "Submitted", never to
 "Verified".
 
+### B3 as built (S3 / roadmap AG3, 2026-11-19)
+
+Migration `20261119100000_assist_sessions` (`sessions.kind` +
+`assisted_by`, `assist_challenges`, `documents.uploaded_by_admin_id`);
+`apps/api/src/lib/assist.ts` (the allowlist), `middleware/authenticate.ts`,
+`modules/admin-agents/assist.ts`; contracts `admin-agents.yaml`,
+`merchant-onboarding.yaml`, `admin-vehicles.yaml` (`uploaded_by_agent`).
+Calls made, where they differ from the sketch above:
+
+- **Consent comes first, and only from a phone the owner verified.**
+  `POST /admin/agents/merchants/{id}/assist/start` texts a 6-digit code
+  (10 minutes, 5 tries, single-use, sha256 only, bound to one agent and one
+  merchant) to `users.phone` **only when `phone_verified`**; otherwise
+  `409 phone_not_verified`. The sketch let the agent verify the phone
+  inside the assist; that would let an agent who typed their own number
+  at Add merchant consent for the owner and then point payouts at
+  themselves. So the owner verifies their phone themselves (invite email,
+  set password, Your details) and then the agent can help.
+- **The agent can't submit, accept the terms, or set the phone or payout.**
+  Item 5 and 7 above had the agent bring the merchant to "Submitted"; the
+  coordinator's security rules for this PR said never, and they win over
+  the sketch because they are the stricter. `PATCH /merchant/onboarding`
+  refuses `phone`, every payout field and `terms_accepted` with
+  `403 assist_scope` (field named); submit is outside the allowlist. The
+  wizard hides those parts in an assist and says the owner finishes them.
+  The B3 item 7 email therefore goes out at **start**, not submit: "Kamau
+  from CRAL started filling in your setup... they can't send it for
+  review... End agent access".
+- **A narrower allowlist.** `GET`/`PATCH /merchant/onboarding`, onboarding
+  vehicle create/patch/delete, document upload, document read/delete (only
+  files that agent uploaded, else 404), and `POST
+  /merchant/onboarding/assist/end`. Not `/merchant/vehicles*`,
+  `/merchant/drivers*` or `/auth/phone/verification/*`: the wizard doesn't
+  call the first two, and the phone is verified before an assist exists.
+  Matched on `METHOD + req.route.path`, so a new route is closed by default.
+  A test walks every mounted route and asserts the 403 (admin routes 401:
+  the ops audience never accepts a public token).
+- **The token.** Public audience as B3 says (the merchant portal's own
+  endpoints read it), signed with `JWT_ACCESS_SECRET`, `asb` = the agent,
+  1-hour life, no refresh token (refresh also refuses `kind = 'assist'`).
+  `authenticate()` trusts the session row, not the claim: `asb` must match
+  `assisted_by`, an `asb` on a user session is refused, a disabled agent's
+  sessions die, and a submitted draft is `409 onboarding_submitted`.
+  `requireAdmin` is untouched. The token reaches the portal in the URL
+  fragment (`/assist#token=`) and lives in that tab's sessionStorage.
+- **Audit**, same transaction: `merchant.assist_code_sent`,
+  `merchant.assist_started`, each write (`merchant.onboarding_updated`,
+  `vehicle.created/updated/deleted`, `document.uploaded/deleted`, actor the
+  agent, `after.assisted_for`), `merchant.assist_ended` (by agent or owner).
+- **The owner sees it and can stop it.** `GET /merchant/onboarding` carries
+  `assists` (who, when, live or not); the setup page shows "Kamau from
+  CRAL is filling this in with you" with End agent access, or "helped fill
+  this in on 19 Nov" afterwards. The owner's Sign out everywhere also ends
+  it. The reviewer sees "uploaded by agent Kamau" on a vehicle case.
+- **Rate limits**: start 3 an hour per merchant per agent and 20 per agent;
+  confirm 20 an hour per agent. Start takes an `Idempotency-Key`; confirm
+  doesn't (the code is single-use and a stored replay would keep the
+  token at rest).
+- **Owner checks on dev** (end to end): (1) Ops, as a Sales agent: Add
+  merchant with a phone you hold. (2) Open the invite email, set the
+  password, and in onboarding go to Your details and verify the phone.
+  (3) Back in Ops, My merchants: the row now offers Fill in onboarding;
+  Text the owner a code, type the SMS code, Open onboarding. (4) In that
+  tab: the blue banner names the owner; fill in details, add a vehicle,
+  upload a document; the payout and terms parts say the owner does them,
+  and there is no Submit. (5) In the owner's own browser: the setup page
+  says the agent is filling it in; End agent access, then the agent's tab
+  stops working. (6) As the owner, add payout, accept terms and submit.
+
 ## PR order
 
 | PR | What | Size |

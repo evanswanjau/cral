@@ -7,6 +7,7 @@ import { appendVehicleEvent, nextListingRef } from "../../lib/vehicle-events.js"
 import { rethrowRegistrationConflict } from "../../lib/pg-errors.js";
 import { assertNotPast } from "../../lib/dates.js";
 import { setUserPhone } from "../../lib/user-phone.js";
+import { ASSIST_FORBIDDEN_PATCH_KEYS, assistScopeError } from "../../lib/assist.js";
 import { ratingSummary } from "../../lib/ratings.js";
 import { emailAdapter } from "../../lib/adapters.js";
 import {
@@ -38,6 +39,36 @@ import type {
 export interface RequestContext {
   ip: string | null;
   requestId: string | null;
+  /** The sales agent behind an assist session (PR AG3), from `req.assist`; absent otherwise. */
+  assistedBy?: string | null;
+}
+
+/**
+ * Every onboarding write made in an assist session is audited (B3) in the
+ * same transaction as the change: the agent as actor, the owner in
+ * `after.assisted_for`. A no-op for the owner's own writes, which this
+ * module has never audited.
+ */
+async function auditAssist(
+  trx: Knex.Transaction,
+  ctx: RequestContext,
+  userId: string,
+  action: string,
+  entityType: string,
+  entityId: string,
+  after: Record<string, unknown>,
+): Promise<void> {
+  if (!ctx.assistedBy) return;
+  await writeAuditEntry(trx, {
+    actorId: ctx.assistedBy,
+    actorType: "admin",
+    action,
+    entityType,
+    entityId,
+    after: { ...after, assisted_for: userId, via: "assist" },
+    requestId: ctx.requestId,
+    ip: ctx.ip,
+  });
 }
 
 /** The merchant listing agreement from the Review step — independent of users.terms_accepted_version. */
@@ -115,7 +146,10 @@ function docSlot(doc: DocumentRow | undefined) {
 // §9 Onboarding state — read + patch
 // ---------------------------------------------------------------------
 
-export async function getOnboardingState(userId: string) {
+export async function getOnboardingState(
+  userId: string,
+  assist: { adminId: string; sessionId: string | null } | null = null,
+) {
   const merchant = await getOrCreateMerchant(userId);
   const user = await db("users").where({ id: userId }).first();
   const vehicles = await db<VehicleRow>("vehicles")
@@ -123,13 +157,29 @@ export async function getOnboardingState(userId: string) {
     .orderBy("created_at", "asc");
   const documents = await db<DocumentRow>("documents").where({ merchant_id: merchant.id });
 
-  return serializeState(
-    merchant,
-    vehicles,
-    documents,
-    user?.phone ?? null,
-    Boolean(user?.phone_verified),
-  );
+  // PR AG3: the banner for an assist, and the history the owner sees.
+  let current: { agent_name: string; expires_at: string } | null = null;
+  if (assist) {
+    const s = assist.sessionId
+      ? await db("sessions").where({ id: assist.sessionId }).first("expires_at")
+      : await db("sessions")
+          .where({ user_id: userId, kind: "assist", assisted_by: assist.adminId })
+          .whereNull("revoked_at")
+          .orderBy("created_at", "desc")
+          .first("expires_at");
+    const agent = await db("admin_users").where({ id: assist.adminId }).first("full_name");
+    current = {
+      agent_name: (agent?.full_name as string | undefined) ?? "A CRAL agent",
+      expires_at: s ? (s.expires_at as Date).toISOString() : new Date().toISOString(),
+    };
+  }
+
+  return {
+    ...serializeState(merchant, vehicles, documents, user?.phone ?? null, Boolean(user?.phone_verified)),
+    account_email: (user?.email as string | undefined) ?? "",
+    assist: current,
+    assists: await assistHistory(userId),
+  };
 }
 
 function serializeState(
@@ -218,6 +268,13 @@ export async function patchOnboarding(
   patch: PatchOnboardingInput,
   _ctx: RequestContext,
 ): Promise<ReturnType<typeof getOnboardingState>> {
+  // An assist can't touch the payout number or account, or accept the
+  // terms: the owner's own acts (B3). Checked here as well as by name in
+  // `lib/assist.ts`, so a schema change can't open it.
+  if (_ctx.assistedBy) {
+    const sent = Object.keys(patch).find((k) => ASSIST_FORBIDDEN_PATCH_KEYS.includes(k));
+    if (sent) throw assistScopeError(sent);
+  }
   const merchant = await getOrCreateMerchant(userId);
 
   const { step, max_step, screen, phone, terms_accepted, ...rest } = patch;
@@ -239,10 +296,80 @@ export async function patchOnboarding(
     update.merchant_terms_accepted_ip = null;
   }
 
-  await db<MerchantRow>("merchants").where({ id: merchant.id }).update(update);
+  await db.transaction(async (trx) => {
+    await trx<MerchantRow>("merchants").where({ id: merchant.id }).update(update);
+    await auditAssist(trx, _ctx, userId, "merchant.onboarding_updated", "merchant", merchant.id, {
+      fields: Object.keys(patch),
+    });
+  });
   if (phone) await setUserPhone(userId, phone);
 
-  return getOnboardingState(userId);
+  return getOnboardingState(userId, _ctx.assistedBy ? { adminId: _ctx.assistedBy, sessionId: null } : null);
+}
+
+/**
+ * Ends assist sessions (PR AG3). An assist token ends its own; the owner's
+ * token ends every live one on the account. Each revocation is audited in
+ * the same transaction, and the update is conditional on the session still
+ * being live, so a double click ends nothing twice.
+ */
+export async function endAssist(
+  userId: string,
+  assist: { adminId: string; sessionId: string } | null,
+  ctx: RequestContext,
+): Promise<{ ended: number }> {
+  const merchant = await getOrCreateMerchant(userId);
+  const now = new Date();
+  return db.transaction(async (trx) => {
+    const q = trx("sessions")
+      .where({ user_id: userId, kind: "assist" })
+      .whereNull("revoked_at")
+      .where("expires_at", ">", now);
+    if (assist) q.where({ id: assist.sessionId });
+    const ended = (await q.update({ revoked_at: now, revoked_reason: assist ? "assist_exit" : "owner_ended" }).returning([
+      "id",
+      "assisted_by",
+    ])) as { id: string; assisted_by: string }[];
+    for (const s of ended) {
+      await writeAuditEntry(trx, {
+        actorId: assist ? assist.adminId : userId,
+        actorType: assist ? "admin" : "user",
+        action: "merchant.assist_ended",
+        entityType: "merchant",
+        entityId: merchant.id,
+        after: { session_id: s.id, assisted_by: s.assisted_by, assisted_for: userId, by: assist ? "agent" : "owner" },
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+    }
+    return { ended: ended.length };
+  });
+}
+
+/** Who has filled in this account, newest first: the owner sees every assist (B3). */
+async function assistHistory(userId: string) {
+  const rows = (await db("sessions as s")
+    .leftJoin("admin_users as a", "a.id", "s.assisted_by")
+    .where({ "s.user_id": userId, "s.kind": "assist" })
+    .orderBy("s.created_at", "desc")
+    .limit(10)
+    .select("s.created_at", "s.revoked_at", "s.expires_at", "a.full_name")) as {
+    created_at: Date;
+    revoked_at: Date | null;
+    expires_at: Date;
+    full_name: string | null;
+  }[];
+  const now = new Date();
+  return rows.map((r) => {
+    const active = r.revoked_at === null && r.expires_at > now;
+    const endedAt = r.revoked_at ?? (active ? null : r.expires_at);
+    return {
+      agent_name: r.full_name ?? "A CRAL agent",
+      started_at: r.created_at.toISOString(),
+      ended_at: endedAt ? endedAt.toISOString() : null,
+      active,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------
@@ -714,6 +841,9 @@ export async function addVehicle(userId: string, input: CreateVehicleInput, _ctx
         })
         .returning("*");
       if (!created) throw new Error("Failed to create vehicle");
+      await auditAssist(trx, _ctx, userId, "vehicle.created", "vehicle", created.id, {
+        registration: created.registration,
+      });
       return created;
     })
     .catch(rethrowRegistrationConflict);
@@ -725,14 +855,21 @@ export async function patchVehicle(
   userId: string,
   vehicleId: string,
   input: VehicleInput,
-  _ctx: RequestContext,
+  ctx: RequestContext,
 ) {
   const vehicle = await requireOwnVehicle(userId, vehicleId);
   if (input.insurance_expiry) assertNotPast(input.insurance_expiry, "insurance_expiry");
-  const [updated] = await db<VehicleRow>("vehicles")
-    .where({ id: vehicle.id })
-    .update(vehicleUpdateFromInput(input, input.type ?? vehicle.type))
-    .returning("*")
+  const [updated] = await db
+    .transaction(async (trx) => {
+      const rows = await trx<VehicleRow>("vehicles")
+        .where({ id: vehicle.id })
+        .update(vehicleUpdateFromInput(input, input.type ?? vehicle.type))
+        .returning("*");
+      await auditAssist(trx, ctx, userId, "vehicle.updated", "vehicle", vehicle.id, {
+        fields: Object.keys(input),
+      });
+      return rows;
+    })
     .catch(rethrowRegistrationConflict);
   if (!updated) throw new Error("Failed to update vehicle");
   await touchActivity(vehicle.merchant_id);
@@ -740,9 +877,14 @@ export async function patchVehicle(
   return serializeVehicle(updated, documents);
 }
 
-export async function removeVehicle(userId: string, vehicleId: string, _ctx: RequestContext) {
+export async function removeVehicle(userId: string, vehicleId: string, ctx: RequestContext) {
   const vehicle = await requireOwnVehicle(userId, vehicleId);
-  await db<VehicleRow>("vehicles").where({ id: vehicle.id }).delete();
+  await db.transaction(async (trx) => {
+    await trx<VehicleRow>("vehicles").where({ id: vehicle.id }).delete();
+    await auditAssist(trx, ctx, userId, "vehicle.deleted", "vehicle", vehicle.id, {
+      registration: vehicle.registration,
+    });
+  });
   await touchActivity(vehicle.merchant_id);
 }
 
@@ -859,9 +1001,14 @@ export async function uploadDocument(userId: string, input: UploadDocumentInput,
           original_name: input.file.originalname,
           size_bytes: input.file.size,
           content_type: input.file.mimetype,
+          uploaded_by_admin_id: _ctx.assistedBy ?? null,
         })
         .returning("*");
       if (!inserted) throw new Error("Failed to record document");
+      await auditAssist(trx, _ctx, userId, "document.uploaded", "document", inserted.id, {
+        kind: inserted.kind,
+        vehicle_id: inserted.vehicle_id,
+      });
       return inserted;
     });
   } catch (err) {
@@ -886,12 +1033,13 @@ export async function uploadDocument(userId: string, input: UploadDocumentInput,
   };
 }
 
-export async function deleteDocument(userId: string, documentId: string, _ctx: RequestContext) {
+export async function deleteDocument(userId: string, documentId: string, ctx: RequestContext) {
   const merchant = await getOrCreateMerchant(userId);
   const doc = await db<DocumentRow>("documents")
     .where({ id: documentId, merchant_id: merchant.id })
     .first();
-  if (!doc) {
+  const assistedBy = ctx.assistedBy ?? null;
+  if (!doc || (assistedBy !== null && doc.uploaded_by_admin_id !== assistedBy)) {
     throw new ApiError({
       status: 404,
       type: "not_found",
@@ -899,7 +1047,10 @@ export async function deleteDocument(userId: string, documentId: string, _ctx: R
       message: "That document doesn't exist on your draft.",
     });
   }
-  await db<DocumentRow>("documents").where({ id: doc.id }).delete();
+  await db.transaction(async (trx) => {
+    await trx<DocumentRow>("documents").where({ id: doc.id }).delete();
+    await auditAssist(trx, ctx, userId, "document.deleted", "document", doc.id, { kind: doc.kind });
+  });
   // Row first, bytes second: the reverse order can leave a row pointing at
   // a file that is gone, which reads to the merchant as a corrupt document.
   await discardStoredObject(doc.storage_key);
@@ -916,12 +1067,14 @@ export async function deleteDocument(userId: string, documentId: string, _ctx: R
  * (not a 403 — a merchant has no business learning that another merchant's
  * document exists).
  */
-export async function readDocument(userId: string, documentId: string) {
+export async function readDocument(userId: string, documentId: string, assistedBy: string | null = null) {
   const merchant = await getOrCreateMerchant(userId);
   const doc = await db<DocumentRow>("documents")
     .where({ id: documentId, merchant_id: merchant.id })
     .first();
-  if (!doc) {
+  // An assist (PR AG3) reads back only what that agent uploaded; the
+  // owner's own ID scans are not the agent's to open.
+  if (!doc || (assistedBy !== null && doc.uploaded_by_admin_id !== assistedBy)) {
     throw new ApiError({
       status: 404,
       type: "not_found",

@@ -276,6 +276,27 @@ Migration `20261119090000_agent_signup_codes`; `lib/agent-codes.ts`. Detail:
   other roles get no `agent` field and 403 on the filter.
   `GET /admin/agents` (the filter's roster) is owner-only.
 
+### Assist session (AG3, 2026-11-19)
+
+Migration `20261119100000_assist_sessions`; `lib/assist.ts`,
+`modules/admin-agents/assist.ts`. Detail:
+`docs/plans/trucks-and-sales-agents.md`, "B3 as built".
+
+- **Consent is a code to the owner's verified phone**, read out in person.
+  Not verified -> `409 phone_not_verified`; the agent never consents via a
+  number they typed. Code: 10 min, 5 tries, single-use, hash only, bound
+  to one agent + merchant.
+- **The assist token reaches onboarding only.** The allowlist in
+  `lib/assist.ts` (`METHOD + route pattern`) is enforced in
+  `authenticate()`; everything else is `403 assist_scope`. Inside it the
+  agent can't set the phone, payout or terms, can't submit, and reads or
+  deletes only documents it uploaded. A route-walk test guards it; add a
+  route to the allowlist only on purpose.
+- **Agents still never approve, and now never submit.** The owner adds the
+  payout, accepts the terms and submits.
+- Every write audited as the agent with `after.assisted_for`; the owner is
+  emailed at start, sees it on the setup page and can end it.
+
 ## Code anchors
 
 - Contract for `/admin/auth/*`: `openapi/admin-identity.yaml`. Team: `GET/POST/PATCH /admin/team`, `.../deactivate`, `.../reactivate`, `.../reset-invite`.

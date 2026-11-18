@@ -8,6 +8,11 @@ export const AddMerchantSchema = z.object({
 });
 export type AddMerchantInput = z.infer<typeof AddMerchantSchema>;
 
+export const ConfirmAssistSchema = z.object({
+  challenge_id: z.string().trim().min(1).max(40),
+  code: z.string().trim().regex(/^\d{6}$/),
+});
+
 export const ListAgentMerchantsQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   cursor: z.string().optional(),

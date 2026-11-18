@@ -47,6 +47,8 @@ export interface DocLine {
   original_name: string | null;
   expires_at: string | null;
   reviewed_at: string | null;
+  /** A sales agent's name when they uploaded it in an assist session (PR AG3). Vehicle documents only. */
+  uploaded_by_agent?: string | null;
   /** This document's slice of the review checklist, shown as an accordion. */
   checklist: ChecklistBlock;
 }

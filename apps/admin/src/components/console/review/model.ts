@@ -16,6 +16,8 @@ export interface SectionDoc {
   review_note: string | null;
   original_name: string | null;
   expires_at: string | null;
+  /** PR AG3: shown as "uploaded by agent <name>". */
+  uploaded_by_agent?: string | null;
 }
 
 export interface SectionModel {

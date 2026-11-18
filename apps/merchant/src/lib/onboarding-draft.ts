@@ -12,6 +12,7 @@
 
 import { getCurrentUserId } from "./auth.js";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
+import { ASSIST_BLOCKED_DRAFT_KEYS, isAssistSession } from "./assist.js";
 import type { TruckType, VehicleType } from "./vehicle-categories.js";
 
 export type OwnerType = "individual" | "company";
@@ -471,8 +472,12 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
 /** Maps a partial draft patch to the PATCH /merchant/onboarding wire shape and sends it. Debounced by callers. */
 export async function syncDraftToServer(patch: Partial<OnboardingDraft>): Promise<void> {
   const wireBody: Record<string, unknown> = {};
+  // An agent's assist session (PR AG3) never sends the phone, payout or
+  // terms: the server refuses them, and they stay the owner's to set.
+  const assist = isAssistSession();
   for (const key of PATCHABLE_KEYS) {
     if (!(key in patch)) continue;
+    if (assist && ASSIST_BLOCKED_DRAFT_KEYS.includes(key)) continue;
     const wireKey = DRAFT_TO_WIRE_KEY[key] ?? key;
     wireBody[wireKey] = patch[key];
   }

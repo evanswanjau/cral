@@ -145,6 +145,8 @@ export interface DocumentRow {
   review_note: string | null;
   reviewed_by: string | null;
   reviewed_at: Date | null;
+  /** The sales agent who uploaded it during an assist session (PR AG3); null when the owner did. */
+  uploaded_by_admin_id: string | null;
   created_at: Date;
   updated_at: Date;
 }

@@ -59,7 +59,7 @@ const WIZARD_STEPS: Record<number, string> = {
 };
 const WIZARD_STEP_COUNT = 5;
 
-interface Joined {
+export interface Joined {
   id: string;
   user_id: string;
   owner_type: string;
@@ -80,6 +80,8 @@ interface Joined {
   full_name: string | null;
   invited_at: Date | null;
   invite_accepted_at: Date | null;
+  phone_verified: boolean;
+  user_status: string;
   agent_name: string | null;
 }
 
@@ -104,6 +106,8 @@ const COLUMNS = [
   "u.full_name",
   "u.invited_at",
   "u.invite_accepted_at",
+  "u.phone_verified",
+  "u.status as user_status",
   "a.full_name as agent_name",
 ];
 
@@ -169,6 +173,8 @@ function serialize(r: Joined) {
     status: statusOf(r),
     onboarding: { step, of: WIZARD_STEP_COUNT, label: WIZARD_STEPS[step] ?? "Onboarding" },
     invite_pending: isInvitePending(r),
+    // PR AG3: "Fill in onboarding" can start (see ./assist.ts).
+    assist_ready: !r.onboarding_submitted && r.user_status === "active" && r.phone_verified && Boolean(r.phone),
     invited_at: r.invited_at ? r.invited_at.toISOString() : null,
     onboarding_source: r.onboarding_source,
     agent: r.onboarded_by ? { id: r.onboarded_by, name: r.agent_name ?? "" } : null,
@@ -188,7 +194,7 @@ function merchantNotFound(): ApiError {
   });
 }
 
-async function loadScoped(merchantId: string, ctx: AgentCtx): Promise<Joined> {
+export async function loadScoped(merchantId: string, ctx: AgentCtx): Promise<Joined> {
   const row = (await scoped(ctx).where("m.id", merchantId).first(COLUMNS)) as Joined | undefined;
   if (!row) throw merchantNotFound();
   return row;

@@ -49,6 +49,10 @@ export interface SessionRow {
   last_seen_at: Date;
   revoked_at: Date | null;
   revoked_reason: string | null;
+  /** `assist` = a sales agent filling in onboarding for this user (PR AG3); see `lib/assist.ts`. */
+  kind: "user" | "assist";
+  /** The agent (`admin_users.id`) behind an assist session; null for every `user` session. */
+  assisted_by: string | null;
   created_at: Date;
   updated_at: Date;
 }

@@ -13,6 +13,7 @@ import {
   startPhoneVerification,
   type OnboardingDraft,
 } from "../../../lib/onboarding-draft.js";
+import { isAssistSession } from "../../../lib/assist.js";
 
 /** Solid (filled) Phosphor marks, white on the blue section badges. */
 const ICON = { size: 20, weight: "fill", color: "#FFFFFF" } as const;
@@ -56,6 +57,9 @@ export function YourDetails({
   onContinue: () => void;
 }): JSX.Element {
   const [showErrors, setShowErrors] = useState(false);
+  // An agent's assist session (PR AG3): the phone and payout are the
+  // owner's to set, so they're read-only here and not required to go on.
+  const assist = isAssistSession();
   const isCompany = draft.ownerType === "company";
   // Companies can only be paid to a bank account in the company name.
   const payByBank = isCompany || draft.payoutMethod === "bank";
@@ -78,7 +82,7 @@ export function YourDetails({
     draft.kraPin.trim() &&
     draft.phone.trim() &&
     draft.phoneVerified &&
-    payoutFilled &&
+    (assist || payoutFilled) &&
     (!isCompany ||
       (draft.companyName.trim() &&
         draft.certNo.trim() &&
@@ -243,6 +247,7 @@ export function YourDetails({
             <FormField label="Phone number" required error={req(draft.phone)} helper="How we reach you about your listing. We text a code to confirm it.">
               <PhoneInput
                 value={draft.phone}
+                disabled={assist}
                 onChange={(v) =>
                   onChange(draft.phoneVerified ? { phone: v, phoneVerified: false } : { phone: v })
                 }
@@ -251,6 +256,7 @@ export function YourDetails({
             </FormField>
           </div>
 
+          {!assist && (
           <div style={{ marginBottom: 18 }}>
             <PhoneVerification
               phone={draft.phone}
@@ -259,9 +265,32 @@ export function YourDetails({
               onVerified={() => onChange({ phoneVerified: true })}
             />
           </div>
+          )}
         </div>
       </div>
 
+      {assist ? (
+        <div style={O.section}>
+          <div style={O.sectionHead}>
+            <div style={O.sectionHeadLeft}>
+              <span style={O.sectionBadgeSquare}>
+                <Wallet {...ICON} />
+              </span>
+              <div>
+                <div style={O.sectionTitle}>Payout account</div>
+                <div style={O.sectionSub}>The owner adds this from their own account</div>
+              </div>
+            </div>
+            <span style={O.sectionAside}>PAYOUTS</span>
+          </div>
+          <div style={O.sectionBody}>
+            <div style={O.noteBox}>
+              Where the money goes is the owner&rsquo;s call, so an agent can&rsquo;t set it. They
+              add it before they send this for review.
+            </div>
+          </div>
+        </div>
+      ) : (
       <div style={O.section}>
         <div style={O.sectionHead}>
           <div style={O.sectionHeadLeft}>
@@ -388,6 +417,7 @@ export function YourDetails({
           )}
         </div>
       </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
         <BackButton onClick={onBack}>← Back</BackButton>

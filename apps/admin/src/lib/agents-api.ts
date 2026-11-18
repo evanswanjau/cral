@@ -14,6 +14,8 @@ export interface AgentMerchant {
   status: AgentMerchantStatus;
   onboarding: { step: number; of: number; label: string };
   invite_pending: boolean;
+  /** "Fill in onboarding" can start: not submitted, account active, phone verified by the owner (PR AG3). */
+  assist_ready: boolean;
   invited_at: string | null;
   onboarding_source: "self" | "agent_invite" | "agent_link";
   agent: { id: string; name: string } | null;
@@ -72,6 +74,23 @@ export function addAgentMerchant(input: {
   phone: string;
 }) {
   return apiPost<InviteResult>("/admin/agents/merchants", input, idem());
+}
+
+/** PR AG3: texts the owner a consent code for an assist session. */
+export function startAssist(merchantId: string) {
+  return apiPost<{ challenge_id: string; masked_destination: string; expires_in: number }>(
+    `/admin/agents/merchants/${merchantId}/assist/start`,
+    undefined,
+    idem(),
+  );
+}
+
+/** PR AG3: the owner's code for a 1-hour assist token; `portal_url` opens the merchant portal with it. */
+export function confirmAssist(merchantId: string, challengeId: string, code: string) {
+  return apiPost<{ access_token: string; expires_at: string; portal_url: string }>(
+    `/admin/agents/merchants/${merchantId}/assist`,
+    { challenge_id: challengeId, code },
+  );
 }
 
 export function resendAgentInvite(merchantId: string) {

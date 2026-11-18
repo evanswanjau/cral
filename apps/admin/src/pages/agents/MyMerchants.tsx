@@ -13,6 +13,7 @@ import { getAdminClaims } from "../../lib/auth.js";
 import { ApiClientError } from "../../lib/api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
 import { A, StatusChip } from "./ui.js";
+import { AssistPanel } from "./AssistPanel.js";
 
 /**
  * My merchants - the owners this sales agent signed up and how far each one
@@ -241,6 +242,10 @@ function Row({
   onResend: () => void;
 }): JSX.Element {
   const contact = [m.phone ? displayPhone(m.phone) : null, m.email].filter(Boolean).join(" · ");
+  const [assisting, setAssisting] = useState(false);
+  // PR AG3: only before submission, and only once the owner has verified
+  // their own phone (the consent code goes there).
+  const canFill = m.status === "invited" || m.status === "onboarding";
   return (
     <div style={R.row}>
       <div style={{ flex: "1 1 220px", minWidth: 0 }}>
@@ -277,7 +282,24 @@ function Row({
             {resending ? "Sending…" : "Resend invite"}
           </button>
         )}
+        {canFill && (
+          <button
+            type="button"
+            style={{ ...A.smallBtn, ...(m.assist_ready ? {} : { color: "#9AA2B0", cursor: "not-allowed" }) }}
+            disabled={!m.assist_ready}
+            title={m.assist_ready ? undefined : "The owner verifies their phone in onboarding first."}
+            onClick={() => setAssisting(true)}
+          >
+            Fill in onboarding
+          </button>
+        )}
       </div>
+      {canFill && !m.assist_ready && (
+        <div style={{ ...R.sub, flexBasis: "100%", marginTop: 0, color: "#838C9B" }}>
+          To fill in onboarding with them, the owner first verifies their phone in onboarding (Your details).
+        </div>
+      )}
+      {assisting && <AssistPanel m={m} onClose={() => setAssisting(false)} />}
     </div>
   );
 }

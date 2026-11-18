@@ -9,6 +9,12 @@ export interface AccessTokenClaims {
   sid: string; // session id — lets /auth/logout revoke "the current session" without needing the refresh token in the body
   roles: string[];
   aud: "public"; // spec §8: admin tokens carry aud: "ops" and are issued by a wholly separate flow
+  /**
+   * Set only on an assist token (PR AG3): the sales agent filling in
+   * onboarding for this user. Never trusted alone - `authenticate()`
+   * checks it against the session row's `kind` and `assisted_by`.
+   */
+  asb?: string;
 }
 
 /**
@@ -72,6 +78,23 @@ export function signAccessToken(claims: Omit<AccessTokenClaims, "aud">): string 
   return jwt.sign({ ...claims, aud: "public" } satisfies AccessTokenClaims, secret(), {
     algorithm: "HS256",
     expiresIn: `${ACCESS_TOKEN_TTL_MINUTES}m`,
+  });
+}
+
+/**
+ * An assist token (PR AG3): the public audience, as B3 specifies, so the
+ * merchant portal's own endpoints read it, but with the agent in `asb` and
+ * the session's own 1-hour life instead of the usual 15 minutes (there is
+ * no refresh token). What it may reach is decided server-side from the
+ * session row, in `authenticate()`.
+ */
+export function signAssistAccessToken(
+  claims: Omit<AccessTokenClaims, "aud" | "asb"> & { asb: string },
+  ttlSeconds: number,
+): string {
+  return jwt.sign({ ...claims, aud: "public" } satisfies AccessTokenClaims, secret(), {
+    algorithm: "HS256",
+    expiresIn: ttlSeconds,
   });
 }
 

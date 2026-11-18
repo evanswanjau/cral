@@ -6,6 +6,7 @@ import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
 import { customerLegalUrl } from "../../../lib/customer-site.js";
 import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
+import { isAssistSession } from "../../../lib/assist.js";
 
 export function Review({
   draft,
@@ -23,6 +24,8 @@ export function Review({
   submitting?: boolean;
 }): JSX.Element {
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  // An agent's assist session (PR AG3) can't accept the terms or submit.
+  const assist = isAssistSession();
   const fullName = [draft.firstName, draft.middleName, draft.surname].filter(Boolean).join(" ");
 
   const blockedReason = !draft.phoneVerified
@@ -194,6 +197,19 @@ export function Review({
       </div>
       )}
 
+      {assist ? (
+        <div style={O.reviewCard}>
+          <div style={O.reviewCardHead}>
+            <div style={O.cardTitle}>The owner finishes this part</div>
+          </div>
+          <div style={O.reviewCardBody}>
+            <p style={{ margin: 0, font: "400 13px/1.55 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+              The owner adds their payout details, reads and accepts the merchant terms, and sends
+              this for review from their own account. You can't do those for them.
+            </p>
+          </div>
+        </div>
+      ) : (
       <div
         style={{
           ...O.reviewCard,
@@ -250,9 +266,11 @@ export function Review({
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <BackButton onClick={onBack}>← Back to documents</BackButton>
+        {!assist && (
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {attemptedSubmit && blockedReason && (
             <span style={{ font: "600 13px/1 'Instrument Sans',sans-serif", color: "#D81E32" }}>{blockedReason}</span>
@@ -261,6 +279,7 @@ export function Review({
             {submitting ? "Submitting…" : "Submit for review"}
           </PrimaryButton>
         </div>
+        )}
       </div>
     </div>
   );

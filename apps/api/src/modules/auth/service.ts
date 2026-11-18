@@ -698,7 +698,10 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
     .first();
 
   if (byCurrentHash) {
-    if (byCurrentHash.revoked_at || byCurrentHash.expires_at < new Date()) {
+    // An assist session (PR AG3) is never handed a refresh token; its
+    // stored hash is of random bytes nobody holds. Refused here as well,
+    // so it can't be extended even if that ever changed.
+    if (byCurrentHash.revoked_at || byCurrentHash.expires_at < new Date() || byCurrentHash.kind === "assist") {
       throw new ApiError({
         status: 401,
         type: "auth_error",

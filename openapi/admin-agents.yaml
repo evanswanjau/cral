@@ -48,8 +48,19 @@ info:
     API reassigns `onboarded_by`.
 
 
-    The assist session is AG3 and is not in this file yet. Agents earn no
-    commission - attribution is for reporting only.
+    **Assist session** (PR AG3). An agent fills in onboarding for the
+    owner, with the owner beside them. It starts only with the owner's
+    consent: `.../assist/start` texts a 6-digit code to the owner's
+    **verified** phone (`users.phone_verified`), the owner reads it to the
+    agent, and `.../assist` exchanges it for a 1-hour assist token for the
+    merchant portal. The code is single-use, lives 10 minutes, allows 5
+    tries and is stored only as a hash (`assist_challenges`), bound to
+    one agent and one merchant. The token reaches onboarding only (see
+    `merchant-onboarding.yaml`): it can't submit, accept the terms, touch
+    the phone or payout details, or read a document the agent didn't
+    upload. Start, every write and end are audited in the same
+    transaction. Agents earn no commission - attribution is for
+    reporting only.
 servers:
   - url: https://api.cral.co.ke/v1
   - url: https://api.staging.cral.co.ke/v1
@@ -205,6 +216,110 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /admin/agents/merchants/{id}/assist/start:
+    post:
+      tags: [admin-agents]
+      summary: Text the owner a consent code for an assist session
+      description: >
+        Texts a 6-digit code to the owner's verified phone, naming the
+        agent and saying to read it out only in person, and returns a
+        `challenge_id`. Any earlier unused code from this agent for this
+        merchant stops working. Refused when the owner's phone isn't
+        verified yet (`409 phone_not_verified`: the owner verifies it in
+        onboarding first, so the code reaches a number they proved is
+        theirs, not one the agent typed), when onboarding is submitted
+        (`409 onboarding_submitted`), or when the account isn't active
+        (`409 account_inactive`). Rate-limited to 3 an hour per merchant
+        per agent and 20 an hour per agent (`429 rate_limited`).
+      operationId: adminAgentStartAssist
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, example: mer_01J9Z3M5X8K2P4T6V8W0Y2A4C6 } }
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: Code sent
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challenge_id, masked_destination, expires_in]
+                properties:
+                  challenge_id: { type: string, example: asc_01J9Z3M5X8K2P4T6V8W0Y2A4C6 }
+                  masked_destination: { type: string }
+                  expires_in: { type: integer, example: 600, description: Seconds }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: "`merchant_not_found` - not one this agent brought in"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "409":
+          description: "`phone_not_verified`, `onboarding_submitted` or `account_inactive`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "429": { $ref: "#/components/responses/RateLimited" }
+        "503":
+          description: "`sms_send_failed` - the code didn't go out; try again"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
+  /admin/agents/merchants/{id}/assist:
+    post:
+      tags: [admin-agents]
+      summary: Exchange the owner's code for an assist token
+      description: >
+        Checks the code against the challenge (same agent, same merchant,
+        unexpired, unused, fewer than 5 wrong tries). On success, in one
+        transaction: the challenge is consumed (a conditional update, so a
+        code can't be spent twice), any earlier live assist session of
+        this agent on this merchant is revoked, a `sessions` row
+        (`kind = "assist"`, `assisted_by` = the agent, expires in 1 hour)
+        is created and `merchant.assist_started` is audited. Returns a
+        public-audience access token whose `asb` claim names the agent, and
+        `portal_url`, the merchant portal's `/assist` screen with the token
+        in the URL fragment, which no server or log sees. There is no
+        refresh token: after an hour the agent asks for a new code. The
+        owner is emailed that the session started and how to end it.
+        No `Idempotency-Key`: the code itself is single-use, and a stored
+        replay would keep the access token at rest for a day.
+      operationId: adminAgentConfirmAssist
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, example: mer_01J9Z3M5X8K2P4T6V8W0Y2A4C6 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challenge_id, code]
+              properties:
+                challenge_id: { type: string }
+                code: { type: string, pattern: "^[0-9]{6}$" }
+      responses:
+        "201":
+          description: Assist session started
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [access_token, expires_at, portal_url]
+                properties:
+                  access_token: { type: string }
+                  expires_at: { type: string, format: date-time }
+                  portal_url: { type: string, example: "https://merchant.cral.co.ke/assist#token=eyJ..." }
+        "401":
+          description: "`otp_incorrect`, or the ops token is missing / expired"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: "`merchant_not_found`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "409":
+          description: "`onboarding_submitted`, `phone_not_verified` or `account_inactive`"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+        "410":
+          description: "`otp_expired` - expired, already used, replaced by a newer code, or 5 wrong tries"
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorEnvelope" } } }
+
   /admin/agents/merchants/{id}/resend-invite:
     post:
       tags: [admin-agents]
@@ -334,6 +449,7 @@ components:
         - status
         - onboarding
         - invite_pending
+        - assist_ready
         - invited_at
         - onboarding_source
         - agent
@@ -360,6 +476,11 @@ components:
             step: { type: integer, minimum: 1, maximum: 5 }
             of: { type: integer, example: 5 }
             label: { type: string, example: Vehicles }
+        assist_ready:
+          type: boolean
+          description: >
+            True when "Fill in onboarding" can start: not submitted, the
+            account is active and the owner's phone is verified (PR AG3).
         invite_pending:
           type: boolean
           description: True until the owner sets a password by an emailed link. Resend invite is offered only while true.
