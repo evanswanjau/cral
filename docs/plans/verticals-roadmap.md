@@ -144,7 +144,7 @@ portal shows the sections for what they offer.
 | UI2b | **Built.** `/machinery` landing, `/machinery/search`, `/machinery/:id`, `/machinery/:id/book`; machinery `/browse`, `/cars/:id`, `/book/:id` redirect; sitemap lists the sub-site paths and each listing under its category | Opus |
 | UI3 | Drivers and towing, public | Opus |
 | UI4 | **Built.** Merchant "Earn with CRAL" landing (supplier doors, coming suppliers, shared estimator) and `/join/cars`, `/join/trucks`, `/join/machinery`, `/join/drivers`; `/create-account?offer=` kept in sessionStorage for UI5 | Opus |
-| UI5 | Onboarding "What do you offer?" | Opus |
+| UI5 | **Built.** Onboarding step 1 "What do you offer?" (multi-select, derived not stored); driver-only gets a Drivers step, no vehicle docs, lands on `/drivers/new`; vehicle form opens on the picked category; step 3 labelled Trucks/Machinery/Drivers | Opus |
 | UI6 | Portal nav by offering | Sonnet |
 | UI7 | Copy sweep; strict link check in the gate | Sonnet |
 
