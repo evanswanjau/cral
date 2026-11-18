@@ -74,6 +74,19 @@ dashboard or notifications. Bookings and payouts are in
 - Merchant-terms intro copy is 13px body text, not the 15px `stepLede`.
 - Photos that already uploaded are kept when a step is revisited.
 
+## Portal by offering
+
+- **The nav comes from `components/portal/nav-sections.ts`** (UI6,
+  2026-11-18), a pure function of data the shell already loads (vehicle
+  list, driver list, the onboarding draft's `drivers_only`), via
+  `lib/use-offering.ts`. Vehicles is hidden only when the merchant is
+  driver-only with no vehicles; it reads "Trucks" / "Machinery" when every
+  vehicle is that kind (and the first page holds them all), else
+  "Vehicles". Drivers comes second for a driver-only merchant. Dashboard
+  buttons, greeting, fleet card, Bookings and Payouts copy follow the same
+  rule. Fleet rows show the rate in the listing's own unit (day, trip,
+  hour, km, tonne), never a day rate for a non-day listing.
+
 ## Vehicles
 
 - **Five categories, stored as slugs**: `sedan` ("Sedan / small cars"),
