@@ -25,7 +25,7 @@ Needs UI0 merged.
 >
 > 1. `apps/customer/src/routes.tsx`: move the route table out of
 >    `App.tsx` unchanged (same paths, same guards), exported so
->    `scripts/check-links.mjs` reads it. `App.tsx` renders it.
+>    `tools/check-links.mjs` reads it. `App.tsx` renders it.
 > 2. `apps/customer/src/lib/services.ts`, the registry. One entry per
 >    service: `key`, `tab` label, door `label` and `note`, `kicker`, `h1`,
 >    `lede`, Phosphor `icon`, `photo` (path under
@@ -76,7 +76,7 @@ Needs UI0 merged.
 > masthead has no horizontal page scroll (`document.documentElement
 > .scrollWidth <= 375` on `/` and `/browse`); the tab row scrolls inside
 > itself. Tab label computed font Instrument Sans; active tab is marked by
-> more than colour. `node scripts/check-links.mjs` reads `routes.tsx` and
+> more than colour. `node tools/check-links.mjs` reads `routes.tsx` and
 > reports nothing new. Book a car still works.
 >
 > **Finish:** README "Finish" steps. Commit message:

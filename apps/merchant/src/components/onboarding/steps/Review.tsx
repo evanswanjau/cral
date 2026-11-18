@@ -3,6 +3,7 @@ import { O } from "../styles.js";
 import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { BackButton, Kes, PlateBadge, PrimaryButton } from "../primitives.js";
 import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
+import { customerLegalUrl } from "../../../lib/customer-site.js";
 import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
 
@@ -229,8 +230,8 @@ export function Review({
               <span />
             )}
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-              <a href="#" style={O.ghostLinkBtn}>Read the merchant terms</a>
-              <a href="#" style={O.ghostLinkBtn}>Privacy notice</a>
+              <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={O.ghostLinkBtn}>Read the merchant terms</a>
+              <a href={customerLegalUrl()} target="_blank" rel="noreferrer" style={O.ghostLinkBtn}>Privacy notice</a>
             </div>
           </div>
         </div>

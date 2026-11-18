@@ -731,11 +731,7 @@ export function Booking(): JSX.Element {
                 >
                   Creating an account accepts our{" "}
                   <Link to="/legal" style={{ color: "#5A6373", textDecoration: "underline" }}>
-                    terms and conditions
-                  </Link>{" "}
-                  and{" "}
-                  <Link to="/legal" style={{ color: "#5A6373", textDecoration: "underline" }}>
-                    privacy policy
+                    terms and privacy policy
                   </Link>
                   .
                 </p>

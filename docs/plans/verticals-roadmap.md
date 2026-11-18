@@ -136,7 +136,7 @@ portal shows the sections for what they offer.
 | PR | What | Model |
 |----|------|-------|
 | 2A | **Built** ([#83](https://github.com/evanswanjau/cral/pull/83)). **Review and proposal only.** Audit every page and link, propose the sub-site structure, wireframes and the PR split, write the build prompts. No code. Stops for owner approval. | Opus |
-| UI0 | Link fixes that need no new page; `scripts/check-links.mjs` | Sonnet |
+| UI0 | **Built.** Link fixes that need no new page; `tools/check-links.mjs` | Sonnet |
 | UI1a | Service registry, sub-site components, service tabs in the masthead | Opus |
 | UI1b | Front door at `/`; `/cars` landing; coming block | Opus |
 | UI1c | `/cars/search`, `/cars/:id/book`; `/browse`, `/book/:id` redirects | Sonnet |

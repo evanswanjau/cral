@@ -160,11 +160,7 @@ export function CreateAccount(): JSX.Element {
         <p style={S.terms}>
           Creating an account accepts our{" "}
           <Link to="/legal" style={S.termsLink}>
-            terms and conditions
-          </Link>{" "}
-          and{" "}
-          <Link to="/legal" style={S.termsLink}>
-            privacy policy
+            terms and privacy policy
           </Link>
           .
         </p>

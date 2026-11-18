@@ -916,7 +916,7 @@ Sonnet per prompt). Kept as the record of what each area needs.
   match, tab label, door label/note, kicker, icon, photo, status);
   `components/subsite/{SubsiteHero,ServiceDoors,ServiceTabs,TrustStrip,HowItWorksSteps,PriceExplainer,FaqList,ComingServices,EarnBand}.tsx`;
   `pages/cars/CarsHome.tsx`; `apps/customer/src/routes.tsx` (route table
-  out of `App.tsx`); `scripts/check-links.mjs`.
+  out of `App.tsx`); `tools/check-links.mjs`.
 - **Changed:** `Masthead.tsx`, `Footer.tsx`, `AccountMenu.tsx` (from the
   registry; cut A3, A5-A7, tabs; add devices row), `Home.tsx` rebuilt as
   the front door (car rails, tiles and search move to `CarsHome`),
@@ -1003,7 +1003,7 @@ Sonnet per prompt). Kept as the record of what each area needs.
    `components/subsite/`. Don't grow an already-oversized file; extract.
 2. Reuse existing API calls. No new endpoints. The only API edit is
    `routes/sitemap.ts` (UI2) and the towing email link (UI3).
-3. Every link is checked by `scripts/check-links.mjs`, which reads the
+3. Every link is checked by `tools/check-links.mjs`, which reads the
    exported route tables and every `to=`, `navigate(`, `href=` literal.
 4. Tokens from `packages/ui/src/tokens.ts` only; no new hex. Archivo for
    display, Instrument Sans for UI, IBM Plex Mono for identifiers. Status
