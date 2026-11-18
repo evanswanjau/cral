@@ -4,19 +4,28 @@ import logo from "../../assets/cral-logo.png";
 import logoWhite from "../../assets/cral-white-logo.png";
 import { useIsAuthenticated } from "../../lib/auth.js";
 import { merchantLandingUrl } from "../../lib/merchant-app.js";
+import { ServiceTabs } from "../subsite/ServiceTabs.js";
 import { AccountMenu } from "./AccountMenu.js";
 
 /**
- * The public masthead, reproduced from
- * `docs/brand/canvas/Cruz Ride Auto - Website.dc.html` (`navItems`/
- * `goHome`/`goList` in its `<script data-dc-script>` block) with its own
- * inline styles verbatim - the design is 100% inline-styled, so this
- * matches exactly rather than approximately.
+ * The public masthead. Bar, logo, sign-in and CTA styles are reproduced
+ * from `docs/brand/canvas/Cruz Ride Auto - Website.dc.html` (`navItems`/
+ * `goHome`/`goList` in its `<script data-dc-script>` block), inline
+ * styles verbatim.
  *
- * The design's masthead has no standalone CTA besides "List your car" -
- * account, sign-in, notifications and everything else live in the avatar
- * dropdown (see AccountMenu.tsx, including what it adds beyond the
- * canvas and why).
+ * UI1a (docs/plans/ui-services-proposal.md 4.4, 5.1, 5.2) replaced the
+ * canvas's car-only nav (Find a car / Find parts / Find services) with
+ * `ServiceTabs`, one tab per live service from `lib/services.ts`. That
+ * part is not from a canvas; built from tokens.ts. On a phone the tabs
+ * are a second row that scrolls sideways inside itself; from 960px they
+ * sit in the one row between logo and account (`.cral-mast` in
+ * index.css). Parts and garage are not tabs: they are not live, and show
+ * once, in "Coming to CRAL". The canvas's "List your car" became "Earn
+ * with CRAL", since every supplier (trucks, machinery, drivers) earns
+ * here, not only car owners.
+ *
+ * Account, sign-in, notifications and everything else live in the avatar
+ * dropdown (see AccountMenu.tsx).
  *
  * On the home page only, the masthead starts transparent (white wordmark,
  * white nav text) floating over the hero's dark background, and reveals
@@ -27,17 +36,6 @@ import { AccountMenu } from "./AccountMenu.js";
  */
 
 const SCROLL_REVEAL_PX = 24;
-
-const NAV: Array<{ label: string; to: string; activeOn: (pathname: string) => boolean }> = [
-  {
-    label: "Find a car",
-    to: "/browse",
-    activeOn: (p) => p === "/browse" || p.startsWith("/cars/") || p.startsWith("/book/"),
-  },
-  { label: "Hire a driver", to: "/drivers", activeOn: (p) => p.startsWith("/drivers") },
-  { label: "Find parts", to: "/parts", activeOn: (p) => p === "/parts" },
-  { label: "Find services", to: "/services", activeOn: (p) => p === "/services" },
-];
 
 export function Masthead(): JSX.Element {
   const navigate = useNavigate();
@@ -75,17 +73,15 @@ export function Masthead(): JSX.Element {
       }}
     >
       <div
+        className="cral-mast"
         style={{
           maxWidth: 1320,
           margin: "0 auto",
           padding: "0 clamp(16px,4vw,40px)",
-          height: 66,
-          display: "flex",
-          alignItems: "center",
-          gap: "clamp(12px,3vw,34px)",
+          minHeight: 66,
         }}
       >
-        <Link to="/" style={{ display: "flex", alignItems: "center", gap: 11, flex: "none" }}>
+        <Link to="/" className="cral-mast-logo" style={{ display: "flex", alignItems: "center", height: 66 }}>
           <img
             src={transparent ? logoWhite : logo}
             alt="Cruz Ride Auto Limited"
@@ -93,34 +89,11 @@ export function Masthead(): JSX.Element {
           />
         </Link>
 
-        <div className="cral-rail" style={{ flex: 1, display: "flex", alignItems: "center", gap: 2, overflowX: "auto" }}>
-          {NAV.map((n) => {
-            const on = n.activeOn(pathname);
-            return (
-              <Link
-                key={n.to}
-                to={n.to}
-                style={{
-                  flex: "none",
-                  height: 34,
-                  display: "flex",
-                  alignItems: "center",
-                  padding: "0 12px",
-                  background: on ? (transparent ? "rgba(255,255,255,.12)" : "#F1F3F6") : "transparent",
-                  color: transparent ? (on ? "#FFFFFF" : "rgba(255,255,255,.75)") : on ? "#0B0F1A" : "#5A6373",
-                  borderRadius: 7,
-                  font: `${on ? 600 : 500} 14px/1 'Instrument Sans',sans-serif`,
-                  whiteSpace: "nowrap",
-                  textDecoration: "none",
-                }}
-              >
-                {n.label}
-              </Link>
-            );
-          })}
+        <div className="cral-mast-tabs">
+          <ServiceTabs transparent={transparent} />
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 9, flex: "none" }}>
+        <div className="cral-mast-actions" style={{ display: "flex", alignItems: "center", gap: 6 }}>
           {isAuthenticated ? (
             <AccountMenu />
           ) : (
@@ -133,8 +106,8 @@ export function Masthead(): JSX.Element {
                 navigate(here === "/" ? "/sign-in" : `/sign-in?next=${encodeURIComponent(here)}`);
               }}
               style={{
-                height: 38,
-                padding: "0 13px",
+                height: 44,
+                padding: "0 10px",
                 background: "none",
                 color: transparent ? "#FFFFFF" : "#333B4A",
                 border: "none",
@@ -152,8 +125,8 @@ export function Masthead(): JSX.Element {
             style={{
               display: "inline-flex",
               alignItems: "center",
-              height: 38,
-              padding: "0 15px",
+              height: 44,
+              padding: "0 14px",
               background: "#0F23A8",
               color: "#FFFFFF",
               border: "none",
@@ -163,7 +136,7 @@ export function Masthead(): JSX.Element {
               whiteSpace: "nowrap",
             }}
           >
-            List your car
+            Earn with CRAL
           </a>
         </div>
       </div>
