@@ -22,8 +22,8 @@ import {
   PrimaryButton,
   Select,
   TextInput,
-  Toggle,
 } from "../primitives.js";
+import { FLEET_WORDS, type FleetKind } from "../../../lib/onboarding-offer.js";
 import {
   createVehicleOnServer,
   deleteVehicleOnServer,
@@ -52,11 +52,17 @@ function formatPlate(raw: string): string {
 
 export function Vehicles({
   draft,
+  fleet,
+  newVehicleType,
   onChange,
   onBack,
   onContinue,
 }: {
   draft: OnboardingDraft;
+  /** What step 3 is about (lib/onboarding-offer.ts); sets the nouns. */
+  fleet: FleetKind;
+  /** Category a new vehicle form opens on, from "What do you offer?". */
+  newVehicleType: VehicleType;
   onChange: (patch: Partial<OnboardingDraft>) => void;
   onBack: () => void;
   onContinue: () => void;
@@ -67,7 +73,7 @@ export function Vehicles({
     // the vehicle being edited.
     const inProgress =
       draft.vehicleDraft && draft.vehicleDraft.id === draft.editingVehicleId ? draft.vehicleDraft : null;
-    const editing = inProgress ?? saved ?? emptyVehicle(draft.editingVehicleId ?? "");
+    const editing = inProgress ?? saved ?? { ...emptyVehicle(draft.editingVehicleId ?? ""), type: newVehicleType };
     return (
       <VehicleForm
         key={editing.id}
@@ -84,20 +90,22 @@ export function Vehicles({
     );
   }
 
+  const words = FLEET_WORDS[fleet === "drivers" ? "vehicles" : fleet];
+  const count = draft.vehicles.length;
   return (
     <div style={O.wFleet}>
       <div style={O.stepEyebrow}>STEP 3 OF 5</div>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, marginBottom: 22, flexWrap: "wrap" }}>
         <div>
-          <h1 style={O.h1Step}>Your vehicles</h1>
+          <h1 style={O.h1Step}>Your {words.many}</h1>
           <p style={O.stepLede}>
-            {draft.vehicles.length === 0
-              ? "Add your first vehicle. You can add the rest of the fleet now or come back to it later."
+            {count === 0
+              ? `Add your first ${words.one}. You can add the rest now or come back to them later.`
               : "Add as many as you like now, or come back for the rest later. Papers for each one come in the next step."}
           </p>
         </div>
         <span style={{ font: "500 12px/1 'IBM Plex Mono',monospace", letterSpacing: ".07em", color: "#838C9B", whiteSpace: "nowrap" }}>
-          {draft.vehicles.length} VEHICLE{draft.vehicles.length === 1 ? "" : "S"}
+          {count} {(count === 1 ? words.one : words.many).toUpperCase()}
         </span>
       </div>
 
@@ -145,25 +153,12 @@ export function Vehicles({
         style={O.dashedAddRow}
         onClick={() => onChange({ screen: "vehicle-form", editingVehicleId: `v_${Date.now()}` })}
       >
-        {draft.vehicles.length === 0 ? "+ Add your first vehicle" : "+ Add another vehicle"}
+        {count === 0 ? `+ Add your first ${words.one}` : `+ Add another ${words.one}`}
       </button>
-
-      {draft.vehicles.length === 0 && (
-        // Someone with no car can still join to drive (owner's call,
-        // 2026-10-18). They add their drivers - themself included - from
-        // the portal once onboarding is in.
-        <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "4px 0 18px" }}>
-          <Toggle on={draft.driversOnly} onToggle={() => onChange({ driversOnly: !draft.driversOnly })} />
-          <div>
-            <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>I don't have a vehicle - I only drive</div>
-            <div style={O.helper}>You'll add yourself or your drivers from the portal after this.</div>
-          </div>
-        </div>
-      )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8 }}>
         <BackButton onClick={onBack}>← Back</BackButton>
-        <PrimaryButton disabled={draft.vehicles.length === 0 && !draft.driversOnly} onClick={onContinue}>
+        <PrimaryButton disabled={count === 0} onClick={onContinue}>
           Continue to documents
         </PrimaryButton>
       </div>

@@ -141,6 +141,19 @@ export function Review({
         </div>
       </div>
 
+      {draft.driversOnly && draft.vehicles.length === 0 ? (
+        <div style={O.reviewCard}>
+          <div style={O.reviewCardHead}>
+            <div style={O.cardTitle}>Drivers</div>
+            <EditButton onClick={() => onEditStep(1)} />
+          </div>
+          <div style={O.reviewCardBody}>
+            <p style={{ ...O.helper, margin: 0 }}>
+              You offer driving only. You add yourself or your drivers straight after you submit.
+            </p>
+          </div>
+        </div>
+      ) : (
       <div style={O.reviewCard}>
         <div style={O.reviewCardHead}>
           <div style={O.cardTitle}>Vehicles · {draft.vehicles.length}</div>
@@ -179,6 +192,7 @@ export function Review({
           ))}
         </div>
       </div>
+      )}
 
       <div
         style={{

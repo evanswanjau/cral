@@ -38,6 +38,20 @@ dashboard or notifications. Bookings and payouts are in
 
 ## Onboarding
 
+- **Step 1 is "What do you offer?"** (UI5, 2026-11-18; replaced the
+  Welcome step): multi-select Cars and vans, Trucks, Machinery, Driving;
+  garages, parts and car sales listed as coming, not selectable. The choice
+  is **derived, never stored** (no `offers` column): from the draft's
+  vehicle categories and `drivers_only`, plus this device's pick in
+  localStorage (`lib/onboarding-offer.ts`), and `?offer=` on a first visit.
+  Driving alone (no vehicle yet) sets `drivers_only: true` through the
+  existing PATCH; step 3 becomes a short "Drivers" step, Documents asks
+  for owner papers only, and submitting lands on `/drivers/new`. A new
+  vehicle form opens on the picked category (cars first, then truck, then
+  machinery). Step 3's label is "Trucks" / "Machinery" when every vehicle
+  (or, before any, the pick) is that kind. A category with a vehicle
+  already added can't be unticked. The old "I only drive" toggle on the
+  Vehicles step is gone.
 - **Your details** mirrors what Settings later shows. Individual: name,
   national ID, KRA PIN, email, phone + SMS verify. Company: company name,
   cert of incorporation no. (`company_cert_no`), company KRA, company
