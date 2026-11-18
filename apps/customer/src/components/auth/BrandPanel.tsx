@@ -7,13 +7,11 @@ import { IdentificationCard } from "@phosphor-icons/react/dist/ssr/Identificatio
 import { Receipt } from "@phosphor-icons/react/dist/ssr/Receipt";
 import { DeviceMobile } from "@phosphor-icons/react/dist/ssr/DeviceMobile";
 import { Key } from "@phosphor-icons/react/dist/ssr/Key";
-import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr/WhatsappLogo";
 import photo from "../../assets/keyhandoff.jpg";
 import logoWhite from "../../assets/cral-white-logo.png";
 import { getCatalogVehicle, formatMoney, photoSrc } from "../../lib/catalog-api.js";
 import { formatHireDate, hireDays } from "../../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../../lib/hiring-units.js";
-import { SUPPORT_PHONE_DISPLAY, whatsappLink } from "../../lib/support.js";
 import { bookingFromNext } from "./next.js";
 
 export type BrandPanelVariant = "signin" | "register" | "recover";
@@ -24,22 +22,22 @@ const COPY: Record<
 > = {
   signin: {
     eyebrow: "WELCOME BACK",
-    h1: "Your hires, all in one place.",
-    lede: "Sign in to request a car, pay by M-Pesa and follow every trip from pickup to return.",
+    h1: "Your bookings, all in one place.",
+    lede: "Sign in to send a request, pay by M-Pesa and follow every booking from request to return.",
     proof: [
-      { icon: IdentificationCard, title: "Documents read once", body: "Your licence and ID are checked by CRAL, then reused on every hire." },
-      { icon: DeviceMobile, title: "Pay by M-Pesa", body: "The prompt only comes once the owner has accepted your dates." },
-      { icon: Receipt, title: "Every trip on record", body: "Bookings, payments and receipts sit in one place you can open any time." },
+      { icon: IdentificationCard, title: "Documents read once", body: "Your ID and licence are checked by CRAL, then reused on every request." },
+      { icon: DeviceMobile, title: "Pay by M-Pesa", body: "The prompt only comes once the price is agreed and accepted." },
+      { icon: Receipt, title: "Every booking on record", body: "Bookings, payments and receipts sit in one place you can open any time." },
     ],
   },
   register: {
     eyebrow: "HIRE WITH CRAL",
-    h1: "Hire a car you can trust.",
-    lede: "An account takes a minute. Your licence and ID are only asked for when you first book.",
+    h1: "Hire from people CRAL has checked.",
+    lede: "An account takes a minute. Your ID, and your licence to drive yourself, are only asked for when you first book.",
     proof: [
-      { icon: ShieldCheck, title: "Checked by a real person", body: "A CRAL reviewer reads every listing's papers before it goes live." },
-      { icon: IdentificationCard, title: "Documents read once", body: "Your licence and ID are checked by CRAL, then reused on every hire." },
-      { icon: Key, title: "A pickup code only you get", body: "It's emailed to you and read out at handover, so the keys go to the right person." },
+      { icon: ShieldCheck, title: "Checked by a real person", body: "A CRAL reviewer reads every vehicle's papers and every driver's licence before they appear." },
+      { icon: IdentificationCard, title: "Documents read once", body: "Your ID and licence are checked by CRAL, then reused on every request." },
+      { icon: Key, title: "A handover code only you get", body: "It's emailed to you and read out at handover, so the vehicle goes to the right person." },
     ],
   },
   recover: {
@@ -48,7 +46,7 @@ const COPY: Record<
     lede: "We'll email you a link to choose a new password. Your bookings and documents stay exactly as they are.",
     proof: [
       { icon: ShieldCheck, title: "The link is yours alone", body: "It works once, expires in 30 minutes, and signs out every device the account was open on." },
-      { icon: IdentificationCard, title: "Nothing to re-upload", body: "Your licence and ID stay on file with CRAL." },
+      { icon: IdentificationCard, title: "Nothing to re-upload", body: "Your ID and licence stay on file with CRAL." },
     ],
   },
 };
@@ -77,7 +75,7 @@ export function BrandPanel({ variant, next }: { variant: BrandPanelVariant; next
           <img src={logoWhite} alt="Cruz Ride Auto Limited" style={S.logo} />
         </Link>
         <span style={S.mastheadRule} />
-        <span style={S.mastheadLabel}>CAR HIRE</span>
+        <span style={S.mastheadLabel}>HIRE AND SERVICES</span>
       </div>
 
       <div style={S.middle}>
@@ -90,10 +88,6 @@ export function BrandPanel({ variant, next }: { variant: BrandPanelVariant; next
 
       <div style={S.footer}>
         <span style={S.footerLeft}>© 2026 CRAL · CRAL.CO.KE</span>
-        <a href={whatsappLink("Hi CRAL - I need help with my account")} target="_blank" rel="noreferrer" style={S.footerRight}>
-          <WhatsappLogo size={16} weight="fill" color="#25D366" />
-          Stuck? WhatsApp {SUPPORT_PHONE_DISPLAY}
-        </a>
       </div>
 
       <div style={S.glow} />
@@ -338,14 +332,6 @@ const S: Record<string, CSSProperties> = {
     borderTop: "1px solid rgba(255,255,255,.1)",
   },
   footerLeft: { font: "500 11px/1.6 'IBM Plex Mono',monospace", letterSpacing: ".08em", color: "#7C8697" },
-  footerRight: {
-    display: "inline-flex",
-    alignItems: "center",
-    gap: 7,
-    font: "500 13px/1.5 'Instrument Sans',sans-serif",
-    color: "#E6EAF0",
-    textDecoration: "none",
-  },
 
   glow: {
     position: "absolute",

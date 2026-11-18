@@ -109,7 +109,7 @@ export function Trips(): JSX.Element {
             No bookings yet.
           </div>
           <Link
-            to="/cars/search"
+            to="/"
             style={{
               display: "inline-flex",
               height: 42,
@@ -122,7 +122,7 @@ export function Trips(): JSX.Element {
               textDecoration: "none",
             }}
           >
-            Find a car
+            Pick a service
           </Link>
         </div>
       )}

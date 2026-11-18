@@ -59,7 +59,8 @@ CI (GitHub Actions) is billing-locked: a red check means zero steps ran,
 not a failure. **The local gate is the only safety net.**
 
 - `npm run gate` (`tools/gate.mjs`, plain Node) runs, stopping at the
-  first failure: `npm run typecheck`, `npm run lint`,
+  first failure: `node tools/check-links.mjs --strict` (every in-app link
+  against its app's router, UI7), `npm run typecheck`, `npm run lint`,
   `npm run test -w apps/api`, `npm run build`. Output is captured. A pass
   prints one line per step and `gate passed`; a failure prints the step
   and only the useful lines (tsc `error TS`, eslint problems, vitest `FAIL`

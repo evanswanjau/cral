@@ -4,7 +4,7 @@ import { ArrowLeft } from "@phosphor-icons/react/dist/ssr/ArrowLeft";
 import { WhatsappLogo } from "@phosphor-icons/react/dist/ssr/WhatsappLogo";
 import { BrandPanel, type BrandPanelVariant } from "./BrandPanel.js";
 import { ErrorBanner } from "./primitives.js";
-import { bookingFromNext } from "./next.js";
+import { backLabel } from "./next.js";
 import { S } from "./styles.js";
 import { whatsappLink } from "../../lib/support.js";
 import { merchantLandingUrl } from "../../lib/merchant-app.js";
@@ -36,7 +36,7 @@ export function AuthShell({
   /** Where the flow resumes afterwards - always an in-app path. */
   next?: string;
 }): JSX.Element {
-  const booking = bookingFromNext(next);
+  const back = backLabel(next);
   return (
     <div style={S.page}>
       {/* Below the grid's stacking point the form comes first, so on a
@@ -48,9 +48,9 @@ export function AuthShell({
 
       <div className="cral-auth-form-panel" style={S.formPanel}>
         <div style={S.formInner}>
-          <Link to={booking ? next : "/"} style={S.back}>
+          <Link to={back ? next : "/"} style={S.back}>
             <ArrowLeft size={15} weight="bold" />
-            {booking ? "Back to the car" : "Back to CRAL"}
+            {back ?? "Back to CRAL"}
           </Link>
 
           <div style={{ marginBottom: 22 }}>
@@ -72,9 +72,9 @@ export function AuthShell({
               </div>
               <div style={S.bottomRow}>
                 {/* The merchant portal is a separate app with its own
-                    sign-in (lib/merchant-app.ts) - a car owner who lands
+                    sign-in (lib/merchant-app.ts) - a supplier who lands
                     here is pointed at it rather than promised one login. */}
-                <span style={{ ...S.bottomText, fontSize: 13 }}>Listing a car?</span>
+                <span style={{ ...S.bottomText, fontSize: 13 }}>Offering a service on CRAL?</span>
                 <a href={merchantLandingUrl()} style={{ ...S.bottomLink, fontSize: 13 }}>
                   Go to the merchant portal
                 </a>
@@ -82,6 +82,7 @@ export function AuthShell({
             </div>
           )}
 
+          {/* The one WhatsApp link on these screens (UI7, U4 and U6 merged). */}
           <a
             href={whatsappLink("Hi CRAL - I need help signing in or signing up")}
             target="_blank"

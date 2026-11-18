@@ -91,3 +91,11 @@ export function listingBase(category: string): "/trucks" | "/machinery" | "/cars
 export function isCarCategory(category: string): boolean {
   return category !== "truck" && category !== "machinery";
 }
+
+/** "car", "truck" or "machine": the noun for a listing in running copy
+ * (UI7), so a truck booking isn't told "the car is yours". */
+export function vehicleNoun(category: string): "car" | "truck" | "machine" {
+  if (category === "truck") return "truck";
+  if (category === "machinery") return "machine";
+  return "car";
+}

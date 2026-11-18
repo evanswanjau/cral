@@ -110,14 +110,18 @@ export function Footer(): JSX.Element {
                 maxWidth: 280,
               }}
             >
-              Kenya's one-stop shop for everything cars. We start with hire: each car's paperwork
-              is verified by our team to ensure your safety, and the licence and ID behind every
-              booking checked once.
+              One place for everything a vehicle needs in Kenya. Every vehicle's papers and every
+              driver's licence are read by our team before they appear, and every price is agreed
+              before you pay.
             </p>
-            <div style={{ font: "500 14px/1.6 'IBM Plex Mono',monospace", color: "#A7B0BE" }}>
-              +254 735 656066
-              <br />
-              hello@cral.co.ke
+            {/* tel: and mailto: links (UI7), each a 44px tap target. */}
+            <div style={{ display: "grid", justifyItems: "start", font: "500 14px/1.6 'IBM Plex Mono',monospace" }}>
+              <a href="tel:+254735656066" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+                +254 735 656066
+              </a>
+              <a href="mailto:hello@cral.co.ke" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+                hello@cral.co.ke
+              </a>
             </div>
           </div>
 
