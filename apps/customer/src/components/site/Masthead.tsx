@@ -28,21 +28,15 @@ import { AccountMenu } from "./AccountMenu.js";
 
 const SCROLL_REVEAL_PX = 24;
 
-const NAV: Array<{ label: string; to: string; activeOn: (pathname: string, search: string) => boolean }> = [
+const NAV: Array<{ label: string; to: string; activeOn: (pathname: string) => boolean }> = [
   {
     label: "Find a car",
     to: "/browse",
-    activeOn: (p, s) => (p === "/browse" && !s.includes("category=truck")) || p.startsWith("/cars/") || p.startsWith("/book/"),
-  },
-  {
-    label: "Trucks & Haulage",
-    to: "/browse?category=truck",
-    activeOn: (p, s) => p === "/browse" && s.includes("category=truck"),
+    activeOn: (p) => p === "/browse" || p.startsWith("/cars/") || p.startsWith("/book/"),
   },
   { label: "Hire a driver", to: "/drivers", activeOn: (p) => p.startsWith("/drivers") },
-  { label: "24/7 Towing", to: "/services/towing", activeOn: (p) => p.startsWith("/services/towing") },
   { label: "Find parts", to: "/parts", activeOn: (p) => p === "/parts" },
-  { label: "Garage services", to: "/services", activeOn: (p) => p === "/services" && !p.startsWith("/services/towing") },
+  { label: "Find services", to: "/services", activeOn: (p) => p === "/services" },
 ];
 
 export function Masthead(): JSX.Element {
@@ -101,7 +95,7 @@ export function Masthead(): JSX.Element {
 
         <div className="cral-rail" style={{ flex: 1, display: "flex", alignItems: "center", gap: 2, overflowX: "auto" }}>
           {NAV.map((n) => {
-            const on = n.activeOn(pathname, location.search);
+            const on = n.activeOn(pathname);
             return (
               <Link
                 key={n.to}
