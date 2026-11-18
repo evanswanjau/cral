@@ -529,11 +529,25 @@ paths:
                   expires_at: { type: string, format: date-time }
                   masked_identifier: { type: string }
                   requires_2fa: { type: boolean }
+                  purpose:
+                    type: string
+                    enum: [reset, invite]
+                    description: >
+                      `invite` when the link is the "Set your password and
+                      finish setting up" email a sales agent's Add merchant
+                      sent (`admin-agents.yaml`), so the screen can say
+                      "set" rather than "reset". Absent when `valid` is false.
 
   /auth/password/reset:
     post:
       tags: [password]
       summary: Complete the reset — revokes every session, notifies both channels
+      description: >
+        The same endpoint completes a sales agent's invite (a token with
+        purpose `invite`). Setting a password by any emailed link also
+        marks the email verified - the link proved the inbox - and, for an
+        account still waiting on an agent's invite, accepts it (the "Your
+        password was reset" notice is skipped for an invite).
       operationId: resetPassword
       security: []
       requestBody:
@@ -547,6 +561,13 @@ paths:
                 token: { type: string }
                 new_password: { type: string, minLength: 10 }
                 two_factor_code: { type: string, pattern: "^[0-9]{6}$" }
+                accepted_terms_version:
+                  type: string
+                  description: >
+                    Recorded as the account's terms acceptance when the
+                    account has none yet - which is only ever an account a
+                    sales agent created, since self sign-up records it at
+                    `POST /auth/register`. Ignored otherwise.
       responses:
         "200":
           description: Reset
@@ -1281,7 +1302,7 @@ components:
         email: { type: string, format: email }
         role:
           type: string
-          enum: [admin_reviewer, admin_finance, admin_support, admin_super]
+          enum: [admin_reviewer, admin_finance, admin_support, admin_sales, admin_super]
         assigned_queues:
           type: array
           items: { type: string }

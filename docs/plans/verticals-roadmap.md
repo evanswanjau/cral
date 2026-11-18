@@ -21,7 +21,7 @@ each one look and feel like its own place.
 | 0 | Cheaper, faster build sessions (no client-visible change) | **Built** (P0) | 1 (done) |
 | 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built, in `main`. **Production deploy pending** | 3 (done) |
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Not started | 1 review + 3-5 builds |
-| 3 | Sales agents sign up owners in the field | Not started | 3 |
+| 3 | Sales agents sign up owners in the field | AG1 built (`develop`); AG2, AG3 not started | 3 |
 | 4 | Garage services: quote first, pay through CRAL | Not started | 4 |
 | 5 | Spare parts: quoted against your chassis | Not started | 2 |
 | 6 | Buy and sell cars: verified listings + enquiries | Not started | 4 |
@@ -155,11 +155,20 @@ Phase 4) a garage never sees car-hire wording that doesn't apply to them.
 field, see who they brought in and how far each one got, and fill in the
 paperwork with the owner beside them. Agents never approve anyone.
 
-| PR | What | Model |
-|----|------|-------|
-| AG1 | `admin_sales` role, "Add merchant" + emailed set-your-password invite, "My merchants" list | Opus |
-| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Opus |
-| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | Opus |
+| PR | What | Model | Status |
+|----|------|-------|--------|
+| AG1 | `admin_sales` role, "Add merchant" + emailed set-your-password invite, "My merchants" list | Opus | Built 2026-11-18, `develop` (`feature/sales-agents-ag1`). Migration `20261118090000_sales_agents` |
+| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Opus | Not started |
+| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | Opus | Not started |
+
+**AG1 as built** (decisions in [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md)
+Part B, "B1 as built"): contract `openapi/admin-agents.yaml`, API
+`modules/admin-agents/`, console `apps/admin/src/pages/agents/`. The invite
+reuses `password_reset_tokens` (new `purpose = 'invite'`, 7 days) and the
+merchant portal's `/reset-password` screen. **Owner checks on dev:** Settings
+-> Team -> add a "Sales agent"; sign in as them (only My merchants and Add
+merchant show); add a merchant; open the invite email (Resend dashboard on
+dev) and set the password; the row moves from Invited to Onboarding.
 
 **Start prompt:** the standard prompt with Phase 3, PR AG1/AG2/AG3. Detail:
 [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md) Part B (it calls

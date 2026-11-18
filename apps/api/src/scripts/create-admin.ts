@@ -22,10 +22,16 @@ import type { AdminRole } from "../lib/jwt.js";
  *   ADMIN_PASSWORD='…' npm run admin:create -w apps/api -- <email> <phone> <role> "<Name>"
  *
  * `role` is one of admin_reviewer | admin_finance | admin_support |
- * admin_super. `admin_super` ignores queue assignment and sees everything,
+ * admin_sales | admin_super. `admin_super` ignores queue assignment and sees everything,
  * so it needs no queue list — bootstrap the first account as admin_super.
  */
-const ROLES: AdminRole[] = ["admin_reviewer", "admin_finance", "admin_support", "admin_super"];
+const ROLES: AdminRole[] = [
+  "admin_reviewer",
+  "admin_finance",
+  "admin_support",
+  "admin_sales",
+  "admin_super",
+];
 
 async function main(): Promise<void> {
   const [email, rawPhone, role, fullName, rawQueues] = process.argv.slice(2);

@@ -19,6 +19,8 @@ import { Queue as ServicesQueue } from "./pages/services/Queue.js";
 import { Case as ServiceCase } from "./pages/services/Case.js";
 import { Queue as PayoutsQueue } from "./pages/payouts/Queue.js";
 import { Run as PayoutRun } from "./pages/payouts/Run.js";
+import { MyMerchants } from "./pages/agents/MyMerchants.js";
+import { AddMerchant } from "./pages/agents/AddMerchant.js";
 
 /**
  * Vehicle review, the Merchants lens, the Renters queue, the Bookings
@@ -55,6 +57,9 @@ const router = createBrowserRouter([
           { path: "services/:id", element: <ServiceCase /> },
           { path: "payouts", element: <PayoutsQueue /> },
           { path: "payouts/:id", element: <PayoutRun /> },
+          // A sales agent's whole console (`AppLayout` keeps them here).
+          { path: "my-merchants", element: <MyMerchants /> },
+          { path: "my-merchants/new", element: <AddMerchant /> },
           { path: "invoicing", element: <Placeholder title="Invoicing" /> },
           { path: "disputes", element: <Placeholder title="Disputes" /> },
           { path: "communications", element: <Communications /> },

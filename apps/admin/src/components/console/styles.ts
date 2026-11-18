@@ -281,5 +281,6 @@ export const ROLE_LABEL: Record<string, string> = {
   admin_reviewer: "Compliance reviewer",
   admin_finance: "Finance",
   admin_support: "Support",
+  admin_sales: "Sales agent",
   admin_super: "Owner",
 };

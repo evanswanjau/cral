@@ -1,6 +1,6 @@
 # Trucks (types, routes, per-km/per-tonne, quotes) and sales agents
 
-Status: **T1 built (2026-11-10, branch `feature/truck-types`); T2 built (2026-11-15, branch `feature/truck-route-load`); T3 built (2026-11-15, branch `feature/truck-quotes`); Part B (sales agents) is plan only.** Owner's call, 2026-11-10, from client
+Status: **T1 built (2026-11-10, branch `feature/truck-types`); T2 built (2026-11-15, branch `feature/truck-route-load`); T3 built (2026-11-15, branch `feature/truck-quotes`); S1 (roadmap AG1) built (2026-11-18, branch `feature/sales-agents-ag1`) - see "B1 as built"; S2 and S3 are plan only.** Owner's call, 2026-11-10, from client
 feedback. A deliberate deviation from `road-to-transactable.md` /
 `pr-delivery-plan.md`, same footing as Drivers and Services.
 
@@ -154,6 +154,73 @@ approval stays with the reviewer (the two-gate rule).
 - The agent can't open the vehicle review queue, other agents' merchants,
   payouts or settings. `requireAdmin({ role: "admin_sales" })` scopes every
   endpoint to `merchants.onboarded_by = me`. `admin_super` sees everyone's.
+
+### B1 as built (S1 / roadmap AG1, 2026-11-18)
+
+Contract `openapi/admin-agents.yaml`; migration `20261118090000_sales_agents`;
+API `apps/api/src/modules/admin-agents/`; console
+`apps/admin/src/pages/agents/`. Calls made while building it:
+
+- **The invite is a reset token with a purpose.** `password_reset_tokens`
+  gained `purpose` (`reset` / `invite`). An invite lives **7 days** (a reset
+  link 30 minutes): it goes to someone who didn't ask for it and may not
+  open it until evening. It opens the merchant portal's existing
+  `/reset-password?token=` screen, which reads `purpose` from
+  `POST /auth/password/reset/check` and says "Set your password" instead of
+  "reset". One table, one lookup, one screen - no second credential path.
+- **The agent never touches a password.** The account is created with an
+  argon2 hash of 32 random bytes nobody keeps, so no password signs in until
+  the owner sets one. The raw invite token exists only in the email.
+- **Invite pending = `users.invited_at` set, `users.invite_accepted_at`
+  null.** Setting a password by *any* emailed link accepts the invite -
+  the invite itself, or a "Forgot password" link the owner asked for
+  instead - and marks the email verified (the link proved the inbox). The
+  "Your password was reset" notice is skipped for that first password. The
+  set-password screen records the platform terms
+  (`accepted_terms_version`) for an account that has none, which is only
+  ever an agent-created one.
+- **The status chip is derived, never stored**, first match wins:
+  `verified` (`approved_at`) -> `changes_requested`
+  (`review_changes_requested_at`) -> `submitted` -> `invited` (invite
+  pending and still on step 1) -> `onboarding`.
+- **"Step n of 5", not "of 6".** The merchant wizard has five steps
+  (Welcome, Your details, Vehicles, Documents, Review); the sixth screen is
+  the post-submit "Done", which the chip already calls Submitted. The step
+  is the furthest reached (`onboarding_max_step`).
+- **Pre-fill only what the agent typed.** An individual's name is split
+  into first / middle / surname (and `users.full_name`); a company's name
+  is `company_name` and the payout method is set to bank, mirroring
+  onboarding's owner-type switch. The phone is stored unverified - the
+  owner still proves it by SMS in the wizard before submitting, which is
+  their consent.
+- **An existing account can't be taken over.** An email or phone already
+  on any CRAL account is `409 account_exists` (naming the field); the owner
+  signs in and onboards themselves (AG2's link will attribute that case).
+- **Scoping.** `requireAdmin({ role: "admin_sales" })` plus
+  `onboarded_by = me` in every query; another agent's merchant reads as
+  `404 merchant_not_found` (not 403), so an agent can't probe for them.
+  `admin_super` sees every agent-brought merchant (`onboarded_by` not null)
+  with the agent named, under the nav label "Agent sign-ups". Every other
+  `/admin/*` router already names its own roles, so `admin_sales` gets 403
+  everywhere else; the test suite walks them. `admin_sales` gets no review
+  queues (stored `[]`, like `admin_super`).
+- **Console.** An agent's nav shows My merchants and Add merchant only;
+  `AppLayout` sends any other path to `/my-merchants`, and the profile menu
+  drops Settings. **Not from a canvas file** (no design bundle has an agent
+  screen): built in the console's own idiom and brand status tints, rows
+  that wrap on a phone, flagged for a swap if a canvas arrives.
+- **Rate limits** (keyed on the admin, not the IP a field team may share):
+  Add merchant 30 an hour per agent, Resend invite 5 an hour per merchant
+  per agent. Both POSTs take an `Idempotency-Key` (`requireAdmin` first).
+- **Audit**, in the same transaction as the change:
+  `merchant.agent_invite`, `merchant.invite_resent` (actor the admin), and
+  `user.invite_accepted` (actor the owner).
+- **Onboarding reminders skip invite-pending accounts.** Their "Continue
+  onboarding" link would land on a sign-in they can't pass; the invite
+  email is their way in, and the agent nudges.
+- **Resend invite** is only offered (and only accepted) while the invite is
+  pending; once the owner has a password it's `409 invite_already_accepted`
+  and "Forgot password" is the path.
 
 ### B2. Attribution
 
