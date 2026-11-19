@@ -29,6 +29,7 @@ import { ForgotPassword } from "./pages/ForgotPassword.js";
 import { ResetPassword } from "./pages/ResetPassword.js";
 import { JoinPage } from "./pages/join/JoinPage.js";
 import { GarageJoinPage } from "./pages/join/GarageJoinPage.js";
+import { PartsJoinPage } from "./pages/join/PartsJoinPage.js";
 import { Assist } from "./pages/Assist.js";
 import { rememberAgentCode } from "./lib/agent-link.js";
 
@@ -44,6 +45,7 @@ const router = createBrowserRouter([
   // Supplier pages, public like the landing at `/` (UI4).
   // Garages (GS4) have their own page: no vehicle, no per-day estimator.
   { path: "/join/garages", element: <GarageJoinPage /> },
+  { path: "/join/parts", element: <PartsJoinPage /> },
   { path: "/join/:type", element: <JoinPage /> },
   // A sales agent's assist session lands here from CRAL Ops (PR AG3).
   { path: "/assist", element: <Assist /> },

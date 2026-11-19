@@ -349,15 +349,16 @@ export function unitAt(supplier: SupplierInfo, index: number): EstimatorUnit {
  * Suppliers CRAL will take on later; shown on `/`, not selectable.
  * Garages left this list in GS4: they join through `/join/garages`
  * (`pages/join/GarageJoinPage.tsx`), not a `SupplierType`, because a garage
- * has no vehicle, no per-day rate and no estimator.
+ * has no vehicle, no per-day rate and no estimator. Parts dealers left it
+ * in PT2 the same way, through `/join/parts` (`PartsJoinPage.tsx`).
  */
-export const COMING_SUPPLIERS = ["Parts dealers", "Car sellers"] as const;
+export const COMING_SUPPLIERS = ["Car sellers"] as const;
 
-/** What `?offer=` may pre-select in onboarding: a supplier type, or garage services. */
-export type RememberedOffer = SupplierType | "garage";
+/** What `?offer=` may pre-select in onboarding: a supplier type, garage services or spare parts. */
+export type RememberedOffer = SupplierType | "garage" | "parts";
 
 function isRememberedOffer(value: string | null | undefined): value is RememberedOffer {
-  return value === "garage" || isSupplierType(value);
+  return value === "garage" || value === "parts" || isSupplierType(value);
 }
 
 const OFFER_KEY = "cral.merchant.offer";

@@ -142,7 +142,7 @@ export function AccountMenu(): JSX.Element {
     { label: "My documents", go: goTo("/documents"), tag: docTag, tagColor: verified ? "#1B8A5A" : "#C77400" },
     // Phase 4 GS2: the cars garage requests name.
     { label: "My cars", go: goTo("/my-cars"), tag: "" },
-    // Phase 5 PT1: parts requests and orders, until the PT2 sub-site.
+    // Phase 5 PT1: parts requests and orders (the `/parts` landing leads here too).
     { label: "My parts", go: goTo("/my-parts"), tag: "" },
   ];
   return (

@@ -32,8 +32,8 @@ const OPTION_COPY: Record<Offer, { title: string; body: string }> = {
 
 const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench, parts: Gear };
 
-/** Not open to join yet (garages left this list in GS4, parts dealers in PT1). */
-const STILL_COMING = COMING_SUPPLIERS.filter((c) => c !== "Parts dealers");
+/** Not open to join yet (garages left this list in GS4, parts dealers in PT2). */
+const STILL_COMING: readonly string[] = COMING_SUPPLIERS;
 
 const ASK_URL = whatsappLink("Hi CRAL, a question about joining");
 

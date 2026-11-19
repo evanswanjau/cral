@@ -184,6 +184,9 @@ describe("parts requests", () => {
     const targets = await db("quote_request_outlets").where({ request_id: r.requestId });
     expect(targets.map((t) => t.outlet_id)).toEqual([r.d.outletId]);
     expect(await db("audit_log").where({ entity_id: r.requestId, action: "parts_request.created" }).first()).toBeTruthy();
+    // The asked dealer gets the in-app notice (channels follow its preferences); the garage gets none.
+    const notices = await db("notifications").where({ subject_type: "garage_request", subject_id: r.requestId });
+    expect(notices.map((n) => n.merchant_id)).toEqual([r.d.merchantId]);
 
     // The dealer sees the chassis and the address; the garage doesn't see it at all.
     const asDealer = await request(app).get(`/merchant/garage-requests/${r.requestId}`).set(bearer(r.d.token));

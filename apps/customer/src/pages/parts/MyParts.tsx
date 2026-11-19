@@ -12,8 +12,7 @@ import { bodyText } from "../../components/subsite/Section.js";
 /**
  * `/my-parts`: ask parts dealers for a part, and the customer's parts
  * requests (Phase 5 PT1, docs/decisions/parts.md). Signed in only, from the
- * account menu: the parts sub-site landing is PT2, so `/parts` still goes
- * to the front door's "Coming to CRAL" block.
+ * account menu and the public `/parts` landing (PT2).
  *
  * A part is quoted against the car's chassis number, so only cars in My
  * cars that carry one can be picked. Up to 5 parts dealers CRAL has

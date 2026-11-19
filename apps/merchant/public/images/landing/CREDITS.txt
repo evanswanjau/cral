@@ -21,3 +21,4 @@ join-trucks.webp - copy of cat-truck.webp (Tiry Nelson Gono, Unsplash) - https:/
 join-machinery.webp - copy of cat-machinery.webp (Jamar Penny, Unsplash) - https://unsplash.com/photos/ZgmGq_eFmUs
 join-drivers.webp - copy of auth.webp (Mr Dibo, Unsplash) - https://unsplash.com/photos/PrD-ocyzzZ8. Wants a real photo of a CRAL driver.
 join-garages.webp - "Mechanic working on a car engine in a workshop" by Dextar Studio - https://unsplash.com/photos/XP8o9_Arwqg (added for /join/garages, Phase 4 GS4, 2026-11-19). Wants a real photo of a CRAL-visited garage.
+join-parts.webp - "white and silver round device" (a brake disc) by Benjamin Brunner - https://unsplash.com/photos/al01Ad0f_KI (added for /join/parts, Phase 5 PT2, 2026-11-19). Wants a real photo of a CRAL-checked parts dealer.
