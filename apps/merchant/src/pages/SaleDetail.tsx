@@ -179,7 +179,7 @@ export function SaleDetail(): JSX.Element {
         </div>
       </div>
 
-      {l.reviewer_note && (l.status === "action" || l.status === "rejected") && (
+      {l.reviewer_note && (l.status === "action" || l.status === "rejected" || l.status === "withdrawn") && (
         <div style={{ ...P.noteCard, marginTop: 16 }}>
           <div style={{ ...P.noteBar, background: meta.core }} />
           <div style={P.noteBody}>

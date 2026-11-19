@@ -105,6 +105,8 @@ export const ID_PREFIXES = {
   // logbook (own rows, kept out of `documents` like outlet photos).
   saleListing: "sal",
   saleListingFile: "slf",
+  // Phase 6 CS2: a buyer's report of a live listing, for Ops.
+  saleListingReport: "slr",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

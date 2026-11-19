@@ -1,14 +1,17 @@
 import { Router, type Request } from "express";
 import { ApiError } from "@cral/types";
 import { authenticate } from "../../middleware/authenticate.js";
+import { rateLimit } from "../../middleware/rate-limit.js";
 import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { assertDeclaredTypeMatchesBytes, createUpload } from "../../lib/uploads.js";
 import type { RequestContext } from "../merchant/service.js";
 import { sendPhoto } from "../outlets/routes.js";
 import * as sales from "./service.js";
+import { fileSaleReport } from "./reports.js";
 import {
   CreateSaleListingSchema,
+  ReportSaleListingSchema,
   ListSaleListingsQuerySchema,
   SetSaleStatusSchema,
   UpdateSaleListingSchema,
@@ -117,5 +120,19 @@ saleListingsRouter.post(
   validateBody(SetSaleStatusSchema),
   asyncHandler(async (req, res) => {
     res.status(200).json(await sales.setSaleStatus(req.auth!.sub, id(req), req.body, ctxOf(req)));
+  }),
+);
+
+/**
+ * Report this listing (CS2, openapi/customer-sales.yaml). Any signed-in
+ * user; 5 an hour, the same shape as towing requests.
+ */
+saleListingsRouter.post(
+  "/sale-listings/:listingId/reports",
+  authenticate(),
+  rateLimit({ bucket: "sale_report", limit: 5, windowSeconds: 3600, keyFn: (req) => req.auth?.sub ?? req.ip ?? "unknown" }),
+  validateBody(ReportSaleListingSchema),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await fileSaleReport(req.auth!.sub, id(req), req.body, ctxOf(req)));
   }),
 );

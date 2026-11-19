@@ -53,8 +53,49 @@ Migration `20261124090000_sale_listings`; module
   Nothing changes while Ops has it or once final.
 - Every change is a conditional update on the status read, with
   `audit_log` (`entity_type = 'sale_listing'`) in the same transaction.
-- **No notification on submit** in CS1 (no `sale_listing` notification
-  subject yet). CS2 adds it with the Ops decision.
+- **No notification on submit** in CS1. CS2 added the `sale_listing`
+  notification subject for the Ops decision (merchant CTA `/sales/:id`).
+
+## Ops review and reports (CS2, built 2026-11-19)
+
+Migration `20261125090000_sale_review`; module
+`apps/api/src/modules/admin-sale-listings`; contracts
+`openapi/admin-sales.yaml` (Ops) and `openapi/customer-sales.yaml` (the
+buyer's report). Console `/sales`, `/sales/:listingId`, `/sales/reports`.
+
+- **Queue `sales`**, `admin_reviewer` (super bypasses), same shape as the
+  outlet review on `lib/review-checklist.ts`. Items in
+  `platform_settings.sale_review.checklist`, answers in
+  `sale_listing_review_checks`: logbook owner is the account holder,
+  make/model/plate match the logbook, a lender on the logbook is disclosed
+  (`encumbered`), photos show this car's plate (all block), photos clear
+  (flag). **A human compares by eye**; the case shows the account holder
+  and type next to the logbook. No OCR, no automatic check, and nothing
+  shown to buyers as "verified" because of it.
+- **Every resubmission re-opens every answer** (the merge context uses
+  `submitted_at` plus the newest file of each kind), so a fixed plate or
+  new logbook is always checked again.
+- **Gates**: every item answered before any decision; approve needs no
+  flags, the merchant's account approved, 4+ photos and a logbook; changes
+  and reject need a note the merchant reads. Only `pending/review` decide;
+  a moved case is 409 `sale_listing_not_in_review`. Approve sets `live`
+  and `live_at`. Conditional update + `audit_log` + `notify()` in one
+  transaction.
+- **Reports** (`sale_listing_reports`, `slr_`): signed-in user, `live`
+  listings only, reason (`scam / not_this_car / wrong_details /
+  already_sold / offensive / other`) + optional text, 5 an hour
+  (`sale_report` bucket), one open report per user per listing (409
+  `already_reported`). Sign-in is required so the limit and the
+  one-open rule hold per person.
+- **Ops actions on a report**: dismiss (listing untouched); **pause =
+  status `action`** with the note, so the merchant can't switch it back on
+  and must fix and resubmit through review (CS1's `paused` stays the
+  merchant's own switch); **take down = `withdrawn`**, final. Pause and take
+  down need a note, apply only to `live/paused`, close every open report on
+  the listing as `actioned`, and notify the merchant. The merchant never
+  sees who reported; the reporter's name is Ops-only. The merchant's
+  listing page shows the note on `withdrawn` too.
+- **The buyer's "Report this listing" button ships with CS3's buy pages.**
 
 ## Who sells (onboarding)
 

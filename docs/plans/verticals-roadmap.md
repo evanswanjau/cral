@@ -267,7 +267,7 @@ buyer and seller pay each other directly.
 | PR | What | Model |
 |----|------|-------|
 | CS1 | Sale listings, merchant side (`sal_`, `S-YYMMDD-NNN` ref), "Cars for sale" in onboarding and the portal. **Built**, in `develop` ([`car-sales.md`](../decisions/car-sales.md)) | Opus |
-| CS2 | Ops sale-listing review + report-a-listing | Opus |
+| CS2 | Ops sale-listing review + report-a-listing (API, contracts, Ops screens; the buyer's button ships with CS3). **Built**, in `develop` ([`car-sales.md`](../decisions/car-sales.md)) | Opus |
 | CS3 | Buy sub-site + enquiries | Opus |
 | CS4 | Listing fees and paid boosts by M-Pesa | Opus |
 
