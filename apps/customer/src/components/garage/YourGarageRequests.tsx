@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { SERVICE_LABELS, carName, listGarageRequests, type GarageRequest } from "../../lib/garage-api.js";
+import { ORDER_STATUS_LABELS, SERVICE_LABELS, carName, listGarageRequests, type GarageRequest } from "../../lib/garage-api.js";
 import { Section, bodyText } from "../subsite/Section.js";
 
 /**
@@ -13,6 +13,7 @@ import { Section, bodyText } from "../subsite/Section.js";
 
 export function requestStatusLine(r: GarageRequest): string {
   if (r.status === "cancelled") return "Closed by you";
+  if (r.order) return `Job ${r.order.ref} · ${ORDER_STATUS_LABELS[r.order.status]}`;
   if (r.status === "accepted") return "Quote accepted";
   if (r.quote_count > 0) return `${r.quote_count} ${r.quote_count === 1 ? "quote" : "quotes"} to compare`;
   return `Waiting on quotes from ${r.garages_asked} ${r.garages_asked === 1 ? "garage" : "garages"}`;

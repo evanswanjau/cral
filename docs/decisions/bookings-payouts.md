@@ -139,6 +139,9 @@ for Ops); code `modules/payouts/`, `modules/admin-payouts/`,
 - **`cutPayoutRun` is the single place that decides what a run
   contains.** A second copy of those rules is how a merchant gets paid
   twice.
+- **Garage orders join the same runs** (Phase 4 GS3): a completed order
+  becomes a line with `order_id` (unique too) through the same
+  `cutPayoutRun`; `payoutPosition` counts them (`garage.md`).
 - **A booking pays out exactly once**: `payout_run_lines.booking_id` is
   globally unique. The service checks first for a clean error; the
   constraint is what holds under concurrency.

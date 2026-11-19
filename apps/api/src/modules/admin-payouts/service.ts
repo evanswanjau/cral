@@ -68,6 +68,7 @@ export interface RunDetail extends RunListItem {
   lines: Array<{
     id: string;
     booking_id: string | null;
+    order_id: string | null;
     booking_ref: string;
     hirer_name: string;
     vehicle_registration: string;
@@ -194,6 +195,7 @@ export async function getRun(id: string): Promise<RunDetail> {
     lines: lines.map((l) => ({
       id: l.id,
       booking_id: l.booking_id,
+      order_id: l.order_id,
       booking_ref: l.booking_ref,
       hirer_name: l.hirer_name,
       vehicle_registration: l.vehicle_registration,

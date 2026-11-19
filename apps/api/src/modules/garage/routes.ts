@@ -3,8 +3,17 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import type { RequestContext } from "../merchant/service.js";
+import { requireIdempotencyKey } from "../../middleware/idempotency.js";
+import { requireAdmin } from "../../middleware/require-admin.js";
 import * as garage from "./service.js";
+import * as orders from "./orders.js";
 import {
+  AdminOrderQuerySchema,
+  ExtraQuoteSchema,
+  MerchantOrderQuerySchema,
+  PayOrderSchema,
+  ProblemSchema,
+  ResolveSchema,
   CarSchema,
   CreateRequestSchema,
   ListQuerySchema,
@@ -14,9 +23,11 @@ import {
 } from "./schemas.js";
 
 /**
- * Garage quotes (Phase 4 GS2): openapi/customer-garage.yaml and
- * openapi/merchant-garage.yaml. No `Idempotency-Key`: nothing here moves
- * money (accepting and paying a quote is GS3).
+ * Garage quotes (Phase 4 GS2) and orders (GS3): openapi/customer-garage.yaml,
+ * openapi/merchant-garage.yaml, openapi/admin-garage-orders.yaml. The quote
+ * routes move no money and take no `Idempotency-Key`; every order POST that
+ * moves money or settles one (accept, pay, cancel, accept extra, confirm,
+ * Ops resolve) requires one, mounted after `authenticate()`/`requireAdmin`.
  */
 export const garageRouter = Router();
 
@@ -142,5 +153,166 @@ garageRouter.post(
   authenticate(),
   asyncHandler(async (req, res) => {
     res.status(200).json(await garage.declineRequest(req.auth!.sub, rid(req), ctxOf(req)));
+  }),
+);
+
+// --- GS3: customer orders ---------------------------------------------
+
+const oid = (req: Request) => req.params.orderId as string;
+const qid = (req: Request) => req.params.quoteId as string;
+
+garageRouter.post(
+  "/me/garage-requests/:requestId/quotes/:quoteId/accept",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await orders.acceptQuote(req.auth!.sub, rid(req), qid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.get(
+  "/me/garage-orders",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.listMyOrders(req.auth!.sub, ListQuerySchema.parse(req.query)));
+  }),
+);
+
+garageRouter.get(
+  "/me/garage-orders/:orderId",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.getMyOrder(req.auth!.sub, oid(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/pay",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(202).json(await orders.payOrder(req.auth!.sub, oid(req), PayOrderSchema.parse(req.body), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/cancel",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.cancelMyOrder(req.auth!.sub, oid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/extras/:quoteId/accept",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.acceptExtra(req.auth!.sub, oid(req), qid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/extras/:quoteId/decline",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.declineExtra(req.auth!.sub, oid(req), qid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/confirm",
+  authenticate(),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.confirmOrder(req.auth!.sub, oid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/me/garage-orders/:orderId/problem",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.raiseProblem(req.auth!.sub, oid(req), ProblemSchema.parse(req.body), ctxOf(req)));
+  }),
+);
+
+// --- GS3: merchant orders ---------------------------------------------
+
+garageRouter.get(
+  "/merchant/garage-orders",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.listMerchantOrders(req.auth!.sub, MerchantOrderQuerySchema.parse(req.query)));
+  }),
+);
+
+garageRouter.get(
+  "/merchant/garage-orders/:orderId",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.getMerchantOrder(req.auth!.sub, oid(req)));
+  }),
+);
+
+garageRouter.post(
+  "/merchant/garage-orders/:orderId/start",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.startOrder(req.auth!.sub, oid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/merchant/garage-orders/:orderId/ready",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.markReady(req.auth!.sub, oid(req), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/merchant/garage-orders/:orderId/extras",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await orders.sendExtra(req.auth!.sub, oid(req), ExtraQuoteSchema.parse(req.body), ctxOf(req)));
+  }),
+);
+
+garageRouter.post(
+  "/merchant/garage-orders/:orderId/extras/:quoteId/withdraw",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.withdrawExtra(req.auth!.sub, oid(req), qid(req), ctxOf(req)));
+  }),
+);
+
+// --- GS3: Ops ----------------------------------------------------------
+
+const opsGuard = requireAdmin({ role: ["admin_support", "admin_finance"] });
+
+garageRouter.get(
+  "/admin/garage-orders",
+  opsGuard,
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.listAdminOrders(AdminOrderQuerySchema.parse(req.query)));
+  }),
+);
+
+garageRouter.get(
+  "/admin/garage-orders/:orderId",
+  opsGuard,
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.getAdminOrder(oid(req)));
+  }),
+);
+
+garageRouter.post(
+  "/admin/garage-orders/:orderId/resolve",
+  opsGuard,
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await orders.resolveProblem(req.admin!.id, oid(req), ResolveSchema.parse(req.body), ctxOf(req)));
   }),
 );

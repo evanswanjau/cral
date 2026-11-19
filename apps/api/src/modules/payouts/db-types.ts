@@ -36,6 +36,8 @@ export interface PayoutRunLineRow {
   id: string;
   payout_run_id: string;
   booking_id: string | null;
+  /** A garage job's line (Phase 4 GS3); at most one of booking_id / order_id. */
+  order_id: string | null;
   booking_ref: string;
   hirer_name: string;
   vehicle_registration: string;

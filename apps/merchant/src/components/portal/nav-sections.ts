@@ -51,7 +51,7 @@ export function isDriverOnly(input: Pick<OfferingInput, "vehicleCount" | "driver
   return input.driversOnly && input.vehicleCount === 0;
 }
 
-export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "quotes" | "bookings" | "payouts" | "notifications" | "settings";
+export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "quotes" | "garage-jobs" | "bookings" | "payouts" | "notifications" | "settings";
 
 export interface NavItem {
   key: NavKey;
@@ -69,6 +69,8 @@ export interface NavCounts {
   premisesActionCount?: number;
   /** Garage requests waiting for this merchant's price (GS2). */
   quoteRequestCount?: number;
+  /** Paid garage jobs waiting to be started (GS3). */
+  garageJobCount?: number;
 }
 
 export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] {
@@ -92,16 +94,23 @@ export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] 
     label: "Quote requests",
     ...(counts.quoteRequestCount ? { count: counts.quoteRequestCount } : {}),
   };
+  // Garage jobs follow quote requests (Phase 4 GS3).
+  const jobs: NavItem = {
+    key: "garage-jobs",
+    to: "/garage/orders",
+    label: "Garage jobs",
+    ...(counts.garageJobCount ? { count: counts.garageJobCount } : {}),
+  };
   const garageOnly = input.garageOnly && input.vehicleCount === 0;
   if (garageOnly) {
-    items.push(premises, quotes, drivers);
+    items.push(premises, quotes, jobs, drivers);
   } else if (isDriverOnly(input)) {
     items.push(drivers);
-    if (input.showPremises) items.push(premises, quotes);
+    if (input.showPremises) items.push(premises, quotes, jobs);
   } else {
     items.push({ key: "vehicles", to: "/vehicles", label: FLEET_WORDS[fleetKind(input)].label, count: input.vehicleCount });
     items.push(drivers);
-    if (input.showPremises) items.push(premises, quotes);
+    if (input.showPremises) items.push(premises, quotes, jobs);
   }
   items.push(
     { key: "bookings", to: "/bookings", label: "Bookings", count: counts.bookingCount },

@@ -1,11 +1,13 @@
 import { useState, type CSSProperties } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiClientError } from "../../lib/api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
 import {
   LINE_LABELS,
+  ORDER_STATUS_LABELS,
   SERVICE_LABELS,
+  acceptQuote,
   cancelGarageRequest,
   carName,
   getGarageRequest,
@@ -17,8 +19,8 @@ import { bodyText } from "../../components/subsite/Section.js";
 
 /**
  * `/garage/requests/:id`: one garage request and its quotes side by side,
- * cheapest first (Phase 4 GS2). Accepting and paying a quote is GS3, so
- * this page says so instead of offering a button that does nothing.
+ * cheapest first (Phase 4 GS2). Accepting one (GS3) creates the job and
+ * opens its page, where the customer pays CRAL by M-Pesa.
  *
  * Not from a canvas; built from tokens.ts and the sub-site's Section idiom.
  */
@@ -31,7 +33,7 @@ function fmtDay(iso: string): string {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 }
 
-function QuoteCard({ q, rank }: { q: GarageQuote; rank: number }): JSX.Element {
+function QuoteCard({ q, rank, onAccept, busy }: { q: GarageQuote; rank: number; onAccept?: () => void; busy?: boolean }): JSX.Element {
   return (
     <article style={{ ...S.card, opacity: q.expired ? 0.7 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
@@ -66,6 +68,11 @@ function QuoteCard({ q, rank }: { q: GarageQuote; rank: number }): JSX.Element {
       <p style={{ ...bodyText, fontSize: 12, marginTop: 10, color: q.expired ? "#A50E22" : "#5A6373" }}>
         {q.expired ? `Expired ${fmtDateTime(q.valid_until)}. The garage can send a new price.` : `Price valid until ${fmtDateTime(q.valid_until)}.`}
       </p>
+      {onAccept && !q.expired && (
+        <button type="button" onClick={onAccept} disabled={busy} style={S.primary}>
+          {busy ? "Accepting…" : `Accept and pay ${kesText(q.total)}`}
+        </button>
+      )}
     </article>
   );
 }
@@ -77,6 +84,8 @@ export function GarageRequestPage(): JSX.Element {
   usePageTitle(r ? `${SERVICE_LABELS[r.service_type]} request` : "Garage request");
   const [closing, setClosing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [accepting, setAccepting] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   if (isLoading) return <div style={S.wrap}><p style={bodyText}>Loading…</p></div>;
   if (error || !r) {
@@ -101,6 +110,19 @@ export function GarageRequestPage(): JSX.Element {
     }
   }
 
+  async function accept(quoteId: string) {
+    setProblem(null);
+    setAccepting(quoteId);
+    try {
+      const order = await acceptQuote(id!, quoteId);
+      await queryClient.invalidateQueries({ queryKey: ["garage-requests"] });
+      navigate(`/garage/orders/${order.id}`);
+    } catch (err) {
+      setProblem(err instanceof ApiClientError ? err.message : "Couldn't accept that quote. Try again.");
+      setAccepting(null);
+    }
+  }
+
   const quotes = r.quotes ?? [];
   return (
     <div style={S.wrap}>
@@ -113,9 +135,15 @@ export function GarageRequestPage(): JSX.Element {
         {r.garages_declined > 0 ? ` · ${r.garages_declined} said they can't do it` : ""}
       </p>
 
-      {quotes.length > 0 && (
+      {r.order && (
         <div style={S.notice}>
-          Accepting and paying for a quote opens on CRAL soon. Until then, nothing is charged and no garage starts work.
+          Job <span style={{ fontFamily: "'IBM Plex Mono',monospace" }}>{r.order.ref}</span>: {ORDER_STATUS_LABELS[r.order.status]}.{" "}
+          <Link to={`/garage/orders/${r.order.id}`} style={{ color: "#0F23A8", fontWeight: 600 }}>Open the job</Link>
+        </div>
+      )}
+      {r.status === "open" && quotes.length > 0 && (
+        <div style={S.notice}>
+          Accepting a quote books that garage. You pay CRAL by M-Pesa, CRAL holds it, and the garage is paid only after you confirm the work is done.
         </div>
       )}
 
@@ -126,7 +154,13 @@ export function GarageRequestPage(): JSX.Element {
           </p>
         )}
         {quotes.map((q, i) => (
-          <QuoteCard key={q.id} q={q} rank={i} />
+          <QuoteCard
+            key={q.id}
+            q={q}
+            rank={i}
+            busy={accepting === q.id}
+            {...(r.status === "open" ? { onAccept: () => void accept(q.id) } : {})}
+          />
         ))}
       </div>
 
@@ -154,5 +188,6 @@ const S = {
   table: { width: "100%", borderCollapse: "collapse", marginTop: 14, font: "400 14px/1.45 'Instrument Sans',sans-serif", color: "#333B4A" },
   td: { padding: "8px 0", borderTop: "1px solid #F1F3F6", verticalAlign: "top", paddingRight: 10 },
   notice: { marginTop: 18, padding: "12px 14px", background: "#EDEFFC", border: "1px solid #C3CBF5", borderRadius: 8, font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#0F23A8" },
+  primary: { marginTop: 12, height: 44, padding: "0 18px", background: "#0F23A8", border: "none", borderRadius: 8, font: "600 14px/1 'Instrument Sans',sans-serif", color: "#FFFFFF", cursor: "pointer" },
   secondary: { height: 44, padding: "0 16px", background: "#FFFFFF", border: "1px solid #CDD2DA", borderRadius: 8, font: "600 14px/1 'Instrument Sans',sans-serif", color: "#A50E22", cursor: "pointer" },
 } satisfies Record<string, CSSProperties>;

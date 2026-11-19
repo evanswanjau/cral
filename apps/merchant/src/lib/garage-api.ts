@@ -34,6 +34,8 @@ export interface QuoteLineInput {
 export interface MyQuote {
   id: string;
   status: "sent" | "withdrawn" | "accepted" | "superseded";
+  /** Set once the customer accepted this quote (GS3). */
+  order_id: string | null;
   lines: Array<{ kind: LineKind; description: string; amount: Money }>;
   total: Money;
   take_home: Money;

@@ -442,7 +442,7 @@ components:
       type: object
       required: [booking_id, ref, hirer_name, vehicle_registration, dropoff_at, hire_days, net]
       properties:
-        booking_id: { type: string }
+        booking_id: { type: string, description: "The booking, or for a garage job (GS3) the order id." }
         ref: { type: string }
         hirer_name: { type: string }
         vehicle_registration: { type: string }

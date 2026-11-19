@@ -132,6 +132,105 @@ paths:
                   total: { $ref: "#/components/schemas/Money" }
                   take_home: { $ref: "#/components/schemas/Money" }
 
+  # ---- GS3: orders -----------------------------------------------------
+
+  /merchant/garage-orders:
+    get:
+      summary: Garage jobs for my premises
+      parameters:
+        - { name: filter, in: query, schema: { type: string, enum: [active, done, all], default: active } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of jobs, newest first, with the count paid and waiting to start.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/MerchantOrder" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts: { type: object, properties: { to_start: { type: integer } } }
+
+  /merchant/garage-orders/{orderId}:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One job
+      responses:
+        "200":
+          description: The job. Another merchant's is 404.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantOrder" }
+
+  /merchant/garage-orders/{orderId}/start:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Start the work
+      description: Only once the customer's payment has reached CRAL (`paid`; otherwise 409 `order_not_paid`).
+      responses:
+        "200":
+          description: The job, `in_progress`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantOrder" }
+
+  /merchant/garage-orders/{orderId}/ready:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Mark the car ready
+      description: >
+        Only `in_progress` (409 `order_not_in_progress`) with no extra-work
+        quote still waiting on the customer (409 `extra_pending`). Starts the
+        72 h window after which the job confirms itself.
+      responses:
+        "200":
+          description: The job, `ready`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantOrder" }
+
+  /merchant/garage-orders/{orderId}/extras:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Quote extra work found mid-job
+      description: >
+        A second itemised quote on the same job, only while `in_progress`
+        and one open at a time (409 `extra_pending`). The customer accepts
+        and pays it before the work is done, or the garage finishes the
+        original scope. Valid 48 h.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "201":
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantOrder" }
+
+  /merchant/garage-orders/{orderId}/extras/{quoteId}/withdraw:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+      - { name: quoteId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Withdraw an extra-work quote not yet paid
+      responses:
+        "200":
+          description: The job.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantOrder" }
+        "409": { description: "`quote_not_available`, `payment_in_flight`" }
+
 components:
   schemas:
     Money:
@@ -181,6 +280,7 @@ components:
           properties:
             id: { type: string }
             status: { type: string, enum: [sent, withdrawn, accepted, superseded] }
+            order_id: { type: string, nullable: true, description: "Set once the customer accepted this quote (GS3)." }
             lines: { type: array, items: { type: object } }
             total: { $ref: "#/components/schemas/Money" }
             take_home: { $ref: "#/components/schemas/Money" }
@@ -189,4 +289,55 @@ components:
             sent_at: { type: string, format: date-time }
             valid_until: { type: string, format: date-time }
             expired: { type: boolean }
+        created_at: { type: string, format: date-time }
+    MerchantOrder:
+      type: object
+      description: >
+        A garage job as the garage sees it. Shilling amounts only: `total`
+        is what the customer paid CRAL for the work so far and `take_home`
+        what the garage keeps. Never CRAL's commission or its rate, and
+        never the customer's phone.
+      properties:
+        id: { type: string, example: ord_01JD0000000000000000000000 }
+        ref: { type: string, example: G-261119-001 }
+        status: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] }
+        request_id: { type: string }
+        service_type: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        car: { type: object, nullable: true, properties: { make: { type: string }, model: { type: string }, year: { type: integer }, plate: { type: string } } }
+        outlet: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string }, address: { type: string }, county: { type: string } } }
+        customer_first_name: { type: string, nullable: true }
+        quotes:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string, enum: [original, extra] }
+              status: { type: string, enum: [sent, withdrawn, accepted, superseded, declined] }
+              lines: { type: array, items: { type: object } }
+              total: { $ref: "#/components/schemas/Money" }
+              take_home: { $ref: "#/components/schemas/Money" }
+              days_needed: { type: integer }
+              note: { type: string, nullable: true }
+              sent_at: { type: string, format: date-time }
+              valid_until: { type: string, format: date-time }
+              expired: { type: boolean }
+              accepted_at: { type: string, format: date-time, nullable: true }
+              paid_at: { type: string, format: date-time, nullable: true }
+        total: { $ref: "#/components/schemas/Money" }
+        take_home: { $ref: "#/components/schemas/Money" }
+        amount_due: { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        due_quote_id: { type: string, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        ready_at: { type: string, format: date-time, nullable: true }
+        auto_confirm_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        confirmed_by: { type: string, enum: [customer, auto, ops], nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        problem_raised_at: { type: string, format: date-time, nullable: true }
+        problem_note: { type: string, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        resolution_note: { type: string, nullable: true }
         created_at: { type: string, format: date-time }

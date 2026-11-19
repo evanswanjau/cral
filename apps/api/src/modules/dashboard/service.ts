@@ -8,6 +8,7 @@ import type { NotificationRow } from "../notifications/db-types.js";
 import { serialize as serializeNotification } from "../notifications/service.js";
 import { EXPIRING_WITHIN_DAYS, VEHICLE_DOC_KINDS, effectiveDocState } from "../vehicles/service.js";
 import { payoutMonthlyNet, payoutPosition } from "../payouts/service.js";
+import type { OrderRow } from "../garage/orders.js";
 
 /**
  * The merchant portal's landing read.
@@ -250,10 +251,35 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
     net: kes(line.net_amount),
   });
 
+  // Garage jobs (Phase 4 GS3) in the same card, so it still adds up to the tile.
+  const orderCars = [...position.payableOrders, ...position.clearingOrders].length
+    ? await db("customer_cars")
+        .whereIn("id", [...position.payableOrders, ...position.clearingOrders].map((o) => o.car_id))
+        .select("id", "plate")
+    : [];
+  const orderPlate = new Map(orderCars.map((c) => [c.id as string, c.plate as string]));
+  const orderUsers = [...position.payableOrders, ...position.clearingOrders].length
+    ? await db("users")
+        .whereIn("id", [...position.payableOrders, ...position.clearingOrders].map((o) => o.user_id))
+        .select("id", "full_name")
+    : [];
+  const orderUserName = new Map(orderUsers.map((u) => [u.id as string, (u.full_name as string | null) ?? "Customer"]));
+  const orderLine = (o: OrderRow) => ({
+    booking_id: o.id,
+    ref: o.ref,
+    hirer_name: orderUserName.get(o.user_id) ?? "Customer",
+    vehicle_registration: orderPlate.get(o.car_id) ?? "",
+    dropoff_at: (o.completed_at ?? o.ready_at ?? o.updated_at).toISOString(),
+    hire_days: 1,
+    net: kes(o.merchant_net_amount),
+  });
+
   const projectionGross =
+    position.payableOrders.reduce((sum, o) => sum + o.gross_amount, 0) +
     position.payable.reduce((sum, b) => sum + b.gross_amount, 0) +
     pendingRunLines.reduce((sum, l) => sum + l.gross_amount, 0);
   const projectionNet =
+    position.payableOrders.reduce((sum, o) => sum + o.merchant_net_amount, 0) +
     position.payable.reduce((sum, b) => sum + b.merchant_net_amount, 0) +
     pendingRunLines.reduce((sum, l) => sum + l.net_amount, 0);
 
@@ -366,8 +392,8 @@ export async function getDashboard(userId: string, now: Date = new Date()) {
       gross: kes(projectionGross),
       commission: kes(projectionGross - projectionNet),
       net: kes(projectionNet),
-      lines: [...pendingRunLines.map(cutLine), ...position.payable.map(projectionLine)],
-      clearing: position.clearing.map(projectionLine),
+      lines: [...pendingRunLines.map(cutLine), ...position.payable.map(projectionLine), ...position.payableOrders.map(orderLine)],
+      clearing: [...position.clearing.map(projectionLine), ...position.clearingOrders.map(orderLine)],
     },
     expiring,
     activity: activityRows.map((row) => {

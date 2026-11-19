@@ -4,7 +4,7 @@ import { db } from "../../db/client.js";
 import { merchantDisplayName } from "../../lib/merchant-display.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import type { MerchantRow } from "../merchant/db-types.js";
-import { cutPayoutRun, nairobiDay, payableBookings } from "./service.js";
+import { cutPayoutRun, nairobiDay, payableBookings, payableOrders } from "./service.js";
 import type { PayoutRunRow } from "./db-types.js";
 
 /**
@@ -91,7 +91,9 @@ export async function cutRunForMerchant(merchantId: string, day: string): Promis
       throw new ApiError({ status: 404, type: "not_found", code: "merchant_not_found", message: "No such merchant." });
     }
     // Nothing owed is the more useful answer than a destination problem.
-    if ((await payableBookings(trx, merchantId)).length === 0) return null;
+    if ((await payableBookings(trx, merchantId)).length === 0 && (await payableOrders(trx, merchantId)).length === 0) {
+      return null;
+    }
     const destination = await merchantPayoutDestination(trx, merchant);
     return cutPayoutRun(trx, merchantId, destination, { runDate: day });
   });
@@ -129,15 +131,27 @@ export async function cutDuePayoutRuns(
     .modify((q) => {
       if (onlyMerchantIds) q.whereIn("m.id", onlyMerchantIds);
     })
-    .whereExists(function payable() {
-      this.select(db.raw("1"))
-        .from("bookings as b")
-        .leftJoin("payout_run_lines as l", "l.booking_id", "b.id")
-        .whereRaw("b.merchant_id = m.id")
-        .where("b.status", "completed")
-        .where("b.deposit_released", true)
-        .whereNull("l.id");
-    })
+    .where((owed) =>
+      owed
+        .whereExists(function payable() {
+          this.select(db.raw("1"))
+            .from("bookings as b")
+            .leftJoin("payout_run_lines as l", "l.booking_id", "b.id")
+            .whereRaw("b.merchant_id = m.id")
+            .where("b.status", "completed")
+            .where("b.deposit_released", true)
+            .whereNull("l.id");
+        })
+        // A confirmed garage job (Phase 4 GS3).
+        .orWhereExists(function payableOrder() {
+          this.select(db.raw("1"))
+            .from("orders as o")
+            .leftJoin("payout_run_lines as ol", "ol.order_id", "o.id")
+            .whereRaw("o.merchant_id = m.id")
+            .where("o.status", "completed")
+            .whereNull("ol.id");
+        }),
+    )
     .select("m.id", "m.payout_method", "m.payout_schedule")) as Array<{
     id: string;
     payout_method: string;
