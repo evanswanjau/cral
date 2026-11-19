@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from "react";
+import { useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
 import { ApiClientError } from "../../lib/api.js";
 import { LINE_LABELS, kesText, payGarageOrder, type GarageOrder, type OrderQuote } from "../../lib/garage-api.js";
 import { bodyText } from "../subsite/Section.js";
@@ -14,7 +14,7 @@ export function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" });
 }
 
-export function QuoteLines({ q, title, children }: { q: OrderQuote; title: string; children?: React.ReactNode }): JSX.Element {
+export function QuoteLines({ q, title, children }: { q: OrderQuote; title: string; children?: ReactNode }): JSX.Element {
   const state =
     q.paid_at ? `Paid ${fmtDateTime(q.paid_at)}`
     : q.status === "accepted" ? "Agreed, not paid yet"
@@ -57,7 +57,7 @@ export function PayPanel({ order, onSent }: { order: GarageOrder; onSent: () => 
   const pending = order.payment?.status === "pending" && order.payment.quote_id === order.due_quote_id;
   const failed = order.payment && order.payment.quote_id === order.due_quote_id && ["failed", "expired", "cancelled"].includes(order.payment.status);
 
-  async function pay(e: React.FormEvent) {
+  async function pay(e: FormEvent) {
     e.preventDefault();
     setProblem(null);
     setBusy(true);
