@@ -411,6 +411,9 @@ components:
         garage_only:
           type: boolean
           description: No vehicle - this merchant signed up for garage services only, so submission needs no vehicle; premises are added in the portal (docs/decisions/garage.md).
+        sells_only:
+          type: boolean
+          description: No vehicle - this merchant signed up to sell cars only, so submission needs no vehicle; sale listings are added in the portal (docs/decisions/car-sales.md).
 
     OnboardingState:
       type: object
@@ -451,6 +454,9 @@ components:
         garage_only:
           type: boolean
           description: No vehicle - this merchant signed up for garage services only, so submission needs no vehicle; premises are added in the portal (docs/decisions/garage.md).
+        sells_only:
+          type: boolean
+          description: No vehicle - this merchant signed up to sell cars only, so submission needs no vehicle; sale listings are added in the portal (docs/decisions/car-sales.md).
         owner_docs:
           # "Your documents" = national_id + kra_pin (individual and the
           # contact person of a company). certificate_of_incorporation +

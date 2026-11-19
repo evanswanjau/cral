@@ -229,6 +229,7 @@ function serializeState(
     owner_docs: ownerDocs,
     drivers_only: merchant.drivers_only,
     garage_only: merchant.garage_only,
+    sells_only: merchant.sells_only,
     vehicles: vehicles.map((v) => serializeVehicle(v, documents)),
     submitted: merchant.onboarding_submitted,
     last_activity_at: merchant.last_activity_at.toISOString(),
@@ -1171,7 +1172,7 @@ async function assertCompleteForSubmission(userId: string): Promise<{
   // call, 2026-10-18 - docs/plans/drivers.md).
   // A garage-only merchant adds premises from the portal (Phase 4 GS1 -
   // docs/decisions/garage.md).
-  if (vehicles.length === 0 && !merchant.drivers_only && !merchant.garage_only) fail("Add at least one vehicle.");
+  if (vehicles.length === 0 && !merchant.drivers_only && !merchant.garage_only && !merchant.sells_only) fail("Add at least one vehicle.");
 
   for (const v of vehicles) {
     if (!v.county?.trim()) fail(`${v.registration || "A vehicle"} is missing its county.`);

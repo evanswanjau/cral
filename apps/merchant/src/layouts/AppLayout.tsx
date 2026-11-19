@@ -58,6 +58,7 @@ export function AppLayout(): ReactNode {
                 bookingCount: bookings?.counts.all ?? 0,
                 notificationUnread: notificationUnread ?? 0,
                 premisesActionCount: offering.premisesActionCount,
+                saleActionCount: offering.saleActionCount,
                 quoteRequestCount: garageRequests?.counts.to_quote ?? 0,
                 garageJobCount: garageJobs?.counts.to_start ?? 0,
               })}

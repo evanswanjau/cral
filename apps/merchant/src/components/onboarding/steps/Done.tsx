@@ -102,6 +102,11 @@ export function Done({ draft, onAddAnother }: { draft: OnboardingDraft; onAddAno
             <PrimaryButton onClick={() => navigate("/premises/new")}>Add your premises</PrimaryButton>
             <SecondaryButton onClick={() => navigate("/")}>Go to dashboard</SecondaryButton>
           </>
+        ) : draft.sellsOnly && draft.vehicles.length === 0 ? (
+          <>
+            <PrimaryButton onClick={() => navigate("/sales/new")}>List a car for sale</PrimaryButton>
+            <SecondaryButton onClick={() => navigate("/")}>Go to dashboard</SecondaryButton>
+          </>
         ) : draft.driversOnly && draft.vehicles.length === 0 ? (
           <>
             <PrimaryButton onClick={() => navigate("/drivers/new")}>Add your drivers</PrimaryButton>

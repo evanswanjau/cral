@@ -29,9 +29,11 @@ export function addTimestamps(knex: Knex, table: Knex.CreateTableBuilder): void 
 export function addMoneyColumn(
   table: Knex.CreateTableBuilder,
   name: string,
-  options: { nullable?: boolean } = {},
+  options: { nullable?: boolean; big?: boolean } = {},
 ): void {
-  const amount = table.integer(`${name}_amount`);
+  // `big`: bigint cents, for amounts past integer's KES 21.4M ceiling (a
+  // car's asking price). pg returns bigint as a string: read with Number().
+  const amount = options.big ? table.bigInteger(`${name}_amount`) : table.integer(`${name}_amount`);
   const currency = table.specificType(`${name}_currency`, "char(3)").defaultTo("KES");
   if (!options.nullable) {
     amount.notNullable();

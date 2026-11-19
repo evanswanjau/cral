@@ -1,6 +1,8 @@
 # Car sales - feature review and plan
 
-Status: **plan only, nothing built** (2026-10-18). Parked behind drivers
+Status: CS1 (listings, merchant side) **built** 2026-11-19; current
+decisions in [`docs/decisions/car-sales.md`](../decisions/car-sales.md),
+which wins where this plan differs. Originally (2026-10-18): Parked behind drivers
 (owner's call, 2026-10-18) - [`drivers.md`](./drivers.md) goes first and
 introduces `merchants.offers`, which this plan adds `'seller'` to.
 

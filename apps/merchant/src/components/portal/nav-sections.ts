@@ -11,6 +11,9 @@
  * - Premises (Phase 4 GS1) shows when the merchant has premises or said
  *   they offer garage services. A garage-only merchant with no vehicles
  *   gets no Vehicles item.
+ * - Cars for sale (Phase 6 CS1) shows when the merchant has a sale listing
+ *   or said they sell cars. A sells-only merchant with no vehicles gets no
+ *   Vehicles item either.
  */
 
 export type FleetWord = { label: string; one: string; many: string };
@@ -35,6 +38,10 @@ export interface OfferingInput {
   garageOnly: boolean;
   /** Has premises, or picked garage services: show "Premises". */
   showPremises: boolean;
+  /** Signed up to sell cars only (`sells_only`). */
+  sellsOnly: boolean;
+  /** Has a sale listing, or picked selling cars: show "Cars for sale". */
+  showSales: boolean;
 }
 
 /** Trucks / Machinery only when every vehicle is known to be that kind. */
@@ -51,7 +58,7 @@ export function isDriverOnly(input: Pick<OfferingInput, "vehicleCount" | "driver
   return input.driversOnly && input.vehicleCount === 0;
 }
 
-export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "quotes" | "garage-jobs" | "bookings" | "payouts" | "notifications" | "settings";
+export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "quotes" | "garage-jobs" | "sales" | "bookings" | "payouts" | "notifications" | "settings";
 
 export interface NavItem {
   key: NavKey;
@@ -71,6 +78,8 @@ export interface NavCounts {
   quoteRequestCount?: number;
   /** Paid garage jobs waiting to be started (GS3). */
   garageJobCount?: number;
+  /** Sale listings sent back or turned down (CS1). */
+  saleActionCount?: number;
 }
 
 export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] {
@@ -101,16 +110,29 @@ export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] 
     label: "Jobs and orders",
     ...(counts.garageJobCount ? { count: counts.garageJobCount } : {}),
   };
+  const sales: NavItem = {
+    key: "sales",
+    to: "/sales",
+    label: "Cars for sale",
+    ...(counts.saleActionCount ? { count: counts.saleActionCount } : {}),
+  };
+  const withSales = input.showSales ? [sales] : [];
   const garageOnly = input.garageOnly && input.vehicleCount === 0;
+  const sellsOnly = input.sellsOnly && input.vehicleCount === 0;
   if (garageOnly) {
-    items.push(premises, quotes, jobs, drivers);
+    items.push(premises, quotes, jobs, ...withSales, drivers);
+  } else if (sellsOnly) {
+    items.push(sales, drivers);
+    if (input.showPremises) items.push(premises, quotes, jobs);
   } else if (isDriverOnly(input)) {
     items.push(drivers);
     if (input.showPremises) items.push(premises, quotes, jobs);
+    items.push(...withSales);
   } else {
     items.push({ key: "vehicles", to: "/vehicles", label: FLEET_WORDS[fleetKind(input)].label, count: input.vehicleCount });
     items.push(drivers);
     if (input.showPremises) items.push(premises, quotes, jobs);
+    items.push(...withSales);
   }
   items.push(
     { key: "bookings", to: "/bookings", label: "Bookings", count: counts.bookingCount },

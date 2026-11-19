@@ -12,6 +12,9 @@ import { AddDriver } from "./pages/AddDriver.js";
 import { PremisesList } from "./pages/PremisesList.js";
 import { PremisesDetail } from "./pages/PremisesDetail.js";
 import { AddPremises } from "./pages/AddPremises.js";
+import { SaleList } from "./pages/SaleList.js";
+import { SaleDetail } from "./pages/SaleDetail.js";
+import { AddSaleListing } from "./pages/AddSaleListing.js";
 import { GarageRequestList } from "./pages/GarageRequestList.js";
 import { GarageRequestDetail } from "./pages/GarageRequestDetail.js";
 import { GarageOrderList } from "./pages/GarageOrderList.js";
@@ -77,6 +80,9 @@ const router = createBrowserRouter([
               { path: "premises", element: <PremisesList /> },
               { path: "premises/new", element: <AddPremises /> },
               { path: "premises/:outletId", element: <PremisesDetail /> },
+              { path: "sales", element: <SaleList /> },
+              { path: "sales/new", element: <AddSaleListing /> },
+              { path: "sales/:listingId", element: <SaleDetail /> },
               { path: "garage/requests", element: <GarageRequestList /> },
               { path: "garage/requests/:requestId", element: <GarageRequestDetail /> },
               { path: "garage/orders", element: <GarageOrderList /> },

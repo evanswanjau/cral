@@ -18,6 +18,7 @@ import {
 import { WhatYouOffer } from "../components/onboarding/steps/WhatYouOffer.js";
 import { Drivers } from "../components/onboarding/steps/Drivers.js";
 import { Premises } from "../components/onboarding/steps/Premises.js";
+import { Selling } from "../components/onboarding/steps/Selling.js";
 import { YourDetails } from "../components/onboarding/steps/YourDetails.js";
 import { Vehicles } from "../components/onboarding/steps/Vehicles.js";
 import { Documents } from "../components/onboarding/steps/Documents.js";
@@ -31,6 +32,7 @@ import {
   initialOffers,
   isDriversOnlyChoice,
   isGarageOnlyChoice,
+  isSellsOnlyChoice,
   lockedOffers,
   rememberPickedOffers,
   type Offer,
@@ -196,7 +198,8 @@ export function Onboarding(): JSX.Element {
     if (!draft) return;
     const driversOnly = isDriversOnlyChoice(offers) && draft.vehicles.length === 0;
     const garageOnly = isGarageOnlyChoice(offers) && draft.vehicles.length === 0;
-    goStep(2, { driversOnly, garageOnly });
+    const sellsOnly = isSellsOnlyChoice(offers) && draft.vehicles.length === 0;
+    goStep(2, { driversOnly, garageOnly, sellsOnly });
   }
 
   const [submitting, setSubmitting] = useState(false);
@@ -219,6 +222,12 @@ export function Onboarding(): JSX.Element {
         // The cache is set first so RequireOnboarding sees "submitted".
         queryClient.setQueryData(["onboarding"], next);
         navigate("/drivers/new", { replace: true });
+        return;
+      }
+      if (next.sellsOnly && !next.garageOnly && next.vehicles.length === 0) {
+        // Selling cars only: straight on to listing the first car (Phase 6 CS1).
+        queryClient.setQueryData(["onboarding"], next);
+        navigate("/sales/new", { replace: true });
         return;
       }
       if (next.garageOnly && next.vehicles.length === 0) {
@@ -349,6 +358,8 @@ export function Onboarding(): JSX.Element {
           <YourDetails draft={draft} onChange={patch} onBack={() => goStep(1)} onContinue={() => goStep(3)} />
         ) : draft.step === 3 && fleet === "drivers" ? (
           <Drivers onBack={() => goStep(2)} onContinue={() => goStep(4)} />
+        ) : draft.step === 3 && fleet === "sales" ? (
+          <Selling onBack={() => goStep(2)} onContinue={() => goStep(4)} />
         ) : draft.step === 3 && fleet === "premises" ? (
           <Premises onBack={() => goStep(2)} onContinue={() => goStep(4)} />
         ) : draft.step === 3 ? (

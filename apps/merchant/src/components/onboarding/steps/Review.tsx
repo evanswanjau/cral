@@ -157,6 +157,18 @@ export function Review({
             </p>
           </div>
         </div>
+      ) : draft.sellsOnly && draft.vehicles.length === 0 ? (
+        <div style={O.reviewCard}>
+          <div style={O.reviewCardHead}>
+            <div style={O.cardTitle}>Cars for sale</div>
+            <EditButton onClick={() => onEditStep(1)} />
+          </div>
+          <div style={O.reviewCardBody}>
+            <p style={{ ...O.helper, margin: 0 }}>
+              You sell cars. You list each car straight after you submit, and CRAL checks each listing before it goes up.
+            </p>
+          </div>
+        </div>
       ) : draft.driversOnly && draft.vehicles.length === 0 ? (
         <div style={O.reviewCard}>
           <div style={O.reviewCardHead}>
