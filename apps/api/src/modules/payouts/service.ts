@@ -9,6 +9,7 @@ import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { notify } from "../../lib/notifications.js";
 import type { BookingRow } from "../bookings/db-types.js";
+import type { OrderRow } from "../garage/orders.js";
 import type { PayoutQueryRow, PayoutRunLineRow, PayoutRunRow } from "./db-types.js";
 import type { CreatePayoutQueryInput, ListPayoutsQuery } from "./schemas.js";
 
@@ -93,6 +94,8 @@ function serializeLine(line: PayoutRunLineRow) {
   return {
     id: line.id,
     booking_id: line.booking_id,
+    // A garage job's line (Phase 4 GS3) names its order instead.
+    order_id: line.order_id,
     booking_ref: line.booking_ref,
     hirer_name: line.hirer_name,
     vehicle_registration: line.vehicle_registration,
@@ -198,12 +201,36 @@ export async function payableBookings(trx: Knex.Transaction | Knex, merchantId: 
     .select("bookings.*");
 }
 
+/**
+ * Garage orders that are payable but not yet on any run (Phase 4 GS3):
+ * completed - confirmed by the customer, by the 72 h sweep or by Ops - and
+ * on no line. The unique index on `payout_run_lines.order_id` is what makes
+ * an order pay out exactly once, the same guard as bookings.
+ */
+export async function payableOrders(trx: Knex.Transaction | Knex, merchantId: string): Promise<OrderRow[]> {
+  return trx<OrderRow>("orders")
+    .leftJoin("payout_run_lines", "payout_run_lines.order_id", "orders.id")
+    .where("orders.merchant_id", merchantId)
+    .where("orders.status", "completed")
+    .whereNull("payout_run_lines.id")
+    .orderBy("orders.completed_at", "asc")
+    .select("orders.*");
+}
+
+/** "hire" / "job" wording for a run's lines. */
+function workNoun(count: number, hasOrders: boolean): string {
+  const noun = hasOrders ? "job" : "hire";
+  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+}
+
 export interface CutRunOptions {
   /** Nairobi day the run goes out. Defaults to the next Monday. */
   runDate?: string;
   /** Only used by the dev-seed and, later, a settled Daraja callback. */
   markPaid?: { providerCode: string; paidAt: Date };
   bookingIds?: string[];
+  /** Restrict to these orders. When only `bookingIds` is given, no orders join. */
+  orderIds?: string[];
 }
 
 /**
@@ -227,9 +254,14 @@ export async function cutPayoutRun(
     const wanted = new Set(options.bookingIds);
     bookings = bookings.filter((b) => wanted.has(b.id));
   }
-  if (bookings.length === 0) return null;
+  let orders = await payableOrders(trx, merchantId);
+  if (options.orderIds || options.bookingIds) {
+    const wanted = new Set(options.orderIds ?? []);
+    orders = orders.filter((o) => wanted.has(o.id));
+  }
+  if (bookings.length === 0 && orders.length === 0) return null;
 
-  const hirerIds = [...new Set(bookings.map((b) => b.hirer_id))];
+  const hirerIds = [...new Set([...bookings.map((b) => b.hirer_id), ...orders.map((o) => o.user_id)])];
   const vehicleIds = [...new Set(bookings.map((b) => b.vehicle_id).filter((v): v is string => !!v))];
   const hirers = await trx("users").whereIn("id", hirerIds).select("id", "full_name");
   const vehicles = await trx("vehicles").whereIn("id", vehicleIds).select("id", "registration");
@@ -238,9 +270,16 @@ export async function cutPayoutRun(
 
   // Totals are the sum of the line snapshots, never a fresh multiply by
   // COMMISSION_RATE — see the contract's money note.
-  const gross = bookings.reduce((sum, b) => sum + b.gross_amount, 0);
-  const commission = bookings.reduce((sum, b) => sum + b.commission_amount, 0);
-  const net = bookings.reduce((sum, b) => sum + b.merchant_net_amount, 0);
+  const gross = bookings.reduce((sum, b) => sum + b.gross_amount, 0) + orders.reduce((sum, o) => sum + o.gross_amount, 0);
+  const commission =
+    bookings.reduce((sum, b) => sum + b.commission_amount, 0) + orders.reduce((sum, o) => sum + o.commission_amount, 0);
+  const net =
+    bookings.reduce((sum, b) => sum + b.merchant_net_amount, 0) + orders.reduce((sum, o) => sum + o.merchant_net_amount, 0);
+  const lineCount = bookings.length + orders.length;
+  const cars = orders.length
+    ? await trx("customer_cars").whereIn("id", [...new Set(orders.map((o) => o.car_id))]).select("id", "plate")
+    : [];
+  const plate = new Map(cars.map((c) => [c.id as string, c.plate as string]));
 
   const runId = generateId("payoutRun");
   const runDate = options.runDate ?? nextMonday(new Date());
@@ -277,7 +316,7 @@ export async function cutPayoutRun(
       ? `${run!.ref} · payout sent · KES ${formatAmount(net)}`
       : `${run!.ref} · payout scheduled · KES ${formatAmount(net)}`,
     body: options.markPaid
-      ? `${bookings.length} finished ${bookings.length === 1 ? "hire" : "hires"} cleared to ${destinationPhrase(destination.method, destination.detail)}. Reference ${options.markPaid.providerCode}.`
+      ? `${workNoun(lineCount, orders.length > 0)} cleared to ${destinationPhrase(destination.method, destination.detail)}. Reference ${options.markPaid.providerCode}.`
       : `Goes out ${weekdayOf(runDate)} to ${destinationPhrase(destination.method, destination.detail)}. Anything returned and cleared before then joins it.`,
     ref: run!.ref,
     subjectType: "payout_run",
@@ -285,8 +324,8 @@ export async function cutPayoutRun(
     ...(options.markPaid ? { occurredAt: options.markPaid.paidAt } : {}),
   });
 
-  await trx<PayoutRunLineRow>("payout_run_lines").insert(
-    bookings.map((b) => ({
+  const lines = [
+    ...bookings.map((b) => ({
       id: generateId("payoutRunLine"),
       payout_run_id: runId,
       booking_id: b.id,
@@ -303,7 +342,27 @@ export async function cutPayoutRun(
       net_amount: b.merchant_net_amount,
       net_currency: b.merchant_net_currency,
     })),
-  );
+    // A garage job: the order's plated ref, the car's plate, paid to
+    // confirmed. Amounts are the order's snapshots (the sum of its paid quotes).
+    ...orders.map((o) => ({
+      id: generateId("payoutRunLine"),
+      payout_run_id: runId,
+      booking_id: null,
+      order_id: o.id,
+      booking_ref: o.ref,
+      hirer_name: hirerName.get(o.user_id) ?? "Customer",
+      vehicle_registration: plate.get(o.car_id) ?? "NO PLATE",
+      pickup_at: o.paid_at ?? o.created_at,
+      dropoff_at: o.completed_at ?? o.updated_at,
+      gross_amount: o.gross_amount,
+      gross_currency: o.gross_currency,
+      commission_amount: o.commission_amount,
+      commission_currency: o.commission_currency,
+      net_amount: o.merchant_net_amount,
+      net_currency: o.merchant_net_currency,
+    })),
+  ];
+  await trx<PayoutRunLineRow>("payout_run_lines").insert(lines);
 
   return run!;
 }
@@ -335,6 +394,10 @@ export interface PayoutPosition {
   payable: BookingRow[];
   /** Still on hire, or returned with the deposit hold not yet lapsed. */
   clearing: BookingRow[];
+  /** Garage orders completed and not yet on a run (Phase 4 GS3). */
+  payableOrders: OrderRow[];
+  /** Garage orders paid and not yet confirmed (in the works, ready, or with a problem). */
+  clearingOrders: OrderRow[];
   /** Sum of `payable` plus every pending run's net. */
   nextPayoutAmount: number;
   /** Sum of `clearing`. */
@@ -372,8 +435,10 @@ export async function payoutPosition(merchantId: string, now: Date = new Date())
   const pendingLineCounts = await lineCounts(pendingRuns.map((r) => r.id));
 
   const payable = await payableBookings(db, merchantId);
+  const ordersPayable = await payableOrders(db, merchantId);
   const nextPayoutAmount =
     payable.reduce((sum, b) => sum + b.merchant_net_amount, 0) +
+    ordersPayable.reduce((sum, o) => sum + o.merchant_net_amount, 0) +
     pendingRuns.reduce((sum, r) => sum + r.net_amount, 0);
 
   // Money that will become payable but isn't yet: the hire is still running,
@@ -387,7 +452,14 @@ export async function payoutPosition(merchantId: string, now: Date = new Date())
     )
     .orderBy("dropoff_at", "asc")
     .select("*");
-  const clearingAmount = clearing.reduce((sum, b) => sum + b.merchant_net_amount, 0);
+  const ordersClearing = await db<OrderRow>("orders")
+    .where({ merchant_id: merchantId })
+    .whereIn("status", ["paid", "in_progress", "ready", "problem"])
+    .orderBy("created_at", "asc")
+    .select("*");
+  const clearingAmount =
+    clearing.reduce((sum, b) => sum + b.merchant_net_amount, 0) +
+    ordersClearing.reduce((sum, o) => sum + o.merchant_net_amount, 0);
   const onHireCount = clearing.filter((b) => b.status === "active").length;
 
   const monthStart = nairobiDayStart(`${nairobiDay(now).slice(0, 7)}-01`);
@@ -397,7 +469,7 @@ export async function payoutPosition(merchantId: string, now: Date = new Date())
     .select("net_amount", "paid_at");
   const paidThisMonthRuns = paidRuns.filter((r) => r.paid_at !== null && r.paid_at >= monthStart);
 
-  const nextHires = payable.length + pendingRuns.reduce((sum, r) => sum + (pendingLineCounts.get(r.id) ?? 0), 0);
+  const nextHires = payable.length + ordersPayable.length + pendingRuns.reduce((sum, r) => sum + (pendingLineCounts.get(r.id) ?? 0), 0);
   // The soonest run already on the books wins; otherwise the next Monday, and
   // only when there is actually something to send.
   const scheduledDates = pendingRuns.map((r) => r.run_date).sort();
@@ -407,6 +479,8 @@ export async function payoutPosition(merchantId: string, now: Date = new Date())
     pendingRuns,
     payable,
     clearing,
+    payableOrders: ordersPayable,
+    clearingOrders: ordersClearing,
     nextPayoutAmount,
     clearingAmount,
     onHireCount,

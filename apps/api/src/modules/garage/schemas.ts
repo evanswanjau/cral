@@ -62,3 +62,39 @@ export const MerchantListQuerySchema = PaginationQuerySchema.extend({
 export const QUOTE_VALID_MS = 48 * 3600_000;
 /** At most this many garages are asked per request. */
 export const MAX_GARAGES = 5;
+
+// --- GS3: orders ------------------------------------------------------
+
+/** A second quote for extra work: the same itemised shape. */
+export const ExtraQuoteSchema = QuoteSchema;
+export type ExtraQuoteInput = z.infer<typeof ExtraQuoteSchema>;
+
+export const PayOrderSchema = z.object({ phone: z.string().trim().min(9, "Enter the M-Pesa number.").max(20) });
+
+export const ProblemSchema = z.object({
+  note: z.string().trim().min(10, "Say what's wrong, so CRAL can help.").max(2000),
+});
+
+export const ResolveSchema = z.object({
+  outcome: z.enum(["release", "refund"]),
+  note: z.string().trim().min(5, "Say how it was settled.").max(2000),
+});
+
+export const MerchantOrderQuerySchema = PaginationQuerySchema.extend({
+  filter: z.enum(["active", "done", "all"]).default("active"),
+});
+
+export const ORDER_STATUSES = [
+  "awaiting_payment",
+  "paid",
+  "in_progress",
+  "ready",
+  "completed",
+  "problem",
+  "cancelled",
+  "refunded",
+] as const;
+export const AdminOrderQuerySchema = PaginationQuerySchema.extend({ status: z.enum(ORDER_STATUSES).optional() });
+
+/** A ready job confirms itself this long after "ready" (owner decision 7). */
+export const AUTO_CONFIRM_MS = 72 * 3600_000;

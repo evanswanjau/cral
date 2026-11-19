@@ -98,6 +98,9 @@ export const ID_PREFIXES = {
   quoteRequest: "rfq",
   quote: "quo",
   quoteLine: "qln",
+  // Phase 4 GS3: a paid garage job. Accepting a quote creates one; the
+  // customer pays CRAL, the garage is paid out after confirmation.
+  order: "ord",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

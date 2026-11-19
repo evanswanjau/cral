@@ -226,7 +226,7 @@ job stays on the car's service record.
 |----|------|-------|
 | GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 | GS2 | My cars (customer) + request for quote + itemised quotes. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
-| GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines | Opus |
+| GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 | GS4 | Service record, garage sub-site made real | Opus |
 
 Open questions 1, 2 and 5 (payment timing, auto-confirm window, commission

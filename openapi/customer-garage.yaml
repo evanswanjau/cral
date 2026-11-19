@@ -14,8 +14,13 @@ info:
 
     Each asked garage may send one itemised quote (lines: part, labour,
     delivery, other; integer cents), valid 48 h from when it was last sent,
-    or decline. Accepting and paying a quote is GS3; nothing here moves
-    money.
+    or decline.
+
+    GS3 (orders): accepting a quote creates an order the customer pays CRAL
+    for upfront by M-Pesa; CRAL holds it and pays the garage after the
+    customer confirms (or 72 h after "ready" with no problem raised). Extra
+    work is a second quote the customer accepts and pays before it is done.
+    Every money POST requires an `Idempotency-Key`.
   license:
     name: Proprietary - Cruz Ride Auto Limited
 servers:
@@ -143,6 +148,191 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/GarageRequest" }
 
+  # ---- GS3: orders -----------------------------------------------------
+
+  /me/garage-requests/{requestId}/quotes/{quoteId}/accept:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+      - { name: quoteId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Accept a garage's quote (creates an order)
+      description: >
+        The request must be `open` (409 `request_not_open`) and the quote
+        `sent` (409 `quote_not_available`) and unexpired (409
+        `quote_expired`). The request becomes `accepted`, every other
+        garage's quote `superseded`, and an order is created
+        `awaiting_payment` for the quote's total. The money (total, CRAL's
+        commission, the garage's share) is snapshotted now and never
+        recomputed.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "201":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "400": { description: "`idempotency_key_required`" }
+        "409": { description: "`request_not_open`, `quote_not_available`, `quote_expired`" }
+
+  /me/garage-orders:
+    get:
+      summary: My garage jobs, newest first
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Order" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /me/garage-orders/{orderId}:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One garage job
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "404": { description: "`order_not_found`" }
+
+  /me/garage-orders/{orderId}/pay:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Pay what is due by M-Pesa (STK push)
+      description: >
+        Pays `amount_due`: the accepted quote while the order is
+        `awaiting_payment`, or an accepted extra-work quote while it is
+        `in_progress`. Same payment rails and settle rules as a booking
+        (`openapi/payments.yaml`): a success settles only for the exact
+        amount. A prompt still open is returned rather than pushed twice; a
+        quote already paid is 409 `already_paid`. A second success for the
+        same quote, or money arriving for a cancelled order, is refunded
+        automatically.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string, example: "0712345678" }
+      responses:
+        "202":
+          description: The prompt is on its way. Poll the order's `payment`.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  payment_request_id: { type: string }
+                  status: { type: string }
+        "409": { description: "`already_paid`, `order_not_payable`" }
+        "422": { description: "`invalid_phone`" }
+
+  /me/garage-orders/{orderId}/cancel:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Cancel a job nobody has paid for
+      description: Only `awaiting_payment` (409 `order_not_cancellable`), with no prompt open (409 `payment_in_flight`). The request becomes `cancelled`.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The order, `cancelled`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /me/garage-orders/{orderId}/extras/{quoteId}/accept:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+      - { name: quoteId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Say yes to an extra-work quote
+      description: >
+        Only while the order is `in_progress` and the extra quote `sent` and
+        unexpired. Its money is snapshotted now; it becomes `amount_due`,
+        paid with `/pay`. Nothing joins the bill until it is paid.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+        "409": { description: "`order_state_changed`, `quote_not_available`, `quote_expired`" }
+
+  /me/garage-orders/{orderId}/extras/{quoteId}/decline:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+      - { name: quoteId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Say no to an extra-work quote
+      description: A `sent` extra, or an accepted one not yet paid (409 `payment_in_flight` while a prompt is open). The garage finishes the original scope.
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /me/garage-orders/{orderId}/confirm:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Confirm the job is done
+      description: Only `ready` (409 `order_not_ready`). The garage's share becomes payable in its next payout run.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: The order, `completed`, `confirmed_by` `customer`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
+  /me/garage-orders/{orderId}/problem:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Raise a problem
+      description: >
+        While `in_progress` or `ready` (409 `order_not_disputable`). Stops
+        the 72 h auto-confirm; the money stays with CRAL until Ops settles
+        it (released to the garage, or refunded).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [note]
+              properties:
+                note: { type: string, minLength: 10, maxLength: 2000 }
+      responses:
+        "200":
+          description: The order, `problem`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Order" }
+
 components:
   schemas:
     Money:
@@ -208,5 +398,68 @@ components:
         garages_asked: { type: integer }
         garages_declined: { type: integer }
         quote_count: { type: integer }
+        order:
+          type: object
+          nullable: true
+          description: The order, once a quote was accepted (GS3).
+          properties: { id: { type: string }, ref: { type: string }, status: { type: string } }
         quotes: { type: array, items: { $ref: "#/components/schemas/Quote" }, description: Detail only. }
+        created_at: { type: string, format: date-time }
+    OrderQuote:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [original, extra] }
+        status: { type: string, enum: [sent, withdrawn, accepted, superseded, declined] }
+        lines: { type: array, items: { $ref: "#/components/schemas/QuoteLine" } }
+        total: { $ref: "#/components/schemas/Money" }
+        days_needed: { type: integer }
+        note: { type: string, nullable: true }
+        sent_at: { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+        expired: { type: boolean }
+        accepted_at: { type: string, format: date-time, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+    Order:
+      type: object
+      description: >
+        A garage job (`ord_`, ref `G-YYMMDD-NNN`). `awaiting_payment -> paid
+        -> in_progress -> ready -> completed`, plus `cancelled` (unpaid
+        only), `problem` and `refunded`. `total` is the work paid for so far
+        (the sum of the paid quotes). A `ready` job confirms itself at
+        `auto_confirm_at` (72 h) unless a problem is raised.
+      properties:
+        id: { type: string, example: ord_01JD0000000000000000000000 }
+        ref: { type: string, example: G-261119-001 }
+        status: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] }
+        request_id: { type: string }
+        service_type: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        car: { type: object, nullable: true, properties: { make: { type: string }, model: { type: string }, year: { type: integer }, plate: { type: string } } }
+        outlet: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string }, address: { type: string }, county: { type: string } } }
+        quotes: { type: array, items: { $ref: "#/components/schemas/OrderQuote" } }
+        total: { $ref: "#/components/schemas/Money" }
+        amount_due: { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        due_quote_id: { type: string, nullable: true }
+        payment:
+          type: object
+          nullable: true
+          description: The latest prompt on this order.
+          properties:
+            status: { type: string, enum: [pending, success, failed, cancelled, expired] }
+            quote_id: { type: string, nullable: true }
+            amount: { $ref: "#/components/schemas/Money" }
+            receipt: { type: string, nullable: true }
+            failure_reason: { type: string, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        ready_at: { type: string, format: date-time, nullable: true }
+        auto_confirm_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        confirmed_by: { type: string, enum: [customer, auto, ops], nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        problem_raised_at: { type: string, format: date-time, nullable: true }
+        problem_note: { type: string, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        resolution_note: { type: string, nullable: true }
         created_at: { type: string, format: date-time }

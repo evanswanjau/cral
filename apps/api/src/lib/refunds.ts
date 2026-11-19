@@ -26,14 +26,23 @@ import { createRefundDisbursement, sendDisbursement } from "./disbursements.js";
 
 export type RefundReason = "declined" | "expired" | "merchant_cancelled" | "hirer_cancelled";
 
+/**
+ * Why a garage order's payment goes back (Phase 4 GS3):
+ * `order_duplicate` - a second payment landed for a quote already paid;
+ * `order_closed` - money arrived for an order that was cancelled first;
+ * `order_refunded` - Ops upheld the customer's problem.
+ */
+export type OrderRefundReason = "order_duplicate" | "order_closed" | "order_refunded";
+
 export interface RefundRow {
   id: string;
-  booking_id: string;
+  booking_id: string | null;
+  order_id: string | null;
   payment_request_id: string;
   amount_amount: number;
   amount_currency: string;
   phone: string;
-  reason: RefundReason;
+  reason: RefundReason | OrderRefundReason;
   status: "pending" | "success" | "failed";
   provider: string;
   provider_ref: string | null;
@@ -111,6 +120,59 @@ export async function recordRefund(
     ip: input.ip,
   });
 
+  return id;
+}
+
+/**
+ * A garage order's refund of one payment, in the caller's transaction.
+ * An order can carry two payments (the original quote and an extra-work
+ * quote), so the obligation is per payment: the partial unique index on
+ * `(payment_request_id, reason)` is what makes a double-refund impossible.
+ * Returns the refund id for `executeRefund` after commit, or null when this
+ * payment was already refunded for this reason.
+ */
+export async function recordOrderRefund(
+  trx: Knex.Transaction,
+  input: {
+    orderId: string;
+    paymentRequestId: string;
+    reason: OrderRefundReason;
+    actorId: string | null;
+    actorType?: "user" | "admin" | "system";
+    requestId: string | null;
+    ip: string | null;
+  },
+): Promise<string | null> {
+  const payment = (await trx("payment_requests")
+    .where({ id: input.paymentRequestId, order_id: input.orderId, status: "success" })
+    .first()) as
+    | { id: string; amount_amount: number; amount_currency: string; phone: string; provider: string }
+    | undefined;
+  if (!payment) return null;
+
+  const id = generateId("refund");
+  // Raw for the partial index's arbiter (`WHERE order_id IS NOT NULL`).
+  const inserted = await trx.raw<{ rows: Array<{ id: string }> }>(
+    `INSERT INTO refunds
+       (id, booking_id, order_id, payment_request_id, amount_amount, amount_currency, phone, reason, status, provider, created_at, updated_at)
+     VALUES (?, NULL, ?, ?, ?, ?, ?, ?, 'pending', ?, now(), now())
+     ON CONFLICT (payment_request_id, reason) WHERE order_id IS NOT NULL DO NOTHING
+     RETURNING id`,
+    [id, input.orderId, payment.id, payment.amount_amount, payment.amount_currency, payment.phone, input.reason, payment.provider],
+  );
+  const row = inserted.rows[0];
+  if (!row) return null;
+
+  await writeAuditEntry(trx, {
+    actorId: input.actorId,
+    actorType: input.actorType ?? (input.actorId ? "user" : "system"),
+    action: "refund.recorded",
+    entityType: "order",
+    entityId: input.orderId,
+    after: { refund_id: id, reason: input.reason, amount: payment.amount_amount, payment_request_id: payment.id },
+    requestId: input.requestId,
+    ip: input.ip,
+  });
   return id;
 }
 

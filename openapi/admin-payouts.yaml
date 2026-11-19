@@ -220,6 +220,7 @@ components:
                 properties:
                   id: { type: string }
                   booking_id: { type: string, nullable: true }
+                  order_id: { type: string, nullable: true }
                   booking_ref: { type: string }
                   hirer_name: { type: string }
                   vehicle_registration: { type: string }

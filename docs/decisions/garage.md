@@ -4,7 +4,8 @@ Read before touching outlets, "Your premises", the Ops outlet queue, or
 any garage request, quote or order. Queue and design notes:
 [`docs/plans/verticals-roadmap.md`](../plans/verticals-roadmap.md) (Phase 4,
 "Design notes"). Contracts `openapi/merchant-outlets.yaml`,
-`openapi/admin-outlets.yaml`.
+`openapi/admin-outlets.yaml`, `openapi/customer-garage.yaml`,
+`openapi/merchant-garage.yaml`, `openapi/admin-garage-orders.yaml`.
 
 ## Owner decisions (2026-11-19, "use your recommendation")
 
@@ -124,11 +125,84 @@ customer `pages/garage/{GarageHome,GarageRequestPage}.tsx`,
   (`booking` category, SMS per their preferences); a quote notifies the
   customer's own feed. `subject_type: garage_request`, CTA
   `/garage/requests/:id` in both apps.
-- **Nothing moves money yet.** The customer's request page says accepting
-  and paying opens soon instead of showing a dead button. GS3 adds accept
-  (expiring the other quotes), payment and orders.
+- **Money moves in GS3** (below): the request page's "Accept and pay"
+  creates the order.
 - **Garage stays unlisted.** The registry keeps garage under "Coming to
   CRAL", so no tab, door or footer link points at `/garage` until GS3/GS4;
   the page is reachable directly. The hero photo is a placeholder copy of
   `towing.jpg`. "My cars" is in the account menu. The merchant portal adds
   "Quote requests" (with the to-quote count) after Premises.
+
+## Orders and money (GS3, built 2026-11-19)
+
+Migration `20261122090000_garage_orders`; `modules/garage/orders.ts`
+(every transition), `modules/garage/order-settlement.ts` (the order's side
+of a settled payment), `jobs/garage-order-confirm.ts`; customer
+`pages/garage/GarageOrderPage.tsx` (+ `components/garage/OrderParts.tsx`),
+merchant `pages/GarageOrder{List,Detail}.tsx` (+
+`components/garage/ExtraQuoteForm.tsx`, nav "Garage jobs" with the
+to-start count).
+
+- **An order (`orders`, `ord_`, ref `G-YYMMDD-NNN` from
+  `order_ref_daily_counters`)** is created by accepting a quote: one per
+  request and per quote, one payee. Statuses `awaiting_payment -> paid ->
+  in_progress -> ready -> completed`, plus `cancelled` (unpaid only, no
+  prompt open), `problem` (customer, while in progress or ready) and
+  `refunded` (Ops). Every move is a conditional update on the status it
+  checked (409 when it moved), audited in the same transaction, and
+  notifies the other side (`subject_type: garage_order`, CTA
+  `/garage/orders/:id` in both apps).
+- **Accept** locks the request, closes it (`accepted`), marks the quote
+  `accepted` and every other original quote `superseded` (those garages get
+  a feed line), and snapshots the money onto the quote
+  (`commission_amount`, `merchant_net_amount`, at `commission.garage`
+  today). The order's money columns are the **sum of the paid quotes'
+  snapshots**, never recomputed from a rate (DB CHECK: net = gross -
+  commission).
+- **Payment** is `startStkPush` in `modules/payments/service.ts` (shared
+  with bookings; `payment_requests` gains `order_id` + `quote_id`, CHECK
+  exactly one of booking/order). `applySettlement` stays the one copy of
+  the settle rules (match, amount check, idempotency) and calls
+  `applyOrderPayment` for an order's row inside its transaction. Pay takes
+  whatever is due: the original quote while `awaiting_payment`, or an
+  accepted extra while `in_progress`. A prompt still open is returned, a
+  paid quote is 409 `already_paid`. **A second success for a quote already
+  paid, or money for an order cancelled while its prompt was open, is
+  refunded** (`recordOrderRefund`, reasons `order_duplicate` /
+  `order_closed`) and sent by `executeRefund` after commit.
+- **The garage starts only once paid** (409 `order_not_paid`).
+- **Extra work is a second quote** (`quotes.kind = extra`, same request and
+  outlet, `order_id` set; the one-per-outlet unique is now a partial index
+  on originals). Only while `in_progress`, one open at a time (409
+  `extra_pending`). The customer accepts (snapshot taken then) and pays it,
+  or declines; the garage can withdraw it until paid. "Ready" is refused
+  while an extra is sent or accepted-but-unpaid. Extras never show on the
+  request's quote list.
+- **Confirm**: the customer confirms a `ready` job, or
+  `autoConfirmReadyOrders` (BullMQ every 15 min) completes it 72 h after
+  `ready_at` (`confirmed_by` `customer` / `auto` / `ops`). A problem stops
+  the clock.
+- **Problems go to Ops**: `GET /admin/garage-orders?status=problem`,
+  `POST /admin/garage-orders/:id/resolve` (`admin_support` /
+  `admin_finance`, Idempotency-Key) with `release` (completes, payable) or
+  `refund` (every successful payment refunded once, reason
+  `order_refunded`, partial unique on `(payment_request_id, reason)`).
+  **There is no console screen for this yet**: Ops uses the API. Flagged
+  for a follow-up PR.
+- **Payouts**: a `completed` order is payable. `payableOrders` +
+  `cutPayoutRun` add it as a `payout_run_lines` row with `order_id`
+  (unique, so it pays once; CHECK not both booking and order), the order
+  ref, the customer's name, the car's plate, paid-to-confirmed dates and
+  the order's snapshots. `payoutPosition` counts payable orders in "next
+  payout" and paid-but-unconfirmed ones in clearing; the dashboard's
+  next-payout card lists them too. The daily cut picks up merchants with
+  only garage jobs owed. Run wording says "jobs" when a run has any.
+- **The merchant sees shillings only**: what the customer paid and what it
+  keeps (`take_home`), never the commission or its rate, never the
+  customer's phone. Ops sees the commission.
+- **Idempotency-Key** on accept, pay, cancel, accept-extra, confirm and Ops
+  resolve. Start, ready, extra send/withdraw/decline and problem move no
+  money and rely on their conditional updates.
+- **Not built:** unpaid orders don't expire on their own (the customer can
+  cancel); the customer gets feed notifications only (no SMS), as with
+  quotes; the service record on My cars is GS4.

@@ -157,12 +157,25 @@ export function GarageRequestDetail(): JSX.Element {
         <p style={{ ...P.lede, maxWidth: 720, margin: "12px 0 0" }}>{r.description}</p>
       </div>
 
-      {!open && (
-        <div style={{ ...P.card, marginTop: 16, padding: 16, maxWidth: 820 }}>
-          <span style={P.lede}>
-            {r.declined ? "You said this garage can't do this job." : "The customer has closed this request. It can't be quoted any more."}
-          </span>
+      {q?.status === "accepted" && q.order_id ? (
+        <div style={{ ...P.card, marginTop: 16, padding: 16, maxWidth: 820, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <span style={{ ...P.lede, flex: "1 1 260px" }}>The customer accepted your quote. Follow the job from payment to payout.</span>
+          <button type="button" style={{ ...P.actionBtn, minHeight: 44 }} onClick={() => navigate(`/garage/orders/${q.order_id}`)}>
+            Open the job
+          </button>
         </div>
+      ) : (
+        !open && (
+          <div style={{ ...P.card, marginTop: 16, padding: 16, maxWidth: 820 }}>
+            <span style={P.lede}>
+              {r.declined
+                ? "You said this garage can't do this job."
+                : q?.status === "superseded"
+                  ? "The customer chose another garage this time."
+                  : "The customer has closed this request. It can't be quoted any more."}
+            </span>
+          </div>
+        )
       )}
 
       {q && q.status === "sent" && !editing && (

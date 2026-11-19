@@ -8,6 +8,9 @@ import { writeAuditEntry } from "../../lib/audit.js";
 import { paymentAdapter } from "../../lib/adapters.js";
 import type { ParsedCallback } from "../../adapters/payment/index.js";
 import type { BookingRow } from "../bookings/db-types.js";
+import { executeRefund } from "../../lib/refunds.js";
+import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
+import { applyOrderPayment, orderRefFor } from "../garage/order-settlement.js";
 
 export interface RequestContext {
   ip: string | null;
@@ -16,8 +19,12 @@ export interface RequestContext {
 
 export interface PaymentRequestRow {
   id: string;
-  booking_id: string;
-  purpose: "deposit" | "full";
+  /** Exactly one of `booking_id` / `order_id` is set (DB CHECK). */
+  booking_id: string | null;
+  /** A garage order's payment (Phase 4 GS3), with the quote it pays. */
+  order_id: string | null;
+  quote_id: string | null;
+  purpose: "deposit" | "full" | "order";
   amount_amount: number;
   amount_currency: string;
   phone: string;
@@ -114,11 +121,43 @@ export async function initiatePayment(
     });
   }
 
+  return startStkPush({
+    subject: { bookingId: booking.id },
+    purpose: input.purpose,
+    amountCents: amountFor(booking, input.purpose),
+    phone,
+    ref: booking.ref,
+    userId,
+    ctx,
+  });
+}
+
+/**
+ * Writes the `payment_requests` row, pushes the prompt and stamps the
+ * provider's correlator. Shared by a booking's pay and a garage order's
+ * pay (Phase 4 GS3) so there is one copy of the push order; the settle
+ * rules are `applySettlement`'s.
+ */
+export async function startStkPush(input: {
+  subject: { bookingId: string } | { orderId: string; quoteId: string };
+  purpose: PaymentRequestRow["purpose"];
+  amountCents: number;
+  /** Already normalised. */
+  phone: string;
+  /** The plated ref the payer sees in the prompt. */
+  ref: string;
+  userId: string;
+  ctx: RequestContext;
+}): Promise<{ payment_request_id: string; status: string }> {
+  const { purpose, amountCents, phone, userId, ctx } = input;
+  const subject =
+    "bookingId" in input.subject
+      ? { booking_id: input.subject.bookingId, order_id: null, quote_id: null }
+      : { booking_id: null, order_id: input.subject.orderId, quote_id: input.subject.quoteId };
   // Ours, generated before the call. A raw ulid() is 26 chars, inside
   // Co-op's 27-char `MessageReference` limit; a prefixed id (e.g.
   // "pay_...") would not fit.
   const messageReference = ulid();
-  const amountCents = amountFor(booking, input.purpose);
 
   /**
    * **The row is written before the prompt goes out** (2026-09-22, with
@@ -141,8 +180,8 @@ export async function initiatePayment(
     const [inserted] = await trx<PaymentRequestRow>("payment_requests")
       .insert({
         id: generateId("payment"),
-        booking_id: booking.id,
-        purpose: input.purpose,
+        ...subject,
+        purpose,
         amount_amount: amountCents,
         amount_currency: "KES",
         phone,
@@ -158,11 +197,12 @@ export async function initiatePayment(
       actorType: "user",
       actorId: userId,
       action: "payment.initiated",
-      entityType: "booking",
-      entityId: booking.id,
+      entityType: subject.order_id ? "order" : "booking",
+      entityId: (subject.order_id ?? subject.booking_id)!,
       after: {
         payment_request_id: inserted.id,
-        purpose: input.purpose,
+        ...(subject.quote_id ? { quote_id: subject.quote_id } : {}),
+        purpose,
         amount_amount: amountCents,
       },
       ip: ctx.ip,
@@ -178,8 +218,8 @@ export async function initiatePayment(
       messageReference,
       phone,
       amountCents,
-      narration: `CRAL ${booking.ref}`,
-      accountReference: compactRef(booking.ref),
+      narration: `CRAL ${input.ref}`,
+      accountReference: compactRef(input.ref),
     });
   } catch (err) {
     await db<PaymentRequestRow>("payment_requests")
@@ -269,6 +309,10 @@ export async function applySettlement(
   /** Who decided, for the audit row: the provider's callback, or our own status lookup. */
   via: "callback" | "status-query" = "callback",
 ): Promise<void> {
+  // Money that arrived for an order that can no longer take it (paid twice,
+  // or cancelled while the prompt was open) goes back after commit.
+  const refundsToSend: Array<{ refundId: string; ref: string }> = [];
+  const merchantNotices: Array<{ merchantId: string; id: string }> = [];
   await db.transaction(async (trx) => {
     const existing = await trx<PaymentRequestRow>("payment_requests")
       .where({ provider_request_id: parsed.reference })
@@ -315,10 +359,18 @@ export async function applySettlement(
         raw_callback: JSON.stringify(rawBody),
       });
 
-    if (succeeded) {
+    if (succeeded && existing.booking_id) {
       await trx<BookingRow>("bookings")
         .where({ id: existing.booking_id })
         .update({ payment_request_id: existing.id });
+    }
+    // A garage order's money (Phase 4 GS3): the order's own state moves in
+    // this same transaction. The rules above (match, amount, idempotency)
+    // are not repeated there.
+    if (succeeded && existing.order_id) {
+      const outcome = await applyOrderPayment(trx, existing, ctx);
+      if (outcome.refundId) refundsToSend.push({ refundId: outcome.refundId, ref: existing.order_id });
+      if (outcome.merchantNotice) merchantNotices.push(outcome.merchantNotice);
     }
 
     await writeAuditEntry(trx, {
@@ -329,8 +381,8 @@ export async function applySettlement(
         : succeeded
           ? "payment.succeeded"
           : "payment.failed",
-      entityType: "booking",
-      entityId: existing.booking_id,
+      entityType: existing.order_id ? "order" : "booking",
+      entityId: (existing.order_id ?? existing.booking_id)!,
       after: {
         payment_request_id: existing.id,
         succeeded,
@@ -344,6 +396,8 @@ export async function applySettlement(
       requestId: ctx.requestId,
     });
   });
+  for (const n of merchantNotices) await enqueueNotificationDelivery(n.merchantId, [n.id]);
+  for (const r of refundsToSend) await executeRefund(r.refundId, await orderRefFor(r.ref));
 }
 
 /**

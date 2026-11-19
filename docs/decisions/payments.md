@@ -41,6 +41,12 @@ owner/Co-op blockers).
   sent with each STK push (`DARAJA_CALLBACK_USER`/`_PASSWORD`); the API
   refuses to boot in production without them. Co-op:
   `COOPBANK_CALLBACK_USER`/`_PASSWORD` (503 in production until set).
+- **Garage orders pay through the same path** (Phase 4 GS3,
+  `garage.md`): `startStkPush` writes the row before the push for a
+  booking or an order, and `applySettlement` hands an order's settled row
+  to `modules/garage/order-settlement.ts`. Money that can't be applied
+  there (a quote paid twice, an order already cancelled) is refunded, never
+  kept.
 - **There is no "mark paid" endpoint.** The dev settler was removed once
   the real flow worked end to end. If a sandbox callback misbehaves, fix
   the callback path; don't bring a settler back.

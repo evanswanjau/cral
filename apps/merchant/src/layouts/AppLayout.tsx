@@ -16,6 +16,7 @@ import { useDriverList } from "../lib/drivers-api.js";
 import { useNotificationUnread } from "../lib/notifications-api.js";
 import { useProfile } from "../lib/settings-api.js";
 import { useGarageRequests } from "../lib/garage-api.js";
+import { useGarageOrders } from "../lib/garage-orders-api.js";
 
 export function AppLayout(): ReactNode {
   // Shares the ["onboarding"] cache key with RequireOnboarding/Onboarding - 
@@ -34,6 +35,7 @@ export function AppLayout(): ReactNode {
   const { data: profile } = useProfile();
   const offering = useOffering();
   const { data: garageRequests } = useGarageRequests("to_quote", offering.showPremises);
+  const { data: garageJobs } = useGarageOrders("active", offering.showPremises);
 
   const name = [draft?.firstName, draft?.surname].filter(Boolean).join(" ");
   const company = draft?.ownerType === "company" ? draft.companyName || null : null;
@@ -57,6 +59,7 @@ export function AppLayout(): ReactNode {
                 notificationUnread: notificationUnread ?? 0,
                 premisesActionCount: offering.premisesActionCount,
                 quoteRequestCount: garageRequests?.counts.to_quote ?? 0,
+                garageJobCount: garageJobs?.counts.to_start ?? 0,
               })}
               footer={onDashboard ? <MerchantStatusCard /> : null}
             />

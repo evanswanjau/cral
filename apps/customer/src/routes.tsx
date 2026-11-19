@@ -33,6 +33,7 @@ import { ResetPassword } from "./pages/ResetPassword.js";
 import { Sessions } from "./pages/Sessions.js";
 import { GarageHome } from "./pages/garage/GarageHome.js";
 import { GarageRequestPage } from "./pages/garage/GarageRequestPage.js";
+import { GarageOrderPage } from "./pages/garage/GarageOrderPage.js";
 import { MyCars } from "./pages/MyCars.js";
 
 /**
@@ -125,6 +126,7 @@ export const routes: RouteObject[] = [
           { path: "/account", element: <Sessions /> },
           { path: "/my-cars", element: <MyCars /> },
           { path: "/garage/requests/:id", element: <GarageRequestPage /> },
+          { path: "/garage/orders/:id", element: <GarageOrderPage /> },
         ],
       },
     ],

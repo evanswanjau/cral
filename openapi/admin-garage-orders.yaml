@@ -1,0 +1,119 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Garage Orders API
+  version: "1.0.0"
+  description: >
+    Ops' view of garage orders (Phase 4 PR GS3, docs/decisions/garage.md).
+    `admin_support` and `admin_finance` (and `admin_super`). A customer's
+    problem stops the 72 h auto-confirm and lands here; Ops settles it by
+    releasing the money to the garage (the order completes and joins the
+    merchant's next payout run) or refunding every payment on the order by
+    Send to M-Pesa (`executeRefund`). Ops sees CRAL's commission; merchants
+    never do.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /admin/garage-orders:
+    get:
+      summary: Garage orders, newest first
+      parameters:
+        - { name: status, in: query, schema: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of orders.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/AdminOrder" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+
+  /admin/garage-orders/{orderId}:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One order
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOrder" }
+
+  /admin/garage-orders/{orderId}/resolve:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Settle a problem
+      description: >
+        Only a `problem` order (409 `order_not_in_problem`). `release`
+        completes it (`confirmed_by` `ops`); `refund` marks it `refunded`
+        and refunds each successful payment once. Audited; both sides are
+        notified with the note.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [outcome, note]
+              properties:
+                outcome: { type: string, enum: [release, refund] }
+                note: { type: string, minLength: 5, maxLength: 2000 }
+      responses:
+        "200":
+          description: The order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminOrder" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount: { type: integer, description: Integer cents. }
+        currency: { type: string, enum: [KES] }
+    AdminOrder:
+      type: object
+      description: The customer `Order` (openapi/customer-garage.yaml) plus the fields below.
+      properties:
+        id: { type: string, example: ord_01JD0000000000000000000000 }
+        ref: { type: string, example: G-261119-001 }
+        status: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] }
+        request_id: { type: string }
+        service_type: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        car: { type: object, nullable: true, properties: { make: { type: string }, model: { type: string }, year: { type: integer }, plate: { type: string } } }
+        outlet: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string }, address: { type: string }, county: { type: string } } }
+        merchant_id: { type: string }
+        customer_first_name: { type: string, nullable: true }
+        customer_phone: { type: string, nullable: true }
+        quotes: { type: array, items: { type: object, description: "As OrderQuote, plus commission (Money, null until accepted)." } }
+        total: { $ref: "#/components/schemas/Money" }
+        commission: { $ref: "#/components/schemas/Money" }
+        merchant_net: { $ref: "#/components/schemas/Money" }
+        amount_due: { allOf: [{ $ref: "#/components/schemas/Money" }], nullable: true }
+        payment: { type: object, nullable: true }
+        paid_at: { type: string, format: date-time, nullable: true }
+        started_at: { type: string, format: date-time, nullable: true }
+        ready_at: { type: string, format: date-time, nullable: true }
+        auto_confirm_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        confirmed_by: { type: string, enum: [customer, auto, ops], nullable: true }
+        cancelled_at: { type: string, format: date-time, nullable: true }
+        problem_raised_at: { type: string, format: date-time, nullable: true }
+        problem_note: { type: string, nullable: true }
+        resolved_at: { type: string, format: date-time, nullable: true }
+        resolution_note: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }

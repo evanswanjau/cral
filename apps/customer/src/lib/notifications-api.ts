@@ -34,7 +34,7 @@ export interface NotificationRow {
   title: string;
   body: string;
   ref: string | null;
-  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | null;
+  subject_type: "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | "garage_request" | "garage_order" | null;
   subject_id: string | null;
   occurred_at: string;
   read: boolean;

@@ -336,6 +336,7 @@ components:
       properties:
         id: { type: string }
         booking_id: { type: string, nullable: true }
+        order_id: { type: string, nullable: true, description: "A garage job's line (GS3); then booking_ref is the order's G- ref and vehicle_registration the car's plate." }
         booking_ref: { type: string, example: CB-2811 }
         hirer_name: { type: string }
         vehicle_registration: { type: string, example: KDG 233V }

@@ -22,7 +22,8 @@ import {
  * openapi/customer-garage.yaml, openapi/merchant-garage.yaml).
  *
  * A customer's car, a request on it, and the garages' itemised quotes.
- * Nothing here moves money: accepting and paying a quote is GS3. Every
+ * Nothing here moves money: accepting and paying a quote is `orders.ts`
+ * (GS3). Every
  * state change is a conditional update on the status it checked, with
  * `audit_log` in the same transaction.
  */
@@ -72,8 +73,17 @@ export interface QuoteRow {
   request_id: string;
   outlet_id: string;
   merchant_id: string;
-  status: "sent" | "withdrawn" | "accepted" | "superseded";
+  status: "sent" | "withdrawn" | "accepted" | "superseded" | "declined";
+  /** `extra` is a second quote on an order (GS3). */
+  kind: "original" | "extra";
+  order_id: string | null;
+  /** Snapshots taken when the customer accepts (GS3). */
+  commission_amount: number | null;
+  merchant_net_amount: number | null;
+  accepted_at: Date | null;
+  paid_at: Date | null;
   days_needed: number;
+  updated_at?: Date;
   note: string | null;
   total_amount: number;
   total_currency: string;
@@ -266,8 +276,14 @@ async function serializeRequest(r: QuoteRequestRow, withQuotes: boolean) {
   const [car, targets, quotes] = await Promise.all([
     db<CarRow>("customer_cars").where({ id: r.car_id }).first(),
     db<TargetRow>("quote_request_outlets").where({ request_id: r.id }),
-    db<QuoteRow>("quotes").where({ request_id: r.id, status: "sent" }).orderBy("total_amount", "asc"),
+    db<QuoteRow>("quotes").where({ request_id: r.id, kind: "original", status: "sent" }).orderBy("total_amount", "asc"),
   ]);
+  // Once a quote is accepted the request points at its order (GS3).
+  const order = r.status === "accepted" || r.status === "cancelled"
+    ? ((await db("orders").where({ request_id: r.id }).first("id", "ref", "status")) as
+        | { id: string; ref: string; status: string }
+        | undefined)
+    : undefined;
   const base = {
     id: r.id,
     car: car ? serializeCar(car) : null,
@@ -278,6 +294,7 @@ async function serializeRequest(r: QuoteRequestRow, withQuotes: boolean) {
     garages_asked: targets.length,
     garages_declined: targets.filter((t) => t.declined_at).length,
     quote_count: quotes.length,
+    order: order ? { id: order.id, ref: order.ref, status: order.status } : null,
     created_at: r.created_at.toISOString(),
   };
   if (!withQuotes) return base;
@@ -427,7 +444,7 @@ async function serializeForMerchant(r: QuoteRequestRow, target: TargetRow, rate:
     db<CarRow>("customer_cars").where({ id: r.car_id }).first(),
     db<OutletRow>("outlets").where({ id: target.outlet_id }).first(),
     db<{ id: string; full_name: string | null }>("users").where({ id: r.user_id }).first("id", "full_name"),
-    db<QuoteRow>("quotes").where({ request_id: r.id, outlet_id: target.outlet_id }).first(),
+    db<QuoteRow>("quotes").where({ request_id: r.id, outlet_id: target.outlet_id, kind: "original" }).first(),
   ]);
   const lines = quote ? ((await linesFor([quote.id])).get(quote.id) ?? []) : [];
   return {
@@ -449,12 +466,14 @@ async function serializeForMerchant(r: QuoteRequestRow, target: TargetRow, rate:
           lines: lines.map(lineOut),
           total: kes(quote.total_amount),
           // Shillings only; the rate never leaves the server.
-          take_home: kes(takeHome(quote.total_amount, rate)),
+          take_home: kes(quote.merchant_net_amount ?? takeHome(quote.total_amount, rate)),
           days_needed: quote.days_needed,
           note: quote.note,
           sent_at: quote.sent_at.toISOString(),
           valid_until: quote.valid_until.toISOString(),
           expired: isExpired(quote),
+          // Set once the customer accepted this quote (GS3).
+          order_id: quote.order_id,
         }
       : null,
     created_at: r.created_at.toISOString(),
@@ -467,7 +486,7 @@ export async function listMerchantRequests(
 ) {
   const merchant = await getOrCreateMerchant(userId);
   const mine = db("quote_request_outlets").where({ merchant_id: merchant.id }).select("request_id");
-  const quotedIds = db("quotes").where({ merchant_id: merchant.id, status: "sent" }).select("request_id");
+  const quotedIds = db("quotes").where({ merchant_id: merchant.id, kind: "original", status: "sent" }).select("request_id");
   const declinedIds = db("quote_request_outlets").where({ merchant_id: merchant.id }).whereNotNull("declined_at").select("request_id");
 
   const scoped = (q: Knex.QueryBuilder) => {
@@ -537,7 +556,10 @@ export async function sendQuote(userId: string, requestId: string, input: QuoteI
     const locked = await trx<QuoteRequestRow>("quote_requests").where({ id: request.id }).forUpdate().first();
     if (!locked || locked.status !== "open") conflict("request_not_open", "The customer has closed this request.");
 
-    const existing = await trx<QuoteRow>("quotes").where({ request_id: request.id, outlet_id: outlet.id }).forUpdate().first();
+    const existing = await trx<QuoteRow>("quotes")
+      .where({ request_id: request.id, outlet_id: outlet.id, kind: "original" })
+      .forUpdate()
+      .first();
     if (existing && existing.status !== "sent" && existing.status !== "withdrawn") {
       conflict("quote_closed", "This quote can't be changed any more.");
     }
@@ -604,7 +626,7 @@ export async function withdrawQuote(userId: string, requestId: string, ctx: Requ
   const { target } = await requireTarget(userId, requestId);
   await db.transaction(async (trx) => {
     const [q] = await trx<QuoteRow>("quotes")
-      .where({ request_id: requestId, outlet_id: target.outlet_id, status: "sent" })
+      .where({ request_id: requestId, outlet_id: target.outlet_id, kind: "original", status: "sent" })
       .update({ status: "withdrawn" })
       .returning("*");
     if (!q) conflict("no_quote", "There's no sent quote to withdraw.");
@@ -623,7 +645,9 @@ export async function declineRequest(userId: string, requestId: string, ctx: Req
       .update({ declined_at: new Date() })
       .returning("*");
     if (!t) conflict("request_declined", "You've already said this garage can't do the job.");
-    await trx("quotes").where({ request_id: requestId, outlet_id: target.outlet_id, status: "sent" }).update({ status: "withdrawn" });
+    await trx("quotes")
+      .where({ request_id: requestId, outlet_id: target.outlet_id, kind: "original", status: "sent" })
+      .update({ status: "withdrawn" });
     await audit(trx, userId, "garage_request.declined", "quote_request", requestId, ctx, undefined, { outlet_id: target.outlet_id });
   });
   return getMerchantRequest(userId, requestId);
