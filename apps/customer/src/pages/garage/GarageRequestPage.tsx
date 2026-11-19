@@ -4,14 +4,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiClientError } from "../../lib/api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
 import {
+  CONDITION_LABELS,
+  FULFILMENT_LABELS,
   LINE_LABELS,
   ORDER_STATUS_LABELS,
-  SERVICE_LABELS,
   acceptQuote,
   cancelGarageRequest,
   carName,
   getGarageRequest,
   kesText,
+  requestTitle,
   type GarageQuote,
 } from "../../lib/garage-api.js";
 import { requestStatusLine } from "../../components/garage/YourGarageRequests.js";
@@ -20,7 +22,8 @@ import { bodyText } from "../../components/subsite/Section.js";
 /**
  * `/garage/requests/:id`: one garage request and its quotes side by side,
  * cheapest first (Phase 4 GS2). Accepting one (GS3) creates the job and
- * opens its page, where the customer pays CRAL by M-Pesa.
+ * opens its page, where the customer pays CRAL by M-Pesa. A parts request
+ * (PT1) reads the same, with each quote's condition and fitted/delivered.
  *
  * Not from a canvas; built from tokens.ts and the sub-site's Section idiom.
  */
@@ -34,12 +37,13 @@ function fmtDay(iso: string): string {
 }
 
 function QuoteCard({ q, rank, onAccept, busy }: { q: GarageQuote; rank: number; onAccept?: () => void; busy?: boolean }): JSX.Element {
+  const isPart = q.part_condition !== null;
   return (
     <article style={{ ...S.card, opacity: q.expired ? 0.7 : 1 }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <div style={S.mono}>{rank === 0 && !q.expired ? "LOWEST PRICE" : `QUOTE ${rank + 1}`}</div>
-          <h3 style={S.h3}>{q.outlet?.name ?? "A garage"}</h3>
+          <h3 style={S.h3}>{q.outlet?.name ?? (isPart ? "A parts dealer" : "A garage")}</h3>
           <p style={{ ...bodyText, fontSize: 13 }}>
             {q.outlet ? `${q.outlet.address}, ${q.outlet.county}` : ""}
           </p>
@@ -48,11 +52,19 @@ function QuoteCard({ q, rank, onAccept, busy }: { q: GarageQuote; rank: number; 
         <div style={{ textAlign: "right" }}>
           <div style={S.total}>{kesText(q.total)}</div>
           <div style={{ ...bodyText, fontSize: 13 }}>
-            {q.days_needed} {q.days_needed === 1 ? "day" : "days"} of work
+            {isPart
+              ? `Within ${q.days_needed} ${q.days_needed === 1 ? "day" : "days"}`
+              : `${q.days_needed} ${q.days_needed === 1 ? "day" : "days"} of work`}
           </div>
         </div>
       </div>
 
+      {q.part_condition && q.fulfilment && (
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 10 }}>
+          <span style={S.chip}>{CONDITION_LABELS[q.part_condition]}</span>
+          <span style={S.chip}>{FULFILMENT_LABELS[q.fulfilment]}</span>
+        </div>
+      )}
       <table style={S.table}>
         <tbody>
           {q.lines.map((l, i) => (
@@ -66,7 +78,9 @@ function QuoteCard({ q, rank, onAccept, busy }: { q: GarageQuote; rank: number; 
       </table>
       {q.note && <p style={{ ...bodyText, fontSize: 13, marginTop: 10 }}>&ldquo;{q.note}&rdquo;</p>}
       <p style={{ ...bodyText, fontSize: 12, marginTop: 10, color: q.expired ? "#A50E22" : "#5A6373" }}>
-        {q.expired ? `Expired ${fmtDateTime(q.valid_until)}. The garage can send a new price.` : `Price valid until ${fmtDateTime(q.valid_until)}.`}
+        {q.expired
+          ? `Expired ${fmtDateTime(q.valid_until)}. The ${isPart ? "dealer" : "garage"} can send a new price.`
+          : `Price valid until ${fmtDateTime(q.valid_until)}.`}
       </p>
       {onAccept && !q.expired && (
         <button type="button" onClick={onAccept} disabled={busy} style={S.primary}>
@@ -81,7 +95,7 @@ export function GarageRequestPage(): JSX.Element {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
   const { data: r, isLoading, error } = useQuery({ queryKey: ["garage-requests", id], queryFn: () => getGarageRequest(id!), enabled: !!id });
-  usePageTitle(r ? `${SERVICE_LABELS[r.service_type]} request` : "Garage request");
+  usePageTitle(r ? `${requestTitle(r)} request` : "Garage request");
   const [closing, setClosing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [accepting, setAccepting] = useState<string | null>(null);
@@ -93,6 +107,8 @@ export function GarageRequestPage(): JSX.Element {
       <div style={S.wrap}>
         <p style={bodyText}>That request isn't on your account.</p>
         <Link to="/garage" style={S.link}>Back to garage service</Link>
+        {" "}
+        <Link to="/my-parts" style={S.link}>Your parts requests</Link>
       </div>
     );
   }
@@ -124,12 +140,17 @@ export function GarageRequestPage(): JSX.Element {
   }
 
   const quotes = r.quotes ?? [];
+  const isPart = r.kind === "part";
   return (
     <div style={S.wrap}>
-      <Link to="/garage" style={S.link}>← Garage service</Link>
-      <div style={{ ...S.mono, marginTop: 18 }}>{SERVICE_LABELS[r.service_type].toUpperCase()} · {r.county.toUpperCase()}</div>
+      {isPart ? <Link to="/my-parts" style={S.link}>← Your parts requests</Link> : <Link to="/garage" style={S.link}>← Garage service</Link>}
+      <div style={{ ...S.mono, marginTop: 18 }}>{requestTitle(r).toUpperCase()} · {r.county.toUpperCase()}</div>
       <h1 style={S.h1}>{r.car ? `${carName(r.car)} · ${r.car.plate}` : "Your car"}</h1>
+      {isPart && r.car?.chassis_number && (
+        <p style={{ ...bodyText, fontSize: 13 }}>Quoted against chassis {r.car.chassis_number}</p>
+      )}
       <p style={{ ...bodyText, maxWidth: 640 }}>{r.description}</p>
+      {isPart && r.delivery_address && <p style={{ ...bodyText, fontSize: 13 }}>Deliver to: {r.delivery_address}</p>}
       <p style={{ ...bodyText, fontWeight: 600, color: "#0B0F1A", marginTop: 10 }}>
         {requestStatusLine(r)}
         {r.garages_declined > 0 ? ` · ${r.garages_declined} said they can't do it` : ""}
@@ -137,13 +158,15 @@ export function GarageRequestPage(): JSX.Element {
 
       {r.order && (
         <div style={S.notice}>
-          Job <span style={{ fontFamily: "'IBM Plex Mono',monospace" }}>{r.order.ref}</span>: {ORDER_STATUS_LABELS[r.order.status]}.{" "}
-          <Link to={`/garage/orders/${r.order.id}`} style={{ color: "#0F23A8", fontWeight: 600 }}>Open the job</Link>
+          {isPart ? "Order" : "Job"} <span style={{ fontFamily: "'IBM Plex Mono',monospace" }}>{r.order.ref}</span>: {ORDER_STATUS_LABELS[r.order.status]}.{" "}
+          <Link to={`/garage/orders/${r.order.id}`} style={{ color: "#0F23A8", fontWeight: 600 }}>{isPart ? "Open the order" : "Open the job"}</Link>
         </div>
       )}
       {r.status === "open" && quotes.length > 0 && (
         <div style={S.notice}>
-          Accepting a quote books that garage. You pay CRAL by M-Pesa, CRAL holds it, and the garage is paid only after you confirm the work is done.
+          {isPart
+            ? "Accepting a quote orders the part from that dealer. You pay CRAL by M-Pesa, CRAL holds it, and the dealer is paid only after you confirm it's the right part."
+            : "Accepting a quote books that garage. You pay CRAL by M-Pesa, CRAL holds it, and the garage is paid only after you confirm the work is done."}
         </div>
       )}
 
@@ -169,7 +192,7 @@ export function GarageRequestPage(): JSX.Element {
           <button type="button" onClick={() => void close()} disabled={closing} style={S.secondary}>
             {closing ? "Closing…" : "Close this request"}
           </button>
-          <p style={{ ...bodyText, fontSize: 12, marginTop: 6 }}>Garages can no longer quote once it's closed.</p>
+          <p style={{ ...bodyText, fontSize: 12, marginTop: 6 }}>{isPart ? "Dealers" : "Garages"} can no longer quote once it's closed.</p>
           {problem && <p role="alert" style={{ ...bodyText, color: "#A50E22" }}>{problem}</p>}
         </div>
       )}
@@ -185,6 +208,7 @@ const S = {
   h3: { margin: "4px 0 4px", font: "600 18px/1.25 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", color: "#0B0F1A" },
   total: { font: "700 22px/1.1 Archivo,sans-serif", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" },
   card: { padding: 18, background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: 12 },
+  chip: { padding: "4px 8px", border: "1px solid #CDD2DA", borderRadius: 6, font: "500 11px/1.2 'IBM Plex Mono',monospace", letterSpacing: ".06em", color: "#333B4A", textTransform: "uppercase" },
   table: { width: "100%", borderCollapse: "collapse", marginTop: 14, font: "400 14px/1.45 'Instrument Sans',sans-serif", color: "#333B4A" },
   td: { padding: "8px 0", borderTop: "1px solid #F1F3F6", verticalAlign: "top", paddingRight: 10 },
   notice: { marginTop: 18, padding: "12px 14px", background: "#EDEFFC", border: "1px solid #C3CBF5", borderRadius: 8, font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#0F23A8" },

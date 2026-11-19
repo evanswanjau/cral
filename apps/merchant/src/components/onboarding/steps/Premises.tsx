@@ -15,11 +15,11 @@ export function Premises({ onBack, onContinue }: { onBack: () => void; onContinu
       <div style={O.stepEyebrow}>STEP 3 OF 5</div>
       <h1 style={O.h1Step}>Your premises</h1>
       <p style={{ ...O.stepLede, marginBottom: 20 }}>
-        You add your garage straight after you submit. It takes a few minutes, and you can add each branch on its own.
+        You add your garage or parts shop straight after you submit. It takes a few minutes, and you can add each branch on its own.
       </p>
 
       <div style={O.panel}>
-        <div style={O.panelHead}>For each garage</div>
+        <div style={O.panelHead}>For each garage or parts shop</div>
         <div style={O.panelBody}>
           <div style={O.docPillRow}>
             <span style={O.docPill}>Name on site</span>
@@ -29,7 +29,7 @@ export function Premises({ onBack, onContinue }: { onBack: () => void; onContinu
             <span style={O.docPill}>2 or more photos</span>
           </div>
           <div style={O.panelNote}>
-            Someone from CRAL visits each garage before it can take requests. A garage with no premises does not get
+            Someone from CRAL visits each one before it can take requests. A garage or parts dealer with no premises does not get
             listed.
           </div>
         </div>

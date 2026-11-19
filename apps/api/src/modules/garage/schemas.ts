@@ -36,6 +36,23 @@ export const CreateRequestSchema = z.object({
 });
 export type CreateRequestInput = z.infer<typeof CreateRequestSchema>;
 
+/**
+ * A parts request (Phase 5 PT1, docs/decisions/parts.md): the part, against
+ * a car in My cars that has its chassis number, and where to deliver it.
+ */
+export const CreatePartsRequestSchema = z.object({
+  car_id: z.string().min(1),
+  part_name: z.string().trim().min(3, "Name the part, like front brake pads.").max(120),
+  description: z.string().trim().min(10, "Say a little more: which side, any part number, what's wrong.").max(2000),
+  county: z.enum(KENYA_COUNTIES, { errorMap: () => ({ message: "Pick the county." }) }),
+  delivery_address: z.string().trim().min(5, "Enter where the part should be delivered.").max(500),
+});
+export type CreatePartsRequestInput = z.infer<typeof CreatePartsRequestSchema>;
+
+export const PART_CONDITIONS = ["genuine", "oem", "used"] as const;
+export const FULFILMENTS = ["fitted", "delivered"] as const;
+export const REQUEST_KINDS = ["service", "part"] as const;
+
 export const LINE_KINDS = ["part", "labour", "delivery", "other"] as const;
 
 export const QuoteLineSchema = z.object({
@@ -48,14 +65,25 @@ export const QuoteSchema = z.object({
   lines: z.array(QuoteLineSchema).min(1, "Add at least one line.").max(30),
   days_needed: z.number().int().min(1).max(60),
   note: z.string().trim().max(1000).nullable().optional(),
+  /** Parts only (PT1): required on a parts request, refused on a garage one. */
+  part_condition: z.enum(PART_CONDITIONS).optional(),
+  fulfilment: z.enum(FULFILMENTS).optional(),
 });
 export type QuoteInput = z.infer<typeof QuoteSchema>;
 
-export const PreviewSchema = z.object({ lines: z.array(QuoteLineSchema).max(30) });
+export const PreviewSchema = z.object({
+  lines: z.array(QuoteLineSchema).max(30),
+  /** Which vertical's rate to use; the rate itself never leaves the server. */
+  kind: z.enum(REQUEST_KINDS).default("service"),
+});
 
 export const ListQuerySchema = PaginationQuerySchema;
+/** The customer's own lists: garage and parts are kept apart (PT1). */
+export const KindListQuerySchema = PaginationQuerySchema.extend({ kind: z.enum(REQUEST_KINDS).default("service") });
 export const MerchantListQuerySchema = PaginationQuerySchema.extend({
   filter: z.enum(["to_quote", "quoted", "closed", "all"]).default("to_quote"),
+  /** Omitted: every kind this merchant's outlets were asked about. */
+  kind: z.enum(REQUEST_KINDS).optional(),
 });
 
 /** A quote stands this long after it was last sent, the truck-quote window. */
@@ -65,8 +93,8 @@ export const MAX_GARAGES = 5;
 
 // --- GS3: orders ------------------------------------------------------
 
-/** A second quote for extra work: the same itemised shape. */
-export const ExtraQuoteSchema = QuoteSchema;
+/** A second quote for extra work: the same itemised shape (garage only). */
+export const ExtraQuoteSchema = QuoteSchema.omit({ part_condition: true, fulfilment: true });
 export type ExtraQuoteInput = z.infer<typeof ExtraQuoteSchema>;
 
 export const PayOrderSchema = z.object({ phone: z.string().trim().min(9, "Enter the M-Pesa number.").max(20) });
@@ -82,6 +110,7 @@ export const ResolveSchema = z.object({
 
 export const MerchantOrderQuerySchema = PaginationQuerySchema.extend({
   filter: z.enum(["active", "done", "all"]).default("active"),
+  kind: z.enum(REQUEST_KINDS).optional(),
 });
 
 export const ORDER_STATUSES = [
@@ -94,7 +123,10 @@ export const ORDER_STATUSES = [
   "cancelled",
   "refunded",
 ] as const;
-export const AdminOrderQuerySchema = PaginationQuerySchema.extend({ status: z.enum(ORDER_STATUSES).optional() });
+export const AdminOrderQuerySchema = PaginationQuerySchema.extend({
+  status: z.enum(ORDER_STATUSES).optional(),
+  kind: z.enum(REQUEST_KINDS).optional(),
+});
 
 /** A ready job confirms itself this long after "ready" (owner decision 7). */
 export const AUTO_CONFIRM_MS = 72 * 3600_000;

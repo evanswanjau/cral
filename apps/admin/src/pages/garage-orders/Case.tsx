@@ -2,9 +2,10 @@ import { useState, type CSSProperties } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ORDER_STATUS,
-  SERVICE_LABELS,
+  CONDITION_LABELS,
   fetchGarageOrder,
+  orderStatus,
+  orderTitle,
   money,
   resolveGarageOrder,
   type AdminOrderQuote,
@@ -69,7 +70,7 @@ export function Case(): JSX.Element {
   if (isLoading) return <div style={S.empty}>Loading…</div>;
   if (error || !o) return <div style={S.empty}>Couldn't load that job.</div>;
 
-  const s = ORDER_STATUS[o.status];
+  const s = orderStatus(o);
   const paidQuotes = o.quotes.filter((q) => q.paid_at || q.status === "accepted" || q.status === "sent");
   const timeline: Array<[string, string | null]> = [
     ["Accepted the quote", o.created_at],
@@ -92,7 +93,7 @@ export function Case(): JSX.Element {
         <div>
           <div style={S.mono}>{o.ref}</div>
           <h1 style={S.h1}>
-            {o.service_type ? (SERVICE_LABELS[o.service_type] ?? o.service_type) : "Garage job"}
+            {orderTitle(o)}
             {o.car ? ` · ${o.car.year} ${o.car.make} ${o.car.model}` : ""}
           </h1>
           <span style={{ ...S.badge, background: s.bg, borderColor: s.border, color: s.fg }}>{s.label}</span>
@@ -102,7 +103,7 @@ export function Case(): JSX.Element {
       {o.status === "problem" && (
         <div style={{ ...S.panel, borderColor: "#F7BDC5" }}>
           <div style={S.panelHead}>
-            <span style={S.panelTitle}>The customer raised a problem</span>
+            <span style={S.panelTitle}>{o.kind === "part" ? "The customer says it's the wrong part" : "The customer raised a problem"}</span>
             {o.problem_raised_at && <span style={S.mono}>{fmt(o.problem_raised_at).toUpperCase()}</span>}
           </div>
           <div style={{ padding: "16px 18px", display: "grid", gap: 12 }}>
@@ -193,6 +194,17 @@ export function Case(): JSX.Element {
             </div>
           </div>
           {o.description && <Line label="What the customer asked for" value={o.description} />}
+          {o.kind === "part" && (
+            <Line
+              label="The part"
+              value={[
+                o.part_condition ? CONDITION_LABELS[o.part_condition] : null,
+                o.fulfilment === "fitted" ? "fitted at the dealer" : o.fulfilment === "delivered" ? `delivered to ${o.delivery_address ?? "the customer"}` : null,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            />
+          )}
         </div>
       </div>
 

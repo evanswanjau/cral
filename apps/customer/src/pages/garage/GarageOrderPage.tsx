@@ -4,7 +4,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ApiClientError } from "../../lib/api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
 import {
-  ORDER_STATUS_LABELS,
+  CONDITION_LABELS,
+  FULFILMENT_LABELS,
   SERVICE_LABELS,
   acceptExtraQuote,
   cancelGarageOrder,
@@ -13,6 +14,7 @@ import {
   declineExtraQuote,
   getGarageOrder,
   kesText,
+  orderStatusLabel,
   raiseGarageProblem,
   type GarageOrder,
 } from "../../lib/garage-api.js";
@@ -23,11 +25,42 @@ import { bodyText } from "../../components/subsite/Section.js";
  * `/garage/orders/:id`: one garage job (Phase 4 GS3). Pay CRAL by M-Pesa,
  * answer an extra-work quote, then confirm the job or raise a problem. A
  * ready job confirms itself 72 h after "ready" unless a problem is raised.
+ * A part order (PT1, docs/decisions/parts.md) reads the same: the dealer
+ * marks it delivered or fitted, the customer confirms it's the right part
+ * or reports a wrong part, which goes to CRAL support.
  *
  * Not from a canvas; built from tokens.ts and GarageRequestPage.
  */
 
+function whatNextPart(o: GarageOrder): string {
+  const fitted = o.fulfilment === "fitted";
+  switch (o.status) {
+    case "awaiting_payment":
+      return "Pay CRAL to order the part. The dealer sends or fits it once your payment lands.";
+    case "paid":
+    case "in_progress":
+      return fitted
+        ? "Your payment is with CRAL. The dealer will fit the part at their premises."
+        : "Your payment is with CRAL. The dealer will deliver the part to your address.";
+    case "ready":
+      return o.auto_confirm_at
+        ? `Check it's the right part for your car and confirm. If you say nothing, it confirms itself on ${fmtDateTime(o.auto_confirm_at)}.`
+        : "Check it's the right part for your car and confirm.";
+    case "completed":
+      return o.confirmed_by === "auto"
+        ? "Confirmed automatically 72 hours after the part was handed over. The dealer is being paid."
+        : "Confirmed. The dealer is being paid.";
+    case "problem":
+      return "CRAL support is looking into the wrong part you reported and will contact you. The money stays with CRAL until it's settled.";
+    case "refunded":
+      return "Your payment is being sent back to the M-Pesa number it came from.";
+    case "cancelled":
+      return "You cancelled this order before paying. Nothing was charged.";
+  }
+}
+
 function whatNext(o: GarageOrder): string {
+  if (o.kind === "part") return whatNextPart(o);
   switch (o.status) {
     case "awaiting_payment":
       return "Pay CRAL to book the job. The garage starts once your payment lands.";
@@ -62,7 +95,7 @@ export function GarageOrderPage(): JSX.Element {
     // Poll while an M-Pesa prompt is open so the page moves when it lands.
     refetchInterval: (q) => (q.state.data?.payment?.status === "pending" ? 4000 : false),
   });
-  usePageTitle(o ? `Garage job ${o.ref}` : "Garage job");
+  usePageTitle(o ? `${o.kind === "part" ? "Part order" : "Garage job"} ${o.ref}` : "Garage job");
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [note, setNote] = useState("");
@@ -72,7 +105,7 @@ export function GarageOrderPage(): JSX.Element {
   if (error || !o) {
     return (
       <div style={S.wrap}>
-        <p style={bodyText}>That job isn't on your account.</p>
+        <p style={bodyText}>That job or order isn't on your account.</p>
         <Link to="/garage" style={S.link}>Back to garage service</Link>
       </div>
     );
@@ -96,17 +129,25 @@ export function GarageOrderPage(): JSX.Element {
   const original = o.quotes.find((q) => q.kind === "original");
   const extras = o.quotes.filter((q) => q.kind === "extra");
   const refresh = () => void queryClient.invalidateQueries({ queryKey: ["garage-orders", id] });
+  const isPart = o.kind === "part";
 
   return (
     <div style={S.wrap}>
       <Link to={`/garage/requests/${o.request_id}`} style={S.link}>← Your request</Link>
       <div style={{ ...P.mono, marginTop: 18 }}>
-        JOB {o.ref}
+        {isPart ? "ORDER" : "JOB"} {o.ref}
         {o.service_type ? ` · ${SERVICE_LABELS[o.service_type].toUpperCase()}` : ""}
+        {o.part_name ? ` · ${o.part_name.toUpperCase()}` : ""}
       </div>
       <h1 style={S.h1}>{o.car ? `${carName(o.car)} · ${o.car.plate}` : "Your car"}</h1>
-      <p style={{ ...bodyText, fontWeight: 600, color: "#0B0F1A" }}>{ORDER_STATUS_LABELS[o.status]}</p>
+      <p style={{ ...bodyText, fontWeight: 600, color: "#0B0F1A" }}>{orderStatusLabel(o)}</p>
       <p style={{ ...bodyText, maxWidth: 640, marginTop: 4 }}>{whatNext(o)}</p>
+      {isPart && o.part_condition && o.fulfilment && (
+        <p style={{ ...bodyText, fontSize: 13, marginTop: 8 }}>
+          {CONDITION_LABELS[o.part_condition]} part · {FULFILMENT_LABELS[o.fulfilment]}
+          {o.fulfilment === "delivered" && o.delivery_address ? ` · ${o.delivery_address}` : ""}
+        </p>
+      )}
       {o.outlet && (
         <p style={{ ...bodyText, fontSize: 13, marginTop: 8 }}>
           {o.outlet.name}, {o.outlet.address}, {o.outlet.county}
@@ -144,7 +185,7 @@ export function GarageOrderPage(): JSX.Element {
         ))}
 
         <div style={{ ...P.card, display: "flex", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
-          <span style={{ ...bodyText, fontWeight: 600, color: "#0B0F1A" }}>Paid to CRAL for this job</span>
+          <span style={{ ...bodyText, fontWeight: 600, color: "#0B0F1A" }}>Paid to CRAL for this {isPart ? "order" : "job"}</span>
           <span style={P.total}>{kesText(o.total)}</span>
         </div>
         {o.payment?.receipt && (
@@ -157,7 +198,7 @@ export function GarageOrderPage(): JSX.Element {
       {o.status === "ready" && (
         <div style={{ ...S.row, marginTop: 20 }}>
           <button type="button" style={P.primary} disabled={!!busy} onClick={() => void act("confirm", () => confirmGarageOrder(o.id))}>
-            {busy === "confirm" ? "Confirming…" : "Confirm the job is done"}
+            {busy === "confirm" ? "Confirming…" : isPart ? "It's the right part" : "Confirm the job is done"}
           </button>
         </div>
       )}
@@ -166,7 +207,7 @@ export function GarageOrderPage(): JSX.Element {
         <div style={{ marginTop: 16 }}>
           {!reporting ? (
             <button type="button" style={P.danger} onClick={() => setReporting(true)}>
-              Something's wrong
+              {isPart ? "Wrong part" : "Something's wrong"}
             </button>
           ) : (
             <form
@@ -177,11 +218,11 @@ export function GarageOrderPage(): JSX.Element {
               style={{ ...P.card, maxWidth: 640 }}
             >
               <label>
-                <span style={P.label}>What's wrong?</span>
+                <span style={P.label}>{isPart ? "What's wrong with the part?" : "What's wrong?"}</span>
                 <textarea required minLength={10} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} style={P.textarea} />
               </label>
               <p style={{ ...bodyText, fontSize: 12, marginTop: 6 }}>
-                CRAL holds your payment while support looks into it. The job won't confirm itself in the meantime.
+                CRAL holds your payment while support looks into it. The {isPart ? "order" : "job"} won't confirm itself in the meantime.
               </p>
               <div style={S.row}>
                 <button type="submit" style={P.primary} disabled={!!busy}>
@@ -206,7 +247,7 @@ export function GarageOrderPage(): JSX.Element {
       {o.status === "awaiting_payment" && o.payment?.status !== "pending" && (
         <div style={{ marginTop: 24 }}>
           <button type="button" style={P.danger} disabled={!!busy} onClick={() => void act("cancel", () => cancelGarageOrder(o.id))}>
-            {busy === "cancel" ? "Cancelling…" : "Cancel this job"}
+            {busy === "cancel" ? "Cancelling…" : isPart ? "Cancel this order" : "Cancel this job"}
           </button>
           <p style={{ ...bodyText, fontSize: 12, marginTop: 6 }}>Nothing has been charged yet.</p>
         </div>

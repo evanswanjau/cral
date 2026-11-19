@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
 import { SERVICE_LABELS, kesText } from "../lib/garage-api.js";
-import { ORDER_STATUS, useGarageOrders, type OrderFilter } from "../lib/garage-orders-api.js";
+import { orderStatus, useGarageOrders, type OrderFilter } from "../lib/garage-orders-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
@@ -21,7 +21,7 @@ function fmtDate(iso: string): string {
 }
 
 export function GarageOrderList(): JSX.Element {
-  usePageTitle("Garage jobs");
+  usePageTitle("Jobs and orders");
   const navigate = useNavigate();
   const [filter, setFilter] = useState<OrderFilter>("active");
   const { data, isPending } = useGarageOrders(filter);
@@ -30,7 +30,7 @@ export function GarageOrderList(): JSX.Element {
     <div>
       <div style={P.listHead}>
         <div>
-          <h1 style={P.h1}>Garage jobs</h1>
+          <h1 style={P.h1}>Jobs and orders</h1>
           <p style={P.lede}>
             Quotes customers accepted. Start once the customer has paid CRAL. You are paid in your next payout after they confirm the work.
           </p>
@@ -67,7 +67,7 @@ export function GarageOrderList(): JSX.Element {
           </div>
         ) : (
           data.data.map((o) => {
-            const s = ORDER_STATUS[o.status];
+            const s = orderStatus(o);
             return (
               <div
                 key={o.id}
@@ -84,6 +84,7 @@ export function GarageOrderList(): JSX.Element {
                   <div style={P.rowMeta}>
                     <span style={{ fontFamily: "'IBM Plex Mono',monospace" }}>{o.ref}</span>
                     {o.service_type ? ` · ${SERVICE_LABELS[o.service_type] ?? o.service_type}` : ""}
+                    {o.part_name ? ` · ${o.part_name}` : ""}
                     {o.outlet ? ` · ${o.outlet.name}` : ""}
                   </div>
                 </div>

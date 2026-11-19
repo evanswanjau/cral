@@ -2,12 +2,13 @@ import { useState, type CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import {
-  ORDER_STATUS,
-  SERVICE_LABELS,
   fetchGarageOrders,
   money,
+  orderStatus,
+  orderTitle,
   type AdminGarageOrder,
   type GarageOrderStatus,
+  type OrderKind,
 } from "../../lib/garage-orders-api.js";
 import { usePageTitle } from "../../lib/use-page-title.js";
 
@@ -15,7 +16,9 @@ import { usePageTitle } from "../../lib/use-page-title.js";
  * Garage jobs (Phase 4 GS4): the console for GS3's orders. The problem
  * queue comes first: a customer who raised a problem is waiting on Ops to
  * release the money to the garage or refund it. The other filters are for
- * looking a job up. Follows the `/services` towing queue idiom.
+ * looking a job up. Follows the `/services` towing queue idiom. Spare
+ * parts orders (PT1) are here too, with a Garage / Parts filter; a
+ * wrong-part dispute is a parts order's problem.
  *
  * `admin_support` and `admin_finance` (and `admin_super`), the roles the
  * `/admin/garage-orders` endpoints allow. Not from a canvas; built from
@@ -33,15 +36,22 @@ const FILTERS: Array<{ key: GarageOrderStatus | "all"; label: string }> = [
   { key: "all", label: "All" },
 ];
 
+const KINDS: Array<{ key: OrderKind | "all"; label: string }> = [
+  { key: "all", label: "Garage and parts" },
+  { key: "service", label: "Garage" },
+  { key: "part", label: "Parts" },
+];
+
 const GRID = "minmax(0,1fr) 140px 120px 190px 14px";
 
 export function Queue(): JSX.Element {
-  usePageTitle("Garage jobs");
+  usePageTitle("Garage jobs and parts");
   const navigate = useNavigate();
   const [filter, setFilter] = useState<GarageOrderStatus | "all">("problem");
+  const [kind, setKind] = useState<OrderKind | "all">("all");
   const { data, isLoading, error, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ["admin", "garage-orders", "list", filter],
-    queryFn: ({ pageParam }) => fetchGarageOrders(filter, pageParam),
+    queryKey: ["admin", "garage-orders", "list", filter, kind],
+    queryFn: ({ pageParam }) => fetchGarageOrders(filter, pageParam, kind),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.has_more ? last.next_cursor : null),
   });
@@ -51,14 +61,32 @@ export function Queue(): JSX.Element {
     <div>
       <div style={S.headRow}>
         <div>
-          <h1 style={S.h1}>Garage jobs</h1>
+          <h1 style={S.h1}>Garage jobs and parts</h1>
           <p style={S.lede}>
-            Jobs customers paid CRAL for at a garage. A raised problem holds the money until you settle it here: release it
-            to the garage, or refund the customer.
+            Garage jobs and spare parts customers paid CRAL for. A raised problem or a wrong-part dispute holds the money
+            until you settle it here: release it to the garage or dealer, or refund the customer.
           </p>
         </div>
       </div>
 
+      <div role="group" aria-label="Garage or parts" style={{ display: "flex", gap: 7, marginBottom: 10, flexWrap: "wrap" }}>
+        {KINDS.map((k) => (
+          <button
+            key={k.key}
+            type="button"
+            aria-pressed={kind === k.key}
+            onClick={() => setKind(k.key)}
+            style={{
+              ...S.filterBtn,
+              background: kind === k.key ? "#EDEFFC" : "#FFFFFF",
+              color: kind === k.key ? "#0F23A8" : "#333B4A",
+              borderColor: kind === k.key ? "#0F23A8" : "#E4E7EC",
+            }}
+          >
+            {k.label}
+          </button>
+        ))}
+      </div>
       <div style={{ display: "flex", gap: 7, marginBottom: 16, flexWrap: "wrap" }}>
         {FILTERS.map((f) => (
           <button
@@ -113,7 +141,7 @@ export function Queue(): JSX.Element {
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Africa/Nairobi" });
 
 function Row({ o, showRaised, onOpen }: { o: AdminGarageOrder; showRaised: boolean; onOpen: () => void }): JSX.Element {
-  const s = ORDER_STATUS[o.status];
+  const s = orderStatus(o);
   const when = showRaised && o.problem_raised_at ? o.problem_raised_at : o.created_at;
   return (
     <div
@@ -128,7 +156,7 @@ function Row({ o, showRaised, onOpen }: { o: AdminGarageOrder; showRaised: boole
       <div style={{ minWidth: 0 }}>
         <div style={{ font: "600 15px/1.25 Archivo,sans-serif", color: "#1A1F2B" }}>
           <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontWeight: 500, fontSize: 13 }}>{o.ref}</span> ·{" "}
-          {o.service_type ? (SERVICE_LABELS[o.service_type] ?? o.service_type) : "Garage job"}
+          {orderTitle(o)}
         </div>
         <div style={S.ellipsis}>
           {o.outlet ? `${o.outlet.name}, ${o.outlet.county}` : "Garage"}

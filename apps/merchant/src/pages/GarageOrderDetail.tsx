@@ -5,9 +5,9 @@ import { O } from "../components/onboarding/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { ExtraQuoteForm } from "../components/garage/ExtraQuoteForm.js";
 import { YourWorkOnThisCar } from "../components/garage/YourWorkOnThisCar.js";
-import { LINE_LABELS, SERVICE_LABELS, kesText } from "../lib/garage-api.js";
+import { CONDITION_LABELS, FULFILMENT_LABELS, LINE_LABELS, SERVICE_LABELS, kesText } from "../lib/garage-api.js";
 import {
-  ORDER_STATUS,
+  orderStatus,
   useGarageOrder,
   useMarkReady,
   useSendExtra,
@@ -22,14 +22,42 @@ import { usePageTitle } from "../lib/use-page-title.js";
  * One garage job (Phase 4 GS3): start once paid, send an extra-work quote
  * if the job needs more, mark the car ready. Amounts in shillings: what the
  * customer paid and what the garage keeps after CRAL's service fee, never
- * the rate. Not from a canvas; built from tokens.ts and GarageRequestDetail.
+ * the rate. A part order (PT1) is the same screen: no extra work, and the
+ * dealer marks the part delivered or fitted once paid. Not from a canvas;
+ * built from tokens.ts and GarageRequestDetail.
  */
 
 function fmtDateTime(iso: string): string {
   return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "Africa/Nairobi" });
 }
 
+function nextStepPart(o: GarageOrder): string {
+  const fitted = o.fulfilment === "fitted";
+  switch (o.status) {
+    case "awaiting_payment":
+      return "The customer accepted your quote and is paying CRAL. Don't hand the part over until this says paid.";
+    case "paid":
+    case "in_progress":
+      return fitted
+        ? "The customer has paid CRAL. Fit the part, then mark it fitted."
+        : "The customer has paid CRAL. Deliver the part to the address below, then mark it delivered.";
+    case "ready":
+      return o.auto_confirm_at
+        ? `Waiting for the customer to confirm it's the right part. If they report nothing, it confirms itself on ${fmtDateTime(o.auto_confirm_at)}.`
+        : "Waiting for the customer to confirm it's the right part.";
+    case "completed":
+      return "Confirmed. What you keep joins your next payout run.";
+    case "problem":
+      return "The customer says it's the wrong part. CRAL support will contact you. The payment stays with CRAL until it's settled.";
+    case "cancelled":
+      return "The customer cancelled before paying. Nothing is owed either way.";
+    case "refunded":
+      return "CRAL settled the dispute by refunding the customer.";
+  }
+}
+
 function nextStep(o: GarageOrder): string {
+  if (o.kind === "part") return nextStepPart(o);
   switch (o.status) {
     case "awaiting_payment":
       return "The customer accepted your quote and is paying CRAL. Don't start until this says paid.";
@@ -66,7 +94,7 @@ export function GarageOrderDetail(): JSX.Element {
   const navigate = useNavigate();
   const flash = useToast();
   const { data: o, isPending, error } = useGarageOrder(orderId);
-  usePageTitle(o ? `Job ${o.ref}` : "Garage job");
+  usePageTitle(o ? `${o.kind === "part" ? "Order" : "Job"} ${o.ref}` : "Garage job");
   const start = useStartOrder(orderId ?? "");
   const ready = useMarkReady(orderId ?? "");
   const sendExtra = useSendExtra(orderId ?? "");
@@ -77,34 +105,37 @@ export function GarageOrderDetail(): JSX.Element {
   if (error || !o) {
     return (
       <div>
-        <button type="button" style={P.backLink} onClick={() => navigate("/garage/orders")}>← All garage jobs</button>
-        <p style={P.lede}>That job isn't one of yours.</p>
+        <button type="button" style={P.backLink} onClick={() => navigate("/garage/orders")}>← All jobs</button>
+        <p style={P.lede}>That job or order isn't one of yours.</p>
       </div>
     );
   }
 
   const fail = (err: unknown) => flash(err instanceof Error ? err.message : "Something went wrong. Try again.", "#FF8A8A");
-  const s = ORDER_STATUS[o.status];
+  const s = orderStatus(o);
+  const isPart = o.kind === "part";
+  const word = isPart ? "order" : "job";
   const openExtra = o.quotes.find((q) => q.kind === "extra" && (q.status === "sent" || (q.status === "accepted" && !q.paid_at)));
   const primary: CSSProperties = { ...P.actionBtn, minHeight: 44, background: "#0F23A8", color: "#FFFFFF", borderColor: "#0F23A8" };
 
   return (
     <div>
-      <button type="button" style={P.backLink} onClick={() => navigate("/garage/orders")}>← All garage jobs</button>
+      <button type="button" style={P.backLink} onClick={() => navigate("/garage/orders")}>← All jobs</button>
 
       <div style={P.mastCard}>
         <div style={P.mastTop}>
           <div>
             <h1 style={P.mastH1}>{o.car ? `${o.car.year} ${o.car.make} ${o.car.model}` : "A car"}</h1>
             <div style={P.mastSub}>
-              {o.service_type ? (SERVICE_LABELS[o.service_type] ?? o.service_type) : "Garage job"}
+              {isPart ? (o.part_name ?? "A part") : o.service_type ? (SERVICE_LABELS[o.service_type] ?? o.service_type) : "Garage job"}
+              {o.part_condition ? ` · ${CONDITION_LABELS[o.part_condition]}` : ""}
               {o.customer_first_name ? ` · for ${o.customer_first_name}` : ""}
               {o.outlet ? ` · at ${o.outlet.name}` : ""}
             </div>
             <div style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: s.color, marginTop: 8 }}>{s.label}</div>
           </div>
           <div style={{ textAlign: "right" }}>
-            <div style={P.mastRefLabel}>JOB</div>
+            <div style={P.mastRefLabel}>{isPart ? "ORDER" : "JOB"}</div>
             <div style={P.mastRef}>{o.ref}</div>
             {o.car && (
               <>
@@ -115,14 +146,35 @@ export function GarageOrderDetail(): JSX.Element {
           </div>
         </div>
         {o.description && <p style={{ ...P.lede, maxWidth: 720, margin: "12px 0 0" }}>{o.description}</p>}
+        {isPart && o.fulfilment && (
+          <p style={{ ...P.lede, maxWidth: 720, margin: "8px 0 0" }}>
+            {FULFILMENT_LABELS[o.fulfilment]}
+            {o.fulfilment === "delivered" && o.delivery_address ? `, to ${o.delivery_address}` : ""}
+          </p>
+        )}
         <p style={{ ...P.lede, maxWidth: 720, margin: "12px 0 0", color: "#1A1F2B" }}>{nextStep(o)}</p>
         <div style={{ ...P.mastActions, marginTop: 14 }}>
-          {o.status === "paid" && (
+          {isPart && (o.status === "paid" || o.status === "in_progress") && (
+            <button
+              type="button"
+              style={primary}
+              disabled={ready.isPending}
+              onClick={() =>
+                ready.mutate(undefined, {
+                  onSuccess: () => flash("The customer has been asked to confirm it's the right part.", "#57D69E"),
+                  onError: fail,
+                })
+              }
+            >
+              {ready.isPending ? "Saving…" : o.fulfilment === "fitted" ? "Mark it fitted" : "Mark it delivered"}
+            </button>
+          )}
+          {!isPart && o.status === "paid" && (
             <button type="button" style={primary} disabled={start.isPending} onClick={() => start.mutate(undefined, { onSuccess: () => flash("Marked as started.", "#57D69E"), onError: fail })}>
               {start.isPending ? "Saving…" : "Start the work"}
             </button>
           )}
-          {o.status === "in_progress" && (
+          {!isPart && o.status === "in_progress" && (
             <>
               <button
                 type="button"
@@ -182,7 +234,10 @@ export function GarageOrderDetail(): JSX.Element {
               </div>
             ))}
             <div style={{ ...S.line, fontWeight: 700, borderBottom: "none" }}>
-              <span style={{ flex: 1 }}>Customer pays · {q.days_needed} {q.days_needed === 1 ? "day" : "days"} of work</span>
+              <span style={{ flex: 1 }}>
+                Customer pays · {q.days_needed} {q.days_needed === 1 ? "day" : "days"}
+                {isPart ? "" : " of work"}
+              </span>
               <span>{kesText(q.total)}</span>
             </div>
             <div style={{ ...O.helper, marginTop: 4 }}>You keep {kesText(q.take_home)} after CRAL&rsquo;s service fee.</div>
@@ -205,13 +260,15 @@ export function GarageOrderDetail(): JSX.Element {
 
       <div style={{ ...P.card, marginTop: 16, maxWidth: 820, padding: 18 }}>
         <div style={{ ...S.line, borderBottom: "none" }}>
-          <span style={{ flex: 1 }}>Paid by the customer for this job so far</span>
+          <span style={{ flex: 1 }}>Paid by the customer for this {word} so far</span>
           <span style={{ fontWeight: 700 }}>{kesText(o.total)}</span>
         </div>
-        <div style={O.helper}>You keep {kesText(o.take_home)} after CRAL&rsquo;s service fee. It joins your payout run once the job is confirmed.</div>
+        <div style={O.helper}>
+          You keep {kesText(o.take_home)} after CRAL&rsquo;s service fee. It joins your payout run once the {word} is confirmed.
+        </div>
       </div>
 
-      <YourWorkOnThisCar orderId={o.id} />
+      {!isPart && <YourWorkOnThisCar orderId={o.id} />}
 
       {o.problem_note && (o.status === "problem" || o.status === "refunded" || o.confirmed_by === "ops") && (
         <div style={{ ...P.card, marginTop: 16, maxWidth: 820, padding: 18 }}>

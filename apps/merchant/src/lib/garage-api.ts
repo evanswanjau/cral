@@ -24,6 +24,24 @@ export const SERVICE_LABELS: Record<string, string> = {
   ac: "Air conditioning",
 };
 
+// --- PT1: spare parts (docs/decisions/parts.md) -------------------------
+
+export type RequestKind = "service" | "part";
+export type PartCondition = "genuine" | "oem" | "used";
+export type Fulfilment = "fitted" | "delivered";
+export const CONDITIONS: PartCondition[] = ["genuine", "oem", "used"];
+export const CONDITION_LABELS: Record<PartCondition, string> = { genuine: "Genuine", oem: "OEM", used: "Used" };
+export const FULFILMENT_LABELS: Record<Fulfilment, string> = {
+  fitted: "We fit it at our premises",
+  delivered: "We deliver it",
+};
+
+/** What a request is for: the garage service, or the part. */
+export function requestTitle(r: { kind: RequestKind; service_type: string | null; part_name: string | null }): string {
+  if (r.kind === "part") return r.part_name ?? "A part";
+  return r.service_type ? (SERVICE_LABELS[r.service_type] ?? r.service_type) : "Garage work";
+}
+
 export interface QuoteLineInput {
   kind: LineKind;
   description: string;
@@ -40,6 +58,8 @@ export interface MyQuote {
   total: Money;
   take_home: Money;
   days_needed: number;
+  part_condition: PartCondition | null;
+  fulfilment: Fulfilment | null;
   note: string | null;
   sent_at: string;
   valid_until: string;
@@ -48,9 +68,13 @@ export interface MyQuote {
 
 export interface GarageRequest {
   id: string;
+  kind: RequestKind;
   outlet: { id: string; name: string } | null;
   car: { make: string; model: string; year: number; plate: string; chassis_number: string | null } | null;
-  service_type: string;
+  service_type: string | null;
+  part_name: string | null;
+  /** Parts only: where the customer wants it delivered. */
+  delivery_address: string | null;
   description: string;
   county: string;
   customer_first_name: string | null;
@@ -78,8 +102,8 @@ export function useGarageRequest(id: string | undefined) {
   });
 }
 
-export const previewQuote = (lines: QuoteLineInput[]) =>
-  apiPost<{ total: Money; take_home: Money }>("/merchant/garage-requests/quote-preview", { lines });
+export const previewQuote = (lines: QuoteLineInput[], kind: RequestKind = "service") =>
+  apiPost<{ total: Money; take_home: Money }>("/merchant/garage-requests/quote-preview", { lines, kind });
 
 function useAction<T>(id: string, fn: (input: T) => Promise<GarageRequest>) {
   const qc = useQueryClient();
@@ -93,7 +117,7 @@ function useAction<T>(id: string, fn: (input: T) => Promise<GarageRequest>) {
 }
 
 export const useSendQuote = (id: string) =>
-  useAction(id, (input: { lines: QuoteLineInput[]; days_needed: number; note: string | null }) =>
+  useAction(id, (input: { lines: QuoteLineInput[]; days_needed: number; note: string | null; part_condition?: PartCondition; fulfilment?: Fulfilment }) =>
     apiPost<GarageRequest>(`/merchant/garage-requests/${id}/quote`, input),
   );
 export const useWithdrawQuote = (id: string) => useAction(id, () => apiPost<GarageRequest>(`/merchant/garage-requests/${id}/quote/withdraw`));

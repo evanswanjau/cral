@@ -10,6 +10,10 @@ info:
     merchant's next payout run) or refunding every payment on the order by
     Send to M-Pesa (`executeRefund`). Ops sees CRAL's commission; merchants
     never do.
+
+    PT1: part orders (`kind` part, ref `P-YYMMDD-NNN`) are on the same
+    routes; a customer's wrong-part dispute is a `problem` on one. The list
+    takes an optional `kind`.
   license:
     name: Proprietary - Cruz Ride Auto Limited
 servers:
@@ -21,6 +25,7 @@ paths:
       summary: Garage orders, newest first
       parameters:
         - { name: status, in: query, schema: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] } }
+        - { name: kind, in: query, schema: { type: string, enum: [service, part] }, description: Omitted for both. }
         - { name: cursor, in: query, schema: { type: string } }
         - { name: limit, in: query, schema: { type: integer, default: 25 } }
       responses:
@@ -91,8 +96,13 @@ components:
         id: { type: string, example: ord_01JD0000000000000000000000 }
         ref: { type: string, example: G-261119-001 }
         status: { type: string, enum: [awaiting_payment, paid, in_progress, ready, completed, problem, cancelled, refunded] }
+        kind: { type: string, enum: [service, part] }
         request_id: { type: string }
         service_type: { type: string, nullable: true }
+        part_name: { type: string, nullable: true }
+        part_condition: { type: string, enum: [genuine, oem, used], nullable: true }
+        fulfilment: { type: string, enum: [fitted, delivered], nullable: true }
+        delivery_address: { type: string, nullable: true }
         description: { type: string, nullable: true }
         car: { type: object, nullable: true, properties: { make: { type: string }, model: { type: string }, year: { type: integer }, plate: { type: string } } }
         outlet: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string }, address: { type: string }, county: { type: string } } }

@@ -8,13 +8,15 @@ import { SERVICE_LABELS, SERVICE_TYPES, type OutletInput, type ServiceType } fro
 
 /**
  * The premises form, shared by "Add premises" and the detail screen's edit
- * modal (Phase 4 GS1). Not from a canvas; built from tokens.ts and the
- * portal's existing form primitives, the same as the driver form.
+ * modal (Phase 4 GS1). A parts dealer's premises (PT1) has no service
+ * list. Not from a canvas; built from tokens.ts and the portal's existing
+ * form primitives, the same as the driver form.
  */
 
 export type OutletFormValue = OutletInput;
 
 export const EMPTY_OUTLET: OutletFormValue = {
+  kind: "garage",
   name: "",
   address: "",
   county: "",
@@ -29,7 +31,7 @@ export function outletFormMissing(v: OutletFormValue): boolean {
     v.address.trim().length < 5 ||
     !v.county ||
     v.opening_hours.trim().length < 3 ||
-    v.service_types.length === 0
+    (v.kind === "garage" && v.service_types.length === 0)
   );
 }
 
@@ -38,18 +40,21 @@ export function OutletFields({
   onChange,
   showErrors,
   detailsLocked = false,
+  kindEditable = false,
 }: {
   value: OutletFormValue;
   onChange: (next: OutletFormValue) => void;
   showErrors: boolean;
+  /** Only when adding premises: garage or parts can't change afterwards. */
+  kindEditable?: boolean;
   /** CRAL has these premises: name, address and county stay as sent. */
   detailsLocked?: boolean;
 }): JSX.Element {
-  const set = (k: Exclude<keyof OutletFormValue, "service_types">) => (e: { target: { value: string } }) =>
+  const set = (k: Exclude<keyof OutletFormValue, "service_types" | "kind">) => (e: { target: { value: string } }) =>
     onChange({ ...value, [k]: e.target.value });
   const err = (k: keyof OutletFormValue, min: number, msg: string) =>
     showErrors && String(value[k]).trim().length < min ? msg : undefined;
-  const noService = showErrors && value.service_types.length === 0;
+  const noService = showErrors && value.kind === "garage" && value.service_types.length === 0;
 
   function toggle(t: ServiceType) {
     const on = value.service_types.includes(t);
@@ -58,6 +63,16 @@ export function OutletFields({
 
   return (
     <div style={O.formFields}>
+      {kindEditable && (
+        <div style={{ gridColumn: "1 / -1" }}>
+          <FormField label="What these premises are" required helper="A garage fixes cars here. A parts shop sells spare parts and may fit them.">
+            <Select value={value.kind} onChange={(e) => onChange({ ...value, kind: e.target.value as OutletFormValue["kind"] })}>
+              <option value="garage">A garage</option>
+              <option value="parts">A spare parts shop</option>
+            </Select>
+          </FormField>
+        </div>
+      )}
       <FormField label="Name on site" required error={err("name", 2, "Enter the name customers see.")} helper="The name on your sign, as customers know it.">
         <TextInput value={value.name} onChange={set("name")} disabled={detailsLocked} error={!!err("name", 2, "x")} placeholder="Mwangi Motors" />
       </FormField>
@@ -91,6 +106,7 @@ export function OutletFields({
       <FormField label="Phone at the premises" helper="Optional, if the premises has its own number.">
         <TextInput value={value.phone} onChange={set("phone")} inputMode="tel" placeholder="0712 345 678" />
       </FormField>
+      {value.kind === "garage" && (
       <div style={{ gridColumn: "1 / -1" }}>
         <div style={{ ...O.label, marginBottom: 8 }}>
           Services you do here<span style={O.required}> *</span>
@@ -125,6 +141,7 @@ export function OutletFields({
           {noService ? "Tick at least one service." : "Only what you can do on site today. The visit checks this."}
         </div>
       </div>
+      )}
     </div>
   );
 }

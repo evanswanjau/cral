@@ -19,7 +19,7 @@ export function QuoteLines({ q, title, children }: { q: OrderQuote; title: strin
     q.paid_at ? `Paid ${fmtDateTime(q.paid_at)}`
     : q.status === "accepted" ? "Agreed, not paid yet"
     : q.status === "declined" ? "You said no"
-    : q.status === "withdrawn" ? "Withdrawn by the garage"
+    : q.status === "withdrawn" ? "Withdrawn"
     : q.expired ? `Expired ${fmtDateTime(q.valid_until)}`
     : `Waiting for your answer, valid until ${fmtDateTime(q.valid_until)}`;
   return (
@@ -76,7 +76,9 @@ export function PayPanel({ order, onSent }: { order: GarageOrder; onSent: () => 
       <div style={P.mono}>PAY CRAL</div>
       <h2 style={P.h2}>{kesText(order.amount_due)} by M-Pesa</h2>
       <p style={{ ...bodyText, fontSize: 13 }}>
-        CRAL holds the money and pays the garage only after you confirm the work is done.
+        {order.kind === "part"
+          ? "CRAL holds the money and pays the dealer only after you confirm it's the right part."
+          : "CRAL holds the money and pays the garage only after you confirm the work is done."}
       </p>
       {pending ? (
         <p style={{ ...bodyText, fontWeight: 600, color: "#0F23A8", marginTop: 12 }}>

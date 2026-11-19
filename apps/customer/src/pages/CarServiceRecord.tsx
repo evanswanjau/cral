@@ -41,7 +41,7 @@ function Entry({ e }: { e: ServiceRecordEntry }): JSX.Element {
           <div style={P.mono}>
             {fmtDate(e.completed_at).toUpperCase()} · {e.ref}
           </div>
-          <h2 style={{ ...P.h2, fontSize: 18 }}>{e.service_type ? SERVICE_LABELS[e.service_type] : "Garage job"}</h2>
+          <h2 style={{ ...P.h2, fontSize: 18 }}>{e.service_type ? SERVICE_LABELS[e.service_type] : e.part_name ? `Part: ${e.part_name}` : "Garage job"}</h2>
           {e.outlet && (
             <p style={{ ...bodyText, fontSize: 13 }}>
               {e.outlet.name}, {e.outlet.address}, {e.outlet.county}

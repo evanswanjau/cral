@@ -15,7 +15,7 @@ function fmtDate(iso: string): string {
 
 function Row({ o, onOpen }: { o: Outlet; onOpen: () => void }): JSX.Element {
   const meta = STATUS[o.status];
-  const services = o.service_types.map((t) => SERVICE_LABELS[t]).join(", ");
+  const services = o.kind === "parts" ? "Spare parts" : o.service_types.map((t) => SERVICE_LABELS[t]).join(", ");
   return (
     <div
       className="m-trow"

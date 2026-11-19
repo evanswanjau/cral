@@ -34,6 +34,7 @@ import { Sessions } from "./pages/Sessions.js";
 import { GarageHome } from "./pages/garage/GarageHome.js";
 import { GarageRequestPage } from "./pages/garage/GarageRequestPage.js";
 import { GarageOrderPage } from "./pages/garage/GarageOrderPage.js";
+import { MyParts } from "./pages/parts/MyParts.js";
 import { CarServiceRecord } from "./pages/CarServiceRecord.js";
 import { MyCars } from "./pages/MyCars.js";
 
@@ -129,6 +130,9 @@ export const routes: RouteObject[] = [
           { path: "/my-cars/:id", element: <CarServiceRecord /> },
           { path: "/garage/requests/:id", element: <GarageRequestPage /> },
           { path: "/garage/orders/:id", element: <GarageOrderPage /> },
+          // Spare parts (PT1): reachable from the account menu while
+          // `/parts` still goes to "Coming to CRAL" until PT2.
+          { path: "/my-parts", element: <MyParts /> },
         ],
       },
     ],

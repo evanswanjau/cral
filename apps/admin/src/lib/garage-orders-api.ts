@@ -22,6 +22,8 @@ export type GarageOrderStatus =
   | "cancelled"
   | "refunded";
 
+export type OrderKind = "service" | "part";
+
 export interface AdminOrderQuote {
   id: string;
   kind: "original" | "extra";
@@ -30,6 +32,8 @@ export interface AdminOrderQuote {
   total: Money;
   commission: Money | null;
   days_needed: number;
+  part_condition: "genuine" | "oem" | "used" | null;
+  fulfilment: "fitted" | "delivered" | null;
   note: string | null;
   sent_at: string;
   valid_until: string;
@@ -42,8 +46,14 @@ export interface AdminGarageOrder {
   id: string;
   ref: string;
   status: GarageOrderStatus;
+  /** `part` is a spare-parts order (PT1); its `problem` is a wrong-part dispute. */
+  kind: OrderKind;
   request_id: string;
   service_type: string | null;
+  part_name: string | null;
+  part_condition: "genuine" | "oem" | "used" | null;
+  fulfilment: "fitted" | "delivered" | null;
+  delivery_address: string | null;
   description: string | null;
   car: { make: string; model: string; year: number; plate: string } | null;
   outlet: { id: string; name: string; address: string; county: string } | null;
@@ -76,9 +86,10 @@ export interface GarageOrdersPage {
   has_more: boolean;
 }
 
-export function fetchGarageOrders(status: GarageOrderStatus | "all", cursor?: string | null) {
+export function fetchGarageOrders(status: GarageOrderStatus | "all", cursor?: string | null, kind: OrderKind | "all" = "all") {
   const q = new URLSearchParams({ limit: "25" });
   if (status !== "all") q.set("status", status);
+  if (kind !== "all") q.set("kind", kind);
   if (cursor) q.set("cursor", cursor);
   return apiGet<GarageOrdersPage>(`/admin/garage-orders?${q.toString()}`);
 }
@@ -115,5 +126,23 @@ export const ORDER_STATUS: Record<GarageOrderStatus, { label: string; bg: string
   refunded: { label: "REFUNDED", bg: "#F1F3F6", border: "#E4E7EC", fg: "#5A6373" },
   cancelled: { label: "CANCELLED", bg: "#F1F3F6", border: "#E4E7EC", fg: "#838C9B" },
 };
+
+export const CONDITION_LABELS = { genuine: "Genuine", oem: "OEM", used: "Used" } as const;
+
+/** What an order is for, in words: the garage service or the part. */
+export function orderTitle(o: Pick<AdminGarageOrder, "kind" | "service_type" | "part_name">): string {
+  if (o.kind === "part") return `Part: ${o.part_name ?? "not named"}`;
+  return o.service_type ? (SERVICE_LABELS[o.service_type] ?? o.service_type) : "Garage job";
+}
+
+/** A part order's own status words; the colours stay the garage set. */
+export function orderStatus(o: Pick<AdminGarageOrder, "kind" | "status" | "fulfilment">) {
+  const base = ORDER_STATUS[o.status];
+  if (o.kind !== "part") return base;
+  if (o.status === "problem") return { ...base, label: "WRONG PART DISPUTED" };
+  if (o.status === "ready") return { ...base, label: `${o.fulfilment === "fitted" ? "FITTED" : "DELIVERED"}, AWAITING CONFIRM` };
+  if (o.status === "paid") return { ...base, label: "PAID, NOT HANDED OVER" };
+  return base;
+}
 
 export const money = (m: Money) => `KES ${(m.amount / 100).toLocaleString("en-KE")}`;

@@ -17,6 +17,12 @@
  * services alone sets `garage_only: true` (Phase 4 GS1). Garage services
  * isn't a `SupplierType`: its `/join/garages` page (GS4) is its own page,
  * and its `?offer=garage` link pre-selects it here.
+ *
+ * Spare parts (Phase 5 PT1) is the same kind of offer as garage services:
+ * premises, no vehicle. Picked alone, or with garage services and nothing
+ * else, it also sets `garage_only` (which means "premises only" on the
+ * server; no new column). Submitting then lands on `/premises/new`,
+ * pre-set to a parts shop when parts was picked without garage services.
  */
 
 import { getCurrentUserId } from "./auth.js";
@@ -24,10 +30,14 @@ import type { OnboardingDraft } from "./onboarding-draft.js";
 import { readRememberedOffer, SUPPLIER_TYPES, type SupplierType } from "./supplier-types.js";
 import type { VehicleType } from "./vehicle-categories.js";
 
-export type Offer = SupplierType | "garage";
+export type Offer = SupplierType | "garage" | "parts";
 
-/** Step 1's order: the four supplier types, then garage services. */
-export const OFFER_ORDER: readonly Offer[] = [...SUPPLIER_TYPES, "garage"];
+/** Step 1's order: the four supplier types, then garage services, then spare parts. */
+export const OFFER_ORDER: readonly Offer[] = [...SUPPLIER_TYPES, "garage", "parts"];
+
+/** Offers served from premises rather than vehicles or drivers. */
+export const PREMISES_OFFERS: readonly Offer[] = ["garage", "parts"];
+export const isPremisesOffer = (o: Offer): boolean => PREMISES_OFFERS.includes(o);
 
 const CATEGORY_OFFER: Record<VehicleType, Offer> = {
   sedan: "cars",
@@ -90,7 +100,9 @@ export function initialOffers(draft: OnboardingDraft): Offer[] {
     // A saved Driving-only pick that the draft no longer agrees with
     // (another device added a vehicle) gives way to the vehicles.
     const stale = draft.vehicles.length > 0 && isDriversOnlyChoice(picked);
-    return stale ? derived : ordered([...derived, ...picked]);
+    // `garage_only` also stands for parts only: trust the pick over it.
+    const fromDraft = picked.includes("parts") && !picked.includes("garage") ? derived.filter((o) => o !== "garage") : derived;
+    return stale ? derived : ordered([...fromDraft, ...picked]);
   }
   if (derived.length > 0) return derived;
   const fromLink = readRememberedOffer();
@@ -102,9 +114,9 @@ export function isDriversOnlyChoice(offers: Offer[]): boolean {
   return offers.length === 1 && offers[0] === "drivers";
 }
 
-/** Garage services and nothing else: no vehicle step, premises come after submit. */
+/** Garage services and/or spare parts and nothing else: no vehicle step, premises come after submit. */
 export function isGarageOnlyChoice(offers: Offer[]): boolean {
-  return offers.length === 1 && offers[0] === "garage";
+  return offers.length > 0 && offers.every(isPremisesOffer);
 }
 
 /**
@@ -113,7 +125,7 @@ export function isGarageOnlyChoice(offers: Offer[]): boolean {
  * "Premises" nav item before any premises exist.
  */
 export function offersGarage(garageOnly: boolean): boolean {
-  return garageOnly || (readPicked() ?? []).includes("garage");
+  return garageOnly || (readPicked() ?? []).some(isPremisesOffer);
 }
 
 /** Offers that can't be unticked because a vehicle of that kind is already added. */
@@ -136,7 +148,7 @@ export function fleetKind(draft: OnboardingDraft, offers: Offer[]): FleetKind {
   }
   if (draft.driversOnly || isDriversOnlyChoice(offers)) return "drivers";
   if (draft.garageOnly || isGarageOnlyChoice(offers)) return "premises";
-  const vehicleOffers = offers.filter((o) => o !== "drivers" && o !== "garage");
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isPremisesOffer(o));
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "trucks") return "trucks";
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "machinery") return "machinery";
   return "vehicles";

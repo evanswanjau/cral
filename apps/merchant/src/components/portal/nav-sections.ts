@@ -98,7 +98,7 @@ export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] 
   const jobs: NavItem = {
     key: "garage-jobs",
     to: "/garage/orders",
-    label: "Garage jobs",
+    label: "Jobs and orders",
     ...(counts.garageJobCount ? { count: counts.garageJobCount } : {}),
   };
   const garageOnly = input.garageOnly && input.vehicleCount === 0;

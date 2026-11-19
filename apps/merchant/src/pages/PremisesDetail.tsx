@@ -33,6 +33,7 @@ const SUBMITTABLE = ["draft", "action", "rejected"];
 
 function toForm(o: Outlet): OutletFormValue {
   return {
+    kind: o.kind,
     name: o.name,
     address: o.address,
     county: o.county,
@@ -264,6 +265,11 @@ export function PremisesDetail(): JSX.Element {
         </div>
       )}
 
+      {o.kind === "parts" ? (
+        <div style={{ ...P.card, marginTop: 16, maxWidth: 820, padding: 18 }}>
+          <span style={{ ...P.lede, margin: 0 }}>A spare parts shop. Parts requests from customers in {o.county} come here once CRAL approves it.</span>
+        </div>
+      ) : (
       <div style={{ ...P.card, marginTop: 16, maxWidth: 820 }}>
         <div style={P.cardHead}>
           <span style={P.cardTitle}>Services</span>
@@ -278,6 +284,7 @@ export function PremisesDetail(): JSX.Element {
           )}
         </div>
       </div>
+      )}
 
       <Photos o={o} canRemove={!isLive || o.photos.length > MIN_PHOTOS} flash={flash} />
 
