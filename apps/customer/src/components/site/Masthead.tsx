@@ -19,8 +19,8 @@ import { AccountMenu } from "./AccountMenu.js";
  * part is not from a canvas; built from tokens.ts. On a phone the tabs
  * are a second row that scrolls sideways inside itself; from 960px they
  * sit in the one row between logo and account (`.cral-mast` in
- * index.css). Parts and garage are not tabs: they are not live, and show
- * once, in "Coming to CRAL". The canvas's "List your car" became "Earn
+ * index.css). Coming services (parts, buy and sell) are not tabs: they
+ * show once, in "Coming to CRAL". Garage became a tab in GS4. The canvas's "List your car" became "Earn
  * with CRAL", since every supplier (trucks, machinery, drivers) earns
  * here, not only car owners.
  *

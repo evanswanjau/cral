@@ -88,7 +88,7 @@ export function LandingShell({
               />
               <p style={{ margin: 0, maxWidth: 320, font: `400 14px/1.6 ${SANS}` }}>
                 The merchant side of CRAL, Kenya's marketplace for hiring cars, trucks, machinery and
-                drivers.
+                drivers, and for garage services.
               </p>
             </div>
             <div>
@@ -99,6 +99,9 @@ export function LandingShell({
                     <Link to={`/join/${t}`}>{SUPPLIERS[t].label}</Link>
                   </li>
                 ))}
+                <li>
+                  <Link to="/join/garages">Garages</Link>
+                </li>
               </ul>
             </div>
             <div>

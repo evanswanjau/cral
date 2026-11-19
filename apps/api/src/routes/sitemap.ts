@@ -34,6 +34,8 @@ const STATIC_PATHS: Array<{ path: string; changefreq: string; priority: string }
   { path: "/machinery/search", changefreq: "hourly", priority: "0.8" },
   { path: "/drivers", changefreq: "daily", priority: "0.7" },
   { path: "/towing", changefreq: "weekly", priority: "0.7" },
+  // Garage services went live in Phase 4 GS4. `/services` only redirects.
+  { path: "/garage", changefreq: "weekly", priority: "0.7" },
   { path: "/how-it-works", changefreq: "monthly", priority: "0.5" },
   { path: "/how-we-protect-you", changefreq: "monthly", priority: "0.5" },
   { path: "/corporate", changefreq: "monthly", priority: "0.3" },

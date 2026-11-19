@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./api.js";
 import type { Money } from "./vehicles-api.js";
 import type { LineKind, QuoteLineInput } from "./garage-api.js";
@@ -91,6 +91,33 @@ export function useGarageOrder(id: string | undefined) {
     queryKey: ["garage-order", id],
     queryFn: () => apiGet<GarageOrder>(`/merchant/garage-orders/${id}`),
     enabled: !!id,
+  });
+}
+
+/** One of this garage's own completed jobs on a car (GS4's service record, garage side). */
+export interface ServiceRecordEntry {
+  order_id: string;
+  ref: string;
+  service_type: string | null;
+  description: string | null;
+  outlet_name: string | null;
+  lines: Array<{ kind: LineKind; description: string; amount: Money }>;
+  total: Money;
+  take_home: Money;
+  completed_at: string;
+}
+
+/** Your own finished jobs on this job's car, latest first. Never another garage's. */
+export function useServiceRecord(orderId: string | undefined) {
+  return useInfiniteQuery({
+    queryKey: ["garage-order", orderId, "service-record"],
+    queryFn: ({ pageParam }) =>
+      apiGet<{ data: ServiceRecordEntry[]; next_cursor: string | null; has_more: boolean }>(
+        `/merchant/garage-orders/${orderId}/service-record?limit=10${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""}`,
+      ),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last.has_more ? last.next_cursor : null),
+    enabled: !!orderId,
   });
 }
 

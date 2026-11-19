@@ -15,7 +15,8 @@
  * Two values reach the server, through the existing onboarding PATCH:
  * picking Driving alone sets `drivers_only: true`, and picking Garage
  * services alone sets `garage_only: true` (Phase 4 GS1). Garage services
- * isn't a `SupplierType`: it has no landing or `/join` page yet.
+ * isn't a `SupplierType`: its `/join/garages` page (GS4) is its own page,
+ * and its `?offer=garage` link pre-selects it here.
  */
 
 import { getCurrentUserId } from "./auth.js";

@@ -345,14 +345,26 @@ export function unitAt(supplier: SupplierInfo, index: number): EstimatorUnit {
   return supplier.units[index] ?? supplier.units[0];
 }
 
-/** Suppliers CRAL will take on later; shown on `/`, not selectable. */
-export const COMING_SUPPLIERS = ["Garages", "Parts dealers", "Car sellers"] as const;
+/**
+ * Suppliers CRAL will take on later; shown on `/`, not selectable.
+ * Garages left this list in GS4: they join through `/join/garages`
+ * (`pages/join/GarageJoinPage.tsx`), not a `SupplierType`, because a garage
+ * has no vehicle, no per-day rate and no estimator.
+ */
+export const COMING_SUPPLIERS = ["Parts dealers", "Car sellers"] as const;
+
+/** What `?offer=` may pre-select in onboarding: a supplier type, or garage services. */
+export type RememberedOffer = SupplierType | "garage";
+
+function isRememberedOffer(value: string | null | undefined): value is RememberedOffer {
+  return value === "garage" || isSupplierType(value);
+}
 
 const OFFER_KEY = "cral.merchant.offer";
 
 /** Keep the `?offer=` a visitor arrived with, for onboarding to pre-select. */
 export function rememberOffer(value: string | null): void {
-  if (!isSupplierType(value)) return;
+  if (!isRememberedOffer(value)) return;
   try {
     sessionStorage.setItem(OFFER_KEY, value);
   } catch {
@@ -360,11 +372,11 @@ export function rememberOffer(value: string | null): void {
   }
 }
 
-/** The supplier type remembered from `?offer=`, if any. */
-export function readRememberedOffer(): SupplierType | null {
+/** The offer remembered from `?offer=`, if any. */
+export function readRememberedOffer(): RememberedOffer | null {
   try {
     const value = sessionStorage.getItem(OFFER_KEY);
-    return isSupplierType(value) ? value : null;
+    return isRememberedOffer(value) ? value : null;
   } catch {
     return null;
   }

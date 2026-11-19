@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { Icon } from "@phosphor-icons/react";
 import { ShieldCheck } from "@phosphor-icons/react/dist/ssr/ShieldCheck";
 import { DeviceMobile } from "@phosphor-icons/react/dist/ssr/DeviceMobile";
@@ -58,7 +59,6 @@ const WHY: Array<{ icon: Icon; title: string; body: string }> = [
 ];
 
 const COMING_ICONS: Record<(typeof COMING_SUPPLIERS)[number], Icon> = {
-  Garages: Wrench,
   "Parts dealers": Gear,
   "Car sellers": Storefront,
 };
@@ -67,7 +67,7 @@ const FAQ: SupplierFaq[] = [
   COST_FAQ,
   {
     q: "What can I offer on CRAL?",
-    a: "Cars and vans, trucks and trailers, construction and farm machinery, and driving, either yourself or your own drivers. Pick one or more when you sign up, and add the rest later.",
+    a: "Cars and vans, trucks and trailers, construction and farm machinery, driving (yourself or your own drivers), and garage services at your own premises. Pick one or more when you sign up, and add the rest later.",
   },
   {
     q: "Do I need a vehicle to join?",
@@ -117,6 +117,26 @@ function Hero(): JSX.Element {
 
 function Coming(): JSX.Element {
   return (
+    <>
+    {/* Garages opened in Phase 4 GS4: their own page, not a door (no vehicle, no estimator). */}
+    <div className="ml-coming">
+      <div className="ml-wrap ml-coming-inner">
+        <span className="ml-kicker" style={{ margin: 0 }}>
+          <span className="ml-kicker-dot" />
+          NOW OPEN
+        </span>
+        <div className="ml-coming-list">
+          <span className="ml-coming-chip" style={{ borderStyle: "solid" }}>
+            <Wrench size={16} weight="regular" />
+            Garages
+          </span>
+        </div>
+        <Link className="ml-coming-link" to="/join/garages">
+          Join as a garage
+          <ArrowRight size={16} weight="bold" />
+        </Link>
+      </div>
+    </div>
     <div className="ml-coming">
       <div className="ml-wrap ml-coming-inner">
         <span className="ml-kicker" style={{ margin: 0 }}>
@@ -136,7 +156,7 @@ function Coming(): JSX.Element {
         </div>
         <a
           className="ml-coming-link"
-          href={whatsappLink("Hi CRAL - I run a garage, sell parts or sell cars, and I'm interested in joining")}
+          href={whatsappLink("Hi CRAL - I sell parts or sell cars, and I'm interested in joining")}
           target="_blank"
           rel="noreferrer"
         >
@@ -145,6 +165,7 @@ function Coming(): JSX.Element {
         </a>
       </div>
     </div>
+    </>
   );
 }
 

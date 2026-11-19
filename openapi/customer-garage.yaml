@@ -82,6 +82,33 @@ paths:
         "204": { description: Removed. }
         "409": { description: "`car_has_requests`" }
 
+  /me/cars/{carId}/service-record:
+    parameters:
+      - { name: carId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: The car's service record, latest job first
+      description: >
+        Every garage job on this car that was completed (confirmed by the
+        customer, automatically 72 h after "ready", or released by Ops),
+        with the work that was paid for, line by line (GS4). Cancelled and
+        refunded jobs are not on the record. Another customer's car is 404.
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of service record entries.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  car: { $ref: "#/components/schemas/Car" }
+                  data: { type: array, items: { $ref: "#/components/schemas/ServiceRecordEntry" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+        "404": { description: "`car_not_found`" }
+
   /me/garage-requests:
     get:
       summary: My garage requests, newest first
@@ -463,3 +490,32 @@ components:
         resolved_at: { type: string, format: date-time, nullable: true }
         resolution_note: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
+
+    ServiceRecordEntry:
+      type: object
+      description: One completed garage job on a car (GS4).
+      properties:
+        order_id: { type: string, example: ord_01JD0000000000000000000000 }
+        ref: { type: string, example: G-261119-001 }
+        service_type: { type: string, nullable: true, enum: [service, diagnostics, mechanical, bodywork, tyres, electrical, ac] }
+        description: { type: string, nullable: true, description: What the customer asked for. }
+        outlet:
+          type: object
+          nullable: true
+          properties:
+            name: { type: string }
+            address: { type: string }
+            county: { type: string }
+        work:
+          type: array
+          description: The paid quotes, the original first, then any extra work.
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [original, extra] }
+              lines: { type: array, items: { $ref: "#/components/schemas/QuoteLine" } }
+              total: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+        paid_at: { type: string, format: date-time, nullable: true }
+        completed_at: { type: string, format: date-time }
+        confirmed_by: { type: string, enum: [customer, auto, ops] }

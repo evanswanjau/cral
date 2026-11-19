@@ -27,7 +27,7 @@ each one look and feel like its own place.
 | 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built. **Production shipped** at `72e3593` | 3 (done) |
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Built, in `develop`. Production pending (owner says ship phase 2) | 1 review + 3-5 builds |
 | 3 | Sales agents sign up owners in the field | Built, in `develop`. Production pending (owner says ship phase 3) | 3 |
-| 4 | Garage services: quote first, pay through CRAL | In progress: GS1-GS2 built, in `develop` | 4 |
+| 4 | Garage services: quote first, pay through CRAL | Built, in `develop`. Production pending | 4 |
 | 5 | Spare parts: quoted against your chassis | Not started | 2 |
 | 6 | Buy and sell cars: verified listings + enquiries | Not started | 4 |
 
@@ -227,7 +227,7 @@ job stays on the car's service record.
 | GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 | GS2 | My cars (customer) + request for quote + itemised quotes. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 | GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
-| GS4 | Service record, garage sub-site made real | Opus |
+| GS4 | Service record, garage sub-site made real, Ops garage jobs screen. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 
 Open questions 1, 2 and 5 (payment timing, auto-confirm window, commission
 rate) were answered 2026-11-19: see "Owner decisions on record".

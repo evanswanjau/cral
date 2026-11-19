@@ -89,7 +89,7 @@ describe("GET /sitemap.xml", () => {
     expect(res.text).not.toContain("https://cral.co.ke/browse");
     expect(res.text).not.toContain("https://cral.co.ke/services/towing");
     expect(res.text).toContain("https://cral.co.ke/how-it-works");
-    for (const path of ["/cars", "/cars/search", "/trucks", "/trucks/search", "/machinery", "/machinery/search", "/drivers", "/towing"]) {
+    for (const path of ["/cars", "/cars/search", "/trucks", "/trucks/search", "/machinery", "/machinery/search", "/drivers", "/towing", "/garage"]) {
       expect(res.text).toContain(`<loc>https://cral.co.ke${path}</loc>`);
     }
     expect(res.text).toContain(`/cars/${visible}`);

@@ -30,8 +30,8 @@ const OPTION_COPY: Record<Offer, { title: string; body: string }> = {
 
 const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench };
 
-/** Open to join now, so no longer "coming" here (the public landing keeps its own list). */
-const STILL_COMING = COMING_SUPPLIERS.filter((c) => c !== "Garages");
+/** Not open to join yet (garages left this list in GS4). */
+const STILL_COMING = COMING_SUPPLIERS;
 
 const ASK_URL = whatsappLink("Hi CRAL, a question about joining");
 

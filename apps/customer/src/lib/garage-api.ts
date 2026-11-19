@@ -178,3 +178,29 @@ export const declineExtraQuote = (id: string, quoteId: string) =>
   apiPost<GarageOrder>(`/me/garage-orders/${id}/extras/${quoteId}/decline`);
 export const confirmGarageOrder = (id: string) => apiPost<GarageOrder>(`/me/garage-orders/${id}/confirm`, undefined, idempotent());
 export const raiseGarageProblem = (id: string, note: string) => apiPost<GarageOrder>(`/me/garage-orders/${id}/problem`, { note });
+
+// --- GS4: the service record ------------------------------------------
+
+export interface ServiceRecordEntry {
+  order_id: string;
+  ref: string;
+  service_type: ServiceType | null;
+  description: string | null;
+  outlet: { name: string; address: string; county: string } | null;
+  /** The paid quotes: the original first, then any extra work. */
+  work: Array<{ kind: "original" | "extra"; lines: Array<{ kind: string; description: string; amount: Money }>; total: Money }>;
+  total: Money;
+  paid_at: string | null;
+  completed_at: string;
+  confirmed_by: "customer" | "auto" | "ops";
+}
+
+export interface ServiceRecordPage {
+  car: Car;
+  data: ServiceRecordEntry[];
+  next_cursor: string | null;
+  has_more: boolean;
+}
+
+export const getServiceRecord = (carId: string, cursor?: string | null) =>
+  apiGet<ServiceRecordPage>(`/me/cars/${carId}/service-record?limit=20${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);

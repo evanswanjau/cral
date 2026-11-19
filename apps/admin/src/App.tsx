@@ -19,6 +19,8 @@ import { Settings } from "./pages/Settings.js";
 import { Communications } from "./pages/Communications.js";
 import { Queue as ServicesQueue } from "./pages/services/Queue.js";
 import { Case as ServiceCase } from "./pages/services/Case.js";
+import { Queue as GarageOrdersQueue } from "./pages/garage-orders/Queue.js";
+import { Case as GarageOrderCase } from "./pages/garage-orders/Case.js";
 import { Queue as PayoutsQueue } from "./pages/payouts/Queue.js";
 import { Run as PayoutRun } from "./pages/payouts/Run.js";
 import { MyMerchants } from "./pages/agents/MyMerchants.js";
@@ -59,6 +61,8 @@ const router = createBrowserRouter([
           { path: "bookings/:id", element: <BookingDetail /> },
           { path: "services", element: <ServicesQueue /> },
           { path: "services/:id", element: <ServiceCase /> },
+          { path: "garage-orders", element: <GarageOrdersQueue /> },
+          { path: "garage-orders/:id", element: <GarageOrderCase /> },
           { path: "payouts", element: <PayoutsQueue /> },
           { path: "payouts/:id", element: <PayoutRun /> },
           // A sales agent's whole console (`AppLayout` keeps them here).

@@ -7,6 +7,7 @@ import { requireIdempotencyKey } from "../../middleware/idempotency.js";
 import { requireAdmin } from "../../middleware/require-admin.js";
 import * as garage from "./service.js";
 import * as orders from "./orders.js";
+import * as serviceRecord from "./service-record.js";
 import {
   AdminOrderQuerySchema,
   ExtraQuoteSchema,
@@ -68,6 +69,14 @@ garageRouter.delete(
   asyncHandler(async (req, res) => {
     await garage.deleteCar(req.auth!.sub, req.params.carId as string, ctxOf(req));
     res.status(204).send();
+  }),
+);
+
+garageRouter.get(
+  "/me/cars/:carId/service-record",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await serviceRecord.customerServiceRecord(req.auth!.sub, req.params.carId as string, ListQuerySchema.parse(req.query)));
   }),
 );
 
@@ -253,6 +262,14 @@ garageRouter.get(
   authenticate(),
   asyncHandler(async (req, res) => {
     res.status(200).json(await orders.getMerchantOrder(req.auth!.sub, oid(req)));
+  }),
+);
+
+garageRouter.get(
+  "/merchant/garage-orders/:orderId/service-record",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await serviceRecord.merchantServiceRecord(req.auth!.sub, oid(req), ListQuerySchema.parse(req.query)));
   }),
 );
 
