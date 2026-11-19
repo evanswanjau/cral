@@ -24,6 +24,7 @@ import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { driversRouter } from "./modules/drivers/routes.js";
 import { outletsRouter } from "./modules/outlets/routes.js";
+import { saleListingsRouter } from "./modules/sale-listings/routes.js";
 import { garageRouter } from "./modules/garage/routes.js";
 import { catalogRouter } from "./modules/catalog/routes.js";
 import { customerAccountRouter } from "./modules/customer-account/routes.js";
@@ -132,6 +133,7 @@ export function createApp(): Express {
   app.use(vehiclesRouter);
   app.use(driversRouter);
   app.use(outletsRouter);
+  app.use(saleListingsRouter);
   app.use(garageRouter);
   app.use(catalogRouter);
   app.use(customerAccountRouter);

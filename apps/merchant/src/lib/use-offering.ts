@@ -3,7 +3,8 @@ import { loadDraftFromServer } from "./onboarding-draft.js";
 import { useVehicleList } from "./vehicles-api.js";
 import { useDriverList } from "./drivers-api.js";
 import { useOutletList } from "./outlets-api.js";
-import { offersGarage } from "./onboarding-offer.js";
+import { useSaleListingList } from "./sales-api.js";
+import { offersGarage, offersSelling } from "./onboarding-offer.js";
 import { FLEET_WORDS, fleetKind, isDriverOnly, type FleetWord, type OfferingInput } from "../components/portal/nav-sections.js";
 
 export type Offering = OfferingInput & {
@@ -15,6 +16,8 @@ export type Offering = OfferingInput & {
   driverCount: number;
   /** Premises sent back or turned down. */
   premisesActionCount: number;
+  /** Sale listings sent back or turned down. */
+  saleActionCount: number;
 };
 
 /**
@@ -27,7 +30,9 @@ export function useOffering(): Offering {
   const { data: vehicles } = useVehicleList("all");
   const { data: drivers } = useDriverList();
   const { data: outlets } = useOutletList();
+  const { data: sales } = useSaleListingList();
   const garageOnly = draft?.garageOnly ?? false;
+  const sellsOnly = draft?.sellsOnly ?? false;
   const input: OfferingInput = {
     vehicleCount: vehicles?.counts.all ?? 0,
     vehicleTypes: vehicles?.data.map((v) => v.type) ?? [],
@@ -35,6 +40,8 @@ export function useOffering(): Offering {
     driversOnly: draft?.driversOnly ?? false,
     garageOnly,
     showPremises: (outlets?.counts.all ?? 0) > 0 || offersGarage(garageOnly),
+    sellsOnly,
+    showSales: (sales?.counts.all ?? 0) > 0 || offersSelling(sellsOnly),
   };
   return {
     ...input,
@@ -42,5 +49,6 @@ export function useOffering(): Offering {
     fleet: FLEET_WORDS[fleetKind(input)],
     driverCount: drivers?.counts.all ?? 0,
     premisesActionCount: outlets?.counts.needs_action ?? 0,
+    saleActionCount: sales?.counts.needs_action ?? 0,
   };
 }

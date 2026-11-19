@@ -23,6 +23,11 @@
  * else, it also sets `garage_only` (which means "premises only" on the
  * server; no new column). Submitting then lands on `/premises/new`,
  * pre-set to a parts shop when parts was picked without garage services.
+ *
+ * Selling cars (Phase 6 CS1) needs no vehicle step either: the car is a
+ * sale listing added in the portal. Picked with nothing that needs a
+ * fleet, it sets `sells_only: true`; picked with garage or parts, both
+ * flags are set. Submitting with selling alone lands on `/sales/new`.
  */
 
 import { getCurrentUserId } from "./auth.js";
@@ -30,14 +35,17 @@ import type { OnboardingDraft } from "./onboarding-draft.js";
 import { readRememberedOffer, SUPPLIER_TYPES, type SupplierType } from "./supplier-types.js";
 import type { VehicleType } from "./vehicle-categories.js";
 
-export type Offer = SupplierType | "garage" | "parts";
+export type Offer = SupplierType | "garage" | "parts" | "selling";
 
-/** Step 1's order: the four supplier types, then garage services, then spare parts. */
-export const OFFER_ORDER: readonly Offer[] = [...SUPPLIER_TYPES, "garage", "parts"];
+/** Step 1's order: the four supplier types, then garage services, spare parts and selling cars. */
+export const OFFER_ORDER: readonly Offer[] = [...SUPPLIER_TYPES, "garage", "parts", "selling"];
 
 /** Offers served from premises rather than vehicles or drivers. */
 export const PREMISES_OFFERS: readonly Offer[] = ["garage", "parts"];
 export const isPremisesOffer = (o: Offer): boolean => PREMISES_OFFERS.includes(o);
+
+/** Offers that need no vehicle in onboarding: premises, and selling cars (listed in the portal). */
+export const isNoFleetOffer = (o: Offer): boolean => isPremisesOffer(o) || o === "selling";
 
 const CATEGORY_OFFER: Record<VehicleType, Offer> = {
   sedan: "cars",
@@ -62,6 +70,7 @@ export function derivedOffers(draft: OnboardingDraft): Offer[] {
   const out: Offer[] = draft.vehicles.map((v) => offerForCategory(v.type));
   if (draft.driversOnly) out.push("drivers");
   if (draft.garageOnly) out.push("garage");
+  if (draft.sellsOnly) out.push("selling");
   return ordered(out);
 }
 
@@ -114,9 +123,23 @@ export function isDriversOnlyChoice(offers: Offer[]): boolean {
   return offers.length === 1 && offers[0] === "drivers";
 }
 
-/** Garage services and/or spare parts and nothing else: no vehicle step, premises come after submit. */
+/** Only offers that need no vehicle, at least one of them premises: premises come after submit. */
 export function isGarageOnlyChoice(offers: Offer[]): boolean {
-  return offers.length > 0 && offers.every(isPremisesOffer);
+  return offers.length > 0 && offers.every(isNoFleetOffer) && offers.some(isPremisesOffer);
+}
+
+/** Selling cars and nothing that needs a vehicle: no vehicle step (Phase 6 CS1). */
+export function isSellsOnlyChoice(offers: Offer[]): boolean {
+  return offers.includes("selling") && offers.every(isNoFleetOffer);
+}
+
+/**
+ * Whether this merchant said they sell cars: the server's `sells_only`, or
+ * a pick kept on this device. Drives the portal's "Cars for sale" item
+ * before any listing exists.
+ */
+export function offersSelling(sellsOnly: boolean): boolean {
+  return sellsOnly || (readPicked() ?? []).includes("selling");
 }
 
 /**
@@ -133,7 +156,7 @@ export function lockedOffers(draft: OnboardingDraft): Set<Offer> {
   return new Set(draft.vehicles.map((v) => offerForCategory(v.type)));
 }
 
-export type FleetKind = "vehicles" | "trucks" | "machinery" | "drivers" | "premises";
+export type FleetKind = "vehicles" | "trucks" | "machinery" | "drivers" | "premises" | "sales";
 
 /**
  * What step 3 is about. With vehicles added, it follows them: every one a
@@ -148,7 +171,8 @@ export function fleetKind(draft: OnboardingDraft, offers: Offer[]): FleetKind {
   }
   if (draft.driversOnly || isDriversOnlyChoice(offers)) return "drivers";
   if (draft.garageOnly || isGarageOnlyChoice(offers)) return "premises";
-  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isPremisesOffer(o));
+  if (draft.sellsOnly || isSellsOnlyChoice(offers)) return "sales";
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isNoFleetOffer(o));
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "trucks") return "trucks";
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "machinery") return "machinery";
   return "vehicles";
@@ -160,6 +184,7 @@ export const FLEET_WORDS: Record<FleetKind, { step: string; one: string; many: s
   machinery: { step: "Machinery", one: "machine", many: "machines" },
   drivers: { step: "Drivers", one: "driver", many: "drivers" },
   premises: { step: "Premises", one: "premises", many: "premises" },
+  sales: { step: "Cars for sale", one: "car", many: "cars" },
 };
 
 /** The category a new vehicle form opens on. */

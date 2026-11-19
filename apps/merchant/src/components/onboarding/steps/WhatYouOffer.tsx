@@ -4,12 +4,13 @@ import { CheckSquare } from "@phosphor-icons/react/dist/ssr/CheckSquare";
 import { Square } from "@phosphor-icons/react/dist/ssr/Square";
 import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
 import { Wrench } from "@phosphor-icons/react/dist/ssr/Wrench";
+import { Tag } from "@phosphor-icons/react/dist/ssr/Tag";
 import { O } from "../styles.js";
 import { PrimaryButton } from "../primitives.js";
 import { whatsappLink } from "../../../lib/support.js";
 import { COMING_SUPPLIERS, SUPPLIERS, type SupplierType } from "../../../lib/supplier-types.js";
 import { SUPPLIER_ICONS } from "../../landing/SupplierDoors.js";
-import { OFFER_ORDER, isPremisesOffer, type Offer } from "../../../lib/onboarding-offer.js";
+import { OFFER_ORDER, isNoFleetOffer, isPremisesOffer, type Offer } from "../../../lib/onboarding-offer.js";
 
 /**
  * Onboarding step 1, "What do you offer?". Replaces the old Welcome step
@@ -28,12 +29,17 @@ const OPTION_COPY: Record<Offer, { title: string; body: string }> = {
   drivers: { title: "Driving", body: "You, or drivers who work for you" },
   garage: { title: "Garage services", body: "Servicing and repairs at your own premises" },
   parts: { title: "Spare parts", body: "Parts from your own shop, delivered or fitted" },
+  selling: { title: "Cars for sale", body: "List cars you are selling. Free to list" },
 };
 
-const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench, parts: Gear };
+const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench, parts: Gear, selling: Tag };
 
-/** Not open to join yet (garages left this list in GS4, parts dealers in PT2). */
-const STILL_COMING: readonly string[] = COMING_SUPPLIERS;
+/**
+ * Not open to join yet (garages left this list in GS4, parts dealers in PT2).
+ * Car sellers are pickable here from CS1 ("Cars for sale"); the public
+ * landing keeps them as coming until their join page exists.
+ */
+const STILL_COMING: readonly string[] = COMING_SUPPLIERS.filter((c) => c !== "Car sellers");
 
 const ASK_URL = whatsappLink("Hi CRAL, a question about joining");
 
@@ -106,6 +112,7 @@ export function WhatYouOffer({
           })}
         </div>
 
+        {STILL_COMING.length > 0 && (
         <div style={S.coming}>
           <div style={O.panelGroupLabel}>COMING TO CRAL</div>
           <p style={S.comingBody}>
@@ -117,6 +124,7 @@ export function WhatYouOffer({
             ))}
           </div>
         </div>
+        )}
 
         {showError && <div style={O.fieldError}>Pick at least one to continue.</div>}
 
@@ -140,8 +148,9 @@ export function WhatYouOffer({
 
       <div style={O.rightCol}>
         {(() => {
-          const first = offers.find((o): o is SupplierType => !isPremisesOffer(o));
-          return first || offers.length === 0 ? <EarningsExample offer={first ?? "cars"} /> : <GarageExample />;
+          const first = offers.find((o): o is SupplierType => !isNoFleetOffer(o));
+          if (first || offers.length === 0) return <EarningsExample offer={first ?? "cars"} />;
+          return offers.some(isPremisesOffer) ? <GarageExample /> : <SellingExample />;
         })()}
         <HaveReady offers={offers} />
       </div>
@@ -205,8 +214,29 @@ function GarageExample(): JSX.Element {
   );
 }
 
+/** Selling cars alone: classifieds, so there is no earnings figure. How it works instead (Phase 6 CS1). */
+function SellingExample(): JSX.Element {
+  return (
+    <div style={O.darkCard}>
+      <div style={O.darkEyebrow}>
+        <span style={O.skewRuleDark} />
+        <span style={O.darkEyebrowText}>HOW SELLING A CAR WORKS</span>
+      </div>
+      <p style={O.darkBody}>
+        You list the car with photos and the logbook. CRAL checks the listing against the logbook before it goes up.
+        Buyers contact you through CRAL, and you and the buyer agree the price and pay each other directly. CRAL takes
+        no cut of the sale.
+      </p>
+      <div style={O.darkChipRow}>
+        <span style={O.darkChip}>FREE TO LIST</span>
+        <span style={O.darkChip}>YOU SET THE PRICE</span>
+      </div>
+    </div>
+  );
+}
+
 function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
-  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isPremisesOffer(o));
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isNoFleetOffer(o));
   const vehicleLabel =
     vehicleOffers.length === 1 && vehicleOffers[0] === "trucks"
       ? "FOR EACH TRUCK"
@@ -243,6 +273,15 @@ function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
               <span style={O.docPill}>Logbook</span>
               <span style={O.docPill}>Comprehensive insurance</span>
               <span style={O.docPill}>Tracker certificate</span>
+            </div>
+          </div>
+        )}
+        {offers.includes("selling") && (
+          <div>
+            <div style={O.panelGroupLabel}>FOR EACH CAR FOR SALE · AFTER YOU SUBMIT</div>
+            <div style={O.docPillRow}>
+              <span style={O.docPill}>Logbook</span>
+              <span style={O.docPill}>4 or more photos</span>
             </div>
           </div>
         )}

@@ -120,6 +120,8 @@ export interface OnboardingDraft {
   driversOnly: boolean;
   /** No vehicle - garage services only (`garage_only`, Phase 4 GS1). */
   garageOnly: boolean;
+  /** No vehicle - sells cars only (`sells_only`, Phase 6 CS1). */
+  sellsOnly: boolean;
   vehicles: DraftVehicle[];
   editingVehicleId: string | null;
   vehicleDraft: DraftVehicle | null;
@@ -169,6 +171,7 @@ export function emptyDraft(): OnboardingDraft {
     },
     driversOnly: false,
     garageOnly: false,
+    sellsOnly: false,
     vehicles: [],
     editingVehicleId: null,
     vehicleDraft: null,
@@ -228,7 +231,7 @@ export function clearDraft(): void {
  * empty dashboard.
  */
 export function isOnboardingComplete(draft: OnboardingDraft): boolean {
-  return draft.submitted && (draft.vehicles.length > 0 || draft.driversOnly || draft.garageOnly);
+  return draft.submitted && (draft.vehicles.length > 0 || draft.driversOnly || draft.garageOnly || draft.sellsOnly);
 }
 
 // --- server sync ---------------------------------------------------------
@@ -302,6 +305,7 @@ interface WireOnboardingState {
   };
   drivers_only?: boolean;
   garage_only?: boolean;
+  sells_only?: boolean;
   vehicles: WireVehicle[];
   submitted: boolean;
   last_activity_at: string;
@@ -395,6 +399,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     },
     driversOnly: state.drivers_only ?? false,
     garageOnly: state.garage_only ?? false,
+    sellsOnly: state.sells_only ?? false,
     vehicles: state.vehicles.map(toDraftVehicle),
     editingVehicleId: null,
     vehicleDraft: null,
@@ -450,6 +455,7 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "termsAccepted",
   "driversOnly",
   "garageOnly",
+  "sellsOnly",
 ];
 
 const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
@@ -474,6 +480,7 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
   termsAccepted: "terms_accepted",
   driversOnly: "drivers_only",
   garageOnly: "garage_only",
+  sellsOnly: "sells_only",
 };
 
 /** Maps a partial draft patch to the PATCH /merchant/onboarding wire shape and sends it. Debounced by callers. */

@@ -162,3 +162,17 @@ export const BOOKING_FILTER_ORDER: BookingFilter[] = ["all", "requests", "upcomi
 export function bookingFilterLabel(f: BookingFilter): string {
   return BOOKING_BUCKET_LABEL[f];
 }
+
+export type SaleStatus = VehicleStatus | "sold" | "withdrawn";
+
+/**
+ * Car-sale listing statuses (Phase 6 CS1, docs/decisions/car-sales.md).
+ * The first seven reuse the listing tints; `live` reads "For sale". Never
+ * colour alone: every chip pairs the dot with the word.
+ */
+export const SALE_STATUS: Record<SaleStatus, { label: string; core: string; tint: string; border: string; text: string }> = {
+  ...STATUS,
+  live: { ...STATUS.live, label: "For sale" },
+  sold: { label: "Sold", core: "#076945", tint: "#DDF3E9", border: "#A8DEC7", text: "#076945" },
+  withdrawn: { label: "Withdrawn", core: "#838C9B", tint: "#F1F3F6", border: "#CDD2DA", text: "#5A6373" },
+};

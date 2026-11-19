@@ -256,6 +256,10 @@ export function Documents({
           ? isCompany
             ? "Company papers, then the contact person's ID. Your premises come after you submit."
             : "Your own papers. Your premises come after you submit."
+          : fleet === "sales"
+          ? isCompany
+            ? "Company papers, then the contact person's ID. Each car's logbook comes with its listing, after you submit."
+            : "Your own papers. Each car's logbook comes with its listing, after you submit."
           : fleet === "drivers"
           ? isCompany
             ? "Company papers, then the contact person's ID. Each driver's papers come when you add them, after you submit."

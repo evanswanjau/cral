@@ -101,6 +101,10 @@ export const ID_PREFIXES = {
   // Phase 4 GS3: a paid garage job. Accepting a quote creates one; the
   // customer pays CRAL, the garage is paid out after confirmation.
   order: "ord",
+  // Phase 6 CS1: a car a merchant lists for sale, and its photos and
+  // logbook (own rows, kept out of `documents` like outlet photos).
+  saleListing: "sal",
+  saleListingFile: "slf",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

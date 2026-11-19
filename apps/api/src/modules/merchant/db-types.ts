@@ -39,6 +39,8 @@ export interface MerchantRow {
   drivers_only: boolean;
   /** Someone with no vehicle who offers garage services only - waives the same rule (20261120090000). */
   garage_only: boolean;
+  /** Someone with no vehicle who only sells cars - waives the same rule (20261124090000). */
+  sells_only: boolean;
   /** Set by an admin's business-level "Request changes"; cleared on approve (20261109090000). */
   review_changes_requested_at: Date | null;
   /** What the merchant was told with that request. */
