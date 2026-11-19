@@ -59,7 +59,6 @@ const WHY: Array<{ icon: Icon; title: string; body: string }> = [
 ];
 
 const COMING_ICONS: Record<(typeof COMING_SUPPLIERS)[number], Icon> = {
-  "Parts dealers": Gear,
   "Car sellers": Storefront,
 };
 
@@ -67,7 +66,7 @@ const FAQ: SupplierFaq[] = [
   COST_FAQ,
   {
     q: "What can I offer on CRAL?",
-    a: "Cars and vans, trucks and trailers, construction and farm machinery, driving (yourself or your own drivers), and garage services at your own premises. Pick one or more when you sign up, and add the rest later.",
+    a: "Cars and vans, trucks and trailers, construction and farm machinery, driving (yourself or your own drivers), and garage services or spare parts at your own premises. Pick one or more when you sign up, and add the rest later.",
   },
   {
     q: "Do I need a vehicle to join?",
@@ -118,7 +117,7 @@ function Hero(): JSX.Element {
 function Coming(): JSX.Element {
   return (
     <>
-    {/* Garages opened in Phase 4 GS4: their own page, not a door (no vehicle, no estimator). */}
+    {/* Garages (GS4) and parts dealers (PT2): their own pages, not doors (no vehicle, no estimator). */}
     <div className="ml-coming">
       <div className="ml-wrap ml-coming-inner">
         <span className="ml-kicker" style={{ margin: 0 }}>
@@ -130,9 +129,17 @@ function Coming(): JSX.Element {
             <Wrench size={16} weight="regular" />
             Garages
           </span>
+          <span className="ml-coming-chip" style={{ borderStyle: "solid" }}>
+            <Gear size={16} weight="regular" />
+            Parts dealers
+          </span>
         </div>
         <Link className="ml-coming-link" to="/join/garages">
           Join as a garage
+          <ArrowRight size={16} weight="bold" />
+        </Link>
+        <Link className="ml-coming-link" to="/join/parts">
+          Join as a parts dealer
           <ArrowRight size={16} weight="bold" />
         </Link>
       </div>
@@ -156,7 +163,7 @@ function Coming(): JSX.Element {
         </div>
         <a
           className="ml-coming-link"
-          href={whatsappLink("Hi CRAL - I sell parts or sell cars, and I'm interested in joining")}
+          href={whatsappLink("Hi CRAL - I sell cars, and I'm interested in joining")}
           target="_blank"
           rel="noreferrer"
         >

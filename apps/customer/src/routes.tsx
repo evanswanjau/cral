@@ -35,6 +35,7 @@ import { GarageHome } from "./pages/garage/GarageHome.js";
 import { GarageRequestPage } from "./pages/garage/GarageRequestPage.js";
 import { GarageOrderPage } from "./pages/garage/GarageOrderPage.js";
 import { MyParts } from "./pages/parts/MyParts.js";
+import { PartsHome } from "./pages/parts/PartsHome.js";
 import { CarServiceRecord } from "./pages/CarServiceRecord.js";
 import { MyCars } from "./pages/MyCars.js";
 
@@ -86,11 +87,9 @@ export const routes: RouteObject[] = [
       { path: "/machinery/search", element: <MachinerySearch /> },
       { path: "/machinery/:id", element: <CarDetail /> },
       { path: "/machinery/:id/book", element: <Booking /> },
-      // Parts is not live yet: it lands on the front door's "Coming to
-      // CRAL" block (owner decision 2, 2026-11-18) until PT2 builds the
-      // sub-site. `/services` meant garage services; it goes to `/garage`
-      // now that garage is live (GS4).
-      { path: "/parts", element: <Navigate to="/#coming" replace /> },
+      // `/services` meant garage services; it goes to `/garage` now that
+      // garage is live (GS4). `/parts` is the parts sub-site (PT2).
+      { path: "/parts", element: <PartsHome /> },
       { path: "/services", element: <Navigate to="/garage" replace /> },
       { path: "/cars/:id", element: <CarDetail /> },
       // Not behind RequireAuth: see the note on the booking route below.
@@ -130,8 +129,8 @@ export const routes: RouteObject[] = [
           { path: "/my-cars/:id", element: <CarServiceRecord /> },
           { path: "/garage/requests/:id", element: <GarageRequestPage /> },
           { path: "/garage/orders/:id", element: <GarageOrderPage /> },
-          // Spare parts (PT1): reachable from the account menu while
-          // `/parts` still goes to "Coming to CRAL" until PT2.
+          // Spare parts (PT1): the request form and list, behind sign-in.
+          // The public `/parts` landing (PT2) leads here.
           { path: "/my-parts", element: <MyParts /> },
         ],
       },

@@ -83,8 +83,7 @@ unchanged except for wording and the rate they read
 - **Customer screens:** `/my-parts` (account menu "My parts": the request
   form and the list), then the garage request and order pages, which
   read a parts request in its own words ("It's the right part", "Wrong
-  part"). `/parts` still redirects to `/#coming`: the parts landing is
-  PT2.
+  part"). `/parts` is the public landing since PT2 (below).
 - **Notifications** keep `subject_type: garage_request` / `garage_order`
   so the existing CTAs open the shared pages in both apps.
 - **Service record:** a confirmed part order is on the car's record like a
@@ -93,11 +92,37 @@ unchanged except for wording and the rate they read
 - Not from a canvas (none exists for parts yet): the screens are the
   garage ones with parts wording, built from tokens.ts.
 
-## Not built in PT1
+## The parts sub-site (PT2, built 2026-11-19)
 
-- The `/parts` sub-site, its landing copy and "Coming to CRAL" cleanup on
-  the front door and the merchant landing (PT2). Onboarding's own
-  "Coming to CRAL" strip no longer lists parts dealers.
+No API change and no migration: PT1 already sent a new parts request to
+every asked dealer (one `notify()` per merchant in the request's
+transaction, then `enqueueNotificationDelivery`, so SMS and email follow
+each dealer's channel preferences). PT2 adds a test that pins it.
+
+- **Parts is a live service** in `apps/customer/src/lib/services.ts`:
+  masthead tab "Parts", front-door door "Buy a part", footer link. Its
+  h1 and lede are the canvas `vertDefs` parts copy. The tab is active on
+  `/parts` and `/my-parts`. "Coming to CRAL" now holds only buy and sell,
+  moved to NEXT.
+- **`/parts` is the landing** (`pages/parts/PartsHome.tsx`), public: hero,
+  how it works, "you know what you're buying" (chassis, condition,
+  delivery on the quote, paid upfront), FAQ, and an EarnBand to the
+  merchant site's `/join/parts`. The hero's card goes to `/my-parts`
+  (behind sign-in, which returns there) instead of embedding the form: the
+  form needs My cars with a chassis number, so it is a signed-in screen.
+- **Sitemap** lists `/parts`. About and the front door's copy name parts.
+- **Merchant `/join/parts`** (`pages/join/PartsJoinPage.tsx`), on the
+  `/join/garages` pattern: CTA `/create-account?offer=parts`, which now
+  pre-selects "Spare parts" in onboarding. The merchant landing lists
+  parts dealers under "Now open" with their own join link; "Coming to
+  CRAL" there and in onboarding is car sellers only.
+- Copy says dealers are **visited**: the outlet checklist's
+  `visit_done` applies to parts outlets too. No dealer count is shown.
+- Unsplash placeholder photo, credited in both `CREDITS.txt` files. Not
+  from a canvas: built from tokens.ts.
+
+## Not built
+
 - Picking one named dealer; a stock catalog (no catalog in v1, owner call).
 - Request photos; SMS to the customer (feed only, as with garage).
 - Unpaid part orders don't expire on their own (the customer can cancel).

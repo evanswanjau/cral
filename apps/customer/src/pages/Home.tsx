@@ -20,7 +20,7 @@ import { EarnBand } from "../components/subsite/EarnBand.js";
  * doors and the trust points follow the Website canvas's `doors` and
  * `trustCols` (see ServiceDoors.tsx and TrustStrip.tsx).
  *
- * `/parts` redirects to `/#coming` (`/services` goes to `/garage`); the effect below
+ * `/services` goes to `/garage` and `/parts` is its own sub-site (PT2); the effect below
  * scrolls to whichever anchor the URL names, since the router does not.
  */
 
@@ -40,7 +40,7 @@ const ORG_JSON_LD = {
 const STEPS: Step[] = [
   {
     title: "Tell us what you need",
-    body: "Your dates for a car, a machine or a driver. The route and the load for a truck. What your car needs for a garage. Where you are for a tow.",
+    body: "Your dates for a car, a machine or a driver. The route and the load for a truck. What your car needs for a garage. The part and your chassis number for parts. Where you are for a tow.",
   },
   {
     title: "Agree the price first",
@@ -56,7 +56,7 @@ export function Home(): JSX.Element {
   useSeo({
     title: null,
     description:
-      "Everything a vehicle needs in Kenya, in one place: hire a car, a truck, machinery or a driver, get a car fixed, or call a tow. Every supplier is checked by a person and every price is agreed before you pay.",
+      "Everything a vehicle needs in Kenya, in one place: hire a car, a truck, machinery or a driver, get a car fixed, buy a part, or call a tow. Every supplier is checked by a person and every price is agreed before you pay.",
     path: "/",
     jsonLd: ORG_JSON_LD,
   });

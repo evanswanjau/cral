@@ -28,16 +28,15 @@ export function About(): JSX.Element {
       <Section>
         <SectionTitle>What's live today</SectionTitle>
         <Body>
-          Hire a car, machinery, a truck or a driver, get a car fixed, or call a tow. A request is
+          Hire a car, machinery, a truck or a driver, get a car fixed, buy a part, or call a tow. A request is
           free, owners answer within twelve hours, and you pay by M-Pesa only once the price is
           agreed. Every vehicle's papers and every driver's licence are read by a person before
-          they appear, every garage is visited before it can quote, and every renter's ID is
-          checked once.
+          they appear, every garage is visited before it can quote, parts dealers quote against
+          your chassis number, and every renter's ID is checked once.
         </Body>
         <SectionTitle>What's next</SectionTitle>
         <Body>
-          Parts that match your vehicle, and buying and selling with the logbook read against the
-          car - all inside the account you already have, with the same checked suppliers and the
+          Buying and selling cars with the logbook read against the car - all inside the account you already have, with the same checked suppliers and the
           same record.
         </Body>
       </Section>
