@@ -189,7 +189,8 @@ screens `pages/{Merchants,MerchantFile}.tsx`.
 ## Other queues
 
 Renters (`admin-renters`, renter ID/licence review), Bookings
-(`admin-bookings`, the pickup gate), Drivers (`drivers.md`), Services
+(`admin-bookings`, the pickup gate), Drivers (`drivers.md`), Outlets
+(`garage.md`, checklist-first, the `outlets` queue), Services
 (`services.md`) and Payouts (`bookings-payouts.md`) each have their own
 contract in `openapi/admin-*.yaml`. They use the simpler list-and-file
 idiom of `Renters.tsx`/`RenterFile.tsx` unless they need a checklist.

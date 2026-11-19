@@ -8,6 +8,9 @@
  *   driver-only. Its label follows the fleet: "Trucks" when every vehicle
  *   is a truck, "Machinery" when every one is machinery, else "Vehicles".
  * - Drivers always shows; for a driver-only merchant it comes second.
+ * - Premises (Phase 4 GS1) shows when the merchant has premises or said
+ *   they offer garage services. A garage-only merchant with no vehicles
+ *   gets no Vehicles item.
  */
 
 export type FleetWord = { label: string; one: string; many: string };
@@ -28,6 +31,10 @@ export interface OfferingInput {
   /** True when `vehicleTypes` covers every vehicle (no further page). */
   allTypesKnown: boolean;
   driversOnly: boolean;
+  /** Signed up for garage services only (`garage_only`). */
+  garageOnly: boolean;
+  /** Has premises, or picked garage services: show "Premises". */
+  showPremises: boolean;
 }
 
 /** Trucks / Machinery only when every vehicle is known to be that kind. */
@@ -44,7 +51,7 @@ export function isDriverOnly(input: Pick<OfferingInput, "vehicleCount" | "driver
   return input.driversOnly && input.vehicleCount === 0;
 }
 
-export type NavKey = "dashboard" | "vehicles" | "drivers" | "bookings" | "payouts" | "notifications" | "settings";
+export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "bookings" | "payouts" | "notifications" | "settings";
 
 export interface NavItem {
   key: NavKey;
@@ -58,6 +65,8 @@ export interface NavCounts {
   driverActionCount: number;
   bookingCount: number;
   notificationUnread: number;
+  /** Premises sent back or turned down. */
+  premisesActionCount?: number;
 }
 
 export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] {
@@ -68,11 +77,22 @@ export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] 
     label: "Drivers",
     ...(counts.driverActionCount > 0 ? { count: counts.driverActionCount } : {}),
   };
-  if (isDriverOnly(input)) {
+  const premises: NavItem = {
+    key: "premises",
+    to: "/premises",
+    label: "Premises",
+    ...(counts.premisesActionCount ? { count: counts.premisesActionCount } : {}),
+  };
+  const garageOnly = input.garageOnly && input.vehicleCount === 0;
+  if (garageOnly) {
+    items.push(premises, drivers);
+  } else if (isDriverOnly(input)) {
     items.push(drivers);
+    if (input.showPremises) items.push(premises);
   } else {
     items.push({ key: "vehicles", to: "/vehicles", label: FLEET_WORDS[fleetKind(input)].label, count: input.vehicleCount });
     items.push(drivers);
+    if (input.showPremises) items.push(premises);
   }
   items.push(
     { key: "bookings", to: "/bookings", label: "Bookings", count: counts.bookingCount },

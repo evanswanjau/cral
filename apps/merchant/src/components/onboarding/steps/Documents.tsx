@@ -200,7 +200,7 @@ export function Documents({
   onContinue,
 }: {
   draft: OnboardingDraft;
-  /** "drivers" = Driving only: no vehicle documents; drivers' papers come in the portal. */
+  /** "drivers" = Driving only: no vehicle documents; drivers' papers come in the portal. "premises" = garage services only, the same. */
   fleet: FleetKind;
   onChange: (patch: Partial<OnboardingDraft>) => void;
   onBack: () => void;
@@ -252,7 +252,11 @@ export function Documents({
       <div style={O.stepEyebrow}>STEP 4 OF 5</div>
       <h1 style={O.h1Step}>Documents</h1>
       <p style={{ ...O.stepLede, marginBottom: 20 }}>
-        {fleet === "drivers"
+        {fleet === "premises"
+          ? isCompany
+            ? "Company papers, then the contact person's ID. Your premises come after you submit."
+            : "Your own papers. Your premises come after you submit."
+          : fleet === "drivers"
           ? isCompany
             ? "Company papers, then the contact person's ID. Each driver's papers come when you add them, after you submit."
             : "Your own papers. Each driver's papers come when you add them, after you submit."

@@ -163,6 +163,7 @@ Read the file before touching its area.
 | [`admin-ops.md`](./docs/decisions/admin-ops.md) | `/admin/*`, `apps/admin`, vehicle/merchant review, checklists, team, communications |
 | [`customer-portal.md`](./docs/decisions/customer-portal.md) | `apps/customer` (with `docs/plans/customer-portal.md`) |
 | [`services.md`](./docs/decisions/services.md) | towing, `service_requests`, new service verticals |
+| [`garage.md`](./docs/decisions/garage.md) | outlets (`out_`), "Your premises", the Ops outlet queue and visit record, garage services (Phase 4) |
 | [`drivers.md`](./docs/decisions/drivers.md) | drivers, driver bookings, linked bookings |
 | [`trucks.md`](./docs/decisions/trucks.md) | truck types, routes and loads, quotes, per-km/per-tonne |
 | [`deploy.md`](./docs/decisions/deploy.md) | branches, the gate, `shipper`/`release`, the VPS, dev auto-deploy, Vercel |

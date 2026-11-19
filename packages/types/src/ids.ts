@@ -86,6 +86,12 @@ export const ID_PREFIXES = {
   // The consent code a sales agent asks the owner for before an assist
   // session (Phase 3, PR AG3). Internal entity.
   assistChallenge: "asc",
+  // A merchant's physical premises - a garage (Phase 4, PR GS1) or, from
+  // PT1, a parts shop. Its own record, reviewed after a real visit, the
+  // way a driver is. Photos of it are their own rows, kept out of
+  // `documents` so no account-document query can mistake one for an ID.
+  outlet: "out",
+  outletPhoto: "olp",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

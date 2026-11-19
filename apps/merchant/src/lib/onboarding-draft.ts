@@ -118,6 +118,8 @@ export interface OnboardingDraft {
   ownerDocs: OwnerDocs;
   /** No car - this merchant only lists drivers (owner's call, 2026-10-18). */
   driversOnly: boolean;
+  /** No vehicle - garage services only (`garage_only`, Phase 4 GS1). */
+  garageOnly: boolean;
   vehicles: DraftVehicle[];
   editingVehicleId: string | null;
   vehicleDraft: DraftVehicle | null;
@@ -166,6 +168,7 @@ export function emptyDraft(): OnboardingDraft {
       cr12: null,
     },
     driversOnly: false,
+    garageOnly: false,
     vehicles: [],
     editingVehicleId: null,
     vehicleDraft: null,
@@ -225,7 +228,7 @@ export function clearDraft(): void {
  * empty dashboard.
  */
 export function isOnboardingComplete(draft: OnboardingDraft): boolean {
-  return draft.submitted && (draft.vehicles.length > 0 || draft.driversOnly);
+  return draft.submitted && (draft.vehicles.length > 0 || draft.driversOnly || draft.garageOnly);
 }
 
 // --- server sync ---------------------------------------------------------
@@ -298,6 +301,7 @@ interface WireOnboardingState {
     cr12: WireDocSlot | null;
   };
   drivers_only?: boolean;
+  garage_only?: boolean;
   vehicles: WireVehicle[];
   submitted: boolean;
   last_activity_at: string;
@@ -390,6 +394,7 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
       cr12: toDraftDoc(state.owner_docs.cr12 ?? null),
     },
     driversOnly: state.drivers_only ?? false,
+    garageOnly: state.garage_only ?? false,
     vehicles: state.vehicles.map(toDraftVehicle),
     editingVehicleId: null,
     vehicleDraft: null,
@@ -444,6 +449,7 @@ const PATCHABLE_KEYS: (keyof OnboardingDraft)[] = [
   "bankAccountNumber",
   "termsAccepted",
   "driversOnly",
+  "garageOnly",
 ];
 
 const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
@@ -467,6 +473,7 @@ const DRAFT_TO_WIRE_KEY: Partial<Record<keyof OnboardingDraft, string>> = {
   bankAccountNumber: "bank_account_number",
   termsAccepted: "terms_accepted",
   driversOnly: "drivers_only",
+  garageOnly: "garage_only",
 };
 
 /** Maps a partial draft patch to the PATCH /merchant/onboarding wire shape and sends it. Debounced by callers. */

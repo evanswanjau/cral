@@ -9,6 +9,9 @@ import { AddVehicle } from "./pages/AddVehicle.js";
 import { DriverList } from "./pages/DriverList.js";
 import { DriverDetail } from "./pages/DriverDetail.js";
 import { AddDriver } from "./pages/AddDriver.js";
+import { PremisesList } from "./pages/PremisesList.js";
+import { PremisesDetail } from "./pages/PremisesDetail.js";
+import { AddPremises } from "./pages/AddPremises.js";
 import { BookingList } from "./pages/BookingList.js";
 import { BookingDetail } from "./pages/BookingDetail.js";
 import { PayoutList } from "./pages/PayoutList.js";
@@ -62,6 +65,9 @@ const router = createBrowserRouter([
               { path: "drivers", element: <DriverList /> },
               { path: "drivers/new", element: <AddDriver /> },
               { path: "drivers/:driverId", element: <DriverDetail /> },
+              { path: "premises", element: <PremisesList /> },
+              { path: "premises/new", element: <AddPremises /> },
+              { path: "premises/:outletId", element: <PremisesDetail /> },
               { path: "bookings", element: <BookingList /> },
               { path: "bookings/:bookingId", element: <BookingDetail /> },
               { path: "payouts", element: <PayoutList /> },

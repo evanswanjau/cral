@@ -37,6 +37,8 @@ export interface MerchantRow {
   approved_at: Date | null;
   /** Someone with no car who only lists drivers - waives onboarding's "at least one vehicle" (20261018090000). */
   drivers_only: boolean;
+  /** Someone with no vehicle who offers garage services only - waives the same rule (20261120090000). */
+  garage_only: boolean;
   /** Set by an admin's business-level "Request changes"; cleared on approve (20261109090000). */
   review_changes_requested_at: Date | null;
   /** What the merchant was told with that request. */

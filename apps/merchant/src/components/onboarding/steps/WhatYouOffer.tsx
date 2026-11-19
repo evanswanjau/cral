@@ -2,12 +2,13 @@ import { useState, type CSSProperties } from "react";
 import { netFromGross } from "@cral/types";
 import { CheckSquare } from "@phosphor-icons/react/dist/ssr/CheckSquare";
 import { Square } from "@phosphor-icons/react/dist/ssr/Square";
+import { Wrench } from "@phosphor-icons/react/dist/ssr/Wrench";
 import { O } from "../styles.js";
 import { PrimaryButton } from "../primitives.js";
 import { whatsappLink } from "../../../lib/support.js";
-import { COMING_SUPPLIERS, SUPPLIERS, SUPPLIER_TYPES } from "../../../lib/supplier-types.js";
+import { COMING_SUPPLIERS, SUPPLIERS, type SupplierType } from "../../../lib/supplier-types.js";
 import { SUPPLIER_ICONS } from "../../landing/SupplierDoors.js";
-import { type Offer } from "../../../lib/onboarding-offer.js";
+import { OFFER_ORDER, type Offer } from "../../../lib/onboarding-offer.js";
 
 /**
  * Onboarding step 1, "What do you offer?". Replaces the old Welcome step
@@ -24,7 +25,13 @@ const OPTION_COPY: Record<Offer, { title: string; body: string }> = {
   trucks: { title: "Trucks", body: "By trip, day, km or tonne, or quote each job" },
   machinery: { title: "Machinery", body: "Excavators, loaders, rollers and other plant" },
   drivers: { title: "Driving", body: "You, or drivers who work for you" },
+  garage: { title: "Garage services", body: "Servicing and repairs at your own premises" },
 };
+
+const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench };
+
+/** Open to join now, so no longer "coming" here (the public landing keeps its own list). */
+const STILL_COMING = COMING_SUPPLIERS.filter((c) => c !== "Garages");
 
 const ASK_URL = whatsappLink("Hi CRAL, a question about joining");
 
@@ -68,10 +75,10 @@ export function WhatYouOffer({
         <p style={O.stepLede}>Pick all that apply. You can add more later.</p>
 
         <div role="group" aria-label="What you offer" style={S.list}>
-          {SUPPLIER_TYPES.map((t) => {
+          {OFFER_ORDER.map((t) => {
             const on = offers.includes(t);
             const isLocked = locked.has(t);
-            const Icon = SUPPLIER_ICONS[t];
+            const Icon = OFFER_ICONS[t];
             return (
               <button
                 key={t}
@@ -103,7 +110,7 @@ export function WhatYouOffer({
             Not open to join yet. Each one appears here when it opens.
           </p>
           <div style={O.docPillRow}>
-            {COMING_SUPPLIERS.map((c) => (
+            {STILL_COMING.map((c) => (
               <span key={c} style={{ ...O.docPill, color: "#838C9B" }}>{c}</span>
             ))}
           </div>
@@ -130,7 +137,10 @@ export function WhatYouOffer({
       </div>
 
       <div style={O.rightCol}>
-        <EarningsExample offer={offers[0] ?? "cars"} />
+        {(() => {
+          const first = offers.find((o): o is SupplierType => o !== "garage");
+          return first || offers.length === 0 ? <EarningsExample offer={first ?? "cars"} /> : <GarageExample />;
+        })()}
         <HaveReady offers={offers} />
       </div>
     </div>
@@ -138,7 +148,7 @@ export function WhatYouOffer({
 }
 
 /** One worked example in the first picked offer's own unit, as take-home after CRAL's service fee. */
-function EarningsExample({ offer }: { offer: Offer }): JSX.Element {
+function EarningsExample({ offer }: { offer: SupplierType }): JSX.Element {
   const supplier = SUPPLIERS[offer];
   const unit = supplier.units[0];
   const gross = unit.exampleRate * unit.qtyDefault;
@@ -168,8 +178,33 @@ function EarningsExample({ offer }: { offer: Offer }): JSX.Element {
   );
 }
 
+/**
+ * Garage services alone: jobs are quoted one by one, so there is no honest
+ * monthly figure to show. How it works instead.
+ */
+function GarageExample(): JSX.Element {
+  return (
+    <div style={O.darkCard}>
+      <div style={O.darkEyebrow}>
+        <span style={O.skewRuleDark} />
+        <span style={O.darkEyebrowText}>HOW GARAGE JOBS WORK</span>
+      </div>
+      <p style={O.darkBody}>
+        Customers describe what their car needs and you send an itemised price. They pay CRAL when they accept, so
+        the money is there before you start. You&rsquo;re paid after they confirm the job is done, after CRAL&rsquo;s
+        service fee. Someone from CRAL visits your premises first, so you can get checked now, before garage
+        requests open on CRAL.
+      </p>
+      <div style={O.darkChipRow}>
+        <span style={O.darkChip}>M-PESA OR BANK PAYOUT</span>
+        <span style={O.darkChip}>YOU SET THE PRICE</span>
+      </div>
+    </div>
+  );
+}
+
 function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
-  const vehicleOffers = offers.filter((o) => o !== "drivers");
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && o !== "garage");
   const vehicleLabel =
     vehicleOffers.length === 1 && vehicleOffers[0] === "trucks"
       ? "FOR EACH TRUCK"
@@ -187,6 +222,16 @@ function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
             <span style={O.docPill}>KRA PIN certificate</span>
           </div>
         </div>
+        {offers.includes("garage") && (
+          <div>
+            <div style={O.panelGroupLabel}>FOR EACH GARAGE · AFTER YOU SUBMIT</div>
+            <div style={O.docPillRow}>
+              <span style={O.docPill}>Address</span>
+              <span style={O.docPill}>Opening hours</span>
+              <span style={O.docPill}>2 or more photos</span>
+            </div>
+          </div>
+        )}
         {(vehicleOffers.length > 0 || offers.length === 0) && (
           <div>
             <div style={O.panelGroupLabel}>{vehicleLabel}</div>

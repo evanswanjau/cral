@@ -53,6 +53,7 @@ export function AppLayout(): ReactNode {
                 driverActionCount: drivers?.counts.needs_action ?? 0,
                 bookingCount: bookings?.counts.all ?? 0,
                 notificationUnread: notificationUnread ?? 0,
+                premisesActionCount: offering.premisesActionCount,
               })}
               footer={onDashboard ? <MerchantStatusCard /> : null}
             />

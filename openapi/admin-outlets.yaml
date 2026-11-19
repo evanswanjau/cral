@@ -1,0 +1,239 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Outlet Review API
+  version: "1.0.0"
+  description: >
+    Ops review of merchants' premises (Phase 4 PR GS1,
+    docs/decisions/garage.md). `admin_reviewer` on the `outlets` queue;
+    `admin_super` bypasses both checks.
+
+    Checklist-first, like the vehicle case: item definitions live in
+    `platform_settings` (`outlet_review.checklist`), answers per (outlet,
+    item). Every applicable item must be answered before any decision (422
+    `checklist_incomplete`); approve also needs zero flags (422
+    `checklist_flagged`), the merchant's account approved (422
+    `merchant_not_approved`) and at least 2 photos (422
+    `photos_required`).
+
+    The `visit_done` item is the visit record: passing it needs
+    `visited_on` (not in the future) and `visited_by` (who went), stored on
+    the outlet with the reviewer who recorded it. Any other answer clears
+    the visit. Premises answers older than the last change of name,
+    address or county, and photo answers older than the newest photo, read
+    `pending` again.
+
+    Only `pending` and `review` outlets can be decided (409
+    `outlet_not_in_review` once it moved). Answering a check claims an
+    unassigned case and moves `pending` to `review`. Each decision writes
+    `audit_log` in the same transaction and notifies the merchant
+    (`subject_type: outlet`).
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /admin/outlets:
+    get:
+      summary: The outlet queue, oldest submission first
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [open, changes_sent, approved, rejected, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of outlets. `total` is whole-set for the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        kind: { type: string }
+                        name: { type: string }
+                        county: { type: string }
+                        status: { type: string }
+                        merchant_id: { type: string }
+                        merchant_name: { type: string }
+                        merchant_approved: { type: boolean }
+                        assignee_name: { type: string, nullable: true }
+                        visited: { type: boolean }
+                        photo_count: { type: integer }
+                        submitted_at: { type: string, format: date-time, nullable: true }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+
+  /admin/outlets/{outletId}:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One outlet case
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutletCase" }
+        "404": { description: "`review_case_not_found` (unknown or still a draft)" }
+
+  /admin/outlets/{outletId}/photos/{photoId}:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+      - { name: photoId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: A photo's bytes (served with nosniff)
+      responses:
+        "200": { description: The image. }
+        "404": { description: Not on this outlet, or no longer stored. }
+
+  /admin/outlets/{outletId}/assign:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Assign the case to me
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutletCase" }
+
+  /admin/outlets/{outletId}/checklist:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Answer one checklist item (idempotent upsert)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, result]
+              properties:
+                item_id: { type: string }
+                result: { type: string, enum: [pending, pass, flag] }
+                note: { type: string, nullable: true, maxLength: 2000 }
+                visited_on:
+                  type: string
+                  format: date
+                  description: Required to pass `visit_done`; Nairobi date, not in the future.
+                visited_by:
+                  type: string
+                  maxLength: 120
+                  description: Required to pass `visit_done`; the person who went.
+      responses:
+        "200":
+          description: The case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutletCase" }
+        "409": { description: "`outlet_not_in_review`" }
+        "422": { description: "`unknown_checklist_item`, `visit_details_required`, `visit_in_future`" }
+
+  /admin/outlets/{outletId}/decision:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Approve, request changes or reject
+      description: Requires `Idempotency-Key`. A note is required for request_changes and reject.
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, request_changes, reject] }
+                note: { type: string, maxLength: 2000 }
+      responses:
+        "200":
+          description: The decided case.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OutletCase" }
+        "409": { description: "`outlet_not_in_review`" }
+        "422":
+          description: >
+            `reason_required`, `checklist_incomplete`, `checklist_flagged`,
+            `merchant_not_approved`, `photos_required`
+
+components:
+  schemas:
+    ChecklistBlock:
+      type: object
+      description: The same block the vehicle case returns (lib/review-checklist.ts#toBlock).
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              group: { type: string }
+              document: { type: string, nullable: true, description: "`premises` or `photos`" }
+              label: { type: string }
+              help: { type: string }
+              result: { type: string, enum: [pending, pass, flag] }
+              note: { type: string, nullable: true }
+              skipped: { type: boolean }
+        checked: { type: integer }
+        total: { type: integer }
+        flagged: { type: integer }
+        outstanding: { type: integer }
+        complete: { type: boolean }
+        suggested_note:
+          type: object
+          properties:
+            changes: { type: string }
+            reject: { type: string }
+
+    OutletCase:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [garage, parts] }
+        name: { type: string }
+        address: { type: string }
+        county: { type: string }
+        phone: { type: string, nullable: true }
+        opening_hours: { type: string }
+        service_types: { type: array, items: { type: string } }
+        status: { type: string }
+        reviewer_note: { type: string, nullable: true }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        assignee: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string } } }
+        visit:
+          type: object
+          nullable: true
+          properties:
+            visited_on: { type: string, format: date }
+            visited_by: { type: string }
+            recorded_by_name: { type: string, nullable: true }
+        photos:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: string }
+              original_name: { type: string }
+              created_at: { type: string, format: date-time }
+        merchant:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            owner_type: { type: string }
+            approved: { type: boolean }
+        checklist: { $ref: "#/components/schemas/ChecklistBlock" }

@@ -97,7 +97,12 @@ export function Done({ draft, onAddAnother }: { draft: OnboardingDraft; onAddAno
       </div>
 
       <div style={{ ...O.actionsRow, justifyContent: "center", marginTop: 24 }}>
-        {draft.driversOnly && draft.vehicles.length === 0 ? (
+        {draft.garageOnly && draft.vehicles.length === 0 ? (
+          <>
+            <PrimaryButton onClick={() => navigate("/premises/new")}>Add your premises</PrimaryButton>
+            <SecondaryButton onClick={() => navigate("/")}>Go to dashboard</SecondaryButton>
+          </>
+        ) : draft.driversOnly && draft.vehicles.length === 0 ? (
           <>
             <PrimaryButton onClick={() => navigate("/drivers/new")}>Add your drivers</PrimaryButton>
             <SecondaryButton onClick={() => navigate("/")}>Go to dashboard</SecondaryButton>
