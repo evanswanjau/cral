@@ -31,8 +31,8 @@ and `modules/admin-outlets/` (Ops); merchant screens
 `pages/outlets/{Queue,Case}.tsx`.
 
 - **An outlet is its own record** (`outlets`, `out_`), like a driver. A
-  merchant can have several. `kind` is `garage` only until PT1 (the DB
-  CHECK already allows `parts`; the API's create schema takes `garage`).
+  merchant can have several. `kind` is `garage` or, since PT1, `parts`
+  (see [`parts.md`](./parts.md)).
   Garage outlets carry `service_types` (`service`, `diagnostics`,
   `mechanical`, `bodywork`, `tyres`, `electrical`, `ac`).
 - **Gates:** account approved -> outlet approved -> can quote (GS2). A

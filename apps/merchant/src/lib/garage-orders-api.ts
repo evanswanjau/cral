@@ -1,7 +1,7 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost } from "./api.js";
 import type { Money } from "./vehicles-api.js";
-import type { LineKind, QuoteLineInput } from "./garage-api.js";
+import type { Fulfilment, LineKind, PartCondition, QuoteLineInput, RequestKind } from "./garage-api.js";
 
 /**
  * Garage jobs (Phase 4 GS3, openapi/merchant-garage.yaml). The customer
@@ -31,6 +31,8 @@ export interface OrderQuote {
   total: Money;
   take_home: Money;
   days_needed: number;
+  part_condition: PartCondition | null;
+  fulfilment: Fulfilment | null;
   note: string | null;
   sent_at: string;
   valid_until: string;
@@ -43,8 +45,14 @@ export interface GarageOrder {
   id: string;
   ref: string;
   status: OrderStatus;
+  kind: RequestKind;
   request_id: string;
   service_type: string | null;
+  /** Parts orders (PT1): the part, its condition, fitted or delivered, and where. */
+  part_name: string | null;
+  part_condition: PartCondition | null;
+  fulfilment: Fulfilment | null;
+  delivery_address: string | null;
   description: string | null;
   car: { make: string; model: string; year: number; plate: string } | null;
   outlet: { id: string; name: string; address: string; county: string } | null;
@@ -78,6 +86,16 @@ export const ORDER_STATUS: Record<OrderStatus, { label: string; color: string }>
   refunded: { label: "Refunded to customer", color: "#5A6373" },
 };
 
+/** A part order's status in words (PT1); the rest read as a garage job's. */
+export function orderStatus(o: Pick<GarageOrder, "kind" | "status" | "fulfilment">): { label: string; color: string } {
+  if (o.kind !== "part") return ORDER_STATUS[o.status];
+  if (o.status === "paid") return { label: o.fulfilment === "fitted" ? "Paid, fit the part" : "Paid, deliver the part", color: "#8A5200" };
+  if (o.status === "in_progress") return { label: "Getting it ready", color: "#0F23A8" };
+  if (o.status === "ready") return { label: `${o.fulfilment === "fitted" ? "Fitted" : "Delivered"}, waiting on customer`, color: "#0F23A8" };
+  if (o.status === "problem") return { label: "Customer says wrong part", color: "#A50E22" };
+  return ORDER_STATUS[o.status];
+}
+
 export function useGarageOrders(filter: OrderFilter, enabled = true) {
   return useQuery({
     queryKey: ["garage-orders", filter],
@@ -99,6 +117,7 @@ export interface ServiceRecordEntry {
   order_id: string;
   ref: string;
   service_type: string | null;
+  part_name: string | null;
   description: string | null;
   outlet_name: string | null;
   lines: Array<{ kind: LineKind; description: string; amount: Money }>;

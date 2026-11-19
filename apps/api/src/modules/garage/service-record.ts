@@ -93,6 +93,7 @@ export async function customerServiceRecord(userId: string, carId: string, query
         order_id: o.id,
         ref: o.ref,
         service_type: request?.service_type ?? null,
+        part_name: request?.part_name ?? null,
         description: request?.description ?? null,
         outlet: outlet ? { name: outlet.name, address: outlet.address, county: outlet.county } : null,
         work: (ctx.work.get(o.id) ?? []).map(({ quote, lines }) => ({
@@ -127,6 +128,7 @@ export async function merchantServiceRecord(userId: string, orderId: string, que
         order_id: o.id,
         ref: o.ref,
         service_type: request?.service_type ?? null,
+        part_name: request?.part_name ?? null,
         description: request?.description ?? null,
         outlet_name: ctx.outlet.get(o.outlet_id)?.name ?? null,
         lines: (ctx.work.get(o.id) ?? []).flatMap(({ lines }) => lines.map(lineOut)),

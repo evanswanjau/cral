@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ORDER_STATUS_LABELS, SERVICE_LABELS, carName, listGarageRequests, type GarageRequest } from "../../lib/garage-api.js";
+import { ORDER_STATUS_LABELS, carName, listGarageRequests, requestTitle, type GarageRequest } from "../../lib/garage-api.js";
 import { Section, bodyText } from "../subsite/Section.js";
 
 /**
@@ -13,14 +13,16 @@ import { Section, bodyText } from "../subsite/Section.js";
 
 export function requestStatusLine(r: GarageRequest): string {
   if (r.status === "cancelled") return "Closed by you";
-  if (r.order) return `Job ${r.order.ref} · ${ORDER_STATUS_LABELS[r.order.status]}`;
+  const part = r.kind === "part";
+  if (r.order) return `${part ? "Order" : "Job"} ${r.order.ref} · ${ORDER_STATUS_LABELS[r.order.status]}`;
   if (r.status === "accepted") return "Quote accepted";
   if (r.quote_count > 0) return `${r.quote_count} ${r.quote_count === 1 ? "quote" : "quotes"} to compare`;
-  return `Waiting on quotes from ${r.garages_asked} ${r.garages_asked === 1 ? "garage" : "garages"}`;
+  const who = part ? (r.garages_asked === 1 ? "dealer" : "dealers") : r.garages_asked === 1 ? "garage" : "garages";
+  return `Waiting on quotes from ${r.garages_asked} ${who}`;
 }
 
 export function YourGarageRequests(): JSX.Element | null {
-  const { data } = useQuery({ queryKey: ["garage-requests"], queryFn: listGarageRequests });
+  const { data } = useQuery({ queryKey: ["garage-requests", "list", "service"], queryFn: () => listGarageRequests("service") });
   const requests = data?.data ?? [];
   if (requests.length === 0) return null;
   return (
@@ -46,7 +48,7 @@ export function YourGarageRequests(): JSX.Element | null {
           >
             <div style={{ flex: "1 1 220px", minWidth: 0 }}>
               <div style={{ font: "600 14px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", overflowWrap: "anywhere" }}>
-                {SERVICE_LABELS[r.service_type]} · {r.car ? carName(r.car) : "Your car"}
+                {requestTitle(r)} · {r.car ? carName(r.car) : "Your car"}
               </div>
               <p style={{ ...bodyText, fontSize: 13 }}>{requestStatusLine(r)}</p>
             </div>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { P } from "../components/portal/styles.js";
-import { SERVICE_LABELS, kesText, useGarageRequests, type GarageFilter, type GarageRequest } from "../lib/garage-api.js";
+import { kesText, requestTitle, useGarageRequests, type GarageFilter, type GarageRequest } from "../lib/garage-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
@@ -41,8 +41,8 @@ export function GarageRequestList(): JSX.Element {
         <div>
           <h1 style={P.h1}>Quote requests</h1>
           <p style={P.lede}>
-            Customers near your garage describe what their car needs. Send an itemised price: each part and each piece of
-            labour on its own line.
+            Customers near your premises describe what their car needs, or the part they want for it. Send an itemised
+            price: each part, each piece of labour and any delivery on its own line.
           </p>
         </div>
       </div>
@@ -73,7 +73,7 @@ export function GarageRequestList(): JSX.Element {
         ) : data.data.length === 0 ? (
           <div style={P.emptyWrap}>
             <div style={P.emptyTitle}>Nothing here</div>
-            <p style={P.emptyBody}>Requests reach approved garages in their county that do the work asked for.</p>
+            <p style={P.emptyBody}>Requests reach approved garages that do the work, and approved parts shops, in the customer’s county.</p>
           </div>
         ) : (
           data.data.map((r) => {
@@ -92,7 +92,7 @@ export function GarageRequestList(): JSX.Element {
                     <span style={P.rowTitle}>{r.car ? `${r.car.year} ${r.car.make} ${r.car.model}` : "A car"}</span>
                   </div>
                   <div style={P.rowMeta}>
-                    {SERVICE_LABELS[r.service_type] ?? r.service_type} · {r.description}
+                    {requestTitle(r)} · {r.description}
                   </div>
                 </div>
                 <span style={{ ...P.rowMeta, marginTop: 0 }}>{r.outlet?.name ?? ""}</span>

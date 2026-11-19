@@ -47,7 +47,7 @@ const ITEMS: Item[] = [
   { kind: "leaf", to: "/bookings", label: "Bookings", roles: ["admin_support"], built: true },
   { kind: "leaf", to: "/services", label: "Services", roles: ["admin_support", "admin_reviewer"], built: true },
   // Phase 4 GS4: the roles `/admin/garage-orders` allows.
-  { kind: "leaf", to: "/garage-orders", label: "Garage jobs", roles: ["admin_support", "admin_finance"], built: true },
+  { kind: "leaf", to: "/garage-orders", label: "Garage jobs and parts", roles: ["admin_support", "admin_finance"], built: true },
   { kind: "leaf", to: "/payouts", label: "Payouts", roles: ["admin_finance"], built: true },
   // A sales agent (`admin_sales`) sees these two and nothing else (Phase 3,
   // PR AG1). An owner sees every agent's sign-ups under the first.

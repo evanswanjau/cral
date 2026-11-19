@@ -48,6 +48,8 @@ export interface Outlet {
 }
 
 export interface OutletInput {
+  /** Garage, or a parts dealer's shop (PT1). Set when the premises are added; never changed after. */
+  kind: "garage" | "parts";
   name: string;
   address: string;
   county: string;
@@ -62,7 +64,8 @@ export const DETAIL_EDITABLE: VehicleStatus[] = ["draft", "action", "rejected"];
 export const listOutlets = () =>
   apiGet<{ data: Outlet[]; counts: { all: number; needs_action: number; live: number } }>("/merchant/outlets?limit=100");
 export const getOutlet = (id: string) => apiGet<Outlet>(`/merchant/outlets/${id}`);
-export const createOutlet = (input: OutletInput) => apiPost<Outlet>("/merchant/outlets", { kind: "garage", ...input });
+export const createOutlet = (input: OutletInput) =>
+  apiPost<Outlet>("/merchant/outlets", { ...input, service_types: input.kind === "garage" ? input.service_types : [] });
 export const outletPhotoBlob = (outletId: string, photoId: string) => apiBlob(`/merchant/outlets/${outletId}/photos/${photoId}`);
 
 export function useOutletList(enabled = true) {

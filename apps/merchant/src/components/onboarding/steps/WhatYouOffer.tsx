@@ -2,13 +2,14 @@ import { useState, type CSSProperties } from "react";
 import { netFromGross } from "@cral/types";
 import { CheckSquare } from "@phosphor-icons/react/dist/ssr/CheckSquare";
 import { Square } from "@phosphor-icons/react/dist/ssr/Square";
+import { Gear } from "@phosphor-icons/react/dist/ssr/Gear";
 import { Wrench } from "@phosphor-icons/react/dist/ssr/Wrench";
 import { O } from "../styles.js";
 import { PrimaryButton } from "../primitives.js";
 import { whatsappLink } from "../../../lib/support.js";
 import { COMING_SUPPLIERS, SUPPLIERS, type SupplierType } from "../../../lib/supplier-types.js";
 import { SUPPLIER_ICONS } from "../../landing/SupplierDoors.js";
-import { OFFER_ORDER, type Offer } from "../../../lib/onboarding-offer.js";
+import { OFFER_ORDER, isPremisesOffer, type Offer } from "../../../lib/onboarding-offer.js";
 
 /**
  * Onboarding step 1, "What do you offer?". Replaces the old Welcome step
@@ -26,12 +27,13 @@ const OPTION_COPY: Record<Offer, { title: string; body: string }> = {
   machinery: { title: "Machinery", body: "Excavators, loaders, rollers and other plant" },
   drivers: { title: "Driving", body: "You, or drivers who work for you" },
   garage: { title: "Garage services", body: "Servicing and repairs at your own premises" },
+  parts: { title: "Spare parts", body: "Parts from your own shop, delivered or fitted" },
 };
 
-const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench };
+const OFFER_ICONS = { ...SUPPLIER_ICONS, garage: Wrench, parts: Gear };
 
-/** Not open to join yet (garages left this list in GS4). */
-const STILL_COMING = COMING_SUPPLIERS;
+/** Not open to join yet (garages left this list in GS4, parts dealers in PT1). */
+const STILL_COMING = COMING_SUPPLIERS.filter((c) => c !== "Parts dealers");
 
 const ASK_URL = whatsappLink("Hi CRAL, a question about joining");
 
@@ -138,7 +140,7 @@ export function WhatYouOffer({
 
       <div style={O.rightCol}>
         {(() => {
-          const first = offers.find((o): o is SupplierType => o !== "garage");
+          const first = offers.find((o): o is SupplierType => !isPremisesOffer(o));
           return first || offers.length === 0 ? <EarningsExample offer={first ?? "cars"} /> : <GarageExample />;
         })()}
         <HaveReady offers={offers} />
@@ -187,13 +189,13 @@ function GarageExample(): JSX.Element {
     <div style={O.darkCard}>
       <div style={O.darkEyebrow}>
         <span style={O.skewRuleDark} />
-        <span style={O.darkEyebrowText}>HOW GARAGE JOBS WORK</span>
+        <span style={O.darkEyebrowText}>HOW GARAGE JOBS AND PARTS ORDERS WORK</span>
       </div>
       <p style={O.darkBody}>
-        Customers describe what their car needs and you send an itemised price. They pay CRAL when they accept, so
-        the money is there before you start. You&rsquo;re paid after they confirm the job is done, after CRAL&rsquo;s
-        service fee. Someone from CRAL visits your premises first, so you can get checked now, before garage
-        requests open on CRAL.
+        Customers describe what their car needs, or the part they want for it, and you send an itemised price. They
+        pay CRAL when they accept, so the money is there before you start or hand over the part. You&rsquo;re paid
+        after they confirm the job is done or that it&rsquo;s the right part, after CRAL&rsquo;s service fee. Someone
+        from CRAL visits your premises first.
       </p>
       <div style={O.darkChipRow}>
         <span style={O.darkChip}>M-PESA OR BANK PAYOUT</span>
@@ -204,7 +206,7 @@ function GarageExample(): JSX.Element {
 }
 
 function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
-  const vehicleOffers = offers.filter((o) => o !== "drivers" && o !== "garage");
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && !isPremisesOffer(o));
   const vehicleLabel =
     vehicleOffers.length === 1 && vehicleOffers[0] === "trucks"
       ? "FOR EACH TRUCK"
@@ -222,9 +224,11 @@ function HaveReady({ offers }: { offers: Offer[] }): JSX.Element {
             <span style={O.docPill}>KRA PIN certificate</span>
           </div>
         </div>
-        {offers.includes("garage") && (
+        {offers.some(isPremisesOffer) && (
           <div>
-            <div style={O.panelGroupLabel}>FOR EACH GARAGE · AFTER YOU SUBMIT</div>
+            <div style={O.panelGroupLabel}>
+              {offers.includes("garage") ? "FOR EACH GARAGE" : "FOR EACH PARTS SHOP"} · AFTER YOU SUBMIT
+            </div>
             <div style={O.docPillRow}>
               <span style={O.docPill}>Address</span>
               <span style={O.docPill}>Opening hours</span>

@@ -222,9 +222,10 @@ export function Onboarding(): JSX.Element {
         return;
       }
       if (next.garageOnly && next.vehicles.length === 0) {
-        // Garage services only: straight on to adding the premises.
+        // Garage services or spare parts only: straight on to adding the premises.
         queryClient.setQueryData(["onboarding"], next);
-        navigate("/premises/new", { replace: true });
+        const partsOnly = offers.includes("parts") && !offers.includes("garage");
+        navigate(partsOnly ? "/premises/new?kind=parts" : "/premises/new", { replace: true });
         return;
       }
       window.scrollTo({ top: 0 });

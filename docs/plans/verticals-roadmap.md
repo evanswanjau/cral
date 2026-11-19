@@ -28,7 +28,7 @@ each one look and feel like its own place.
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Built, in `develop`. Production pending (owner says ship phase 2) | 1 review + 3-5 builds |
 | 3 | Sales agents sign up owners in the field | Built, in `develop`. Production pending (owner says ship phase 3) | 3 |
 | 4 | Garage services: quote first, pay through CRAL | Built, in `develop`. Production pending | 4 |
-| 5 | Spare parts: quoted against your chassis | Not started | 2 |
+| 5 | Spare parts: quoted against your chassis | PT1 built, in `develop`. PT2 next | 2 |
 | 6 | Buy and sell cars: verified listings + enquiries | Not started | 4 |
 
 **Why this order.** Phase 0 cuts the cost of every phase after it. Phase 2
@@ -248,7 +248,7 @@ once you confirm it's the right part.
 
 | PR | What | Model |
 |----|------|-------|
-| PT1 | Parts outlets, condition + fitted/delivered, delivery address, "right part" confirm, wrong-part dispute | Opus |
+| PT1 | Parts outlets, condition + fitted/delivered, delivery address, "right part" confirm, wrong-part dispute. **Built**, in `develop` ([`parts.md`](../decisions/parts.md)) | Opus |
 | PT2 | Parts sub-site made real, request sent to dealers in the county | Opus |
 
 Who delivers was answered 2026-11-19 (decision 8 below).

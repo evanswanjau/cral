@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { BackButton, PrimaryButton } from "../components/onboarding/primitives.js";
 import { P } from "../components/portal/styles.js";
 import { useToast } from "../components/portal/Toast.js";
@@ -8,7 +8,8 @@ import { createOutlet, MIN_PHOTOS } from "../lib/outlets-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
 /**
- * Add premises (Phase 4 GS1). Saves a draft; photos and "Send for a
+ * Add premises (Phase 4 GS1): a garage, or (PT1) a spare parts shop,
+ * pre-picked by `?kind=parts`. Saves a draft; photos and "Send for a
  * visit" happen on the premises screen next. Not from a canvas; built
  * from tokens.ts and the portal's form primitives (AddDriver).
  */
@@ -16,7 +17,8 @@ export function AddPremises(): JSX.Element {
   usePageTitle("Add premises");
   const navigate = useNavigate();
   const flash = useToast();
-  const [value, setValue] = useState<OutletFormValue>(EMPTY_OUTLET);
+  const [params] = useSearchParams();
+  const [value, setValue] = useState<OutletFormValue>({ ...EMPTY_OUTLET, kind: params.get("kind") === "parts" ? "parts" : "garage" });
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,8 +46,8 @@ export function AddPremises(): JSX.Element {
       <BackButton onClick={() => navigate("/premises")}>← All premises</BackButton>
       <h1 style={P.h1}>Add premises</h1>
       <p style={{ ...P.lede, marginBottom: 20 }}>
-        Your garage as customers will find it. After you save, add photos and send it to CRAL. Someone from CRAL visits
-        before it can take requests.
+        Your garage or parts shop as customers will find it. After you save, add photos and send it to CRAL. Someone
+        from CRAL visits before it can take requests.
       </p>
 
       {error && (
@@ -55,7 +57,7 @@ export function AddPremises(): JSX.Element {
       )}
 
       <div style={{ ...P.card, padding: 20, maxWidth: 820 }}>
-        <OutletFields value={value} onChange={setValue} showErrors={showErrors} />
+        <OutletFields value={value} onChange={setValue} showErrors={showErrors} kindEditable />
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginTop: 16, maxWidth: 820 }}>

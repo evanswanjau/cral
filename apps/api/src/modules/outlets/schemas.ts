@@ -36,8 +36,8 @@ const fields = {
   service_types: z.array(z.enum(SERVICE_TYPES)).max(SERVICE_TYPES.length).optional(),
 };
 
-/** `kind` is garage only until PT1 opens parts outlets. */
-export const CreateOutletSchema = z.object({ kind: z.literal("garage"), ...fields });
+/** A garage or (Phase 5 PT1) a parts dealer's premises. A parts outlet has no service types. */
+export const CreateOutletSchema = z.object({ kind: z.enum(OUTLET_KINDS), ...fields });
 export type CreateOutletInput = z.infer<typeof CreateOutletSchema>;
 
 export const UpdateOutletSchema = z.object(fields).partial();

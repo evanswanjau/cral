@@ -110,9 +110,9 @@ describe("merchant premises", () => {
     expect(audit).toBeTruthy();
   });
 
-  it("only takes garage outlets and real counties for now", async () => {
+  it("takes garage and parts outlets (PT1) in real counties only", async () => {
     const { token } = await newMerchant();
-    expect((await request(app).post("/merchant/outlets").set(bearer(token)).send({ ...GARAGE, kind: "parts" })).status).toBe(422);
+    expect((await request(app).post("/merchant/outlets").set(bearer(token)).send({ ...GARAGE, kind: "tyres" })).status).toBe(422);
     expect((await request(app).post("/merchant/outlets").set(bearer(token)).send({ ...GARAGE, county: "Atlantis" })).status).toBe(422);
   });
 

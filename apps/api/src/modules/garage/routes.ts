@@ -16,7 +16,9 @@ import {
   ProblemSchema,
   ResolveSchema,
   CarSchema,
+  CreatePartsRequestSchema,
   CreateRequestSchema,
+  KindListQuerySchema,
   ListQuerySchema,
   MerchantListQuerySchema,
   PreviewSchema,
@@ -91,11 +93,23 @@ garageRouter.post(
   }),
 );
 
+// Spare parts (Phase 5 PT1, docs/decisions/parts.md): only creating a
+// parts request differs. Reading, cancelling, accepting and paying use the
+// garage routes, which serve both kinds by id.
+garageRouter.post(
+  "/me/parts-requests",
+  authenticate(),
+  rateLimit({ bucket: "garage_request", limit: 5, windowSeconds: 3600, keyFn: (req) => req.auth?.sub ?? req.ip ?? "unknown" }),
+  asyncHandler(async (req, res) => {
+    res.status(201).json(await garage.createPartsRequest(req.auth!.sub, CreatePartsRequestSchema.parse(req.body), ctxOf(req)));
+  }),
+);
+
 garageRouter.get(
   "/me/garage-requests",
   authenticate(),
   asyncHandler(async (req, res) => {
-    res.status(200).json(await garage.listMyRequests(req.auth!.sub, ListQuerySchema.parse(req.query)));
+    res.status(200).json(await garage.listMyRequests(req.auth!.sub, KindListQuerySchema.parse(req.query)));
   }),
 );
 
@@ -121,7 +135,8 @@ garageRouter.post(
   "/merchant/garage-requests/quote-preview",
   authenticate(),
   asyncHandler(async (req, res) => {
-    res.status(200).json(await garage.previewQuote(PreviewSchema.parse(req.body).lines));
+    const body = PreviewSchema.parse(req.body);
+    res.status(200).json(await garage.previewQuote(body.lines, body.kind));
   }),
 );
 
@@ -183,7 +198,7 @@ garageRouter.get(
   "/me/garage-orders",
   authenticate(),
   asyncHandler(async (req, res) => {
-    res.status(200).json(await orders.listMyOrders(req.auth!.sub, ListQuerySchema.parse(req.query)));
+    res.status(200).json(await orders.listMyOrders(req.auth!.sub, KindListQuerySchema.parse(req.query)));
   }),
 );
 

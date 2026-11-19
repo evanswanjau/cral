@@ -5,17 +5,22 @@ import { P } from "../components/portal/styles.js";
 import { O } from "../components/onboarding/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import {
+  CONDITIONS,
+  CONDITION_LABELS,
+  FULFILMENT_LABELS,
   LINE_KINDS,
   LINE_LABELS,
-  SERVICE_LABELS,
   kesText,
   previewQuote,
   useDeclineRequest,
   useGarageRequest,
   useSendQuote,
   useWithdrawQuote,
+  requestTitle,
+  type Fulfilment,
   type GarageRequest,
   type LineKind,
+  type PartCondition,
 } from "../lib/garage-api.js";
 import type { Money } from "../lib/vehicles-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
@@ -23,8 +28,10 @@ import { usePageTitle } from "../lib/use-page-title.js";
 /**
  * One quote request and this garage's itemised quote (Phase 4 GS2). The
  * take-home figure comes from the API in shillings after CRAL's service
- * fee; the fee rate is never shown here. Not from a canvas; built from
- * tokens.ts and the portal's detail idiom.
+ * fee; the fee rate is never shown here. A parts request (PT1) is the same
+ * screen: the quote also names the part's condition and whether the dealer
+ * fits it or delivers it (a delivered part carries a priced delivery line).
+ * Not from a canvas; built from tokens.ts and the portal's detail idiom.
  */
 
 type LineDraft = { kind: LineKind; description: string; shillings: string };
@@ -33,6 +40,7 @@ const blankLine = (kind: LineKind = "labour"): LineDraft => ({ kind, description
 
 function fromQuote(r: GarageRequest): { lines: LineDraft[]; days: string; note: string } {
   const q = r.my_quote;
+  if (!q && r.kind === "part") return { lines: [blankLine("part"), blankLine("delivery")], days: "1", note: "" };
   if (!q) return { lines: [blankLine("part"), blankLine("labour")], days: "1", note: "" };
   return {
     lines: q.lines.map((l) => ({ kind: l.kind, description: l.description, shillings: String(Math.round(l.amount.amount / 100)) })),
@@ -65,6 +73,8 @@ export function GarageRequestDetail(): JSX.Element {
   const [lines, setLines] = useState<LineDraft[]>([]);
   const [days, setDays] = useState("1");
   const [note, setNote] = useState("");
+  const [condition, setCondition] = useState<PartCondition | "">("");
+  const [fulfilment, setFulfilment] = useState<Fulfilment | "">("");
   const [editing, setEditing] = useState(false);
   const [preview, setPreview] = useState<{ total: Money; take_home: Money } | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -75,6 +85,8 @@ export function GarageRequestDetail(): JSX.Element {
     setLines(d.lines);
     setDays(d.days);
     setNote(d.note);
+    setCondition(r.my_quote?.part_condition ?? "");
+    setFulfilment(r.my_quote?.fulfilment ?? "");
   }, [r?.id, r?.my_quote?.id, r?.my_quote?.sent_at]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // What the merchant keeps, from the API (never computed here from a rate).
@@ -83,7 +95,7 @@ export function GarageRequestDetail(): JSX.Element {
   useEffect(() => {
     if (!valid.length) return setPreview(null);
     const t = setTimeout(() => {
-      previewQuote(valid).then(setPreview).catch(() => setPreview(null));
+      previewQuote(valid, r?.kind ?? "service").then(setPreview).catch(() => setPreview(null));
     }, 350);
     return () => clearTimeout(t);
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -93,7 +105,7 @@ export function GarageRequestDetail(): JSX.Element {
     return (
       <div>
         <button type="button" style={P.backLink} onClick={() => navigate("/garage/requests")}>← All quote requests</button>
-        <p style={P.lede}>That request wasn't sent to your garage.</p>
+        <p style={P.lede}>That request wasn't sent to your premises.</p>
       </div>
     );
   }
@@ -102,6 +114,7 @@ export function GarageRequestDetail(): JSX.Element {
   const q = r.my_quote;
   const showForm = open && (editing || !q || q.status !== "sent");
   const fail = (err: unknown) => flash(err instanceof Error ? err.message : "Something went wrong. Try again.", "#FF8A8A");
+  const isPart = r.kind === "part";
 
   function setLine(i: number, patch: Partial<LineDraft>) {
     setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
@@ -114,9 +127,24 @@ export function GarageRequestDetail(): JSX.Element {
       return setProblem("Each line needs a description and an amount, or remove it.");
     }
     const d = Number(days);
-    if (!Number.isInteger(d) || d < 1 || d > 60) return setProblem("Say how many days the work takes, 1 to 60.");
+    if (!Number.isInteger(d) || d < 1 || d > 60) {
+      return setProblem(isPart ? "Say how many days until the part is fitted or delivered, 1 to 60." : "Say how many days the work takes, 1 to 60.");
+    }
+    if (isPart && !condition) return setProblem("Say whether the part is genuine, OEM or used.");
+    if (isPart && !fulfilment) return setProblem("Say whether you fit the part or deliver it.");
+    if (isPart && fulfilment === "delivered" && !valid.some((l) => l.kind === "delivery")) {
+      return setProblem("Add a delivery line with its price.");
+    }
+    if (isPart && fulfilment === "fitted" && valid.some((l) => l.kind === "delivery")) {
+      return setProblem("A part you fit at your premises has no delivery line. Remove it.");
+    }
     send.mutate(
-      { lines: valid, days_needed: d, note: note.trim() || null },
+      {
+        lines: valid,
+        days_needed: d,
+        note: note.trim() || null,
+        ...(isPart && condition && fulfilment ? { part_condition: condition, fulfilment } : {}),
+      },
       {
         onSuccess: () => {
           setEditing(false);
@@ -136,7 +164,7 @@ export function GarageRequestDetail(): JSX.Element {
           <div>
             <h1 style={P.mastH1}>{r.car ? `${r.car.year} ${r.car.make} ${r.car.model}` : "A car"}</h1>
             <div style={P.mastSub}>
-              {SERVICE_LABELS[r.service_type] ?? r.service_type} · {r.county}
+              {requestTitle(r)} · {r.county}
               {r.customer_first_name ? ` · from ${r.customer_first_name}` : ""}
               {r.outlet ? ` · to ${r.outlet.name}` : ""}
             </div>
@@ -155,13 +183,18 @@ export function GarageRequestDetail(): JSX.Element {
           )}
         </div>
         <p style={{ ...P.lede, maxWidth: 720, margin: "12px 0 0" }}>{r.description}</p>
+        {isPart && r.delivery_address && (
+          <p style={{ ...P.lede, maxWidth: 720, margin: "8px 0 0" }}>Deliver to: {r.delivery_address}</p>
+        )}
       </div>
 
       {q?.status === "accepted" && q.order_id ? (
         <div style={{ ...P.card, marginTop: 16, padding: 16, maxWidth: 820, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-          <span style={{ ...P.lede, flex: "1 1 260px" }}>The customer accepted your quote. Follow the job from payment to payout.</span>
+          <span style={{ ...P.lede, flex: "1 1 260px" }}>
+            The customer accepted your quote. Follow the {isPart ? "order" : "job"} from payment to payout.
+          </span>
           <button type="button" style={{ ...P.actionBtn, minHeight: 44 }} onClick={() => navigate(`/garage/orders/${q.order_id}`)}>
-            Open the job
+            {isPart ? "Open the order" : "Open the job"}
           </button>
         </div>
       ) : (
@@ -169,9 +202,11 @@ export function GarageRequestDetail(): JSX.Element {
           <div style={{ ...P.card, marginTop: 16, padding: 16, maxWidth: 820 }}>
             <span style={P.lede}>
               {r.declined
-                ? "You said this garage can't do this job."
+                ? isPart
+                  ? "You said you can't supply this part."
+                  : "You said this garage can't do this job."
                 : q?.status === "superseded"
-                  ? "The customer chose another garage this time."
+                  ? `The customer chose another ${isPart ? "dealer" : "garage"} this time.`
                   : "The customer has closed this request. It can't be quoted any more."}
             </span>
           </div>
@@ -195,7 +230,12 @@ export function GarageRequestDetail(): JSX.Element {
               </div>
             ))}
             <div style={{ ...S.line, fontWeight: 700, borderBottom: "none" }}>
-              <span style={{ flex: 1 }}>Customer pays · {q.days_needed} {q.days_needed === 1 ? "day" : "days"} of work</span>
+              <span style={{ flex: 1 }}>
+                Customer pays · {q.days_needed} {q.days_needed === 1 ? "day" : "days"}
+                {isPart ? "" : " of work"}
+                {q.part_condition ? ` · ${CONDITION_LABELS[q.part_condition]}` : ""}
+                {q.fulfilment ? ` · ${FULFILMENT_LABELS[q.fulfilment]}` : ""}
+              </span>
               <span>{kesText(q.total)}</span>
             </div>
             <div style={{ ...O.helper, marginTop: 4 }}>You keep {kesText(q.take_home)} after CRAL&rsquo;s service fee.</div>
@@ -254,9 +294,33 @@ export function GarageRequestDetail(): JSX.Element {
                 Add a line
               </button>
             </div>
+            {isPart && (
+              <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                <label style={{ flex: "1 1 200px" }}>
+                  <span style={O.label}>Condition</span>
+                  <select style={O.select} value={condition} onChange={(e) => setCondition(e.target.value as PartCondition)}>
+                    <option value="">Select</option>
+                    {CONDITIONS.map((c) => (
+                      <option key={c} value={c}>{CONDITION_LABELS[c]}</option>
+                    ))}
+                  </select>
+                </label>
+                <label style={{ flex: "1 1 240px" }}>
+                  <span style={O.label}>How the customer gets it</span>
+                  <select style={O.select} value={fulfilment} onChange={(e) => setFulfilment(e.target.value as Fulfilment)}>
+                    <option value="">Select</option>
+                    <option value="delivered">{FULFILMENT_LABELS.delivered}</option>
+                    <option value="fitted">{FULFILMENT_LABELS.fitted}</option>
+                  </select>
+                </label>
+              </div>
+            )}
+            {isPart && fulfilment === "delivered" && (
+              <div style={O.helper}>Price your own delivery as a Delivery line. CRAL arranges no riders.</div>
+            )}
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               <label style={{ flex: "0 0 160px" }}>
-                <span style={O.label}>Days of work</span>
+                <span style={O.label}>{isPart ? "Days to hand over" : "Days of work"}</span>
                 <input style={O.input} inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, "").slice(0, 2))} />
               </label>
               <label style={{ flex: "1 1 260px" }}>
@@ -293,7 +357,7 @@ export function GarageRequestDetail(): JSX.Element {
                 disabled={decline.isPending}
                 onClick={() => decline.mutate(undefined, { onSuccess: () => flash("Marked as a job you can't do.", "#8C97A8"), onError: fail })}
               >
-                We can&rsquo;t do this job
+                {isPart ? "We can\u2019t supply this part" : "We can\u2019t do this job"}
               </button>
             </div>
           </div>

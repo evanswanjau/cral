@@ -88,8 +88,11 @@ export async function applyOrderPayment(
     const id = await notify(trx, {
       merchantId: order.merchant_id,
       category: "booking",
-      title: `${order.ref} · paid · you can start`,
-      body: `The customer has paid ${kesText(order.gross_amount)} to CRAL for this job. CRAL holds it and pays you once they confirm the work is done.`,
+      title: order.kind === "part" ? `${order.ref} · paid · send or fit the part` : `${order.ref} · paid · you can start`,
+      body:
+        order.kind === "part"
+          ? `The customer has paid ${kesText(order.gross_amount)} to CRAL for this part. CRAL holds it and pays you once they confirm it's the right part.`
+          : `The customer has paid ${kesText(order.gross_amount)} to CRAL for this job. CRAL holds it and pays you once they confirm the work is done.`,
       ref: order.ref,
       subjectType: "garage_order",
       subjectId: order.id,

@@ -12,7 +12,7 @@ import { commissionRateFor, takeHome } from "../../lib/commission.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
 import { startStkPush, type PaymentRequestRow } from "../payments/service.js";
 import type { OutletRow } from "../outlets/service.js";
-import type { CarRow, QuoteRequestRow, QuoteRow } from "./service.js";
+import { verticalOf, type CarRow, type QuoteRequestRow, type QuoteRow, type RequestKind } from "./service.js";
 import { AUTO_CONFIRM_MS, QUOTE_VALID_MS, type ExtraQuoteInput } from "./schemas.js";
 
 /**
@@ -32,6 +32,12 @@ import { AUTO_CONFIRM_MS, QUOTE_VALID_MS, type ExtraQuoteInput } from "./schemas
  * Every transition is a conditional update on the status it checked (409
  * when it moved) with `audit_log` in the same transaction. Amounts are
  * integer cents, snapshotted on the quote when it is accepted.
+ *
+ * Spare parts (Phase 5 PT1, docs/decisions/parts.md) run on the same
+ * order: `kind = 'part'`, ref `P-YYMMDD-NNN`, the parts commission. The
+ * dealer marks the part delivered or fitted (`ready`) straight from
+ * `paid`; the customer confirms it's the right part, or opens a wrong-part
+ * dispute (`problem`) for Ops. No extra-work quotes on a part.
  */
 
 export type OrderStatus =
@@ -74,6 +80,19 @@ export interface OrderRow {
   resolved_by: string | null;
   created_at: Date;
   updated_at: Date;
+}
+
+/** Words that differ between a garage job and a part order. */
+const WORDS = {
+  service: { business: "garage", thing: "job" },
+  part: { business: "dealer", thing: "order" },
+} as const;
+
+/** How a part order's `ready` reads: the accepted quote says fitted or delivered. */
+async function fulfilmentOf(order: OrderRow, trx: Knex | Knex.Transaction = db): Promise<"fitted" | "delivered" | null> {
+  if (order.kind !== "part") return null;
+  const q = await trx<QuoteRow>("quotes").where({ id: order.quote_id }).first("fulfilment");
+  return q?.fulfilment ?? null;
 }
 
 interface LineRow {
@@ -130,7 +149,7 @@ const isExpired = (q: QuoteRow) => q.valid_until.getTime() < Date.now();
  * day" shape as `CB-` bookings and `H-` listings (conventions.md), from its
  * own daily counter in the caller's transaction.
  */
-async function nextOrderRef(trx: Knex.Transaction): Promise<string> {
+async function nextOrderRef(trx: Knex.Transaction, kind: RequestKind): Promise<string> {
   const result = await trx.raw<{ rows: { day: string; n: number }[] }>(
     `INSERT INTO order_ref_daily_counters (day, n, created_at, updated_at)
      VALUES ((now() AT TIME ZONE 'Africa/Nairobi')::date, 1, now(), now())
@@ -139,7 +158,8 @@ async function nextOrderRef(trx: Knex.Transaction): Promise<string> {
      RETURNING to_char(day, 'YYMMDD') AS day, n`,
   );
   const { day, n } = result.rows[0]!;
-  return `G-${day}-${String(n).padStart(3, "0")}`;
+  // One daily counter for both kinds; the letter says which.
+  return `${kind === "part" ? "P" : "G"}-${day}-${String(n).padStart(3, "0")}`;
 }
 
 /** The quote the customer owes money on right now, if any. */
@@ -192,7 +212,8 @@ async function serializeOrder(order: OrderRow, audience: Audience) {
     db<PaymentRequestRow>("payment_requests").where({ order_id: order.id }).orderBy("created_at", "desc").first(),
   ]);
   const lines = await linesFor(quotes.map((q) => q.id));
-  const rate = audience === "merchant" ? await commissionRateFor("garage") : 0;
+  const rate = audience === "merchant" ? await commissionRateFor(verticalOf(order.kind)) : 0;
+  const original = quotes.find((q) => q.id === order.quote_id);
   const due = dueQuote(order, quotes);
   const autoConfirmAt = order.status === "ready" && order.ready_at ? new Date(order.ready_at.getTime() + AUTO_CONFIRM_MS) : null;
 
@@ -210,6 +231,8 @@ async function serializeOrder(order: OrderRow, audience: Audience) {
       ? { commission: q.commission_amount === null ? null : kes(q.commission_amount) }
       : {}),
     days_needed: q.days_needed,
+    part_condition: q.part_condition,
+    fulfilment: q.fulfilment,
     note: q.note,
     sent_at: q.sent_at.toISOString(),
     valid_until: q.valid_until.toISOString(),
@@ -233,8 +256,14 @@ async function serializeOrder(order: OrderRow, audience: Audience) {
     id: order.id,
     ref: order.ref,
     status: order.status,
+    kind: order.kind,
     request_id: order.request_id,
     service_type: request?.service_type ?? null,
+    part_name: request?.part_name ?? null,
+    // Parts: how the dealer hands it over, and where a delivery goes.
+    fulfilment: original?.fulfilment ?? null,
+    part_condition: original?.part_condition ?? null,
+    delivery_address: request?.delivery_address ?? null,
     description: request?.description ?? null,
     car: car ? { make: car.make, model: car.model, year: car.year, plate: car.plate } : null,
     outlet: outlet ? { id: outlet.id, name: outlet.name, address: outlet.address, county: outlet.county } : null,
@@ -301,6 +330,10 @@ async function deliver(notices: Array<{ merchantId?: string; userId?: string; id
   for (const n of notices) if (n.merchantId) await enqueueNotificationDelivery(n.merchantId, [n.id]);
 }
 
+function noExtrasOnParts(): never {
+  conflict("not_for_parts", "A part order has no extra-work quotes. Anything else is a new parts request.");
+}
+
 // ---------------------------------------------------------------------
 // Customer
 // ---------------------------------------------------------------------
@@ -314,22 +347,23 @@ async function deliver(notices: Array<{ merchantId?: string; userId?: string; id
 export async function acceptQuote(userId: string, requestId: string, quoteId: string, ctx: RequestContext) {
   const request = await db<QuoteRequestRow>("quote_requests").where({ id: requestId, user_id: userId }).first();
   if (!request) throw new ApiError({ status: 404, type: "not_found", code: "request_not_found", message: "That request isn't on your account." });
-  const rate = await commissionRateFor("garage");
+  const rate = await commissionRateFor(verticalOf(request.kind));
+  const w = WORDS[request.kind];
   const notices: Array<{ merchantId: string; id: string }> = [];
 
   const order = await db.transaction(async (trx) => {
     const locked = await trx<QuoteRequestRow>("quote_requests").where({ id: request.id }).forUpdate().first();
     if (!locked || locked.status !== "open") conflict("request_not_open", "This request is already closed.");
     const quote = await trx<QuoteRow>("quotes").where({ id: quoteId, request_id: request.id, kind: "original" }).forUpdate().first();
-    if (!quote || quote.status !== "sent") conflict("quote_not_available", "That garage's quote is no longer open.");
-    if (isExpired(quote)) conflict("quote_expired", "That quote has expired. Ask the garage to send it again.");
+    if (!quote || quote.status !== "sent") conflict("quote_not_available", `That ${w.business}'s quote is no longer open.`);
+    if (isExpired(quote)) conflict("quote_expired", `That quote has expired. Ask the ${w.business} to send it again.`);
     const car = await trx<CarRow>("customer_cars").where({ id: request.car_id }).first();
 
     const now = new Date();
     const net = takeHome(quote.total_amount, rate);
     const commission = quote.total_amount - net;
     const orderId = generateId("order");
-    const ref = await nextOrderRef(trx);
+    const ref = await nextOrderRef(trx, request.kind);
     const [row] = await trx<OrderRow>("orders")
       .insert({
         id: orderId,
@@ -363,7 +397,7 @@ export async function acceptQuote(userId: string, requestId: string, quoteId: st
         updated_at: now,
       })
       .returning("*");
-    if (!accepted) conflict("quote_not_available", "That garage's quote is no longer open.");
+    if (!accepted) conflict("quote_not_available", `That ${w.business}'s quote is no longer open.`);
 
     const others = await trx<QuoteRow>("quotes")
       .where({ request_id: request.id, kind: "original", status: "sent" })
@@ -381,14 +415,16 @@ export async function acceptQuote(userId: string, requestId: string, quoteId: st
       superseded: others.map((o) => o.id),
     });
 
-    const vehicle = car ? `${car.year} ${car.make} ${car.model}` : "the car";
+    const vehicle = request.kind === "part"
+      ? `${request.part_name ?? "the part"} for ${car ? `a ${car.year} ${car.make} ${car.model}` : "the car"}`
+      : car ? `${car.year} ${car.make} ${car.model}` : "the car";
     notices.push({
       merchantId: quote.merchant_id,
       id: await notify(trx, {
         merchantId: quote.merchant_id,
         category: "booking",
         title: `${ref} · your quote was accepted`,
-        body: `The customer accepted your ${kesText(quote.total_amount)} quote for ${vehicle}. Wait for their payment to reach CRAL before you start.`,
+        body: `The customer accepted your ${kesText(quote.total_amount)} quote for ${vehicle}. Wait for their payment to reach CRAL before you ${request.kind === "part" ? "send or fit the part" : "start"}.`,
         ref,
         subjectType: "garage_order",
         subjectId: orderId,
@@ -398,7 +434,7 @@ export async function acceptQuote(userId: string, requestId: string, quoteId: st
       await notify(trx, {
         merchantId: o.merchant_id,
         category: "booking",
-        title: "The customer chose another garage",
+        title: `The customer chose another ${w.business}`,
         body: `Your quote for ${vehicle} was not picked this time.`,
         ref: vehicle,
         subjectType: "garage_request",
@@ -411,8 +447,8 @@ export async function acceptQuote(userId: string, requestId: string, quoteId: st
   return serializeOrder(order, "customer");
 }
 
-export async function listMyOrders(userId: string, query: { cursor?: string | undefined; limit: number }) {
-  const rows = await applyCursor(db<OrderRow>("orders").where({ user_id: userId }).select("*"), {
+export async function listMyOrders(userId: string, query: { kind?: RequestKind | undefined; cursor?: string | undefined; limit: number }) {
+  const rows = await applyCursor(db<OrderRow>("orders").where({ user_id: userId, kind: query.kind ?? "service" }).select("*"), {
     sortColumn: "created_at",
     direction: "desc",
     limit: query.limit,
@@ -496,7 +532,8 @@ export async function cancelMyOrder(userId: string, orderId: string, ctx: Reques
 /** Say yes to an extra-work quote. Its money is snapshotted now; paying it is `payOrder`. */
 export async function acceptExtra(userId: string, orderId: string, quoteId: string, ctx: RequestContext) {
   const order = await requireMyOrder(userId, orderId);
-  const rate = await commissionRateFor("garage");
+  if (order.kind === "part") noExtrasOnParts();
+  const rate = await commissionRateFor(verticalOf(order.kind));
   const notices: Array<{ merchantId: string; id: string }> = [];
   const row = await db.transaction(async (trx) => {
     const locked = await trx<OrderRow>("orders").where({ id: order.id }).forUpdate().first();
@@ -560,20 +597,31 @@ export async function declineExtra(userId: string, orderId: string, quoteId: str
   return getMyOrder(userId, orderId);
 }
 
-/** The customer confirms the work is done. The garage's money becomes payable. */
+/**
+ * The customer confirms the work is done (garage), or that it's the right
+ * part (parts). The merchant's money becomes payable.
+ */
 export async function confirmOrder(userId: string, orderId: string, ctx: RequestContext) {
   const order = await requireMyOrder(userId, orderId);
+  const isPart = order.kind === "part";
   const notices: Array<{ merchantId: string; id: string }> = [];
   const row = await db.transaction(async (trx) => {
-    const next = await move(trx, order.id, ["ready"], { status: "completed", completed_at: new Date(), confirmed_by: "customer" }, "order_not_ready", "You can confirm once the garage says the car is ready.");
-    await audit(trx, { id: userId, type: "user" }, "order.confirmed", order.id, ctx, { status: "ready" }, { status: "completed", confirmed_by: "customer" });
+    const next = await move(
+      trx,
+      order.id,
+      ["ready"],
+      { status: "completed", completed_at: new Date(), confirmed_by: "customer" },
+      "order_not_ready",
+      isPart ? "You can confirm once the dealer says the part is delivered or fitted." : "You can confirm once the garage says the car is ready.",
+    );
+    await audit(trx, { id: userId, type: "user" }, isPart ? "order.right_part_confirmed" : "order.confirmed", order.id, ctx, { status: "ready" }, { status: "completed", confirmed_by: "customer" });
     notices.push({
       merchantId: order.merchant_id,
       id: await notify(trx, {
         merchantId: order.merchant_id,
         category: "payout",
         title: `${order.ref} · confirmed · ${kesText(next.merchant_net_amount)} to you`,
-        body: "The customer confirmed the job. It joins your next payout.",
+        body: isPart ? "The customer confirmed it's the right part. It joins your next payout." : "The customer confirmed the job. It joins your next payout.",
         ref: order.ref,
         subjectType: "garage_order",
         subjectId: order.id,
@@ -585,9 +633,14 @@ export async function confirmOrder(userId: string, orderId: string, ctx: Request
   return serializeOrder(row, "customer");
 }
 
-/** Something's wrong: stops the auto-confirm and sends the job to Ops. */
+/**
+ * Something's wrong: stops the auto-confirm and sends the job to Ops. On a
+ * part order this is the wrong-part dispute: the money stays with CRAL
+ * until Ops releases it to the dealer or refunds the customer.
+ */
 export async function raiseProblem(userId: string, orderId: string, input: { note: string }, ctx: RequestContext) {
   const order = await requireMyOrder(userId, orderId);
+  const isPart = order.kind === "part";
   const notices: Array<{ merchantId: string; id: string }> = [];
   const row = await db.transaction(async (trx) => {
     const next = await move(
@@ -596,15 +649,17 @@ export async function raiseProblem(userId: string, orderId: string, input: { not
       ["in_progress", "ready"],
       { status: "problem", problem_raised_at: new Date(), problem_note: input.note },
       "order_not_disputable",
-      "A problem can be raised while the job is in progress or ready, before you confirm it.",
+      isPart
+        ? "A wrong part can be reported once the dealer has delivered or fitted it, before you confirm it."
+        : "A problem can be raised while the job is in progress or ready, before you confirm it.",
     );
-    await audit(trx, { id: userId, type: "user" }, "order.problem_raised", order.id, ctx, { status: order.status }, { status: "problem", note: input.note });
+    await audit(trx, { id: userId, type: "user" }, isPart ? "order.wrong_part_disputed" : "order.problem_raised", order.id, ctx, { status: order.status }, { status: "problem", note: input.note });
     notices.push({
       merchantId: order.merchant_id,
       id: await notify(trx, {
         merchantId: order.merchant_id,
         category: "booking",
-        title: `${order.ref} · the customer raised a problem`,
+        title: isPart ? `${order.ref} · the customer says it's the wrong part` : `${order.ref} · the customer raised a problem`,
         body: "CRAL is looking into it and will be in touch. The payment stays with CRAL until it's settled.",
         ref: order.ref,
         subjectType: "garage_order",
@@ -628,11 +683,12 @@ const MERCHANT_FILTERS: Record<string, OrderStatus[]> = {
 
 export async function listMerchantOrders(
   userId: string,
-  query: { filter: "active" | "done" | "all"; cursor?: string | undefined; limit: number },
+  query: { filter: "active" | "done" | "all"; kind?: RequestKind | undefined; cursor?: string | undefined; limit: number },
 ) {
   const merchant = await getOrCreateMerchant(userId);
   const base = db<OrderRow>("orders").where({ merchant_id: merchant.id }).select("*");
   if (query.filter !== "all") base.whereIn("status", MERCHANT_FILTERS[query.filter]!);
+  if (query.kind) base.where({ kind: query.kind });
   const rows = await applyCursor(base, {
     sortColumn: "created_at",
     direction: "desc",
@@ -641,7 +697,14 @@ export async function listMerchantOrders(
   });
   const paged = toPaginatedResult(rows as OrderRow[], query.limit, "created_at");
   const toStart = Number(
-    (await db("orders").where({ merchant_id: merchant.id, status: "paid" }).count<{ count: string }[]>("* as count"))[0]?.count ?? 0,
+    (
+      await db("orders")
+        .where({ merchant_id: merchant.id, status: "paid" })
+        .modify((q) => {
+          if (query.kind) q.where({ kind: query.kind });
+        })
+        .count<{ count: string }[]>("* as count")
+    )[0]?.count ?? 0,
   );
   return {
     data: await Promise.all(paged.data.map((o) => serializeOrder(o, "merchant"))),
@@ -666,27 +729,48 @@ export async function startOrder(userId: string, orderId: string, ctx: RequestCo
   const row = await db.transaction(async (trx) => {
     const next = await move(trx, order.id, ["paid"], { status: "in_progress", started_at: new Date() }, "order_not_paid", order.status === "awaiting_payment" ? "Wait for the customer's payment to reach CRAL before you start." : "This job has already moved on.");
     await audit(trx, { id: userId, type: "user" }, "order.started", order.id, ctx, { status: "paid" }, { status: "in_progress" });
-    await customerNotice(trx, order, `${order.ref} · work has started`, "The garage has started on your car.");
+    await customerNotice(
+      trx,
+      order,
+      order.kind === "part" ? `${order.ref} · the dealer is getting your part ready` : `${order.ref} · work has started`,
+      order.kind === "part" ? "The dealer is preparing your part." : "The garage has started on your car.",
+    );
     return next;
   });
   return serializeOrder(row, "merchant");
 }
 
-/** In progress -> ready. Starts the 72 h confirmation window. */
+/**
+ * In progress -> ready. Starts the 72 h confirmation window. A parts dealer
+ * marks the part delivered or fitted straight from `paid` (or after
+ * "preparing"), since there's nothing to start on a part.
+ */
 export async function markReady(userId: string, orderId: string, ctx: RequestContext) {
   const { order } = await requireMerchantOrder(userId, orderId);
+  const isPart = order.kind === "part";
   const row = await db.transaction(async (trx) => {
     await trx<OrderRow>("orders").where({ id: order.id }).forUpdate().first();
     if (openExtra(await quotesOf(order.id, trx))) {
       conflict("extra_pending", "An extra-work quote is still waiting on the customer. Withdraw it, or wait for their answer and payment.");
     }
-    const next = await move(trx, order.id, ["in_progress"], { status: "ready", ready_at: new Date() }, "order_not_in_progress", "Only a job in progress can be marked ready.");
-    await audit(trx, { id: userId, type: "user" }, "order.ready", order.id, ctx, { status: "in_progress" }, { status: "ready" });
+    const from: OrderStatus[] = isPart ? ["paid", "in_progress"] : ["in_progress"];
+    const next = await move(
+      trx,
+      order.id,
+      from,
+      { status: "ready", ready_at: new Date() },
+      isPart ? "order_not_paid" : "order_not_in_progress",
+      isPart ? "Only a paid part order can be marked delivered or fitted." : "Only a job in progress can be marked ready.",
+    );
+    const fulfilment = await fulfilmentOf(order, trx);
+    await audit(trx, { id: userId, type: "user" }, isPart ? `order.${fulfilment ?? "delivered"}` : "order.ready", order.id, ctx, { status: order.status }, { status: "ready" });
     await customerNotice(
       trx,
       order,
-      `${order.ref} · your car is ready`,
-      "Collect it and confirm the job is done. If you say nothing, it confirms itself after 72 hours. Something wrong? Raise a problem before then.",
+      isPart ? `${order.ref} · your part was ${fulfilment ?? "delivered"}` : `${order.ref} · your car is ready`,
+      isPart
+        ? "Check it's the right part and confirm. If you say nothing, it confirms itself after 72 hours. Wrong part? Report it before then."
+        : "Collect it and confirm the job is done. If you say nothing, it confirms itself after 72 hours. Something wrong? Raise a problem before then.",
     );
     return next;
   });
@@ -699,6 +783,7 @@ export async function markReady(userId: string, orderId: string, ctx: RequestCon
  */
 export async function sendExtra(userId: string, orderId: string, input: ExtraQuoteInput, ctx: RequestContext) {
   const { order, merchantId } = await requireMerchantOrder(userId, orderId);
+  if (order.kind === "part") noExtrasOnParts();
   const total = input.lines.reduce((s, l) => s + l.amount, 0);
   const now = new Date();
   await db.transaction(async (trx) => {
@@ -797,13 +882,20 @@ export async function autoConfirmReadyOrders(now: Date = new Date(), onlyOrderId
           merchantId: order.merchant_id,
           category: "payout",
           title: `${order.ref} · confirmed · ${kesText(next.merchant_net_amount)} to you`,
-          body: "72 hours passed with no problem raised, so the job confirmed itself. It joins your next payout.",
+          body: `72 hours passed with no problem raised, so the ${WORDS[(order as OrderRow).kind].thing} confirmed itself. It joins your next payout.`,
           ref: order.ref,
           subjectType: "garage_order",
           subjectId: order.id,
         }),
       });
-      await customerNotice(trx, order, `${order.ref} · confirmed`, "72 hours passed since your car was ready, so the job is confirmed and the garage will be paid.");
+      await customerNotice(
+        trx,
+        order,
+        `${order.ref} · confirmed`,
+        order.kind === "part"
+          ? "72 hours passed since your part was handed over, so the order is confirmed and the dealer will be paid."
+          : "72 hours passed since your car was ready, so the job is confirmed and the garage will be paid.",
+      );
       return true;
     });
     if (done) {
@@ -818,9 +910,15 @@ export async function autoConfirmReadyOrders(now: Date = new Date(), onlyOrderId
 // Ops
 // ---------------------------------------------------------------------
 
-export async function listAdminOrders(query: { status?: OrderStatus | undefined; cursor?: string | undefined; limit: number }) {
+export async function listAdminOrders(query: {
+  status?: OrderStatus | undefined;
+  kind?: RequestKind | undefined;
+  cursor?: string | undefined;
+  limit: number;
+}) {
   const base = db<OrderRow>("orders").select("*");
   if (query.status) base.where({ status: query.status });
+  if (query.kind) base.where({ kind: query.kind });
   const rows = await applyCursor(base, {
     sortColumn: "created_at",
     direction: "desc",

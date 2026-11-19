@@ -152,7 +152,8 @@ export function Review({
           </div>
           <div style={O.reviewCardBody}>
             <p style={{ ...O.helper, margin: 0 }}>
-              You offer garage services. You add your premises straight after you submit, and CRAL visits each one.
+              You offer garage services or spare parts. You add your premises straight after you submit, and CRAL visits
+              each one.
             </p>
           </div>
         </div>

@@ -224,7 +224,8 @@ export async function createOutlet(userId: string, input: CreateOutletInput, ctx
         county: input.county,
         phone: input.phone ?? null,
         opening_hours: input.opening_hours,
-        service_types: [...new Set(input.service_types ?? [])],
+        // Service types are a garage's; a parts dealer has none (PT1).
+        service_types: input.kind === "garage" ? [...new Set(input.service_types ?? [])] : [],
         status: "draft",
       })
       .returning("*");
@@ -261,7 +262,7 @@ export async function updateOutlet(userId: string, outletId: string, input: Upda
   }
   if (input.phone !== undefined) update.phone = input.phone ?? null;
   if (input.opening_hours !== undefined) update.opening_hours = input.opening_hours;
-  if (input.service_types !== undefined) {
+  if (input.service_types !== undefined && outlet.kind === "garage") {
     const next = [...new Set(input.service_types)];
     if (outlet.kind === "garage" && next.length === 0 && outlet.status !== "draft") {
       invalid("service_types_required", "Keep at least one service.", "service_types");
