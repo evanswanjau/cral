@@ -12,8 +12,10 @@
  * - On a first visit with nothing else to go on, `?offer=` from
  *   `/create-account` (kept by `rememberOffer`) pre-selects one.
  *
- * Only one value reaches the server: picking Driving alone sets
- * `drivers_only: true` through the existing onboarding PATCH.
+ * Two values reach the server, through the existing onboarding PATCH:
+ * picking Driving alone sets `drivers_only: true`, and picking Garage
+ * services alone sets `garage_only: true` (Phase 4 GS1). Garage services
+ * isn't a `SupplierType`: it has no landing or `/join` page yet.
  */
 
 import { getCurrentUserId } from "./auth.js";
@@ -21,7 +23,10 @@ import type { OnboardingDraft } from "./onboarding-draft.js";
 import { readRememberedOffer, SUPPLIER_TYPES, type SupplierType } from "./supplier-types.js";
 import type { VehicleType } from "./vehicle-categories.js";
 
-export type Offer = SupplierType;
+export type Offer = SupplierType | "garage";
+
+/** Step 1's order: the four supplier types, then garage services. */
+export const OFFER_ORDER: readonly Offer[] = [...SUPPLIER_TYPES, "garage"];
 
 const CATEGORY_OFFER: Record<VehicleType, Offer> = {
   sedan: "cars",
@@ -34,7 +39,7 @@ const CATEGORY_OFFER: Record<VehicleType, Offer> = {
 /** Keeps `SUPPLIER_TYPES` order and drops duplicates. */
 function ordered(offers: Iterable<Offer>): Offer[] {
   const set = new Set(offers);
-  return SUPPLIER_TYPES.filter((t) => set.has(t));
+  return OFFER_ORDER.filter((t) => set.has(t));
 }
 
 export function offerForCategory(type: VehicleType): Offer {
@@ -45,6 +50,7 @@ export function offerForCategory(type: VehicleType): Offer {
 export function derivedOffers(draft: OnboardingDraft): Offer[] {
   const out: Offer[] = draft.vehicles.map((v) => offerForCategory(v.type));
   if (draft.driversOnly) out.push("drivers");
+  if (draft.garageOnly) out.push("garage");
   return ordered(out);
 }
 
@@ -61,7 +67,7 @@ function readPicked(): Offer[] | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return null;
-    return ordered(parsed.filter((x): x is Offer => (SUPPLIER_TYPES as readonly unknown[]).includes(x)));
+    return ordered(parsed.filter((x): x is Offer => (OFFER_ORDER as readonly unknown[]).includes(x)));
   } catch {
     return null;
   }
@@ -95,12 +101,26 @@ export function isDriversOnlyChoice(offers: Offer[]): boolean {
   return offers.length === 1 && offers[0] === "drivers";
 }
 
+/** Garage services and nothing else: no vehicle step, premises come after submit. */
+export function isGarageOnlyChoice(offers: Offer[]): boolean {
+  return offers.length === 1 && offers[0] === "garage";
+}
+
+/**
+ * Whether this merchant said they offer garage services: the server's
+ * `garage_only`, or a pick kept on this device. Drives the portal's
+ * "Premises" nav item before any premises exist.
+ */
+export function offersGarage(garageOnly: boolean): boolean {
+  return garageOnly || (readPicked() ?? []).includes("garage");
+}
+
 /** Offers that can't be unticked because a vehicle of that kind is already added. */
 export function lockedOffers(draft: OnboardingDraft): Set<Offer> {
   return new Set(draft.vehicles.map((v) => offerForCategory(v.type)));
 }
 
-export type FleetKind = "vehicles" | "trucks" | "machinery" | "drivers";
+export type FleetKind = "vehicles" | "trucks" | "machinery" | "drivers" | "premises";
 
 /**
  * What step 3 is about. With vehicles added, it follows them: every one a
@@ -114,7 +134,8 @@ export function fleetKind(draft: OnboardingDraft, offers: Offer[]): FleetKind {
     return "vehicles";
   }
   if (draft.driversOnly || isDriversOnlyChoice(offers)) return "drivers";
-  const vehicleOffers = offers.filter((o) => o !== "drivers");
+  if (draft.garageOnly || isGarageOnlyChoice(offers)) return "premises";
+  const vehicleOffers = offers.filter((o) => o !== "drivers" && o !== "garage");
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "trucks") return "trucks";
   if (vehicleOffers.length === 1 && vehicleOffers[0] === "machinery") return "machinery";
   return "vehicles";
@@ -125,6 +146,7 @@ export const FLEET_WORDS: Record<FleetKind, { step: string; one: string; many: s
   trucks: { step: "Trucks", one: "truck", many: "trucks" },
   machinery: { step: "Machinery", one: "machine", many: "machines" },
   drivers: { step: "Drivers", one: "driver", many: "drivers" },
+  premises: { step: "Premises", one: "premises", many: "premises" },
 };
 
 /** The category a new vehicle form opens on. */

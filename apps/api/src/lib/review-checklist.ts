@@ -97,6 +97,8 @@ async function loadDefinition(key: string): Promise<ChecklistItem[]> {
 
 export const getVehicleChecklistDefinition = () => loadDefinition("vehicle_review.checklist");
 export const getMerchantChecklistDefinition = () => loadDefinition("merchant_approval.checklist");
+/** Outlet visit checklist (Phase 4 GS1, migration 20261120090000). Items hang under `premises` or `photos`. */
+export const getOutletChecklistDefinition = () => loadDefinition("outlet_review.checklist");
 
 // ---------------------------------------------------------------------
 // applies_when
@@ -117,6 +119,14 @@ export function merchantApplies(item: ChecklistItem, merchant: MerchantRow): boo
   const w = item.applies_when;
   if (!w) return true;
   if (w === "company") return merchant.owner_type === "company";
+  return true;
+}
+
+/** `garage` / `parts` match the outlet's kind; anything else always applies. */
+export function outletApplies(item: ChecklistItem, outlet: { kind: string }): boolean {
+  const w = item.applies_when;
+  if (!w) return true;
+  if (w === "garage" || w === "parts") return outlet.kind === w;
   return true;
 }
 
@@ -160,7 +170,7 @@ export function docContextFrom(docs: DocForContext[]): ChecklistDocContext {
 // merge + evaluate
 // ---------------------------------------------------------------------
 
-async function loadRows(table: string, column: string, entityId: string): Promise<Map<string, CheckRow>> {
+export async function loadRows(table: string, column: string, entityId: string): Promise<Map<string, CheckRow>> {
   const rows = await db<CheckRow>(table)
     .where({ [column]: entityId })
     .select("item_id", "result", "note", "checked_at");
@@ -344,17 +354,18 @@ export class UnknownChecklistItem extends Error {
   }
 }
 
-async function upsertCheck(
+export async function upsertCheck(
   table: string,
   scope: Record<string, string>,
   itemId: string,
   result: CheckResult,
   note: string | null,
   adminId: string,
+  conn: Knex | Knex.Transaction = db,
 ): Promise<void> {
   const now = new Date();
   const pkCols = [...Object.keys(scope), "item_id"];
-  await db(table)
+  await conn(table)
     .insert({
       ...scope,
       item_id: itemId,

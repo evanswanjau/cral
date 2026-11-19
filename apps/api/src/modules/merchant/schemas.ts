@@ -27,6 +27,8 @@ export const PatchOnboardingSchema = z.object({
   terms_accepted: z.boolean().optional(),
   /** No car - this merchant only lists drivers (20261018090000). */
   drivers_only: z.boolean().optional(),
+  /** No vehicle - this merchant signed up for garage services only (20261120090000). */
+  garage_only: z.boolean().optional(),
 });
 export type PatchOnboardingInput = z.infer<typeof PatchOnboardingSchema>;
 

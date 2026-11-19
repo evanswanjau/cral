@@ -144,7 +144,19 @@ export function Review({
         </div>
       </div>
 
-      {draft.driversOnly && draft.vehicles.length === 0 ? (
+      {draft.garageOnly && draft.vehicles.length === 0 ? (
+        <div style={O.reviewCard}>
+          <div style={O.reviewCardHead}>
+            <div style={O.cardTitle}>Premises</div>
+            <EditButton onClick={() => onEditStep(1)} />
+          </div>
+          <div style={O.reviewCardBody}>
+            <p style={{ ...O.helper, margin: 0 }}>
+              You offer garage services. You add your premises straight after you submit, and CRAL visits each one.
+            </p>
+          </div>
+        </div>
+      ) : draft.driversOnly && draft.vehicles.length === 0 ? (
         <div style={O.reviewCard}>
           <div style={O.reviewCardHead}>
             <div style={O.cardTitle}>Drivers</div>

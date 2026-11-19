@@ -39,8 +39,11 @@ dashboard or notifications. Bookings and payouts are in
 ## Onboarding
 
 - **Step 1 is "What do you offer?"** (UI5, 2026-11-18; replaced the
-  Welcome step): multi-select Cars and vans, Trucks, Machinery, Driving;
-  garages, parts and car sales listed as coming, not selectable. The choice
+  Welcome step): multi-select Cars and vans, Trucks, Machinery, Driving,
+  and (Phase 4 GS1) Garage services; parts and car sales listed as coming,
+  not selectable. Garage services alone sets `garage_only` the same way
+  Driving alone sets `drivers_only`; premises and the "Premises" nav
+  item are in [`garage.md`](./garage.md). The choice
   is **derived, never stored** (no `offers` column): from the draft's
   vehicle categories and `drivers_only`, plus this device's pick in
   localStorage (`lib/onboarding-offer.ts`), and `?offer=` on a first visit.

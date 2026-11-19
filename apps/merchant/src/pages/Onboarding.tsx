@@ -17,6 +17,7 @@ import {
 } from "../lib/onboarding-draft.js";
 import { WhatYouOffer } from "../components/onboarding/steps/WhatYouOffer.js";
 import { Drivers } from "../components/onboarding/steps/Drivers.js";
+import { Premises } from "../components/onboarding/steps/Premises.js";
 import { YourDetails } from "../components/onboarding/steps/YourDetails.js";
 import { Vehicles } from "../components/onboarding/steps/Vehicles.js";
 import { Documents } from "../components/onboarding/steps/Documents.js";
@@ -29,6 +30,7 @@ import {
   fleetKind,
   initialOffers,
   isDriversOnlyChoice,
+  isGarageOnlyChoice,
   lockedOffers,
   rememberPickedOffers,
   type Offer,
@@ -67,7 +69,8 @@ export function Onboarding(): JSX.Element {
   const [draft, setDraft] = useState<OnboardingDraft | null>(null);
   const [saved, setSaved] = useState(false);
   // What the merchant offers: derived from the draft, never stored
-  // server-side (only Driving alone becomes `drivers_only`).
+  // server-side (only Driving alone becomes `drivers_only`, and Garage
+  // services alone `garage_only`).
   const [offers, setOffers] = useState<Offer[]>([]);
   const fleet = draft ? fleetKind(draft, offers) : "vehicles";
   const STEPS = stepsFor(FLEET_WORDS[fleet].step);
@@ -188,11 +191,12 @@ export function Onboarding(): JSX.Element {
     rememberPickedOffers(next);
   }
 
-  /** Leaving step 1: Driving alone (and no vehicle yet) is the one choice the server hears about. */
+  /** Leaving step 1: Driving alone or Garage services alone (and no vehicle yet) are the choices the server hears about. */
   function continueFromOffer() {
     if (!draft) return;
     const driversOnly = isDriversOnlyChoice(offers) && draft.vehicles.length === 0;
-    goStep(2, { driversOnly });
+    const garageOnly = isGarageOnlyChoice(offers) && draft.vehicles.length === 0;
+    goStep(2, { driversOnly, garageOnly });
   }
 
   const [submitting, setSubmitting] = useState(false);
@@ -215,6 +219,12 @@ export function Onboarding(): JSX.Element {
         // The cache is set first so RequireOnboarding sees "submitted".
         queryClient.setQueryData(["onboarding"], next);
         navigate("/drivers/new", { replace: true });
+        return;
+      }
+      if (next.garageOnly && next.vehicles.length === 0) {
+        // Garage services only: straight on to adding the premises.
+        queryClient.setQueryData(["onboarding"], next);
+        navigate("/premises/new", { replace: true });
         return;
       }
       window.scrollTo({ top: 0 });
@@ -338,6 +348,8 @@ export function Onboarding(): JSX.Element {
           <YourDetails draft={draft} onChange={patch} onBack={() => goStep(1)} onContinue={() => goStep(3)} />
         ) : draft.step === 3 && fleet === "drivers" ? (
           <Drivers onBack={() => goStep(2)} onContinue={() => goStep(4)} />
+        ) : draft.step === 3 && fleet === "premises" ? (
+          <Premises onBack={() => goStep(2)} onContinue={() => goStep(4)} />
         ) : draft.step === 3 ? (
           <Vehicles
             draft={draft}

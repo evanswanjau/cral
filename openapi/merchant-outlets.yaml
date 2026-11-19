@@ -1,0 +1,299 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Merchant Outlets API
+  version: "1.0.0"
+  description: >
+    A merchant's physical premises ("Your premises" in the merchant portal;
+    Phase 4 PR GS1, docs/decisions/garage.md). An outlet is its own record,
+    like a driver: a merchant can have several, each reviewed by Ops after a
+    real visit before it can quote (see `admin-outlets.yaml`).
+
+    `kind` is `garage` today; `parts` arrives with PT1. Statuses reuse the
+    listing set: `draft / pending / review / action / rejected / live /
+    paused`. A draft needs at least 2 photos (at most 8) before it can be
+    sent for review.
+
+    Name, address and county are locked while Ops has the outlet (`pending`,
+    `review`) and once it is approved (`live`, `paused`): 409
+    `outlet_locked`. Phone, opening hours and service types can change at
+    any time. `visited` is set only from a reviewer's recorded visit; there
+    is no other source for it.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+    description: Production
+
+tags:
+  - name: outlets
+
+paths:
+  /merchant/outlets:
+    get:
+      tags: [outlets]
+      summary: List this merchant's outlets, newest first
+      operationId: listOutlets
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        "200":
+          description: A page of outlets. `counts` is whole-set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Outlet" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    properties:
+                      all: { type: integer }
+                      needs_action: { type: integer, description: "`action` + `rejected`" }
+                      live: { type: integer }
+    post:
+      tags: [outlets]
+      summary: Add premises (as a draft)
+      operationId: createOutlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutletInput" }
+      responses:
+        "201":
+          description: The new draft outlet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /merchant/outlets/{outletId}:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [outlets]
+      summary: One outlet
+      operationId: getOutlet
+      responses:
+        "200":
+          description: The outlet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "404": { $ref: "#/components/responses/Error" }
+    patch:
+      tags: [outlets]
+      summary: Edit an outlet
+      description: >
+        Any field of `OutletInput` except `kind`. Name, address and county
+        are editable only in `draft`, `action` and `rejected` (409
+        `outlet_locked` otherwise). Changing any of them resets the visit
+        checks: Ops visits again.
+      operationId: updateOutlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/OutletPatch" }
+      responses:
+        "200":
+          description: The updated outlet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [outlets]
+      summary: Remove an outlet that isn't live
+      description: 409 `outlet_live` for a `live` or `paused` outlet (pause it instead).
+      operationId: deleteOutlet
+      responses:
+        "204": { description: Removed, photos included. }
+        "409": { $ref: "#/components/responses/Error" }
+
+  /merchant/outlets/{outletId}/photos:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [outlets]
+      summary: Add a photo of the premises
+      description: >
+        JPEG, PNG or WebP, checked on the bytes. At most 8 per outlet (422
+        `too_many_photos`). Allowed in any status; on a `live` outlet a new
+        photo sends nothing back to review, but the reviewer's photo check
+        reads `pending` on the next review.
+      operationId: uploadOutletPhoto
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: The outlet, with the new photo.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /merchant/outlets/{outletId}/photos/{photoId}:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+      - { name: photoId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [outlets]
+      summary: The photo's bytes (served with nosniff)
+      operationId: readOutletPhoto
+      responses:
+        "200": { description: The image. }
+        "404": { $ref: "#/components/responses/Error" }
+    delete:
+      tags: [outlets]
+      summary: Remove a photo
+      description: >
+        A `pending`, `review`, `live` or `paused` outlet keeps at least 2
+        photos (422 `photos_required`).
+      operationId: deleteOutletPhoto
+      responses:
+        "200":
+          description: The outlet.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /merchant/outlets/{outletId}/submit:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [outlets]
+      summary: Send an outlet to Ops for a visit and review
+      description: >
+        From `draft`, `action` or `rejected`. Needs at least 2 photos (422
+        `photos_required`) and, for a garage, at least one service type (422
+        `service_types_required`). Goes to `pending`, or straight back to
+        `review` when a reviewer already has it. Any other status: 409
+        `outlet_not_submittable`.
+      operationId: submitOutlet
+      responses:
+        "200":
+          description: The outlet, now in the queue.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+        "409": { $ref: "#/components/responses/Error" }
+        "422": { $ref: "#/components/responses/Error" }
+
+  /merchant/outlets/{outletId}/pause:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [outlets]
+      summary: Stop taking requests at a live outlet
+      description: 409 `not_live` unless `live`.
+      operationId: pauseOutlet
+      responses:
+        "200":
+          description: The outlet, now `paused`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+
+  /merchant/outlets/{outletId}/resume:
+    parameters:
+      - { name: outletId, in: path, required: true, schema: { type: string } }
+    post:
+      tags: [outlets]
+      summary: Take requests again
+      description: 409 `not_paused` unless `paused`.
+      operationId: resumeOutlet
+      responses:
+        "200":
+          description: The outlet, now `live`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Outlet" }
+
+components:
+  responses:
+    Error:
+      description: The standard error envelope.
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: object
+                properties:
+                  type: { type: string }
+                  code: { type: string }
+                  message: { type: string }
+                  field: { type: string }
+                  request_id: { type: string }
+
+  schemas:
+    ServiceType:
+      type: string
+      enum: [service, diagnostics, mechanical, bodywork, tyres, electrical, ac]
+      description: >
+        Servicing, diagnostics, mechanical repair, bodywork and paint, tyres
+        and alignment, electrical, air conditioning.
+
+    OutletInput:
+      type: object
+      required: [kind, name, address, county, opening_hours]
+      properties:
+        kind: { type: string, enum: [garage] }
+        name: { type: string, minLength: 2, maxLength: 120 }
+        address: { type: string, minLength: 5, maxLength: 500, description: "Street, building and how to find it" }
+        county: { type: string }
+        phone: { type: string, nullable: true, description: "Optional; a Kenyan mobile or landline" }
+        opening_hours: { type: string, minLength: 3, maxLength: 200, example: "Mon to Sat, 8am to 6pm" }
+        service_types: { type: array, items: { $ref: "#/components/schemas/ServiceType" } }
+
+    OutletPatch:
+      type: object
+      properties:
+        name: { type: string }
+        address: { type: string }
+        county: { type: string }
+        phone: { type: string, nullable: true }
+        opening_hours: { type: string }
+        service_types: { type: array, items: { $ref: "#/components/schemas/ServiceType" } }
+
+    OutletPhoto:
+      type: object
+      properties:
+        id: { type: string, example: olp_01JD0000000000000000000000 }
+        original_name: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Outlet:
+      type: object
+      properties:
+        id: { type: string, example: out_01JD0000000000000000000000 }
+        kind: { type: string, enum: [garage, parts] }
+        name: { type: string }
+        address: { type: string }
+        county: { type: string }
+        phone: { type: string, nullable: true }
+        opening_hours: { type: string }
+        service_types: { type: array, items: { $ref: "#/components/schemas/ServiceType" } }
+        status: { type: string, enum: [draft, pending, review, action, rejected, live, paused] }
+        reviewer_note: { type: string, nullable: true, description: "What Ops wrote when sending it back or turning it down" }
+        visited:
+          type: boolean
+          description: True only when a reviewer has recorded a visit to the current address.
+        visited_on: { type: string, format: date, nullable: true }
+        photos: { type: array, items: { $ref: "#/components/schemas/OutletPhoto" } }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }

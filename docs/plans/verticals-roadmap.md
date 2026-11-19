@@ -27,7 +27,7 @@ each one look and feel like its own place.
 | 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built. **Production shipped** at `72e3593` | 3 (done) |
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Built, in `develop`. Production pending (owner says ship phase 2) | 1 review + 3-5 builds |
 | 3 | Sales agents sign up owners in the field | Built, in `develop`. Production pending (owner says ship phase 3) | 3 |
-| 4 | Garage services: quote first, pay through CRAL | Not started | 4 |
+| 4 | Garage services: quote first, pay through CRAL | In progress: GS1 built, in `develop` | 4 |
 | 5 | Spare parts: quoted against your chassis | Not started | 2 |
 | 6 | Buy and sell cars: verified listings + enquiries | Not started | 4 |
 
@@ -224,13 +224,13 @@ job stays on the car's service record.
 
 | PR | What | Model |
 |----|------|-------|
-| GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist | Opus |
+| GS1 | Outlets: merchant "Your premises", Ops outlet queue + visit checklist. **Built**, in `develop` ([`garage.md`](../decisions/garage.md)) | Opus |
 | GS2 | My cars (customer) + request for quote + itemised quotes | Opus |
 | GS3 | Orders: pay, in progress, ready, confirm, second quote, payout lines | Opus |
 | GS4 | Service record, garage sub-site made real | Opus |
 
-**Before GS1 the owner answers** open questions 1, 2 and 5 at the bottom of
-this file (payment timing, auto-confirm window, commission rate).
+Open questions 1, 2 and 5 (payment timing, auto-confirm window, commission
+rate) were answered 2026-11-19: see "Owner decisions on record".
 
 **Start prompt:** the standard prompt with Phase 4. Detail: "Design notes"
 below (outlets, my cars, quotes, orders, payouts).
@@ -251,7 +251,7 @@ once you confirm it's the right part.
 | PT1 | Parts outlets, condition + fitted/delivered, delivery address, "right part" confirm, wrong-part dispute | Opus |
 | PT2 | Parts sub-site made real, request sent to dealers in the county | Opus |
 
-**Before PT1 the owner answers** open question 3 (who delivers).
+Who delivers was answered 2026-11-19 (decision 8 below).
 
 **Done when:** one part order runs end to end on dev, including a wrong-part
 dispute reaching Ops.
@@ -271,7 +271,7 @@ buyer and seller pay each other directly.
 | CS3 | Buy sub-site + enquiries | Opus |
 | CS4 | Listing fees and paid boosts by M-Pesa | Opus |
 
-**Before CS1 the owner answers** open question 4 (free listings or a fee).
+Free listings or a fee was answered 2026-11-19 (decision 9 below).
 
 **Start prompt:** the standard prompt with Phase 6. Detail:
 [`car-sales.md`](./car-sales.md) and "Car sales - updates" below.
@@ -291,6 +291,23 @@ and a buyer's enquiry reaches the seller.
    payout), not lead capture.
 4. **Car sales are listings + enquiries.** No escrow.
 5. **Every phase ends deployed** (rules above).
+
+Answered 2026-11-19 ("use your recommendation"), closing the five open
+questions this file used to carry:
+
+6. **Garage payment timing:** the customer pays CRAL upfront when they
+   accept the quote. CRAL holds it, and the garage is paid out after the
+   customer confirms the job.
+7. **Auto-confirm:** an order confirms itself 72 h after the garage marks it
+   ready (or the parts dealer marks it delivered), unless the customer
+   raised a problem first.
+8. **Parts delivery:** the dealer's own delivery, priced as a line on their
+   quote. CRAL arranges no riders.
+9. **Car sales:** free listings at launch. CS4 builds paid boosts. The
+   listing fee exists only as a platform setting, defaulting to 0 (off).
+10. **Commission for services and parts:** its own admin-only setting per
+    vertical in `platform_settings`, defaulting to the hire rate. Never
+    shown to a merchant (CLAUDE.md's global rule).
 
 ---
 
@@ -431,12 +448,5 @@ None collide with `packages/types/src/ids.ts` today.
 
 ## Open questions for the owner
 
-1. **Garage payment timing.** Upfront and held (recommended above), or
-   pay on completion? Upfront protects the garage; on completion is
-   friendlier to the customer but leaves the garage unpaid if they vanish.
-2. **Auto-confirm window** for orders: 72 h after ready/delivered?
-3. **Parts delivery:** the dealer's own delivery only (priced as a quote
-   line), or does CRAL arrange riders?
-4. **Car sales:** free listings at launch, or a listing fee from day one?
-5. **Commission rate** for services and parts: the same as hire, or its
-   own setting?
+None open. The five questions this section held were answered 2026-11-19
+and are recorded as decisions 6-10 under "Owner decisions on record".

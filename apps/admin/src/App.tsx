@@ -7,6 +7,8 @@ import { Queue } from "./pages/vehicles/Queue.js";
 import { Case } from "./pages/vehicles/Case.js";
 import { Queue as DriversQueue } from "./pages/drivers/Queue.js";
 import { Case as DriverCase } from "./pages/drivers/Case.js";
+import { Queue as OutletsQueue } from "./pages/outlets/Queue.js";
+import { Case as OutletCase } from "./pages/outlets/Case.js";
 import { Merchants } from "./pages/Merchants.js";
 import { MerchantFile } from "./pages/MerchantFile.js";
 import { Renters } from "./pages/Renters.js";
@@ -47,6 +49,8 @@ const router = createBrowserRouter([
           { path: "vehicles/:vehicleId", element: <Case /> },
           { path: "drivers", element: <DriversQueue /> },
           { path: "drivers/:driverId", element: <DriverCase /> },
+          { path: "outlets", element: <OutletsQueue /> },
+          { path: "outlets/:outletId", element: <OutletCase /> },
           { path: "merchants", element: <Merchants /> },
           { path: "merchants/:merchantId", element: <MerchantFile /> },
           { path: "renters", element: <Renters /> },
