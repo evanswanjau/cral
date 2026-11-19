@@ -1,0 +1,212 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Customer Garage API
+  version: "1.0.0"
+  description: >
+    "My cars" and garage quote requests for a signed-in customer (Phase 4
+    PR GS2, docs/decisions/garage.md).
+
+    A request names one of the customer's cars, a service type, what the
+    car needs and a county. CRAL sends it to up to 5 approved garage
+    outlets in that county that do that service, at most one per merchant,
+    oldest approval first. With none, 422 `no_garages_in_county` and
+    nothing is stored. Rate-limited to 5 an hour per customer.
+
+    Each asked garage may send one itemised quote (lines: part, labour,
+    delivery, other; integer cents), valid 48 h from when it was last sent,
+    or decline. Accepting and paying a quote is GS3; nothing here moves
+    money.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /me/cars:
+    get:
+      summary: My cars, newest first
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of cars.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Car" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+    post:
+      summary: Add a car
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CarInput" }
+      responses:
+        "201":
+          description: The car.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Car" }
+        "409": { description: "`car_exists`: this plate is already on your account" }
+
+  /me/cars/{carId}:
+    parameters:
+      - { name: carId, in: path, required: true, schema: { type: string } }
+    patch:
+      summary: Edit a car
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CarInput" }
+      responses:
+        "200":
+          description: The car.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Car" }
+    delete:
+      summary: Remove a car with no requests
+      description: 409 `car_has_requests` once a request names it (its history stays).
+      responses:
+        "204": { description: Removed. }
+        "409": { description: "`car_has_requests`" }
+
+  /me/garage-requests:
+    get:
+      summary: My garage requests, newest first
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of requests (each with `quote_count`, no lines).
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/GarageRequest" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+    post:
+      summary: Ask garages for a quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [car_id, service_type, description, county]
+              properties:
+                car_id: { type: string }
+                service_type: { type: string, enum: [service, diagnostics, mechanical, bodywork, tyres, electrical, ac] }
+                description: { type: string, minLength: 10, maxLength: 2000 }
+                county: { type: string }
+      responses:
+        "201":
+          description: The request, with how many garages were asked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageRequest" }
+        "404": { description: "`car_not_found`" }
+        "422": { description: "`no_garages_in_county`" }
+        "429": { description: Rate limited. }
+
+  /me/garage-requests/{requestId}:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One request with its quotes
+      responses:
+        "200":
+          description: The request. `quotes` lists sent quotes only, cheapest first.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageRequest" }
+
+  /me/garage-requests/{requestId}/cancel:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Stop asking for quotes
+      description: Only an `open` request (409 `request_not_open`). Garages can't quote it after this.
+      responses:
+        "200":
+          description: The request, `cancelled`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GarageRequest" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: cents }
+        currency: { type: string, example: KES }
+
+    CarInput:
+      type: object
+      required: [make, model, year, plate]
+      properties:
+        make: { type: string }
+        model: { type: string }
+        year: { type: integer, minimum: 1960 }
+        plate: { type: string, example: KDA 123B }
+        chassis_number: { type: string, nullable: true, description: The VIN. Shown only to garages asked to quote. }
+
+    Car:
+      allOf:
+        - $ref: "#/components/schemas/CarInput"
+        - type: object
+          properties:
+            id: { type: string, example: car_01JD0000000000000000000000 }
+            created_at: { type: string, format: date-time }
+
+    QuoteLine:
+      type: object
+      properties:
+        kind: { type: string, enum: [part, labour, delivery, other] }
+        description: { type: string }
+        amount: { $ref: "#/components/schemas/Money" }
+
+    Quote:
+      type: object
+      properties:
+        id: { type: string, example: quo_01JD0000000000000000000000 }
+        outlet:
+          type: object
+          properties:
+            id: { type: string }
+            name: { type: string }
+            county: { type: string }
+            address: { type: string }
+            visited_on: { type: string, format: date, nullable: true, description: From CRAL's recorded visit only. }
+        lines: { type: array, items: { $ref: "#/components/schemas/QuoteLine" } }
+        total: { $ref: "#/components/schemas/Money" }
+        days_needed: { type: integer }
+        note: { type: string, nullable: true }
+        sent_at: { type: string, format: date-time }
+        valid_until: { type: string, format: date-time }
+        expired: { type: boolean, description: Derived, valid_until has passed. }
+
+    GarageRequest:
+      type: object
+      properties:
+        id: { type: string, example: rfq_01JD0000000000000000000000 }
+        car: { $ref: "#/components/schemas/Car" }
+        service_type: { type: string }
+        description: { type: string }
+        county: { type: string }
+        status: { type: string, enum: [open, cancelled, accepted] }
+        garages_asked: { type: integer }
+        garages_declined: { type: integer }
+        quote_count: { type: integer }
+        quotes: { type: array, items: { $ref: "#/components/schemas/Quote" }, description: Detail only. }
+        created_at: { type: string, format: date-time }

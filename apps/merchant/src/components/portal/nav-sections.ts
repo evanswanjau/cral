@@ -51,7 +51,7 @@ export function isDriverOnly(input: Pick<OfferingInput, "vehicleCount" | "driver
   return input.driversOnly && input.vehicleCount === 0;
 }
 
-export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "bookings" | "payouts" | "notifications" | "settings";
+export type NavKey = "dashboard" | "vehicles" | "drivers" | "premises" | "quotes" | "bookings" | "payouts" | "notifications" | "settings";
 
 export interface NavItem {
   key: NavKey;
@@ -67,6 +67,8 @@ export interface NavCounts {
   notificationUnread: number;
   /** Premises sent back or turned down. */
   premisesActionCount?: number;
+  /** Garage requests waiting for this merchant's price (GS2). */
+  quoteRequestCount?: number;
 }
 
 export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] {
@@ -83,16 +85,23 @@ export function navSections(input: OfferingInput, counts: NavCounts): NavItem[] 
     label: "Premises",
     ...(counts.premisesActionCount ? { count: counts.premisesActionCount } : {}),
   };
+  // Quote requests sit right after Premises (Phase 4 GS2).
+  const quotes: NavItem = {
+    key: "quotes",
+    to: "/garage/requests",
+    label: "Quote requests",
+    ...(counts.quoteRequestCount ? { count: counts.quoteRequestCount } : {}),
+  };
   const garageOnly = input.garageOnly && input.vehicleCount === 0;
   if (garageOnly) {
-    items.push(premises, drivers);
+    items.push(premises, quotes, drivers);
   } else if (isDriverOnly(input)) {
     items.push(drivers);
-    if (input.showPremises) items.push(premises);
+    if (input.showPremises) items.push(premises, quotes);
   } else {
     items.push({ key: "vehicles", to: "/vehicles", label: FLEET_WORDS[fleetKind(input)].label, count: input.vehicleCount });
     items.push(drivers);
-    if (input.showPremises) items.push(premises);
+    if (input.showPremises) items.push(premises, quotes);
   }
   items.push(
     { key: "bookings", to: "/bookings", label: "Bookings", count: counts.bookingCount },

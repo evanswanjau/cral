@@ -92,6 +92,12 @@ export const ID_PREFIXES = {
   // `documents` so no account-document query can mistake one for an ID.
   outlet: "out",
   outletPhoto: "olp",
+  // Phase 4 GS2: a customer's own car ("My cars"), a request for a quote
+  // on it, and a garage's itemised quote with one row per line.
+  customerCar: "car",
+  quoteRequest: "rfq",
+  quote: "quo",
+  quoteLine: "qln",
 } as const;
 
 export type IdKind = keyof typeof ID_PREFIXES;

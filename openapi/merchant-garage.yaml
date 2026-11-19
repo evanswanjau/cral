@@ -1,0 +1,192 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Merchant Garage Requests API
+  version: "1.0.0"
+  description: >
+    Quote requests sent to a merchant's approved garage outlets, and the
+    itemised quotes they send back (Phase 4 PR GS2,
+    docs/decisions/garage.md).
+
+    A merchant sees only requests one of its outlets was asked about. The
+    car's chassis number is shown here, to the garage asked, and nowhere
+    public. The customer's contact details are not shared at this stage.
+
+    One quote per request: lines of `part`, `labour`, `delivery` or `other`,
+    each a positive amount in integer cents, plus the days needed. Sending
+    again revises it (the lines are replaced, the 48 h validity restarts).
+    Quoting needs the request `open` and the outlet `live` (409
+    `request_not_open`, 422 `outlet_not_live`).
+
+    Take-home is returned in shillings after CRAL's service fee. The fee
+    rate itself is never returned.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /merchant/garage-requests:
+    get:
+      summary: Requests my garages were asked about, newest first
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [to_quote, quoted, closed, all], default: to_quote }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of requests. `counts` is whole-set.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/MerchantRequest" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  counts:
+                    type: object
+                    properties:
+                      to_quote: { type: integer }
+
+  /merchant/garage-requests/{requestId}:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: One request, with my quote if I sent one
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRequest" }
+        "404": { description: "`request_not_found` (not sent to this merchant)" }
+
+  /merchant/garage-requests/{requestId}/quote:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Send or revise my quote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/QuoteInput" }
+      responses:
+        "200":
+          description: The request with my quote.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRequest" }
+        "409": { description: "`request_not_open`, `request_declined`" }
+        "422": { description: "`outlet_not_live`, validation" }
+
+  /merchant/garage-requests/{requestId}/quote/withdraw:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Withdraw my quote
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRequest" }
+        "409": { description: "`no_quote`" }
+
+  /merchant/garage-requests/{requestId}/decline:
+    parameters:
+      - { name: requestId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Say this garage can't do the job
+      description: Withdraws any quote sent. 409 `request_not_open` once closed.
+      responses:
+        "200":
+          description: The request.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MerchantRequest" }
+
+  /merchant/garage-requests/quote-preview:
+    post:
+      summary: What I keep for a set of lines
+      description: Nothing is stored. Shilling amounts only.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lines]
+              properties:
+                lines: { type: array, items: { $ref: "#/components/schemas/QuoteLineInput" } }
+      responses:
+        "200":
+          description: The totals.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { $ref: "#/components/schemas/Money" }
+                  take_home: { $ref: "#/components/schemas/Money" }
+
+components:
+  schemas:
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: cents }
+        currency: { type: string, example: KES }
+
+    QuoteLineInput:
+      type: object
+      required: [kind, description, amount]
+      properties:
+        kind: { type: string, enum: [part, labour, delivery, other] }
+        description: { type: string, minLength: 2, maxLength: 200 }
+        amount: { type: integer, minimum: 1, description: cents }
+
+    QuoteInput:
+      type: object
+      required: [lines, days_needed]
+      properties:
+        lines: { type: array, minItems: 1, maxItems: 30, items: { $ref: "#/components/schemas/QuoteLineInput" } }
+        days_needed: { type: integer, minimum: 1, maximum: 60 }
+        note: { type: string, nullable: true, maxLength: 1000 }
+
+    MerchantRequest:
+      type: object
+      properties:
+        id: { type: string }
+        outlet: { type: object, properties: { id: { type: string }, name: { type: string } } }
+        car:
+          type: object
+          properties:
+            make: { type: string }
+            model: { type: string }
+            year: { type: integer }
+            plate: { type: string }
+            chassis_number: { type: string, nullable: true }
+        service_type: { type: string }
+        description: { type: string }
+        county: { type: string }
+        customer_first_name: { type: string, nullable: true }
+        status: { type: string, enum: [open, cancelled, accepted] }
+        declined: { type: boolean }
+        my_quote:
+          type: object
+          nullable: true
+          properties:
+            id: { type: string }
+            status: { type: string, enum: [sent, withdrawn, accepted, superseded] }
+            lines: { type: array, items: { type: object } }
+            total: { $ref: "#/components/schemas/Money" }
+            take_home: { $ref: "#/components/schemas/Money" }
+            days_needed: { type: integer }
+            note: { type: string, nullable: true }
+            sent_at: { type: string, format: date-time }
+            valid_until: { type: string, format: date-time }
+            expired: { type: boolean }
+        created_at: { type: string, format: date-time }

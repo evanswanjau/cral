@@ -31,6 +31,9 @@ import { CreateAccount } from "./pages/CreateAccount.js";
 import { ForgotPassword } from "./pages/ForgotPassword.js";
 import { ResetPassword } from "./pages/ResetPassword.js";
 import { Sessions } from "./pages/Sessions.js";
+import { GarageHome } from "./pages/garage/GarageHome.js";
+import { GarageRequestPage } from "./pages/garage/GarageRequestPage.js";
+import { MyCars } from "./pages/MyCars.js";
 
 /**
  * The customer route table, moved out of App.tsx unchanged (UI1a) so
@@ -95,6 +98,10 @@ export const routes: RouteObject[] = [
       { path: "/drivers", element: <Drivers /> },
       { path: "/drivers/:id", element: <DriverBook /> },
       { path: "/towing", element: <TowingHome /> },
+      // Garage quotes (Phase 4 GS2): public like towing, but unlisted (the
+      // registry keeps garage under "Coming to CRAL") until a quote can be
+      // paid (GS3) and the sub-site is finished (GS4).
+      { path: "/garage", element: <GarageHome /> },
       { path: "/services/towing", element: <Navigate to="/towing" replace /> },
       { path: "/how-it-works", element: <HowItWorks /> },
       { path: "/how-we-protect-you", element: <HowWeProtectYou /> },
@@ -116,6 +123,8 @@ export const routes: RouteObject[] = [
           { path: "/bookings/:id", element: <TripDetail /> },
           { path: "/notifications", element: <Notifications /> },
           { path: "/account", element: <Sessions /> },
+          { path: "/my-cars", element: <MyCars /> },
+          { path: "/garage/requests/:id", element: <GarageRequestPage /> },
         ],
       },
     ],

@@ -7,3 +7,4 @@ trucks.jpg - "white and blue truck on road during daytime" by Tiry Nelson Gono -
 machinery.jpg - "yellow Caterpillar excavator digging up dirt" by Jamar Penny - https://unsplash.com/photos/ZgmGq_eFmUs
 drivers.jpg - "a man driving a car with his hand on the steering wheel" by Harry Borrett - https://unsplash.com/photos/HX-bfYDSXlA
 towing.jpg - "a black car is being transported by a flatbed truck" by Nazar Dremach - https://unsplash.com/photos/wevZ9CYl4KM
+garage.jpg - placeholder: a copy of towing.jpg until a garage photo is chosen (GS2). Replace the file, same name.

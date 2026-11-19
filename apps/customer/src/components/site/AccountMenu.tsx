@@ -140,6 +140,8 @@ export function AccountMenu(): JSX.Element {
     },
     { label: "My bookings", go: goTo("/bookings"), tag: bookingCount > 0 ? String(bookingCount) : "" },
     { label: "My documents", go: goTo("/documents"), tag: docTag, tagColor: verified ? "#1B8A5A" : "#C77400" },
+    // Phase 4 GS2: the cars garage requests name.
+    { label: "My cars", go: goTo("/my-cars"), tag: "" },
   ];
   return (
     <div ref={rootRef} style={{ position: "relative" }}>
