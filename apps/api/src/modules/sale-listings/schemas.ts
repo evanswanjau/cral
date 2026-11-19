@@ -86,3 +86,11 @@ export const UploadSaleFileSchema = z.object({ kind: z.enum(SALE_FILE_KINDS) });
 
 export const SetSaleStatusSchema = z.object({ to: z.enum(["paused", "live", "sold", "withdrawn"]) });
 export type SetSaleStatusInput = z.infer<typeof SetSaleStatusSchema>;
+
+/** Report this listing (CS2, openapi/customer-sales.yaml). */
+export const REPORT_REASONS = ["scam", "not_this_car", "wrong_details", "already_sold", "offensive", "other"] as const;
+export const ReportSaleListingSchema = z.object({
+  reason: z.enum(REPORT_REASONS),
+  details: z.string().max(1000).nullable().optional(),
+});
+export type ReportSaleListingInput = z.infer<typeof ReportSaleListingSchema>;

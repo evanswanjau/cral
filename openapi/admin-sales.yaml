@@ -1,0 +1,288 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Admin Sale Listing Review API
+  version: "1.0.0"
+  description: >
+    Ops review of cars listed for sale, and the reported-listing queue
+    (Phase 6 PR CS2, docs/decisions/car-sales.md). `admin_reviewer` on the
+    `sales` queue; `admin_super` bypasses both checks.
+
+    Checklist-first on the shared engine: item definitions live in
+    `platform_settings` (`sale_review.checklist`), answers per (listing,
+    item). The logbook items are a human comparing the uploaded logbook
+    with the listing (make, model, plate, lender) and with the account
+    holder's name shown on the case. There is no OCR and no automatic
+    check. Answers older than the listing's latest submission read
+    `pending` again, so every resubmission is checked afresh.
+
+    Every item must be answered before any decision (422
+    `checklist_incomplete`); approve also needs zero flags (422
+    `checklist_flagged`), the merchant's account approved (422
+    `merchant_not_approved`), at least 4 photos (422 `photos_required`)
+    and a logbook (422 `logbook_required`). Request changes and reject
+    need a note the merchant reads (422 `reason_required`).
+
+    Only `pending` and `review` listings can be decided (409
+    `sale_listing_not_in_review` once it moved). Answering a check claims
+    an unassigned case and moves `pending` to `review`. Approve moves to
+    `live`; request changes to `action`; reject to `rejected`. Each
+    decision is a conditional update with `audit_log` in the same
+    transaction and notifies the merchant (`subject_type: sale_listing`).
+
+    Reports: buyers file them through `openapi/customer-sales.yaml`.
+    Resolving one takes `dismiss` (the listing is untouched), `pause`
+    (the listing goes to `action` with the note, so the merchant must fix
+    it and resubmit for review) or `take_down` (the listing goes to
+    `withdrawn`, final). Pause and take down need a note, apply only to a
+    `live` or `paused` listing (409 `sale_listing_not_open`), close every
+    open report on the listing as `actioned`, and notify the merchant.
+    The reporter is never shown to the merchant.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /admin/sale-listings:
+    get:
+      summary: The sale review queue, oldest submission first
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [open, changes_sent, live, rejected, closed, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of listings. `total` is whole-set for the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/QueueRow" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+
+  /admin/sale-listings/{listingId}:
+    parameters: [{ $ref: "#/components/parameters/ListingId" }]
+    get:
+      summary: One sale review case
+      responses:
+        "200": { description: The case, content: { application/json: { schema: { $ref: "#/components/schemas/Case" } } } }
+        "404": { description: "`review_case_not_found` (no such listing, or still a draft)" }
+
+  /admin/sale-listings/{listingId}/files/{fileId}:
+    parameters:
+      - { $ref: "#/components/parameters/ListingId" }
+      - { name: fileId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: The bytes of one photo or the logbook
+      responses:
+        "200": { description: The file, with its stored content type }
+        "404": { description: "`file_not_found` / `file_bytes_missing`" }
+
+  /admin/sale-listings/{listingId}/assign:
+    parameters: [{ $ref: "#/components/parameters/ListingId" }]
+    post:
+      summary: Assign the case to me (moves `pending` to `review`)
+      responses:
+        "200": { description: The case, content: { application/json: { schema: { $ref: "#/components/schemas/Case" } } } }
+        "409": { description: "`sale_listing_not_in_review`" }
+
+  /admin/sale-listings/{listingId}/checklist:
+    parameters: [{ $ref: "#/components/parameters/ListingId" }]
+    post:
+      summary: Answer one checklist item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [item_id, result]
+              properties:
+                item_id: { type: string }
+                result: { type: string, enum: [pending, pass, flag] }
+                note: { type: string, nullable: true, maxLength: 2000 }
+      responses:
+        "200": { description: The case, content: { application/json: { schema: { $ref: "#/components/schemas/Case" } } } }
+        "409": { description: "`sale_listing_not_in_review`" }
+        "422": { description: "`unknown_checklist_item`" }
+
+  /admin/sale-listings/{listingId}/decision:
+    parameters: [{ $ref: "#/components/parameters/ListingId" }]
+    post:
+      summary: Approve, request changes or reject
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [approve, request_changes, reject] }
+                note: { type: string, maxLength: 2000, description: Required unless approving. The merchant reads it as written. }
+      responses:
+        "200": { description: The case, content: { application/json: { schema: { $ref: "#/components/schemas/Case" } } } }
+        "409": { description: "`sale_listing_not_in_review`" }
+        "422":
+          description: >
+            `reason_required`, `checklist_incomplete`, `checklist_flagged`,
+            `merchant_not_approved`, `photos_required`, `logbook_required`
+
+  /admin/sale-reports:
+    get:
+      summary: Reported listings, oldest first
+      parameters:
+        - name: filter
+          in: query
+          schema: { type: string, enum: [open, handled, all], default: open }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of reports. `total` is whole-set for the filter.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/Report" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+                  total: { type: integer }
+
+  /admin/sale-reports/{reportId}/resolve:
+    parameters:
+      - { name: reportId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Dismiss a report, or pause or take down the listing
+      parameters: [{ $ref: "#/components/parameters/IdempotencyKey" }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action: { type: string, enum: [dismiss, pause, take_down] }
+                note:
+                  type: string
+                  maxLength: 2000
+                  description: Required for pause and take down; the merchant reads it as written. Optional, internal, for dismiss.
+      responses:
+        "200": { description: The report, content: { application/json: { schema: { $ref: "#/components/schemas/Report" } } } }
+        "404": { description: "`report_not_found`" }
+        "409": { description: "`report_already_handled`, `sale_listing_not_open`" }
+        "422": { description: "`reason_required`" }
+
+components:
+  parameters:
+    ListingId: { name: listingId, in: path, required: true, schema: { type: string, example: sal_01JC0000000000000000000000 } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+  schemas:
+    Money:
+      type: object
+      properties:
+        amount: { type: integer, description: Cents }
+        currency: { type: string, enum: [KES] }
+    QueueRow:
+      type: object
+      properties:
+        id: { type: string }
+        ref: { type: string, example: S-261119-001 }
+        title: { type: string, example: 2016 Toyota Prado TX }
+        registration: { type: string }
+        county: { type: string }
+        asking_price: { $ref: "#/components/schemas/Money" }
+        status: { type: string, enum: [pending, review, action, rejected, live, paused, sold, withdrawn] }
+        merchant_id: { type: string }
+        merchant_name: { type: string }
+        merchant_approved: { type: boolean }
+        assignee_name: { type: string, nullable: true }
+        open_reports: { type: integer }
+        submitted_at: { type: string, format: date-time, nullable: true }
+    File:
+      type: object
+      properties:
+        id: { type: string }
+        kind: { type: string, enum: [photo, logbook] }
+        original_name: { type: string }
+        content_type: { type: string }
+        created_at: { type: string, format: date-time }
+    Case:
+      type: object
+      description: The listing as the merchant typed it, plus what a reviewer compares it with.
+      properties:
+        id: { type: string }
+        ref: { type: string }
+        status: { type: string }
+        body_type: { type: string }
+        make: { type: string }
+        model: { type: string }
+        year: { type: integer }
+        registration: { type: string }
+        mileage_km: { type: integer }
+        transmission: { type: string }
+        fuel: { type: string }
+        engine_cc: { type: integer, nullable: true }
+        colour: { type: string, nullable: true }
+        import_status: { type: string }
+        accident_history: { type: string }
+        known_faults: { type: string }
+        encumbered: { type: boolean }
+        asking_price: { $ref: "#/components/schemas/Money" }
+        negotiable: { type: boolean }
+        county: { type: string }
+        viewing_area: { type: string }
+        description: { type: string, nullable: true }
+        reviewer_note: { type: string, nullable: true }
+        submitted_at: { type: string, format: date-time, nullable: true }
+        live_at: { type: string, format: date-time, nullable: true }
+        assignee: { type: object, nullable: true, properties: { id: { type: string }, name: { type: string } } }
+        photos: { type: array, items: { $ref: "#/components/schemas/File" } }
+        logbook: { allOf: [{ $ref: "#/components/schemas/File" }], nullable: true }
+        merchant:
+          type: object
+          description: The account holder, for the logbook owner comparison.
+          properties:
+            id: { type: string }
+            name: { type: string }
+            owner_type: { type: string, enum: [individual, company] }
+            approved: { type: boolean }
+        open_reports: { type: integer }
+        checklist:
+          type: object
+          properties:
+            items: { type: array, items: { type: object } }
+            checked: { type: integer }
+            total: { type: integer }
+            flagged: { type: integer }
+            outstanding: { type: integer }
+            complete: { type: boolean }
+            suggested_note: { type: object, properties: { changes: { type: string }, reject: { type: string } } }
+    Report:
+      type: object
+      properties:
+        id: { type: string }
+        reason: { type: string, enum: [scam, not_this_car, wrong_details, already_sold, offensive, other] }
+        details: { type: string, nullable: true }
+        status: { type: string, enum: [open, dismissed, actioned] }
+        reporter_name: { type: string, nullable: true, description: Ops only. Never shown to the merchant. }
+        handled_by_name: { type: string, nullable: true }
+        handled_at: { type: string, format: date-time, nullable: true }
+        handled_note: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        listing:
+          type: object
+          properties:
+            id: { type: string }
+            ref: { type: string }
+            title: { type: string }
+            status: { type: string }
+            merchant_name: { type: string }

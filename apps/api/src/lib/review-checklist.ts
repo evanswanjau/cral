@@ -99,6 +99,8 @@ export const getVehicleChecklistDefinition = () => loadDefinition("vehicle_revie
 export const getMerchantChecklistDefinition = () => loadDefinition("merchant_approval.checklist");
 /** Outlet visit checklist (Phase 4 GS1, migration 20261120090000). Items hang under `premises` or `photos`. */
 export const getOutletChecklistDefinition = () => loadDefinition("outlet_review.checklist");
+/** Sale-listing review (Phase 6 CS2, migration 20261125090000). Items hang under `logbook` or `photos`. */
+export const getSaleChecklistDefinition = () => loadDefinition("sale_review.checklist");
 
 // ---------------------------------------------------------------------
 // applies_when

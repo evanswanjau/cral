@@ -9,6 +9,9 @@ import { Queue as DriversQueue } from "./pages/drivers/Queue.js";
 import { Case as DriverCase } from "./pages/drivers/Case.js";
 import { Queue as OutletsQueue } from "./pages/outlets/Queue.js";
 import { Case as OutletCase } from "./pages/outlets/Case.js";
+import { Queue as SalesQueue } from "./pages/sales/Queue.js";
+import { Case as SaleCase } from "./pages/sales/Case.js";
+import { Reports as SaleReports } from "./pages/sales/Reports.js";
 import { Merchants } from "./pages/Merchants.js";
 import { MerchantFile } from "./pages/MerchantFile.js";
 import { Renters } from "./pages/Renters.js";
@@ -53,6 +56,9 @@ const router = createBrowserRouter([
           { path: "drivers/:driverId", element: <DriverCase /> },
           { path: "outlets", element: <OutletsQueue /> },
           { path: "outlets/:outletId", element: <OutletCase /> },
+          { path: "sales", element: <SalesQueue /> },
+          { path: "sales/reports", element: <SaleReports /> },
+          { path: "sales/:listingId", element: <SaleCase /> },
           { path: "merchants", element: <Merchants /> },
           { path: "merchants/:merchantId", element: <MerchantFile /> },
           { path: "renters", element: <Renters /> },

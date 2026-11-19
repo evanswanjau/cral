@@ -20,6 +20,7 @@ import { adminServiceRequestsRouter } from "./modules/admin-service-requests/rou
 import { adminPayoutsRouter } from "./modules/admin-payouts/routes.js";
 import { adminAgentsRouter } from "./modules/admin-agents/routes.js";
 import { adminOutletsRouter } from "./modules/admin-outlets/routes.js";
+import { adminSaleListingsRouter } from "./modules/admin-sale-listings/routes.js";
 import { merchantRouter } from "./modules/merchant/routes.js";
 import { vehiclesRouter } from "./modules/vehicles/routes.js";
 import { driversRouter } from "./modules/drivers/routes.js";
@@ -129,6 +130,7 @@ export function createApp(): Express {
   app.use(adminPayoutsRouter);
   app.use(adminAgentsRouter);
   app.use(adminOutletsRouter);
+  app.use(adminSaleListingsRouter);
   app.use(merchantRouter);
   app.use(vehiclesRouter);
   app.use(driversRouter);

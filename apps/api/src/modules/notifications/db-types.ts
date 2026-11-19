@@ -15,7 +15,7 @@ export type NotificationCategory =
 /** The feed's four icon/filter groups. */
 export type NotificationKind = "hire" | "money" | "doc" | "rate";
 
-export type NotificationSubjectType = "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | "outlet" | "garage_request" | "garage_order";
+export type NotificationSubjectType = "booking" | "vehicle" | "payout_run" | "merchant" | "driver" | "outlet" | "garage_request" | "garage_order" | "sale_listing";
 
 export interface NotificationRow {
   id: string;

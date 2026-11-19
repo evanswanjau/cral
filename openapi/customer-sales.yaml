@@ -1,0 +1,55 @@
+openapi: 3.0.3
+info:
+  title: Cruz Ride Auto - Customer Car Sales API
+  version: "1.0.0"
+  description: >
+    Buyer-side car sales (Phase 6, docs/decisions/car-sales.md). CS2 adds
+    only report-a-listing; the buy pages and enquiries arrive with CS3.
+
+    A signed-in buyer reports a `live` listing with a reason and optional
+    text. Rate-limited to 5 reports an hour per buyer (429
+    `rate_limited`). One open report per buyer per listing (409
+    `already_reported`). The report lands in the Ops queue
+    (`openapi/admin-sales.yaml`); the merchant never sees who reported.
+  license:
+    name: Proprietary - Cruz Ride Auto Limited
+servers:
+  - url: https://api.cral.co.ke/v1
+
+paths:
+  /sale-listings/{listingId}/reports:
+    parameters:
+      - { name: listingId, in: path, required: true, schema: { type: string } }
+    post:
+      summary: Report this listing
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string, enum: [scam, not_this_car, wrong_details, already_sold, offensive, other] }
+                details: { type: string, maxLength: 1000, nullable: true }
+      responses:
+        "201":
+          description: Filed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string }
+                  status: { type: string, enum: [open] }
+                  created_at: { type: string, format: date-time }
+        "401": { description: Not signed in }
+        "404": { description: "`sale_listing_not_found` (no such listing, or not live)" }
+        "409": { description: "`already_reported`" }
+        "422": { description: Validation error }
+        "429": { description: "`rate_limited`" }
+
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }

@@ -42,6 +42,7 @@ const ITEMS: Item[] = [
   { kind: "leaf", to: "/vehicles", label: "Vehicles", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/drivers", label: "Drivers", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/outlets", label: "Outlets", roles: ["admin_reviewer"], built: true },
+  { kind: "leaf", to: "/sales", label: "Car sales", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/merchants", label: "Merchants", roles: ["admin_reviewer", "admin_support"], built: true },
   { kind: "leaf", to: "/renters", label: "Renters", roles: ["admin_reviewer"], built: true },
   { kind: "leaf", to: "/bookings", label: "Bookings", roles: ["admin_support"], built: true },
