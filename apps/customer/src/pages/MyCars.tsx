@@ -9,8 +9,8 @@ import { bodyText } from "../components/subsite/Section.js";
 
 /**
  * `/my-cars`: the customer's own cars (Phase 4 GS2). Every garage request
- * names one of these, and GS4 hangs the service record off each. A car
- * with requests on it stays (its history does too).
+ * names one of these, and each car's service record (GS4) is at
+ * `/my-cars/:id`. A car with requests on it stays (its history does too).
  *
  * Not from a canvas; built from tokens.ts and the sub-site's idiom.
  */
@@ -88,7 +88,10 @@ export function MyCars(): JSX.Element {
                   {c.chassis_number ? ` · ${c.chassis_number}` : ""}
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Link to={`/my-cars/${c.id}`} style={{ ...S.secondary, display: "inline-flex", alignItems: "center", textDecoration: "none", boxSizing: "border-box" }}>
+                  Service record
+                </Link>
                 <button type="button" style={S.secondary} onClick={() => open(c.id, toDraft(c))}>Edit</button>
                 <button type="button" style={{ ...S.secondary, color: "#A50E22" }} disabled={busy} onClick={() => void run(() => deleteCar(c.id))}>
                   Remove

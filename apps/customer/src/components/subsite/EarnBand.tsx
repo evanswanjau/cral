@@ -3,8 +3,8 @@ import { merchantLandingUrl } from "../../lib/merchant-app.js";
 /**
  * The supplier band at the foot of a sub-site: "Have a truck? Earn with
  * CRAL". Links to the merchant site's `/`, or to a `/join/<type>` page
- * when the caller passes `joinPath` (those pages arrive with UI4; until
- * then pass nothing). Copy comes from the page. Never mentions CRAL's fee
+ * when the caller passes `joinPath` (`/join/cars`, `trucks`, `machinery`,
+ * `drivers` from UI4, `/join/garages` from GS4). Copy comes from the page. Never mentions CRAL's fee
  * percentage.
  *
  * Not from a canvas; built from tokens.ts and

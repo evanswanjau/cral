@@ -20,3 +20,4 @@ join-cars.webp - copy of cat-suv.webp (Tim Vegas, Unsplash) - https://unsplash.c
 join-trucks.webp - copy of cat-truck.webp (Tiry Nelson Gono, Unsplash) - https://unsplash.com/photos/h-kD4142VIQ
 join-machinery.webp - copy of cat-machinery.webp (Jamar Penny, Unsplash) - https://unsplash.com/photos/ZgmGq_eFmUs
 join-drivers.webp - copy of auth.webp (Mr Dibo, Unsplash) - https://unsplash.com/photos/PrD-ocyzzZ8. Wants a real photo of a CRAL driver.
+join-garages.webp - "Mechanic working on a car engine in a workshop" by Dextar Studio - https://unsplash.com/photos/XP8o9_Arwqg (added for /join/garages, Phase 4 GS4, 2026-11-19). Wants a real photo of a CRAL-visited garage.

@@ -43,7 +43,7 @@ const FAQS: Array<{ q: string; a: string }> = [
 export function Help(): JSX.Element {
   useSeo({
     title: "Questions and answers",
-    description: "Answers to the questions people ask before they first hire a car, truck, machinery or driver, or call a tow, on CRAL.",
+    description: "Answers to the questions people ask before they first hire a car, truck, machinery or driver, get a car fixed, or call a tow, on CRAL.",
     path: "/help",
     jsonLd: {
       "@context": "https://schema.org",

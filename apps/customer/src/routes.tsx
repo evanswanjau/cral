@@ -34,6 +34,7 @@ import { Sessions } from "./pages/Sessions.js";
 import { GarageHome } from "./pages/garage/GarageHome.js";
 import { GarageRequestPage } from "./pages/garage/GarageRequestPage.js";
 import { GarageOrderPage } from "./pages/garage/GarageOrderPage.js";
+import { CarServiceRecord } from "./pages/CarServiceRecord.js";
 import { MyCars } from "./pages/MyCars.js";
 
 /**
@@ -84,11 +85,12 @@ export const routes: RouteObject[] = [
       { path: "/machinery/search", element: <MachinerySearch /> },
       { path: "/machinery/:id", element: <CarDetail /> },
       { path: "/machinery/:id/book", element: <Booking /> },
-      // Not live yet: both land on the front door's "Coming to CRAL"
-      // block (owner decision 2, 2026-11-18) until their own phase builds
-      // the real sub-site.
+      // Parts is not live yet: it lands on the front door's "Coming to
+      // CRAL" block (owner decision 2, 2026-11-18) until PT2 builds the
+      // sub-site. `/services` meant garage services; it goes to `/garage`
+      // now that garage is live (GS4).
       { path: "/parts", element: <Navigate to="/#coming" replace /> },
-      { path: "/services", element: <Navigate to="/#coming" replace /> },
+      { path: "/services", element: <Navigate to="/garage" replace /> },
       { path: "/cars/:id", element: <CarDetail /> },
       // Not behind RequireAuth: see the note on the booking route below.
       { path: "/cars/:id/book", element: <Booking /> },
@@ -99,9 +101,8 @@ export const routes: RouteObject[] = [
       { path: "/drivers", element: <Drivers /> },
       { path: "/drivers/:id", element: <DriverBook /> },
       { path: "/towing", element: <TowingHome /> },
-      // Garage quotes (Phase 4 GS2): public like towing, but unlisted (the
-      // registry keeps garage under "Coming to CRAL") until a quote can be
-      // paid (GS3) and the sub-site is finished (GS4).
+      // Garage services (Phase 4): public like towing. A live sub-site
+      // since GS4 (tab, door, footer, sitemap).
       { path: "/garage", element: <GarageHome /> },
       { path: "/services/towing", element: <Navigate to="/towing" replace /> },
       { path: "/how-it-works", element: <HowItWorks /> },
@@ -125,6 +126,7 @@ export const routes: RouteObject[] = [
           { path: "/notifications", element: <Notifications /> },
           { path: "/account", element: <Sessions /> },
           { path: "/my-cars", element: <MyCars /> },
+          { path: "/my-cars/:id", element: <CarServiceRecord /> },
           { path: "/garage/requests/:id", element: <GarageRequestPage /> },
           { path: "/garage/orders/:id", element: <GarageOrderPage /> },
         ],

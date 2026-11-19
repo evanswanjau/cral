@@ -4,6 +4,7 @@ import { P } from "../components/portal/styles.js";
 import { O } from "../components/onboarding/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { ExtraQuoteForm } from "../components/garage/ExtraQuoteForm.js";
+import { YourWorkOnThisCar } from "../components/garage/YourWorkOnThisCar.js";
 import { LINE_LABELS, SERVICE_LABELS, kesText } from "../lib/garage-api.js";
 import {
   ORDER_STATUS,
@@ -209,6 +210,8 @@ export function GarageOrderDetail(): JSX.Element {
         </div>
         <div style={O.helper}>You keep {kesText(o.take_home)} after CRAL&rsquo;s service fee. It joins your payout run once the job is confirmed.</div>
       </div>
+
+      <YourWorkOnThisCar orderId={o.id} />
 
       {o.problem_note && (o.status === "problem" || o.status === "refunded" || o.confirmed_by === "ops") && (
         <div style={{ ...P.card, marginTop: 16, maxWidth: 820, padding: 18 }}>

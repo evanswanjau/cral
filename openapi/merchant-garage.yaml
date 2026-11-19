@@ -166,6 +166,33 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/MerchantOrder" }
 
+  /merchant/garage-orders/{orderId}/service-record:
+    parameters:
+      - { name: orderId, in: path, required: true, schema: { type: string } }
+    get:
+      summary: Your own completed jobs on this job's car, latest first
+      description: >
+        The car's service record as this merchant may see it (GS4): only
+        jobs one of its own outlets completed on the same customer car.
+        Other garages' jobs are never included. Amounts are what the
+        customer paid and what the merchant kept, in shillings; never CRAL's
+        fee or its rate. Another merchant's order is 404.
+      parameters:
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+      responses:
+        "200":
+          description: A page of this merchant's completed jobs on the car.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: "#/components/schemas/MerchantServiceRecordEntry" } }
+                  next_cursor: { type: string, nullable: true }
+                  has_more: { type: boolean }
+        "404": { description: "`order_not_found`" }
+
   /merchant/garage-orders/{orderId}/start:
     parameters:
       - { name: orderId, in: path, required: true, schema: { type: string } }
@@ -341,3 +368,24 @@ components:
         resolved_at: { type: string, format: date-time, nullable: true }
         resolution_note: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
+
+    MerchantServiceRecordEntry:
+      type: object
+      properties:
+        order_id: { type: string }
+        ref: { type: string, example: G-261119-001 }
+        service_type: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        outlet_name: { type: string, nullable: true }
+        lines:
+          type: array
+          description: Every paid line, the original quote first, then extra work.
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [part, labour, delivery, other] }
+              description: { type: string }
+              amount: { $ref: "#/components/schemas/Money" }
+        total: { $ref: "#/components/schemas/Money" }
+        take_home: { $ref: "#/components/schemas/Money" }
+        completed_at: { type: string, format: date-time }

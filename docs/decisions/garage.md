@@ -127,10 +127,9 @@ customer `pages/garage/{GarageHome,GarageRequestPage}.tsx`,
   `/garage/requests/:id` in both apps.
 - **Money moves in GS3** (below): the request page's "Accept and pay"
   creates the order.
-- **Garage stays unlisted.** The registry keeps garage under "Coming to
-  CRAL", so no tab, door or footer link points at `/garage` until GS3/GS4;
-  the page is reachable directly. The hero photo is a placeholder copy of
-  `towing.jpg`. "My cars" is in the account menu. The merchant portal adds
+- **Garage went live in GS4** (below); until then the registry kept it
+  under "Coming to CRAL" and `/garage` was reachable only directly.
+  "My cars" is in the account menu. The merchant portal adds
   "Quote requests" (with the to-quote count) after Premises.
 
 ## Orders and money (GS3, built 2026-11-19)
@@ -187,8 +186,7 @@ to-start count).
   `admin_finance`, Idempotency-Key) with `release` (completes, payable) or
   `refund` (every successful payment refunded once, reason
   `order_refunded`, partial unique on `(payment_request_id, reason)`).
-  **There is no console screen for this yet**: Ops uses the API. Flagged
-  for a follow-up PR.
+  The console screen arrived in GS4 (below).
 - **Payouts**: a `completed` order is payable. `payableOrders` +
   `cutPayoutRun` add it as a `payout_run_lines` row with `order_id`
   (unique, so it pays once; CHECK not both booking and order), the order
@@ -206,3 +204,50 @@ to-start count).
 - **Not built:** unpaid orders don't expire on their own (the customer can
   cancel); the customer gets feed notifications only (no SMS), as with
   quotes; the service record on My cars is GS4.
+
+## Service record, live sub-site, Ops console (GS4, built 2026-11-19)
+
+No migration. `modules/garage/service-record.ts`; customer
+`pages/CarServiceRecord.tsx` (`/my-cars/:id`), `pages/garage/GarageHome.tsx`;
+merchant `components/garage/YourWorkOnThisCar.tsx`,
+`pages/join/GarageJoinPage.tsx`; console `pages/garage-orders/{Queue,Case}.tsx`.
+
+- **The service record is read, never stored.** It is the car's orders
+  with status `completed` (customer, auto or Ops release), latest
+  `completed_at` first, cursor-paged on `completed_at`. Cancelled and
+  refunded jobs are not on it; a job still running isn't either. Each
+  entry carries the paid quotes' lines (original, then extras), the
+  garage and the total. Nothing on it can say more than the jobs did.
+- **Who sees it:** the customer, every garage's completed work on their
+  own car (`GET /me/cars/:carId/service-record`; another customer's car is
+  404). A garage, only jobs its own outlets completed on that car, reached
+  through one of its own orders (`GET /merchant/garage-orders/:orderId/service-record`;
+  another merchant's order is 404), with total and take-home in
+  shillings, never the commission. It shows on the merchant job page as
+  "Your work on this car".
+- **Garage is a live service** in `lib/services.ts`: tab "Garage", door
+  "Get a car fixed", footer link, `/garage` in the sitemap. The hero keeps
+  the canvas `vertDefs` copy. Parts moved up to the "NEXT" pill.
+  `/services` (which meant garage services) now redirects to `/garage`;
+  `/parts` still goes to `/#coming`. The landing is written out in full
+  (four steps, price rows, eight FAQs) and promises only what is built:
+  broadcast to up to 5 visited garages in the county, never "pick a
+  garage". No count of garages is shown. Hero photo: an Unsplash
+  placeholder (Dextar Studio), credited in `CREDITS.txt`.
+- **`/join/garages`** is its own merchant page, not a `SupplierType`: a
+  garage has no vehicle, no per-unit rate and so no estimator. Same
+  landing shell, steps, "what you need" and FAQ. `?offer=garage` is now a
+  remembered offer and pre-selects "Garage services" in onboarding. The
+  landing lists garages under "Now open" (and in the footer); the
+  "Coming to CRAL" strip is parts dealers and car sellers.
+- **Ops console "Garage jobs"** (`/garage-orders`, `admin_support` /
+  `admin_finance`, the roles the endpoints allow): the problem queue is
+  the default filter, then the other statuses. The case shows the
+  problem, job, money (commission included, Ops only), quotes and
+  timeline, and settles a problem through GS3's resolve endpoint (release
+  or refund, a note both sides read, a fresh `Idempotency-Key` per
+  submit). No new endpoint.
+- **Not built:** the logbook photo on My cars; picking one named garage
+  (GS2's "garage listing pages" in the roadmap's PR detail table) needs
+  public outlet pages and was left out: the owner's GS4 brief named the
+  service record, the sub-site and the Ops screen.

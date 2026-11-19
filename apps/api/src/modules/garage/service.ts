@@ -138,7 +138,7 @@ async function audit(
   });
 }
 
-function serializeCar(c: CarRow) {
+export function serializeCar(c: CarRow) {
   return {
     id: c.id,
     make: c.make,
@@ -187,7 +187,7 @@ export async function listCars(userId: string, query: { cursor?: string | undefi
   return { data: paged.data.map(serializeCar), next_cursor: paged.next_cursor, has_more: paged.has_more };
 }
 
-async function requireCar(userId: string, carId: string): Promise<CarRow> {
+export async function requireCar(userId: string, carId: string): Promise<CarRow> {
   const car = await db<CarRow>("customer_cars").where({ id: carId, user_id: userId }).first();
   if (!car) notFound("car_not_found", "That car isn't in My cars.");
   return car;
