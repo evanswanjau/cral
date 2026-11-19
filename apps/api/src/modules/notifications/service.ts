@@ -64,6 +64,9 @@ function ctaFor(row: NotificationRow): { cta: string; cta_href: string } | null 
       return row.subject_id ? { cta: "Open vehicle", cta_href: `/vehicles/${row.subject_id}` } : null;
     case "driver":
       return row.subject_id ? { cta: "Open driver", cta_href: `/drivers/${row.subject_id}` } : null;
+    case "garage_request":
+      // Same path in both apps: the customer's request page and the merchant's quote screen.
+      return row.subject_id ? { cta: row.user_id ? "See quotes" : "Open request", cta_href: `/garage/requests/${row.subject_id}` } : null;
     case "outlet":
       return row.subject_id ? { cta: "Open premises", cta_href: `/premises/${row.subject_id}` } : null;
     case "payout_run":

@@ -15,8 +15,10 @@ any garage request, quote or order. Queue and design notes:
 - **Parts delivery** is the dealer's own, priced as a quote line. CRAL
   arranges no riders.
 - **Commission** for services and for parts is its own admin-only
-  `platform_settings` value per vertical, defaulting to the hire rate. It
-  is added when orders are built (GS3), never shown to a merchant.
+  `platform_settings` value per vertical (`commission.garage`, seeded in
+  GS2 at the hire rate; `lib/commission.ts` falls back to
+  `COMMISSION_RATE`). Never shown to a merchant: the API sends shilling
+  take-home amounts only.
 - Car sales: free listings at launch, paid boosts in CS4, listing fee a
   setting defaulting to 0.
 
@@ -82,3 +84,51 @@ and `modules/admin-outlets/` (Ops); merchant screens
 - Not from a canvas (none exists for outlets): merchant screens follow
   `DriverList`/`DriverDetail`, the console follows `drivers/` with the
   shared `ChecklistRow`.
+
+## My cars, requests and quotes (GS2, built 2026-11-19)
+
+Migration `20261121090000_garage_quotes`; module `modules/garage/`;
+contracts `openapi/customer-garage.yaml`, `openapi/merchant-garage.yaml`;
+customer `pages/garage/{GarageHome,GarageRequestPage}.tsx`,
+`pages/MyCars.tsx`; merchant `pages/GarageRequest{List,Detail}.tsx`.
+
+- **My cars** (`customer_cars`, `car_`): make, model, year, plate,
+  optional chassis number. The plate is unique per customer only (a
+  normalised index), not globally. A car with requests can't be removed
+  (409 `car_has_requests`). The logbook photo the design notes mention is
+  not built (optional; left for GS4's service record).
+- **A request** (`quote_requests`, `rfq_`) names one car, a service type
+  (the outlet `service_types`), a description and a county. It goes to up
+  to **5 live garage outlets of approved merchants in that county that do
+  that service, one per merchant**, oldest approval first
+  (`quote_request_outlets`). None -> 422 `no_garages_in_county` and
+  nothing is stored. Broadcast only: picking one named garage waits for
+  GS4's garage pages. Request photos are not built yet. 5 an hour per
+  customer. Statuses `open -> cancelled` (GS3 adds `accepted`).
+- **A quote** (`quotes`, `quo_`, lines `quote_lines`, `qln_`): one per
+  outlet per request; lines `part` / `labour` / `delivery` / `other`, each
+  a positive amount in cents; the total is written from the lines in the
+  same transaction. Sending again revises it in place (lines replaced,
+  audit `quote.revised`). Valid 48 h from the last send; `expired` is
+  derived. Quoting needs the request `open` (row locked `FOR UPDATE`
+  against a racing cancel; 409 `request_not_open`) and the outlet `live`
+  (422 `outlet_not_live`). A decline withdraws the quote and blocks
+  re-quoting (409 `request_declined`).
+- **Who sees what:** a merchant sees only requests one of its outlets was
+  asked about (others 404), with the chassis number and the customer's
+  first name, no phone. The customer sees sent quotes cheapest first, each
+  garage's name, address, county and its recorded visit date (never a
+  default). `POST /merchant/garage-requests/quote-preview` returns total
+  and take-home in shillings so the quote form never needs the rate.
+- **Notifications:** a new request notifies each asked merchant
+  (`booking` category, SMS per their preferences); a quote notifies the
+  customer's own feed. `subject_type: garage_request`, CTA
+  `/garage/requests/:id` in both apps.
+- **Nothing moves money yet.** The customer's request page says accepting
+  and paying opens soon instead of showing a dead button. GS3 adds accept
+  (expiring the other quotes), payment and orders.
+- **Garage stays unlisted.** The registry keeps garage under "Coming to
+  CRAL", so no tab, door or footer link points at `/garage` until GS3/GS4;
+  the page is reachable directly. The hero photo is a placeholder copy of
+  `towing.jpg`. "My cars" is in the account menu. The merchant portal adds
+  "Quote requests" (with the to-quote count) after Premises.
