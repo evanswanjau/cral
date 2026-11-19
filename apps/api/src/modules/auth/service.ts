@@ -19,6 +19,8 @@ import {
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { writeAuditEntry } from "../../lib/audit.js";
+import { resolveSignupCode } from "../../lib/agent-codes.js";
+import type { MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
 import type {
   OtpCodeRow,
@@ -215,6 +217,14 @@ export interface RegisterInput {
    */
   full_name?: string | undefined;
   phone?: string | undefined;
+  /**
+   * A sales agent's personal sign-up code (`/join?a=`, Phase 3 PR AG2).
+   * Merchant sign-ups only. A code naming an active agent credits the new
+   * merchant to them; anything else is ignored without a word, so a stale
+   * link never blocks a sign-up and the response can't be used to test
+   * codes. An existing account is never re-credited (it 409s above).
+   */
+  agent_code?: string | undefined;
 }
 
 export async function register(input: RegisterInput, ctx: RequestContext) {
@@ -260,20 +270,49 @@ export async function register(input: RegisterInput, ctx: RequestContext) {
   const passwordHash = await hashPassword(input.password);
   const now = new Date();
 
-  const [user] = await db<UserRow>("users")
-    .insert({
-      id: generateId("user"),
-      full_name: input.full_name ?? null,
-      phone,
-      email,
-      password_hash: passwordHash,
-      roles: [input.role],
-      terms_accepted_version: input.accepted_terms_version,
-      terms_accepted_at: now,
-      terms_accepted_ip: ctx.ip,
-    })
-    .returning("*");
-  if (!user) throw new Error("Failed to create user");
+  const agent = input.role === "merchant" ? await resolveSignupCode(input.agent_code) : null;
+
+  const user = await db.transaction(async (trx) => {
+    const [created] = await trx<UserRow>("users")
+      .insert({
+        id: generateId("user"),
+        full_name: input.full_name ?? null,
+        phone,
+        email,
+        password_hash: passwordHash,
+        roles: [input.role],
+        terms_accepted_version: input.accepted_terms_version,
+        terms_accepted_at: now,
+        terms_accepted_ip: ctx.ip,
+      })
+      .returning("*");
+    if (!created) throw new Error("Failed to create user");
+
+    // Signed up through an agent's link: the merchants row (normally made
+    // lazily on the first onboarding call) is made now, so the credit is
+    // fixed at sign-up, in the same transaction as the account and its
+    // audit row. Nothing ever moves it afterwards.
+    if (agent) {
+      const merchantId = generateId("merchant");
+      await trx<MerchantRow>("merchants").insert({
+        id: merchantId,
+        user_id: created.id,
+        onboarded_by: agent.id,
+        onboarding_source: "agent_link",
+      });
+      await writeAuditEntry(trx, {
+        actorId: created.id,
+        actorType: "user",
+        action: "merchant.agent_link_signup",
+        entityType: "merchant",
+        entityId: merchantId,
+        after: { user_id: created.id, onboarded_by: agent.id, onboarding_source: "agent_link" },
+        requestId: ctx.requestId,
+        ip: ctx.ip,
+      });
+    }
+    return created;
+  });
 
   // Verify whichever contact we actually hold. Email-first sign-up sends the
   // code by email; a caller that did supply a phone keeps the SMS path.
@@ -659,7 +698,10 @@ export async function refreshToken(presentedToken: string, ctx: RequestContext) 
     .first();
 
   if (byCurrentHash) {
-    if (byCurrentHash.revoked_at || byCurrentHash.expires_at < new Date()) {
+    // An assist session (PR AG3) is never handed a refresh token; its
+    // stored hash is of random bytes nobody holds. Refused here as well,
+    // so it can't be extended even if that ever changed.
+    if (byCurrentHash.revoked_at || byCurrentHash.expires_at < new Date() || byCurrentHash.kind === "assist") {
       throw new ApiError({
         status: 401,
         type: "auth_error",

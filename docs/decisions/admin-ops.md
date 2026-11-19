@@ -253,6 +253,50 @@ reasoning: `docs/plans/trucks-and-sales-agents.md`, "B1 as built".
   `merchant.agent_invite`, `merchant.invite_resent`, `user.invite_accepted`.
 - Screens not from a canvas file (none exists); console idiom, phone-first.
 
+### Attribution (AG2, 2026-11-19)
+
+Migration `20261119090000_agent_signup_codes`; `lib/agent-codes.ts`. Detail:
+`docs/plans/trucks-and-sales-agents.md`, "B2 as built".
+
+- **Personal link `<merchant portal>/join?a=<code>`.** `admin_users.signup_code`,
+  six characters without 0/O/1/I, issued on the agent's first
+  `GET /admin/agents/link` (conditional write, audited
+  `admin.signup_code_issued`), never changed. The portal keeps `?a=` from
+  any page in `localStorage` for 30 days and sends it as `agent_code` on
+  `POST /auth/register`.
+- **Credit is fixed at sign-up and first credit wins.** A code naming an
+  active `admin_sales` / `admin_super` creates the `merchants` row at
+  register with `onboarded_by` + `onboarding_source = agent_link` and
+  `merchant.agent_link_signup` audit, one transaction. Unknown, disabled or
+  customer-side codes are ignored silently (same response). An existing
+  account is never re-credited (409 `account_exists`), so an owner another
+  agent invited stays theirs; nothing reassigns `onboarded_by`.
+- **Who sees it**: attribution is the owner's report. Ops Merchants shows
+  the Agent column and `?agent=<id>|none` filter to `admin_super` only;
+  other roles get no `agent` field and 403 on the filter.
+  `GET /admin/agents` (the filter's roster) is owner-only.
+
+### Assist session (AG3, 2026-11-19)
+
+Migration `20261119100000_assist_sessions`; `lib/assist.ts`,
+`modules/admin-agents/assist.ts`. Detail:
+`docs/plans/trucks-and-sales-agents.md`, "B3 as built".
+
+- **Consent is a code to the owner's verified phone**, read out in person.
+  Not verified -> `409 phone_not_verified`; the agent never consents via a
+  number they typed. Code: 10 min, 5 tries, single-use, hash only, bound
+  to one agent + merchant.
+- **The assist token reaches onboarding only.** The allowlist in
+  `lib/assist.ts` (`METHOD + route pattern`) is enforced in
+  `authenticate()`; everything else is `403 assist_scope`. Inside it the
+  agent can't set the phone, payout or terms, can't submit, and reads or
+  deletes only documents it uploaded. A route-walk test guards it; add a
+  route to the allowlist only on purpose.
+- **Agents still never approve, and now never submit.** The owner adds the
+  payout, accepts the terms and submits.
+- Every write audited as the agent with `after.assisted_for`; the owner is
+  emailed at start, sees it on the setup page and can end it.
+
 ## Code anchors
 
 - Contract for `/admin/auth/*`: `openapi/admin-identity.yaml`. Team: `GET/POST/PATCH /admin/team`, `.../deactivate`, `.../reactivate`, `.../reset-invite`.

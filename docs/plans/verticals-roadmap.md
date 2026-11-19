@@ -26,7 +26,7 @@ each one look and feel like its own place.
 | 0 | Cheaper, faster build sessions (no client-visible change) | **Built** (P0) | 1 (done) |
 | 1 | Hire a truck: route, load, quotes, per-km/per-tonne | Built. **Production shipped** at `72e3593` | 3 (done) |
 | 2 | Each service gets its own sub-site, on the website and the merchant portal | Built, in `develop`. Production pending (owner says ship phase 2) | 1 review + 3-5 builds |
-| 3 | Sales agents sign up owners in the field | AG1 built (`develop`); AG2, AG3 not started | 3 |
+| 3 | Sales agents sign up owners in the field | Built, in `develop`. Production pending (owner says ship phase 3) | 3 |
 | 4 | Garage services: quote first, pay through CRAL | Not started | 4 |
 | 5 | Spare parts: quoted against your chassis | Not started | 2 |
 | 6 | Buy and sell cars: verified listings + enquiries | Not started | 4 |
@@ -173,8 +173,8 @@ paperwork with the owner beside them. Agents never approve anyone.
 | PR | What | Model | Status |
 |----|------|-------|--------|
 | AG1 | `admin_sales` role, "Add merchant" + emailed set-your-password invite, "My merchants" list | Opus | Built 2026-11-18, `develop` (`feature/sales-agents-ag1`). Migration `20261118090000_sales_agents` |
-| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Opus | Not started |
-| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | Opus | Not started |
+| AG2 | Personal sign-up link per agent, Agent column + filter in Ops Merchants | Opus | Built 2026-11-19, `develop` (`feature/sales-agents-ag2`, PR #97). Migration `20261119090000_agent_signup_codes` |
+| AG3 | Assist session: agent fills in onboarding for the merchant, merchant's SMS code is the consent | Opus | Built 2026-11-19, `develop` (`feature/sales-agents-ag3`, PR #98). Migration `20261119100000_assist_sessions` |
 
 **AG1 as built** (decisions in [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md)
 Part B, "B1 as built"): contract `openapi/admin-agents.yaml`, API
@@ -184,6 +184,26 @@ merchant portal's `/reset-password` screen. **Owner checks on dev:** Settings
 -> Team -> add a "Sales agent"; sign in as them (only My merchants and Add
 merchant show); add a merchant; open the invite email (Resend dashboard on
 dev) and set the password; the row moves from Invited to Onboarding.
+
+**AG2 as built** (Part B, "B2 as built"): each agent's link is
+`<merchant portal>/join?a=<code>` on My merchants (Copy, Share on WhatsApp);
+an owner who creates an account through it is credited at sign-up
+(`onboarding_source = agent_link`). First credit wins and nothing moves it.
+Ops Merchants' Agent column and filter are owner-only. **Owner checks on
+dev:** sign in as a Sales agent, copy the link from My merchants, open it in
+a private window and create a merchant account; the row shows on the
+agent's My merchants tagged "VIA YOUR LINK". As the owner, once that
+merchant submits a vehicle, Merchants shows the agent and the Agent filter
+narrows to them.
+
+**AG3 as built** (Part B, "B3 as built"): "Fill in onboarding" on My
+merchants texts a code to the owner's **verified** phone; the owner reads it
+out and the agent gets a 1-hour assist token for the merchant portal
+(`/assist`). It reaches onboarding only (`lib/assist.ts` allowlist, enforced
+in `authenticate()`), can't submit, accept the terms, or set the phone or
+payout, and reads back only files it uploaded. Start, every write and end
+are audited; the owner is emailed and sees it on their setup page with "End
+agent access". **Owner checks on dev:** see "B3 as built", last bullet.
 
 **Start prompt:** the standard prompt with Phase 3, PR AG1/AG2/AG3. Detail:
 [`trucks-and-sales-agents.md`](./trucks-and-sales-agents.md) Part B (it calls

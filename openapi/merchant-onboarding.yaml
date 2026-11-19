@@ -13,6 +13,26 @@ info:
     2026-08-25) key off. There is exactly one merchant draft per user —
     every path here acts on the authenticated caller's own draft, so none
     of them take a merchant id.
+
+
+    **Assist sessions** (Phase 3, PR AG3; `admin-agents.yaml` starts one).
+    A CRAL sales agent can fill in the draft for the owner with an assist
+    token: a public-audience access token backed by a `sessions` row with
+    `kind = "assist"` and `assisted_by` = the agent, live for 1 hour, with
+    no refresh token. `authenticate()` refuses it with `403 assist_scope`
+    on every route except this allowlist: `GET`/`PATCH /merchant/onboarding`,
+    `POST /merchant/onboarding/vehicles`, `PATCH`/`DELETE
+    /merchant/onboarding/vehicles/{id}`, `POST /merchant/onboarding/documents`,
+    `GET`/`DELETE /merchant/onboarding/documents/{id}` (only documents that
+    agent uploaded; any other is `404`) and `POST
+    /merchant/onboarding/assist/end`. Submit is outside it. Inside it,
+    `PATCH` refuses `phone`, every payout field and `terms_accepted`
+    (`403 assist_scope`, naming the field), since the payout number, the
+    terms and the submission are the owner's own acts. Once the draft is
+    submitted the token gets `409 onboarding_submitted`. Every write made
+    with it is audited (`actor_type: admin`, the agent's id,
+    `after.assisted_for` = the owner's user id) in the same transaction,
+    and documents record `uploaded_by_admin_id`.
   license:
     name: Proprietary — Cruz Ride Auto Limited
 servers:
@@ -201,6 +221,28 @@ paths:
           description: Removed
         "404":
           $ref: "#/components/responses/NotFound"
+
+  /merchant/onboarding/assist/end:
+    post:
+      tags: [onboarding]
+      summary: End assist sessions
+      operationId: endAssist
+      description: >
+        With an assist token (the banner's "Exit"), ends that assist
+        session. With the owner's own token, ends every live assist session
+        on their account: the owner can always stop an agent. Each ended
+        session writes `merchant.assist_ended` in the same transaction as
+        the revocation. Idempotent: nothing live is `200` with `ended: 0`.
+      responses:
+        "200":
+          description: Ended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ended]
+                properties:
+                  ended: { type: integer, description: How many live assist sessions this closed }
 
   /merchant/onboarding/submit:
     post:
@@ -420,6 +462,32 @@ components:
           items: { $ref: "#/components/schemas/Vehicle" }
         submitted: { type: boolean }
         last_activity_at: { type: string, format: date-time }
+        account_email:
+          type: string
+          description: The account's sign-in email, for the wizard's read-only email field (an assist token can't call `/me`).
+        assist:
+          type: object
+          nullable: true
+          description: Set only when the caller is an assist token - who is filling this in, and until when. Drives the portal's banner.
+          required: [agent_name, expires_at]
+          properties:
+            agent_name: { type: string }
+            expires_at: { type: string, format: date-time }
+        assists:
+          type: array
+          description: >
+            Every assist session on this account, newest first (at most
+            10), so the owner can see who helped and when. `active` is
+            true while the session is still live; the owner can end it with
+            `POST /merchant/onboarding/assist/end`.
+          items:
+            type: object
+            required: [agent_name, started_at, ended_at, active]
+            properties:
+              agent_name: { type: string }
+              started_at: { type: string, format: date-time }
+              ended_at: { type: string, format: date-time, nullable: true, description: When it was ended, or when it expired }
+              active: { type: boolean }
 
   responses:
     ValidationError:

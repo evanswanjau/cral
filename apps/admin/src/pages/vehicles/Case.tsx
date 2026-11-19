@@ -132,6 +132,7 @@ export function Case(): JSX.Element {
         review_note: d.review_note,
         original_name: d.original_name,
         expires_at: d.expires_at,
+        uploaded_by_agent: d.uploaded_by_agent ?? null,
       },
       checklist: d.checklist,
     })),

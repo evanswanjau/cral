@@ -4,7 +4,8 @@ import { requireIdempotencyKey } from "../../middleware/idempotency.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { asyncHandler } from "../../lib/async-handler.js";
 import * as agents from "./service.js";
-import { AddMerchantSchema, ListAgentMerchantsQuerySchema } from "./schemas.js";
+import * as assist from "./assist.js";
+import { AddMerchantSchema, ConfirmAssistSchema, ListAgentMerchantsQuerySchema } from "./schemas.js";
 
 export const adminAgentsRouter = Router();
 
@@ -33,6 +34,25 @@ adminAgentsRouter.get(
   }),
 );
 
+// The caller's personal sign-up link (PR AG2), issued on first call.
+adminAgentsRouter.get(
+  "/admin/agents/link",
+  guard,
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await agents.getSignupLink(ctxOf(req)));
+  }),
+);
+
+// Ops Merchants' agent filter. Owner only: an agent doesn't get a roster
+// of the sales team.
+adminAgentsRouter.get(
+  "/admin/agents",
+  requireAdmin({ role: "admin_super" }),
+  asyncHandler(async (_req, res) => {
+    res.status(200).json(await agents.listAgents());
+  }),
+);
+
 // Each add sends an email to someone who didn't ask for it, so it's capped
 // per agent. Mounted after `guard`, so the bucket is the admin, not the IP
 // a field team may be sharing.
@@ -50,6 +70,49 @@ adminAgentsRouter.post(
     const body = AddMerchantSchema.parse(req.body);
     const result = await agents.addMerchant(body, ctxOf(req));
     await req.idempotency!.complete(201, result);
+    res.status(201).json(result);
+  }),
+);
+
+// Assist session (PR AG3). Each start texts the owner, so it's capped per
+// merchant and per agent; the code itself allows 5 tries.
+adminAgentsRouter.post(
+  "/admin/agents/merchants/:id/assist/start",
+  guard,
+  rateLimit({
+    bucket: "agent_assist_start",
+    limit: 3,
+    windowSeconds: 3600,
+    keyFn: (req) => `${req.admin?.id ?? req.ip ?? "unknown"}:${String(req.params.id)}`,
+  }),
+  rateLimit({
+    bucket: "agent_assist_start_agent",
+    limit: 20,
+    windowSeconds: 3600,
+    keyFn: (req) => req.admin?.id ?? req.ip ?? "unknown",
+  }),
+  requireIdempotencyKey(),
+  asyncHandler(async (req, res) => {
+    const result = await assist.startAssist(req.params.id as string, ctxOf(req));
+    await req.idempotency!.complete(200, result);
+    res.status(200).json(result);
+  }),
+);
+
+// No Idempotency-Key: the code is single-use, and a stored replay would
+// keep the access token at rest.
+adminAgentsRouter.post(
+  "/admin/agents/merchants/:id/assist",
+  guard,
+  rateLimit({
+    bucket: "agent_assist_confirm",
+    limit: 20,
+    windowSeconds: 3600,
+    keyFn: (req) => req.admin?.id ?? req.ip ?? "unknown",
+  }),
+  asyncHandler(async (req, res) => {
+    const body = ConfirmAssistSchema.parse(req.body);
+    const result = await assist.confirmAssist(req.params.id as string, body, ctxOf(req));
     res.status(201).json(result);
   }),
 );
