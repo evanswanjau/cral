@@ -7,6 +7,7 @@ import { customerLegalUrl } from "../../../lib/customer-site.js";
 import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
 import { isAssistSession } from "../../../lib/assist.js";
+import { VerifyEmailCard } from "../VerifyEmailCard.js";
 
 export function Review({
   draft,
@@ -28,7 +29,9 @@ export function Review({
   const assist = isAssistSession();
   const fullName = [draft.firstName, draft.middleName, draft.surname].filter(Boolean).join(" ");
 
-  const blockedReason = !draft.phoneVerified
+  const blockedReason = !draft.emailVerified
+    ? "Verify your email first."
+    : !draft.phoneVerified
     ? "Verify your phone number on the Your details step first."
     : !draft.termsAccepted
       ? "Accept the merchant terms and conditions first."
@@ -47,6 +50,14 @@ export function Review({
       <div style={O.stepEyebrow}>STEP 5 OF 5</div>
       <h1 style={O.h1Step}>Review and submit</h1>
       <p style={{ ...O.stepLede, marginBottom: 20 }}>One last look before you send it to us. You can still change anything.</p>
+
+      {!assist && !draft.emailVerified && (
+        <VerifyEmailCard
+          email={draft.email}
+          showError={attemptedSubmit}
+          onVerified={() => onChange({ emailVerified: true })}
+        />
+      )}
 
       <div style={{ ...O.darkCard, marginBottom: 20 }}>
         <div style={O.darkEyebrow}>
@@ -135,7 +146,7 @@ export function Review({
             {draft.vehicles.map((v) => (
               <ReviewComplete
                 key={v.id}
-                label={`${v.registration || "Vehicle"} · car documents`}
+                label={`${v.registration || "Vehicle"} · ${v.type === "machinery" ? "machine" : v.type === "truck" ? "truck" : "car"} documents`}
                 complete={Boolean(v.docs.logbook) && Boolean(v.docs.comprehensiveInsurance) && Boolean(v.docs.trackerCertificate)}
               />
             ))}

@@ -4,6 +4,15 @@ import { ImageSquare } from "@phosphor-icons/react/dist/ssr/ImageSquare";
 import { PlateBadge, PrimaryButton, SecondaryButton, StatusPill } from "../primitives.js";
 import { usePhotoPreview } from "../../../lib/use-photo-preview.js";
 import type { DraftPhoto, OnboardingDraft } from "../../../lib/onboarding-draft.js";
+import { vehicleTypeLabel } from "../../../lib/vehicle-categories.js";
+
+/** "1 MACHINE", "2 TRUCKS", "3 VEHICLES" - the noun follows what was listed (PR H6). */
+function fleetCount(vehicles: OnboardingDraft["vehicles"]): string {
+  const n = vehicles.length;
+  const all = (t: string) => n > 0 && vehicles.every((v) => v.type === t);
+  const [one, many] = all("machinery") ? ["MACHINE", "MACHINES"] : all("truck") ? ["TRUCK", "TRUCKS"] : ["VEHICLE", "VEHICLES"];
+  return `${n} ${n === 1 ? one : many}`;
+}
 
 const NEXT_STEPS = [
   {
@@ -51,7 +60,7 @@ export function Done({ draft, onAddAnother }: { draft: OnboardingDraft; onAddAno
           <div style={O.reviewCardHead}>
             <StatusPill status="pending" />
             <span style={O.sectionAside}>
-              {draft.vehicles.length} VEHICLE{draft.vehicles.length === 1 ? "" : "S"}
+              {fleetCount(draft.vehicles)}
             </span>
           </div>
           {draft.vehicles.map((v, i) => {
@@ -68,7 +77,7 @@ export function Done({ draft, onAddAnother }: { draft: OnboardingDraft; onAddAno
                 <div style={{ flex: "1 1 0%", minWidth: "min(100%,140px)" }}>
                   <div style={O.fleetName}>{v.make} {v.model}</div>
                   <div style={O.fleetSub}>
-                    {v.type} · {v.year} · {v.photos.length} photo{v.photos.length === 1 ? "" : "s"}
+                    {vehicleTypeLabel(v.type)} · {v.year} · {v.photos.length} photo{v.photos.length === 1 ? "" : "s"}
                   </div>
                 </div>
                 <PlateBadge>{v.registration || "-"}</PlateBadge>

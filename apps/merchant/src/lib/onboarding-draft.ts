@@ -112,6 +112,11 @@ export interface OnboardingDraft {
   phoneVerified: boolean;
   /** Read-only here - collected once at sign-up (CLAUDE.md's recorded decision), prefilled from GET /me. */
   email: string;
+  /**
+   * Server-owned: false until the sign-in email has passed its code check.
+   * Submit is refused until it has (PR H6); Review shows "Verify your email".
+   */
+  emailVerified: boolean;
   payoutSame: boolean;
   payoutMethod: PayoutMethod;
   /** M-Pesa payout number, national format without the +254. */
@@ -160,6 +165,7 @@ export function emptyDraft(): OnboardingDraft {
     phone: "",
     phoneVerified: false,
     email: "",
+    emailVerified: true,
     payoutSame: true,
     payoutMethod: "mpesa",
     payoutDetail: "",
@@ -321,6 +327,8 @@ interface WireOnboardingState {
   vehicles: WireVehicle[];
   submitted: boolean;
   last_activity_at: string;
+  /** PR H6. Optional so a server that predates it reads as "nothing to ask". */
+  email_verified?: boolean;
 }
 
 function toDraftDoc(slot: WireDocSlot | null): DraftDocument | null {
@@ -397,6 +405,9 @@ function toDraft(state: WireOnboardingState): OnboardingDraft {
     phone: state.phone ?? "",
     phoneVerified: state.phone_verified ?? false,
     email: "", // filled separately from GET /me, as before
+    // Unknown reads as verified: the server still refuses submit if not, and
+    // the 422 flips this so Review shows the step (PR H6).
+    emailVerified: state.email_verified ?? true,
     payoutSame: state.payout_same,
     payoutMethod: state.payout_method,
     payoutDetail: state.payout_detail ?? "",

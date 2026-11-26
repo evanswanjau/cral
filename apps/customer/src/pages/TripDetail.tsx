@@ -14,7 +14,14 @@ import {
 import { getPaymentState, payForBooking } from "../lib/payments-api.js";
 import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
-import { VEHICLE_CATEGORY_LABEL, formatPayload, listingBase, vehicleNoun } from "../lib/vehicle-categories.js";
+import {
+  VEHICLE_CATEGORY_LABEL,
+  crewNote,
+  formatPayload,
+  isCarCategory,
+  listingBase,
+  vehicleNoun,
+} from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
 import { PapersBeingChecked } from "../components/hire/RenterPapers.js";
 
@@ -1103,10 +1110,20 @@ export function TripDetail(): JSX.Element {
                 {booking.vehicle.registration} · {booking.vehicle.county ?? "Location on request"}
               </div>
               <div style={{ font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#5A6373", marginBottom: 16 }}>
-                {VEHICLE_CATEGORY_LABEL[booking.vehicle.category] ?? booking.vehicle.category} ·{" "}
-                {booking.vehicle.seats} seats ·{" "}
-                {booking.vehicle.transmission === "manual" ? "Manual" : "Auto"} ·{" "}
-                {booking.driver || booking.vehicle.chauffeured ? "With driver" : "Self-drive"}
+                {/* Seats and gearbox describe a car only; a truck or machine
+                    never shows them, and a machine comes "With operator" (PR H6). */}
+                {[
+                  VEHICLE_CATEGORY_LABEL[booking.vehicle.category] ?? booking.vehicle.category,
+                  ...(isCarCategory(booking.vehicle.category)
+                    ? [`${booking.vehicle.seats} seats`, booking.vehicle.transmission === "manual" ? "Manual" : "Auto"]
+                    : []),
+                  crewNote({
+                    category: booking.vehicle.category,
+                    chauffeured: Boolean(booking.driver) || booking.vehicle.chauffeured,
+                  }),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </div>
             </>
           ) : (

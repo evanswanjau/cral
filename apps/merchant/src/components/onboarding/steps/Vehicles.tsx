@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { commissionOn } from "@cral/types";
 import { O } from "../styles.js";
 import { Combobox } from "../Combobox.js";
-import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
+import { MIN_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
 import {
   formatPayload,
@@ -33,6 +33,7 @@ import {
   TextInput,
 } from "../primitives.js";
 import { FLEET_WORDS, type FleetKind } from "../../../lib/onboarding-offer.js";
+import { formWords } from "../vehicle-form-words.js";
 import {
   createVehicleOnServer,
   deleteVehicleOnServer,
@@ -128,7 +129,17 @@ export function Vehicles({
             <div style={{ flex: "1 1 0%", minWidth: "min(100%,160px)" }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
-                {fleetKind(v)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
+                {/* A machine shows no gearbox, and who comes with it reads for its type (PR H6). */}
+                {[
+                  fleetKind(v),
+                  v.year,
+                  v.type === "machinery" ? "" : v.transmission,
+                  v.colour,
+                  v.county,
+                  v.chauffeured ? formWords(v).withCrew : formWords(v).withoutCrew,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -213,7 +224,8 @@ function VehicleForm({
   const truckMissing = v.type === "truck" && (!v.truckType || payloadKgFromTonnes(v.payloadT) === null);
   const seatsMissing = asksSeats(v.type) && seatsFromText(v.seats) === null;
   const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim() && !truckMissing && !seatsMissing && !machineTypeMissing(v.type, v.machineType);
-  const photosOk = v.photos.length === MAX_PHOTOS;
+  const photosOk = v.photos.length >= MIN_PHOTOS;
+  const words = formWords(v);
 
   // Lazily create the vehicle on the server the first moment it's saveable
   // in principle - this is what lets PhotoUpload attach photos to a real
@@ -272,12 +284,9 @@ function VehicleForm({
 
   return (
     <div style={O.wVehicleForm}>
-      <button type="button" onClick={handleCancel} style={O.backLink}>← All vehicles</button>
-      <h1 style={O.h1Step}>{isNew ? "Add a vehicle" : `Edit ${vehicle.registration || "vehicle"}`}</h1>
-      <p style={{ ...O.stepLede, marginBottom: 20 }}>
-        Copy the make, model and registration straight from the logbook, then add at least three
-        photos. Documents come in the next step.
-      </p>
+      <button type="button" onClick={handleCancel} style={O.backLink}>← All {words.noun === "vehicle" ? "vehicles" : `${words.noun}s`}</button>
+      <h1 style={O.h1Step}>{isNew ? `Add a ${words.noun}` : `Edit ${vehicle.registration || words.noun}`}</h1>
+      <p style={{ ...O.stepLede, marginBottom: 20 }}>{words.lede}</p>
 
       <div style={O.formRow}>
         <div style={O.formMain}>
@@ -328,7 +337,7 @@ function VehicleForm({
                   onChange={(make) => patch({ make })}
                   options={MAKE_NAMES}
                   defaultOptions={POPULAR_KENYAN_MAKES}
-                  placeholder="Toyota"
+                  placeholder={words.makePlaceholder}
                   error={showErrors && !v.make.trim()}
                   emptyHint="Not listed - we'll use what you typed."
                 />
@@ -338,7 +347,7 @@ function VehicleForm({
                   value={v.model}
                   onChange={(model) => patch({ model })}
                   options={modelsForMake(v.make)}
-                  placeholder="Land Cruiser Prado"
+                  placeholder={words.modelPlaceholder}
                   error={showErrors && !v.model.trim()}
                   emptyHint="Not listed - we'll use what you typed."
                 />
@@ -356,11 +365,14 @@ function VehicleForm({
               {asksSeats(v.type) && (
                 <SeatsField value={v.seats} onChange={(seats) => patch({ seats })} showErrors={showErrors} />
               )}
-              <FormField label="Transmission">
-                <Select value={v.transmission} onChange={(e) => patch({ transmission: e.target.value as Transmission })}>
-                  {TRANSMISSIONS.map((t) => <option key={t} value={t}>{t}</option>)}
-                </Select>
-              </FormField>
+              {/* Nobody picks a machine by its gearbox, and no screen shows it (PR H6). */}
+              {v.type !== "machinery" && (
+                <FormField label="Transmission">
+                  <Select value={v.transmission} onChange={(e) => patch({ transmission: e.target.value as Transmission })}>
+                    {TRANSMISSIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </Select>
+                </FormField>
+              )}
               <FormField label="Fuel">
                 <Select value={v.fuel} onChange={(e) => patch({ fuel: e.target.value as Fuel })}>
                   {FUELS.map((f) => <option key={f} value={f}>{f}</option>)}
@@ -380,13 +392,13 @@ function VehicleForm({
               <FormField label="Pickup address" required error={showErrors && !v.pickupAddress.trim() ? "Required." : undefined} helper="Road or estate, plus town - hirers see the area only.">
                 <TextInput value={v.pickupAddress} onChange={(e) => patch({ pickupAddress: e.target.value })} placeholder="Westlands, Nairobi" error={showErrors && !v.pickupAddress.trim()} />
               </FormField>
-              <FormField label="Driver" helper="Whether this hire comes with your driver, or the hirer drives it themselves.">
+              <FormField label={words.crewLabel} helper={words.crewHelper}>
                 <Select
                   value={v.chauffeured ? "chauffeured" : "self_drive"}
                   onChange={(e) => patch({ chauffeured: e.target.value === "chauffeured" })}
                 >
-                  <option value="chauffeured">With driver (chauffeured)</option>
-                  <option value="self_drive">Self-drive</option>
+                  <option value="chauffeured">{words.withCrew}</option>
+                  <option value="self_drive">{words.withoutCrew}</option>
                 </Select>
               </FormField>
               <div style={{ gridColumn: "1 / -1" }}>
@@ -411,19 +423,17 @@ function VehicleForm({
               color: photosOk ? "#076945" : "#8A5200",
             }}
           >
-            {v.photos.length}/{MAX_PHOTOS}
+            {photosOk ? `${v.photos.length} PHOTOS` : `${v.photos.length} OF ${MIN_PHOTOS}`}
           </span>
         </div>
         <p style={{ ...O.helper, marginTop: 0, marginBottom: 14 }}>
-          Exactly three - outside, inside, and the back or side. Drag onto a card or click to browse.
+          {words.photoHint}
         </p>
 
-        <PhotoUpload photos={v.photos} onChange={(photos) => patch({ photos })} vehicleId={serverVehicleId} />
+        <PhotoUpload photos={v.photos} onChange={(photos) => patch({ photos })} vehicleId={serverVehicleId} captions={words.captions} />
 
-        {showErrors && !photosOk && <div style={O.fieldError}>Add three photos before saving.</div>}
-        <p style={{ ...O.helper, marginTop: 6 }}>
-          Daylight, no number plate blur, whole vehicle in frame. JPG, PNG or WEBP, up to 2MB each.
-        </p>
+        {showErrors && !photosOk && <div style={O.fieldError}>Add at least three photos before saving.</div>}
+        <p style={{ ...O.helper, marginTop: 6 }}>{words.photoTips}</p>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>

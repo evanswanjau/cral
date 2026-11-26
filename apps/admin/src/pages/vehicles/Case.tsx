@@ -343,7 +343,12 @@ export function Case(): JSX.Element {
             </div>
             <h1 style={RS.h1}>{c.title}</h1>
             <div style={RS.subline}>
-              {c.type} · {c.year} · {c.transmission} · {c.seats} seats · {c.county ?? "—"}
+              {/* A truck or machine is never described by seats or gearbox (PR H6). */}
+              {(c.type === "truck" || c.type === "machinery"
+                ? [c.type, c.year]
+                : [c.type, c.year, c.transmission, `${c.seats} seats`]
+              ).join(" · ")}{" "}
+              · {c.county ?? "—"}
               {c.pickup_address ? ` · ${c.pickup_address}` : ""}
             </div>
           </div>
