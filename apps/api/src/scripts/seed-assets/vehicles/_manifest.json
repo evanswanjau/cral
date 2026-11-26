@@ -124,5 +124,1220 @@
     "w": 1400,
     "h": 1050,
     "lic": "CC BY-SA 4.0"
+  },
+  "axio/1.jpg": {
+    "title": "Toyota Corolla Axio (E160) front.JPG",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Axio_(E160)_front.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 134310
+  },
+  "axio/2.jpg": {
+    "title": "Toyota Corolla Axio Hybrid '15 (1).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Axio_Hybrid_%2715_(1).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 146300
+  },
+  "axio/3.jpg": {
+    "title": "Toyota Corolla Axio Hybrid '15 (2).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Axio_Hybrid_%2715_(2).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 143248
+  },
+  "fielder/1.jpg": {
+    "title": "Toyota Corolla Fielder EX '22 (1).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Fielder_EX_%2722_(1).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 136536
+  },
+  "fielder/2.jpg": {
+    "title": "Toyota Corolla Fielder EX '22 (2).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Corolla_Fielder_EX_%2722_(2).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 141064
+  },
+  "fielder/3.jpg": {
+    "title": "2015-2017 Toyota Corolla Fielder Hybrid G Aerotourer.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2015-2017_Toyota_Corolla_Fielder_Hybrid_G_Aerotourer.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 148265
+  },
+  "vitz/1.jpg": {
+    "title": "Toyota Vitz U '11 (1).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Vitz_U_%2711_(1).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 153476
+  },
+  "vitz/2.jpg": {
+    "title": "Toyota Vitz U '11 (2).jpg",
+    "author": "Oq10pass",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Vitz_U_%2711_(2).jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 145420
+  },
+  "vitz/3.jpg": {
+    "title": "Toyota Vitz KSP130 1.0F.jpg",
+    "author": "Ypy31",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Vitz_KSP130_1.0F.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 151601
+  },
+  "demio/1.jpg": {
+    "title": "2016-2019 Mazda Demio XD Touring AWD.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2016-2019_Mazda_Demio_XD_Touring_AWD.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 123636
+  },
+  "demio/2.jpg": {
+    "title": "2016-2019 Mazda Demio XD Touring AWD rear.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2016-2019_Mazda_Demio_XD_Touring_AWD_rear.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 128143
+  },
+  "demio/3.jpg": {
+    "title": "2015-2019 Mazda Demio S.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2015-2019_Mazda_Demio_S.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 150678
+  },
+  "note/1.jpg": {
+    "title": "Nissan NOTE (E12) front.JPG",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Nissan_NOTE_(E12)_front.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 153508
+  },
+  "note/2.jpg": {
+    "title": "Nissan NOTE (E12) rear.JPG",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Nissan_NOTE_(E12)_rear.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 150820
+  },
+  "note/3.jpg": {
+    "title": "Nissan Note E12.JPG",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Nissan_Note_E12.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 148651
+  },
+  "fit/1.jpg": {
+    "title": "HONDA FIT (GK,GH,GP) China (14).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:HONDA_FIT_(GK,GH,GP)_China_(14).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 153456
+  },
+  "fit/2.jpg": {
+    "title": "HONDA FIT (GK,GH,GP) China (29).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:HONDA_FIT_(GK,GH,GP)_China_(29).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 142780
+  },
+  "fit/3.jpg": {
+    "title": "HONDA FIT (GK,GH,GP) China (28).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:HONDA_FIT_(GK,GH,GP)_China_(28).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 151202
+  },
+  "mazda3/1.jpg": {
+    "title": "Mazda3 (BN) 1X7A7262.jpg",
+    "author": "Alexander-93",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mazda3_(BN)_1X7A7262.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 146519
+  },
+  "mazda3/2.jpg": {
+    "title": "Mazda3 (BN) 1X7A7263.jpg",
+    "author": "Alexander-93",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mazda3_(BN)_1X7A7263.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 135252
+  },
+  "mazda3/3.jpg": {
+    "title": "MAZDA3 HATCHBACK (BM) China (8).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:MAZDA3_HATCHBACK_(BM)_China_(8).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 146887
+  },
+  "rav4/1.jpg": {
+    "title": "2021 Toyota RAV4 PHV.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2021_Toyota_RAV4_PHV.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 131297
+  },
+  "rav4/2.jpg": {
+    "title": "Toyota RAV4 Hybrid (XA50) DSC 2709.jpg",
+    "author": "Alexander Migl",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_RAV4_Hybrid_(XA50)_DSC_2709.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144539
+  },
+  "rav4/3.jpg": {
+    "title": "TOYOTA RAV4 PHEV RAV4 PRIME (XA50) China (11).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:TOYOTA_RAV4_PHEV_RAV4_PRIME_(XA50)_China_(11).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 146426
+  },
+  "xtrail/1.jpg": {
+    "title": "2017-2020 Nissan X-Trail 20X.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2017-2020_Nissan_X-Trail_20X.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 144823
+  },
+  "xtrail/2.jpg": {
+    "title": "A Nissan X-Trail (T32) in Taiwan.png",
+    "author": "Cars in Taiwan",
+    "source_url": "https://commons.wikimedia.org/wiki/File:A_Nissan_X-Trail_(T32)_in_Taiwan.png",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 92399
+  },
+  "xtrail/3.jpg": {
+    "title": "NISSAN X-TRAIL (T32) China (37).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:NISSAN_X-TRAIL_(T32)_China_(37).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 142166
+  },
+  "forester/1.jpg": {
+    "title": "SUBARU FORESTER (SK) China (10).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:SUBARU_FORESTER_(SK)_China_(10).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 146890
+  },
+  "forester/2.jpg": {
+    "title": "SUBARU FORESTER (SK) China (17).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:SUBARU_FORESTER_(SK)_China_(17).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144085
+  },
+  "forester/3.jpg": {
+    "title": "SUBARU FORESTER (SK) China (18).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:SUBARU_FORESTER_(SK)_China_(18).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 151242
+  },
+  "prado/1.jpg": {
+    "title": "Toyota Land Cruiser Prado, Baku (P1090223).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Land_Cruiser_Prado,_Baku_(P1090223).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 151307
+  },
+  "prado/2.jpg": {
+    "title": "TOYOTA LAND CRUISER PRADO (J150) China (16).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:TOYOTA_LAND_CRUISER_PRADO_(J150)_China_(16).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 133796
+  },
+  "prado/3.jpg": {
+    "title": "TOYOTA LAND CRUISER PRADO (J150) China (37).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:TOYOTA_LAND_CRUISER_PRADO_(J150)_China_(37).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 142546
+  },
+  "land-cruiser-70/1.jpg": {
+    "title": "2023 Toyota Land Cruiser 70 front left.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2023_Toyota_Land_Cruiser_70_front_left.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 126480
+  },
+  "land-cruiser-70/2.jpg": {
+    "title": "Toyota Land Cruiser 70 003 (cropped).JPG",
+    "author": "Tennen-Gas",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Land_Cruiser_70_003_(cropped).JPG",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+    "plates_blurred": 1,
+    "bytes": 150450
+  },
+  "land-cruiser-70/3.jpg": {
+    "title": "Toyota Land Cruiser 70.jpg",
+    "author": "Rutger van der Maar",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Land_Cruiser_70.jpg",
+    "licence": "CC BY 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by/2.0",
+    "plates_blurred": 1,
+    "bytes": 148266
+  },
+  "land-cruiser-200/1.jpg": {
+    "title": "2018 Toyota Land Cruiser 200 Executive Lounge white front.jpg",
+    "author": "Throwawayacc222",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2018_Toyota_Land_Cruiser_200_Executive_Lounge_white_front.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 126925
+  },
+  "land-cruiser-200/2.jpg": {
+    "title": "2018 Toyota Land Cruiser 200 Executive Lounge white side.jpg",
+    "author": "Throwawayacc222",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2018_Toyota_Land_Cruiser_200_Executive_Lounge_white_side.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 153088
+  },
+  "land-cruiser-200/3.jpg": {
+    "title": "TOYOTA LAND CRUISER 200 China (2).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:TOYOTA_LAND_CRUISER_200_China_(2).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 145444
+  },
+  "pajero-sport/1.jpg": {
+    "title": "Mitsubishi Pajero Sport (3rd generation) 1X7A0409.jpg",
+    "author": "Alexander Migl",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mitsubishi_Pajero_Sport_(3rd_generation)_1X7A0409.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 150105
+  },
+  "pajero-sport/2.jpg": {
+    "title": "Mitsubishi Pajero Sport (3rd generation) 1X7A0410.jpg",
+    "author": "Alexander Migl",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mitsubishi_Pajero_Sport_(3rd_generation)_1X7A0410.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 150712
+  },
+  "pajero-sport/3.jpg": {
+    "title": "Mitsubishi Pajero Sport II China 2015-04-10.jpg",
+    "author": "Navigator84",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mitsubishi_Pajero_Sport_II_China_2015-04-10.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 125007
+  },
+  "dmax/1.jpg": {
+    "title": "2024 Isuzu D-Max (third generation) GIMS 2024 1X7A2056.jpg",
+    "author": "Alexander-93",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2024_Isuzu_D-Max_(third_generation)_GIMS_2024_1X7A2056.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 142489
+  },
+  "dmax/2.jpg": {
+    "title": "Isuzu D-Max, GIMS 2019, Le Grand-Saconnex (GIMS1313).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_D-Max,_GIMS_2019,_Le_Grand-Saconnex_(GIMS1313).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 149319
+  },
+  "dmax/3.jpg": {
+    "title": "GIMS 2024, Le Grand-Saconnex (GIMS0114).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:GIMS_2024,_Le_Grand-Saconnex_(GIMS0114).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 150252
+  },
+  "hilux/1.jpg": {
+    "title": "2021 Toyota Hilux Revo Prerunner Double-Cab 2.4 Entry.jpg",
+    "author": "Chanokchon",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2021_Toyota_Hilux_Revo_Prerunner_Double-Cab_2.4_Entry.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 141954
+  },
+  "hilux/2.jpg": {
+    "title": "2021 Toyota Hilux Revo Prerunner Double-Cab 2.4 Mid.jpg",
+    "author": "Chanokchon",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2021_Toyota_Hilux_Revo_Prerunner_Double-Cab_2.4_Mid.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 139702
+  },
+  "hilux/3.jpg": {
+    "title": "2020 Toyota Hilux Revo Prerunner Double-Cab 2.4 Mid (Rear).jpg",
+    "author": "Chanokchon",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2020_Toyota_Hilux_Revo_Prerunner_Double-Cab_2.4_Mid_(Rear).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 136457
+  },
+  "cx5/1.jpg": {
+    "title": "2026 Mazda CX-5 e-SKYACTIV G 2.5 L.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2026_Mazda_CX-5_e-SKYACTIV_G_2.5_L.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 125452
+  },
+  "cx5/2.jpg": {
+    "title": "Mazda CX-5 - Mondial de l'Automobile de Paris 2012 - 001.jpg",
+    "author": "Thesupermat",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mazda_CX-5_-_Mondial_de_l%27Automobile_de_Paris_2012_-_001.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 0,
+    "bytes": 129077
+  },
+  "cx5/3.jpg": {
+    "title": "Mazda CX-5 - Mondial de l'Automobile de Paris 2012 - 007.jpg",
+    "author": "Thesupermat",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mazda_CX-5_-_Mondial_de_l%27Automobile_de_Paris_2012_-_007.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 0,
+    "bytes": 146405
+  },
+  "noah/1.jpg": {
+    "title": "2022 Toyota Noah Hybrid S-G.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2022_Toyota_Noah_Hybrid_S-G.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 144321
+  },
+  "noah/2.jpg": {
+    "title": "Toyota Noah TRD 2019.jpg",
+    "author": "Jared Cabot",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Noah_TRD_2019.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 140801
+  },
+  "noah/3.jpg": {
+    "title": "TOYOTA NOAH R80 MACAU (2).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:TOYOTA_NOAH_R80_MACAU_(2).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 151587
+  },
+  "voxy/1.jpg": {
+    "title": "2020-2021 Toyota Voxy ZS Kirameki II.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2020-2021_Toyota_Voxy_ZS_Kirameki_II.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 129780
+  },
+  "voxy/2.jpg": {
+    "title": "2017-2019 Toyota Voxy ZS Kirameki.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2017-2019_Toyota_Voxy_ZS_Kirameki.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 147132
+  },
+  "voxy/3.jpg": {
+    "title": "2017-2019 Toyota Voxy ZS Kirameki rear.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2017-2019_Toyota_Voxy_ZS_Kirameki_rear.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 133963
+  },
+  "hiace/1.jpg": {
+    "title": "Toyota HiAce (H300) (parked) in Wyndham OPI Hotel Palembang - Rambutan, Banyuasin, SS.jpg",
+    "author": "Firzafp",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_HiAce_(H300)_(parked)_in_Wyndham_OPI_Hotel_Palembang_-_Rambutan,_Banyuasin,_SS.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 145784
+  },
+  "hiace/2.jpg": {
+    "title": "Toyota HiAce H100 facelift Sanming 01 2022-06-30.jpg",
+    "author": "JamesYoung8167",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_HiAce_H100_facelift_Sanming_01_2022-06-30.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 133221
+  },
+  "hiace/3.jpg": {
+    "title": "2003 Toyota HiAce Commuter Van.jpg",
+    "author": "Coolalabright",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2003_Toyota_HiAce_Commuter_Van.jpg",
+    "licence": "CC BY 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by/4.0",
+    "plates_blurred": 1,
+    "bytes": 148609
+  },
+  "caravan/1.jpg": {
+    "title": "Nissan NV350 Caravan VR2E26.jpg",
+    "author": "Ypy31",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Nissan_NV350_Caravan_VR2E26.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 153532
+  },
+  "caravan/2.jpg": {
+    "title": "2012-2017 Nissan NV350 Caravan.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2012-2017_Nissan_NV350_Caravan.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 140245
+  },
+  "caravan/3.jpg": {
+    "title": "Nissan NV350 Caravan VR2E26 rear.jpg",
+    "author": "Ypy31",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Nissan_NV350_Caravan_VR2E26_rear.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 146019
+  },
+  "isuzu-nkr/1.jpg": {
+    "title": "Isuzu Elf Mio.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_Elf_Mio.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 146309
+  },
+  "isuzu-nkr/2.jpg": {
+    "title": "Isuzu Elf Mio rear.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_Elf_Mio_rear.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 140310
+  },
+  "isuzu-nkr/3.jpg": {
+    "title": "ISUZU ELF EC China(12).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(12).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144827
+  },
+  "fuso-canter/1.jpg": {
+    "title": "2020 Mitsubishi Fuso Canter Standard-Cab.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2020_Mitsubishi_Fuso_Canter_Standard-Cab.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 143131
+  },
+  "fuso-canter/2.jpg": {
+    "title": "Fuso Canter 3C15D IAA 2022 (DSC03808).jpg",
+    "author": "MarcelX42",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Fuso_Canter_3C15D_IAA_2022_(DSC03808).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 149250
+  },
+  "fuso-canter/3.jpg": {
+    "title": "Fuso eCanter 4S15e IAA 2022 (DSC03814).jpg",
+    "author": "MarcelX42",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Fuso_eCanter_4S15e_IAA_2022_(DSC03814).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 151693
+  },
+  "hino-300/1.jpg": {
+    "title": "Hino 300 Dutro (New from Hino Motors Manufacturing Indonesia) (2nd photos).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hino_300_Dutro_(New_from_Hino_Motors_Manufacturing_Indonesia)_(2nd_photos).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 142856
+  },
+  "hino-300/2.jpg": {
+    "title": "Hino 300 Dutro (New from Hino Motors Manufacturing Indonesia).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hino_300_Dutro_(New_from_Hino_Motors_Manufacturing_Indonesia).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 139508
+  },
+  "hino-300/3.jpg": {
+    "title": "Hino 300 of Carplus Auto Leasing 20110329.jpg",
+    "author": "Solomon203",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hino_300_of_Carplus_Auto_Leasing_20110329.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 1,
+    "bytes": 149794
+  },
+  "isuzu-frr/1.jpg": {
+    "title": "ISUZU ELF EC China(2).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(2).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 150241
+  },
+  "isuzu-frr/2.jpg": {
+    "title": "ISUZU ELF EC China(8).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(8).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144756
+  },
+  "isuzu-frr/3.jpg": {
+    "title": "Isuzu Elf Mio EV.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_Elf_Mio_EV.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 150726
+  },
+  "isuzu-fvz-tipper/1.jpg": {
+    "title": "Isuzu giga Dump Truck, Blue.jpg",
+    "author": "Mj-bird",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_giga_Dump_Truck,_Blue.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 147255
+  },
+  "isuzu-fvz-tipper/2.jpg": {
+    "title": "ISUZU Giga, Dump Truck, Green.jpg",
+    "author": "Mj-bird",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_Giga,_Dump_Truck,_Green.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 1,
+    "bytes": 143765
+  },
+  "isuzu-fvz-tipper/3.jpg": {
+    "title": "ISUZU Giga, Dump Truck, Yellow.jpg",
+    "author": "Mj-bird",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_Giga,_Dump_Truck,_Yellow.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 1,
+    "bytes": 132735
+  },
+  "hino-500/1.jpg": {
+    "title": "Hino 500 Ranger FG235JJ (T 9020 DM).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hino_500_Ranger_FG235JJ_(T_9020_DM).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 147219
+  },
+  "hino-500/2.jpg": {
+    "title": "1988 Hino Ranger FD166BA.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:1988_Hino_Ranger_FD166BA.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 151550
+  },
+  "hino-500/3.jpg": {
+    "title": "Hino 500 Ranger (New from Hino Motors Manufacturing Indonesia).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Hino_500_Ranger_(New_from_Hino_Motors_Manufacturing_Indonesia).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 141596
+  },
+  "fuso-fighter/1.jpg": {
+    "title": "Mitsubishi Fuso Fighter (BE 8619 SQ).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mitsubishi_Fuso_Fighter_(BE_8619_SQ).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 2,
+    "bytes": 150917
+  },
+  "fuso-fighter/2.jpg": {
+    "title": "Mitsubishi Fuso Fighter FM (B 9529 SYK).jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mitsubishi_Fuso_Fighter_FM_(B_9529_SYK).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 138407
+  },
+  "fuso-fighter/3.jpg": {
+    "title": "2nd generation Mitsubishi-Fuso FIGHTER front.JPG",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2nd_generation_Mitsubishi-Fuso_FIGHTER_front.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 153501
+  },
+  "actros/1.jpg": {
+    "title": "2000 Mercedes-Benz Actros 1843 LS, IAA 2026, Hanover (20260914-P1097544).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2000_Mercedes-Benz_Actros_1843_LS,_IAA_2026,_Hanover_(20260914-P1097544).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 148189
+  },
+  "actros/2.jpg": {
+    "title": "Mercedes-Benz eActros 600 autoMOBIL Tübingen 2025 DSC 2789.jpg",
+    "author": "Alexander Migl",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Mercedes-Benz_eActros_600_autoMOBIL_T%C3%BCbingen_2025_DSC_2789.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144633
+  },
+  "actros/3.jpg": {
+    "title": "Bumi Prima Konstruksi Mercedes-Benz Actros 3339.jpg",
+    "author": "Sulthan Naufal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Bumi_Prima_Konstruksi_Mercedes-Benz_Actros_3339.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144432
+  },
+  "scania/1.jpg": {
+    "title": "Scania, Nufam 2025, Rheinstetten (20250927-P1051148).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Scania,_Nufam_2025,_Rheinstetten_(20250927-P1051148).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 147783
+  },
+  "scania/2.jpg": {
+    "title": "Scania, Nufam 2025, Rheinstetten (20250927-P1051158).jpg",
+    "author": "Matti Blume",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Scania,_Nufam_2025,_Rheinstetten_(20250927-P1051158).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 142723
+  },
+  "scania/3.jpg": {
+    "title": "Scania G400 Johan van der Zand.jpg",
+    "author": "Reise Reise",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Scania_G400_Johan_van_der_Zand.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 148644
+  },
+  "tata/1.jpg": {
+    "title": "Tata1109Image2471617.jpg",
+    "author": "Premnath Kudva",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tata1109Image2471617.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+    "plates_blurred": 1,
+    "bytes": 129408
+  },
+  "tata/2.jpg": {
+    "title": "Tata909Image242997.jpg",
+    "author": "Premnath Kudva",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tata909Image242997.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "http://creativecommons.org/licenses/by-sa/3.0/",
+    "plates_blurred": 1,
+    "bytes": 149552
+  },
+  "tata/3.jpg": {
+    "title": "Tata LPT 1615 truck Bangladesh (24587122563).jpg",
+    "author": "Shadman Samee from Dhaka, Bangladesh",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tata_LPT_1615_truck_Bangladesh_(24587122563).jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 1,
+    "bytes": 148819
+  },
+  "reefer/1.jpg": {
+    "title": "Isuzu N-Series. Refrigerated box rigid truck. Spielvogel 2013.jpg",
+    "author": "For a gallery of some more of my uploaded pictures see: here.",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_N-Series._Refrigerated_box_rigid_truck._Spielvogel_2013.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 1,
+    "bytes": 130440
+  },
+  "reefer/2.jpg": {
+    "title": "2024 Isuzu Elf refrigerated truck, front right.jpg",
+    "author": "Mr.choppers",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2024_Isuzu_Elf_refrigerated_truck,_front_right.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 1,
+    "bytes": 151701
+  },
+  "reefer/3.jpg": {
+    "title": "ISUZU ELF EC China(7).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(7).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 150229
+  },
+  "water-bowser/1.jpg": {
+    "title": "Isuzu Forward Juston Water Tank.jpg",
+    "author": "Ethan Llamas",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Isuzu_Forward_Juston_Water_Tank.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 149443
+  },
+  "water-bowser/2.jpg": {
+    "title": "ISUZU ELF EC China(5).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(5).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 144963
+  },
+  "water-bowser/3.jpg": {
+    "title": "ISUZU ELF EC China(4).jpg",
+    "author": "Dinkun Chen",
+    "source_url": "https://commons.wikimedia.org/wiki/File:ISUZU_ELF_EC_China(4).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 149543
+  },
+  "premio/1.jpg": {
+    "title": "Toyota Premio T261 2.0G Superior Package.jpg",
+    "author": "TTTNIS",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Premio_T261_2.0G_Superior_Package.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 150340
+  },
+  "premio/2.jpg": {
+    "title": "2008 Toyota Premio (T260) 1.5F sedan (2016-01-07) 01.jpg",
+    "author": "EurovisionNim",
+    "source_url": "https://commons.wikimedia.org/wiki/File:2008_Toyota_Premio_(T260)_1.5F_sedan_(2016-01-07)_01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 143179
+  },
+  "premio/3.jpg": {
+    "title": "Toyota PREMIO 1.5F EX Package (DBA-NZT260-AEXEK) rear.jpg",
+    "author": "Tokumeigakarinoaoshima",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_PREMIO_1.5F_EX_Package_(DBA-NZT260-AEXEK)_rear.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 151474
+  },
+  "low-loader/1.jpg": {
+    "title": "A low loader collecting a mechanical digger on Mead Park, Bickington - geograph.org.uk - 8333289.jpg",
+    "author": "Roger A Smith",
+    "source_url": "https://commons.wikimedia.org/wiki/File:A_low_loader_collecting_a_mechanical_digger_on_Mead_Park,_Bickington_-_geograph.org.uk_-_8333289.jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 1,
+    "bytes": 151851
+  },
+  "low-loader/2.jpg": {
+    "title": "SCANIA XT P500 Series Truck (HILTOP) 0325.jpg",
+    "author": "33Loading",
+    "source_url": "https://commons.wikimedia.org/wiki/File:SCANIA_XT_P500_Series_Truck_(HILTOP)_0325.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 138008
+  },
+  "low-loader/3.jpg": {
+    "title": "Truck trailer, transport of excavator (1).jpg",
+    "author": "Cjp24",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Truck_trailer,_transport_of_excavator_(1).jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 146460
+  },
+  "crane-truck/1.jpg": {
+    "title": "Балхаш, МАЗ-кран на Жезказганской.jpg",
+    "author": "Nikolai Bulykin",
+    "source_url": "https://commons.wikimedia.org/wiki/File:%D0%91%D0%B0%D0%BB%D1%85%D0%B0%D1%88,_%D0%9C%D0%90%D0%97-%D0%BA%D1%80%D0%B0%D0%BD_%D0%BD%D0%B0_%D0%96%D0%B5%D0%B7%D0%BA%D0%B0%D0%B7%D0%B3%D0%B0%D0%BD%D1%81%D0%BA%D0%BE%D0%B9.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 143100
+  },
+  "crane-truck/2.jpg": {
+    "title": "MAZ crane truck in Botevgrad, Bulgaria 01.jpg",
+    "author": "Dimitǎr Boevski",
+    "source_url": "https://commons.wikimedia.org/wiki/File:MAZ_crane_truck_in_Botevgrad,_Bulgaria_01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 153214
+  },
+  "crane-truck/3.jpg": {
+    "title": "MAZ crane truck in Botevgrad, Bulgaria 02.jpg",
+    "author": "Dimitǎr Boevski",
+    "source_url": "https://commons.wikimedia.org/wiki/File:MAZ_crane_truck_in_Botevgrad,_Bulgaria_02.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 145451
+  },
+  "cat-320/1.jpg": {
+    "title": "Excavator side.jpg",
+    "author": "Wikideas1",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Excavator_side.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 149744
+  },
+  "cat-320/2.jpg": {
+    "title": "Excavator, Caterpillar Inc., 2021 Changsha International Construction Equipment Exhibition, Picture4.jpg",
+    "author": "Huangdan2060",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Excavator,_Caterpillar_Inc.,_2021_Changsha_International_Construction_Equipment_Exhibition,_Picture4.jpg",
+    "licence": "CC BY 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by/3.0",
+    "plates_blurred": 0,
+    "bytes": 142242
+  },
+  "cat-320/3.jpg": {
+    "title": "Excavator, Morrison Street, Edinburgh - geograph.org.uk - 2251387.jpg",
+    "author": "Graeme Yuill",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Excavator,_Morrison_Street,_Edinburgh_-_geograph.org.uk_-_2251387.jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 0,
+    "bytes": 145039
+  },
+  "komatsu-pc200/1.jpg": {
+    "title": "Komatsu PC200-8 Hydraulic Excavator -Rakhu Bhagawati,Myagdi-0462.jpg",
+    "author": "Bijay Chaurasia",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Komatsu_PC200-8_Hydraulic_Excavator_-Rakhu_Bhagawati,Myagdi-0462.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 131053
+  },
+  "komatsu-pc200/2.jpg": {
+    "title": "Komatsu PC200 excavator (34970228724).jpg",
+    "author": "Bob Adams from Amanzimtoti, South Africa",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Komatsu_PC200_excavator_(34970228724).jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 0,
+    "bytes": 149513
+  },
+  "komatsu-pc200/3.jpg": {
+    "title": "Komatsu PC200.jpg",
+    "author": "FBenjr123",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Komatsu_PC200.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 153445
+  },
+  "jcb-3cx/1.jpg": {
+    "title": "JCB 3CX Eco - Arlington, MA.jpg",
+    "author": "Daderot",
+    "source_url": "https://commons.wikimedia.org/wiki/File:JCB_3CX_Eco_-_Arlington,_MA.jpg",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 135491
+  },
+  "jcb-3cx/2.jpg": {
+    "title": "JCB 3CX - Gilo Jerusalem 2022-06-05 IZE-003.jpg",
+    "author": "Dr. Zachi Evenor",
+    "source_url": "https://commons.wikimedia.org/wiki/File:JCB_3CX_-_Gilo_Jerusalem_2022-06-05_IZE-003.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 148938
+  },
+  "jcb-3cx/3.jpg": {
+    "title": "JCB 3CX ECO backhoe loader at VDNKh, Moscow.jpg",
+    "author": "Dmitry Ivanov.",
+    "source_url": "https://commons.wikimedia.org/wiki/File:JCB_3CX_ECO_backhoe_loader_at_VDNKh,_Moscow.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 152751
+  },
+  "cat-950/1.jpg": {
+    "title": "CATERPILLAR 950 GC Wheel Loader 01.jpg",
+    "author": "Oto Zapletal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:CATERPILLAR_950_GC_Wheel_Loader_01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 122164
+  },
+  "cat-950/2.jpg": {
+    "title": "CATERPILLAR 950 GC Wheel Loader 02.jpg",
+    "author": "Oto Zapletal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:CATERPILLAR_950_GC_Wheel_Loader_02.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 118704
+  },
+  "cat-950/3.jpg": {
+    "title": "CATERPILLAR 950 GC Wheel Loader 03.jpg",
+    "author": "Oto Zapletal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:CATERPILLAR_950_GC_Wheel_Loader_03.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 136805
+  },
+  "roller/1.jpg": {
+    "title": "Road roller BOMAG BW 100 AD in Botevgrad, Bulgaria 01.jpg",
+    "author": "Dimitǎr Boevski",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Road_roller_BOMAG_BW_100_AD_in_Botevgrad,_Bulgaria_01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 137870
+  },
+  "roller/2.jpg": {
+    "title": "Bomag Tandem Roller 03.JPG",
+    "author": "Cherubino",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Bomag_Tandem_Roller_03.JPG",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 153079
+  },
+  "roller/3.jpg": {
+    "title": "Bomag Road Roller BS 180.jpg",
+    "author": "Cirdan",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Bomag_Road_Roller_BS_180.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 0,
+    "bytes": 151637
+  },
+  "cat-d6/1.jpg": {
+    "title": "Caterpillar D6T Mississippi River project-01.jpg",
+    "author": "User:Marcus Qwertyus",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Caterpillar_D6T_Mississippi_River_project-01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 147101
+  },
+  "cat-d6/2.jpg": {
+    "title": "Châtignac 16 Travaux LGV Bulldozer Caterpillar 2013.jpg",
+    "author": "JLPC",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Ch%C3%A2tignac_16_Travaux_LGV_Bulldozer_Caterpillar_2013.jpg",
+    "licence": "CC BY-SA 3.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/3.0",
+    "plates_blurred": 0,
+    "bytes": 152140
+  },
+  "cat-d6/3.jpg": {
+    "title": "Caterpillar D6K2 XL bulldozer on a job site.jpg",
+    "author": "Grendelkhan",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Caterpillar_D6K2_XL_bulldozer_on_a_job_site.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 152320
+  },
+  "forklift/1.jpg": {
+    "title": "Toyota Core IC Pneumatic Forklift Las Vegas 2026.jpg",
+    "author": "TaurusEmerald",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Core_IC_Pneumatic_Forklift_Las_Vegas_2026.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 149616
+  },
+  "forklift/2.jpg": {
+    "title": "Toyota forklift vehicle.jpg",
+    "author": "Leon Brooks",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_forklift_vehicle.jpg",
+    "licence": "Public domain",
+    "licence_url": "",
+    "plates_blurred": 0,
+    "bytes": 128796
+  },
+  "forklift/3.jpg": {
+    "title": "Toyota Forklift in Trondheim Harbour.jpg",
+    "author": "Trondheim Havn from Trondheim, Norway",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Toyota_Forklift_in_Trondheim_Harbour.jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 0,
+    "bytes": 123743
+  },
+  "tadano/1.jpg": {
+    "title": "Tadano crawler cranes 05.jpg",
+    "author": "LubGua987",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tadano_crawler_cranes_05.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 143641
+  },
+  "tadano/2.jpg": {
+    "title": "Tadano cranes Philippines 01.jpg",
+    "author": "SwarmCheng",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tadano_cranes_Philippines_01.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 0,
+    "bytes": 147724
+  },
+  "tadano/3.jpg": {
+    "title": "Tadano cranes Philippines 01q.jpg",
+    "author": "SwarmCheng",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Tadano_cranes_Philippines_01q.jpg",
+    "licence": "CC BY-SA 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/4.0",
+    "plates_blurred": 1,
+    "bytes": 152180
+  },
+  "cat-140/1.jpg": {
+    "title": "Caterpillar 140H grader,jpg.jpg",
+    "author": "Greg Goebel from Loveland CO, USA",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Caterpillar_140H_grader,jpg.jpg",
+    "licence": "CC BY-SA 2.0",
+    "licence_url": "https://creativecommons.org/licenses/by-sa/2.0",
+    "plates_blurred": 0,
+    "bytes": 152093
+  },
+  "cat-140/2.jpg": {
+    "title": "Caterpillar VHP-185 140H slightly other config p2.JPG",
+    "author": "AlfvanBeem",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Caterpillar_VHP-185_140H_slightly_other_config_p2.JPG",
+    "licence": "CC0",
+    "licence_url": "http://creativecommons.org/publicdomain/zero/1.0/deed.en",
+    "plates_blurred": 0,
+    "bytes": 143648
+  },
+  "cat-140/3.jpg": {
+    "title": "Caterpillar 140H grader - 01.jpg",
+    "author": "Oto Zapletal",
+    "source_url": "https://commons.wikimedia.org/wiki/File:Caterpillar_140H_grader_-_01.jpg",
+    "licence": "CC BY 4.0",
+    "licence_url": "https://creativecommons.org/licenses/by/4.0",
+    "plates_blurred": 0,
+    "bytes": 152552
   }
 }

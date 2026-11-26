@@ -508,6 +508,18 @@ machines; the rest of the listing pages stay H3.
 
 ### H2 - `seed:hire` and its photos, run locally
 
+**Built 2026-11-26** on `feature/hire-seed`. 135 Wikimedia photos (45
+models x 3; 41 CC0/PD, the rest CC BY/BY-SA, credited in `CREDITS.md`),
+plates blurred, each <= 150 KB. Local run: 60/25/15, 11 counties, 12
+merchants, 300 photos; second run adds 0; `--clear` leaves 0. Changes
+from Part 3: no seeded truck is a Tata tipper (the free photos show a
+dropside, so it is listed as a flatbed); the crane truck is a MAZ, the
+low loader a Scania, to match their photos; `--clear --with-bookings`
+deletes seeded bookings (cancelling would not free the vehicle rows) and
+refuses any on a payout run. Seeded vehicles get their own `created_at`,
+because the catalog's newest-first cursor drops rows that share a
+timestamp below the millisecond (see "Not in this plan"). Not run on dev.
+
 - **Goal:** 100 live vehicles with 3 real photos each, by the rules in
   Part 3; run on the laptop and report counts. Prints the dev commands
   and waits.
@@ -610,6 +622,17 @@ machines; the rest of the listing pages stay H3.
   product review, still standing.
 - Hourly machinery stays off until a time-of-day picker exists
   (`bookings-payouts.md`).
+- Catalog paging (found in H2): `listCatalog`
+  (`apps/api/src/modules/catalog/service.ts`) builds the newest-first
+  cursor from `created_at.toISOString()` (milliseconds), but Postgres
+  keeps microseconds, so rows sharing a millisecond with the page's last
+  row are skipped and `has_more` turns false early. Before the H2 fix 100
+  rows inserted in one transaction listed as 48. Fix the cursor (keep
+  microseconds, or compare `date_trunc('milliseconds', ...)`) before H3
+  relies on paging.
+- Photo credits on screen: CC BY / BY-SA photos need the author shown
+  where the photo appears; `CREDITS.md` holds them but no screen links it
+  yet (Part 3 asked for a "Photo credits" link on seeded listings).
 
 ---
 

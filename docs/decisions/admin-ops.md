@@ -169,6 +169,20 @@ screens `pages/vehicles/{Queue,Case}.tsx`.
 - `npm run seed:review-fleet -w apps/api` makes a throwaway merchant with
   submitted vehicles (dev only; doc bytes aren't stored, so "Open scan"
   shows the "file no longer stored" state).
+- `npm run seed:hire -w apps/api` (PR H2, 2026-11-26) fills `cral_dev`
+  with 100 live hire listings (60 cars, 25 trucks, 15 machines) from 12
+  approved merchants in 11 counties, 3 free-licence photos each
+  (`seed-assets/vehicles/<model>/`, credits in `CREDITS.md`), plus 2
+  renters with ID and licence accepted. Refuses production, any database
+  but `cral_dev`/`cral_test`, `/srv/cral/` and a non-local host without
+  `--server`. Accounts are `@cral-seed.test` with no phone; plates `KZZ
+  001S`-`KZZ 100S`; files under `seed-hire/`. Re-runnable; `--dry-run`
+  prints counts and the storage target; `--clear` removes exactly what it
+  made and refuses while seeded bookings exist (`--clear --with-bookings`
+  deletes them, never one on a payout run). Seeded documents are one-page
+  PDFs reading "not a real document", marked accepted so listings go live;
+  no "sample" label (owner's decision 5), so production refusal is the
+  safeguard. A `--server` run needs `SEED_HIRE_PASSWORD`.
 
 ## Merchants lens
 
