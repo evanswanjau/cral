@@ -26,7 +26,7 @@ const FLOWS: Flow[] = [
   {
     key: "hire",
     title: "Hire a car or machinery",
-    href: "/cars",
+    href: "/hire?type=cars",
     cta: "Hire a car",
     steps: [
       "Search a county and your dates. You only see listings that are free on those days, from owners CRAL has checked.",
@@ -38,7 +38,7 @@ const FLOWS: Flow[] = [
   {
     key: "trucks",
     title: "Hire a truck",
-    href: "/trucks",
+    href: "/hire?type=trucks",
     cta: "Hire a truck",
     steps: [
       "Say where the load starts, where it goes and what it is, and pick a truck.",

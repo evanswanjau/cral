@@ -5,7 +5,7 @@ import { HIRING_UNIT_LABEL, quoteTotal, unitRate } from "../../lib/hiring-units.
 import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays } from "../../lib/hire-dates.js";
 import { routeFromParams, routeToParams } from "../../lib/truck-route.js";
 import { TruckRouteFields, truckRouteProblem, type TruckRouteDraft } from "../site/TruckRouteFields.js";
-import { fieldInput, fieldLabel } from "./TruckSearch.js";
+import { fieldInput, fieldLabel } from "./field-styles.js";
 
 /**
  * The right-hand panel on `/trucks/:id` (UI2a), extracted from

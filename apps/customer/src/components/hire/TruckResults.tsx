@@ -1,20 +1,21 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useSeo } from "../../lib/use-seo.js";
 import { getGroupCounties, type CatalogSearchParams } from "../../lib/catalog-api.js";
 import { COUNTIES } from "../../lib/kenya.js";
 import { TRUCK_TYPES } from "../../lib/vehicle-categories.js";
 import { routeQuery } from "../../lib/truck-route.js";
-import { tonnesToKg } from "../../components/site/TruckRouteFields.js";
-import { Dropdown, PIN_ICON, type DropdownOption } from "../../components/site/Dropdown.js";
-import { ChoiceRow } from "../../components/site/Popover.js";
-import { HireListingLayout } from "../../components/hire/HireListingLayout.js";
-import { FilterSheet, SheetGroup } from "../../components/hire/FilterSheet.js";
-import { tagsFor, useHireParams } from "../../components/hire/hire-params.js";
+import { tonnesToKg } from "../site/TruckRouteFields.js";
+import { Dropdown, PIN_ICON, type DropdownOption } from "../site/Dropdown.js";
+import { ChoiceRow } from "../site/Popover.js";
+import { HireListingLayout } from "./HireListingLayout.js";
+import { FilterSheet, SheetGroup } from "./FilterSheet.js";
+import { tagsFor, useHireParams } from "./hire-params.js";
 
 /**
- * `/trucks/search` - "Trucks on hire" (PR H3; was UI2a's truck search).
+ * `/hire?type=trucks` - "Trucks on hire" (PR H4; was H3's
+ * `/trucks/search`). FROM is the page-wide `county`, so it survives a
+ * change of type; it goes onto `/trucks/:id` as `from_county`.
  * Asks the catalog for `group=trucks`. The filters are the truck job's
  * own - from county, to county, load, truck type, fixed price or by
  * quote - never seats, gearbox or self-drive.
@@ -47,22 +48,20 @@ const PRICED_OPTIONS: DropdownOption[] = [
 ];
 
 const SHEET_KEYS = ["to_county", "truck_type", "priced"] as const;
-const ALL_KEYS = ["from_county", "tonnes", ...SHEET_KEYS] as const;
+const ALL_KEYS = ["county", "tonnes", ...SHEET_KEYS] as const;
 
-export function TrucksSearch(): JSX.Element {
-  useSeo({
-    title: "Trucks on hire",
-    description:
-      "Tippers, flatbeds, box bodies and more from owners CRAL has checked. Filter by county and load, then ask the owner for a price.",
-    path: "/trucks/search",
-  });
+export function TruckResults(): JSX.Element {
   const navigate = useNavigate();
-  const { params, get, set, clear, sort } = useHireParams();
+  const { params, get, set, clear, sort, type, changeType } = useHireParams();
 
-  const fromCounty = get("from_county");
-  const toCounty = (COUNTIES as readonly string[]).includes(get("to_county")) ? get("to_county") : "";
+  const fromCounty = get("county");
+  const toCounty = (COUNTIES as readonly string[]).includes(get("to_county"))
+    ? get("to_county")
+    : "";
   const tonnes = get("tonnes");
-  const truckType = TYPE_OPTIONS.some((o) => o.value === get("truck_type")) ? get("truck_type") : "";
+  const truckType = TYPE_OPTIONS.some((o) => o.value === get("truck_type"))
+    ? get("truck_type")
+    : "";
   const priced = PRICED_OPTIONS.some((o) => o.value === get("priced")) ? get("priced") : "";
   const loadKg = tonnesToKg(tonnes);
   const validLoad = loadKg !== null && Number.isFinite(loadKg) ? loadKg : null;
@@ -102,25 +101,29 @@ export function TrucksSearch(): JSX.Element {
     set,
   );
 
-  const carry = routeQuery(params);
+  // The request form reads the route as `from_county`, not `county`.
+  const route = new URLSearchParams(params);
+  if (fromCounty) route.set("from_county", fromCounty);
+  const carry = routeQuery(route);
 
   return (
     <HireListingLayout
-      group="trucks"
-      title="Trucks on hire"
+      type={type}
+      onType={changeType}
       lede={
         fromCounty && toCounty
           ? `For a load from ${fromCounty} to ${toCounty}. Open a truck to send the route and ask for a price.`
           : "Every truck is checked by a person before it is listed. Open one to send the route and ask for a price."
       }
-      noun="trucks"
       emptyHint="Clear the truck type, try a smaller load, or a nearby county."
       query={query}
       sort={sort}
       onSort={(v) => set({ sort: v || undefined })}
       tags={tags}
       onClearAll={() => clear(ALL_KEYS)}
-      onOpen={(truck) => navigate(`/trucks/${truck.id}${carry}`, { state: { truckSearch: params.toString() } })}
+      onOpen={(truck) =>
+        navigate(`/trucks/${truck.id}${carry}`, { state: { hireSearch: params.toString() } })
+      }
       bar={
         <>
           <Dropdown
@@ -131,7 +134,7 @@ export function TrucksSearch(): JSX.Element {
             placeholder="Any county"
             disabled={fromOptions.length <= 1}
             options={fromOptions}
-            onChange={(v) => set({ from_county: v || undefined })}
+            onChange={(v) => set({ county: v || undefined })}
           />
           <Dropdown
             variant="pill"
@@ -164,8 +167,16 @@ export function TrucksSearch(): JSX.Element {
                 onChange={(v) => set({ truck_type: v || undefined })}
               />
             </SheetGroup>
-            <SheetGroup heading="PRICE" hint="By quote: the owner names a price after reading your route and load.">
-              <ChoiceRow name="Price" value={priced} options={PRICED_OPTIONS} onChange={(v) => set({ priced: v || undefined })} />
+            <SheetGroup
+              heading="PRICE"
+              hint="By quote: the owner names a price after reading your route and load."
+            >
+              <ChoiceRow
+                name="Price"
+                value={priced}
+                options={PRICED_OPTIONS}
+                onChange={(v) => set({ priced: v || undefined })}
+              />
             </SheetGroup>
           </FilterSheet>
         </>

@@ -24,14 +24,15 @@ const SITE_URL = process.env.CUSTOMER_SITE_URL ?? "https://cral.co.ke";
 
 const STATIC_PATHS: Array<{ path: string; changefreq: string; priority: string }> = [
   { path: "/", changefreq: "daily", priority: "1.0" },
-  // The service sub-sites (Phase 2 UI rebuild). `/browse` only redirects
-  // now, so it is not listed, and neither is `/services/towing` (UI3).
-  { path: "/cars", changefreq: "daily", priority: "0.9" },
-  { path: "/cars/search", changefreq: "hourly", priority: "0.9" },
-  { path: "/trucks", changefreq: "daily", priority: "0.8" },
-  { path: "/trucks/search", changefreq: "hourly", priority: "0.8" },
-  { path: "/machinery", changefreq: "daily", priority: "0.8" },
-  { path: "/machinery/search", changefreq: "hourly", priority: "0.8" },
+  // The one hire search (PR H4) and its three typed views, each its own
+  // canonical page. `/cars`, `/trucks`, `/machinery` and their `/search`
+  // pages only redirect to these now, so they are not listed, and neither
+  // are `/browse` and `/services/towing`.
+  { path: "/hire", changefreq: "hourly", priority: "0.9" },
+  { path: "/hire?type=cars", changefreq: "hourly", priority: "0.9" },
+  { path: "/hire?type=trucks", changefreq: "hourly", priority: "0.8" },
+  { path: "/hire?type=machinery", changefreq: "hourly", priority: "0.8" },
+  // The other service sub-sites (Phase 2 UI rebuild).
   { path: "/drivers", changefreq: "daily", priority: "0.7" },
   { path: "/towing", changefreq: "weekly", priority: "0.7" },
   // Garage services went live in Phase 4 GS4. `/services` only redirects.

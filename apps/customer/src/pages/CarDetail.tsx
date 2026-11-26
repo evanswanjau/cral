@@ -39,14 +39,15 @@ export function CarDetail(): JSX.Element {
    * state, so that case falls back to the unfiltered search rather than
    * `history.back()`, which would leave the site.
    */
-  // `/trucks/:id` (UI2a) and `/machinery/:id` (UI2b) render this page too,
-  // each going back to its own sub-site's search.
+  // `/trucks/:id` (UI2a) and `/machinery/:id` (UI2b) render this page too.
   const path = location.pathname;
   const base = path.startsWith("/trucks/") ? "/trucks" : path.startsWith("/machinery/") ? "/machinery" : "/cars";
-  const state = location.state as { browseSearch?: string; truckSearch?: string; machinerySearch?: string } | null;
-  const backSearch = (base === "/trucks" ? state?.truckSearch : base === "/machinery" ? state?.machinerySearch : state?.browseSearch) ?? "";
-  const backBase = `${base}/search`;
-  const backTo = backSearch ? `${backBase}?${backSearch}` : backBase;
+  // Back to the `/hire` list it was opened from (PR H4), or that type's list.
+  const state = location.state as { hireSearch?: string } | null;
+  const backTo =
+    state?.hireSearch !== undefined
+      ? `/hire${state.hireSearch ? `?${state.hireSearch}` : ""}`
+      : `/hire?type=${base.slice(1)}`;
   const navigate = useNavigate();
   const { data: car, isLoading, isError } = useQuery({
     queryKey: ["catalog", "vehicle", id],

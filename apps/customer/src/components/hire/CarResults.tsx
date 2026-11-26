@@ -1,19 +1,23 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useSeo } from "../../lib/use-seo.js";
 import { getGroupCounties, type CatalogSearchParams } from "../../lib/catalog-api.js";
 import { earliestPickupDay } from "../../lib/hire-dates.js";
-import { HIRE_GROUPS, VEHICLE_CATEGORY_LABEL, type VehicleCategory } from "../../lib/vehicle-categories.js";
-import { Dropdown, PIN_ICON, type DropdownOption } from "../../components/site/Dropdown.js";
-import { DatePill } from "../../components/site/DatePill.js";
-import { ChoiceRow } from "../../components/site/Popover.js";
-import { HireListingLayout } from "../../components/hire/HireListingLayout.js";
-import { FilterSheet, SheetGroup } from "../../components/hire/FilterSheet.js";
-import { tagsFor, useHireParams } from "../../components/hire/hire-params.js";
+import {
+  HIRE_GROUPS,
+  VEHICLE_CATEGORY_LABEL,
+  type VehicleCategory,
+} from "../../lib/vehicle-categories.js";
+import { Dropdown, PIN_ICON, type DropdownOption } from "../site/Dropdown.js";
+import { DatePill } from "../site/DatePill.js";
+import { ChoiceRow } from "../site/Popover.js";
+import { HireListingLayout } from "./HireListingLayout.js";
+import { FilterSheet, SheetGroup } from "./FilterSheet.js";
+import { pick, tagsFor, useHireParams } from "./hire-params.js";
 
 /**
- * `/cars/search` - "Cars on hire" (PR H3; was `pages/Browse.tsx`). Always
+ * `/hire?type=cars` - "Cars on hire" (PR H4; was H3's `/cars/search`,
+ * before that `pages/Browse.tsx`). Always
  * asks the catalog for `group=cars` (sedan + SUV + van), so a truck or an
  * excavator never shows here; the type chips narrow inside the group.
  *
@@ -28,7 +32,10 @@ import { tagsFor, useHireParams } from "../../components/hire/hire-params.js";
 
 const TYPE_OPTIONS: DropdownOption[] = [
   { value: "", label: "Any" },
-  ...HIRE_GROUPS.cars.map((c) => ({ value: c, label: VEHICLE_CATEGORY_LABEL[c as VehicleCategory] })),
+  ...HIRE_GROUPS.cars.map((c) => ({
+    value: c,
+    label: VEHICLE_CATEGORY_LABEL[c as VehicleCategory],
+  })),
 ];
 
 const SEAT_OPTIONS: DropdownOption[] = [
@@ -63,18 +70,9 @@ const PRICE_OPTIONS: DropdownOption[] = [
 const SHEET_KEYS = ["category", "transmission", "seats_min", "chauffeured", "max_price"] as const;
 const ALL_KEYS = ["county", "from", "to", ...SHEET_KEYS] as const;
 
-const pick = (value: string, options: DropdownOption[]): string =>
-  options.some((o) => o.value === value) ? value : "";
-
-export function CarsSearch(): JSX.Element {
-  useSeo({
-    title: "Cars on hire",
-    description:
-      "Hire a car anywhere in Kenya, self-drive or with a driver. Every car is reviewed by CRAL before it's listed.",
-    path: "/cars/search",
-  });
+export function CarResults(): JSX.Element {
   const navigate = useNavigate();
-  const { params, get, set, clear, sort } = useHireParams();
+  const { params, get, set, clear, sort, type, changeType } = useHireParams();
 
   const county = get("county");
   const from = get("from");
@@ -129,10 +127,9 @@ export function CarsSearch(): JSX.Element {
 
   return (
     <HireListingLayout
-      group="cars"
-      title="Cars on hire"
+      type={type}
+      onType={changeType}
       lede="Every car is checked by a person before it is listed."
-      noun="cars"
       emptyHint="Try another county, other dates, or clear a filter or two."
       query={query}
       sort={sort}
@@ -140,7 +137,9 @@ export function CarsSearch(): JSX.Element {
       tags={tags}
       onClearAll={() => clear(ALL_KEYS)}
       note={!!from !== !!to ? "Pick both dates to see what's free." : undefined}
-      onOpen={(car) => navigate(`/cars/${car.id}${carry}`, { state: { browseSearch: params.toString() } })}
+      onOpen={(car) =>
+        navigate(`/cars/${car.id}${carry}`, { state: { hireSearch: params.toString() } })
+      }
       bar={
         <>
           <Dropdown
@@ -159,12 +158,24 @@ export function CarsSearch(): JSX.Element {
             min={minDay}
             // A pick-up after the return date is not a window anyone
             // meant - the return goes back to unset.
-            onChange={(v) => set({ from: v || undefined, ...(v && to && to < v ? { to: undefined } : {}) })}
+            onChange={(v) =>
+              set({ from: v || undefined, ...(v && to && to < v ? { to: undefined } : {}) })
+            }
           />
-          <DatePill label="Until" value={to} min={from || minDay} onChange={(v) => set({ to: v || undefined })} />
+          <DatePill
+            label="Until"
+            value={to}
+            min={from || minDay}
+            onChange={(v) => set({ to: v || undefined })}
+          />
           <FilterSheet count={tags.length} onClear={() => clear(SHEET_KEYS)}>
             <SheetGroup heading="TYPE">
-              <ChoiceRow name="Type" value={category} options={TYPE_OPTIONS} onChange={(v) => set({ category: v || undefined })} />
+              <ChoiceRow
+                name="Type"
+                value={category}
+                options={TYPE_OPTIONS}
+                onChange={(v) => set({ category: v || undefined })}
+              />
             </SheetGroup>
             <SheetGroup heading="GEARBOX">
               <ChoiceRow
@@ -175,7 +186,12 @@ export function CarsSearch(): JSX.Element {
               />
             </SheetGroup>
             <SheetGroup heading="SEATS">
-              <ChoiceRow name="Seats" value={seatsMin} options={SEAT_OPTIONS} onChange={(v) => set({ seats_min: v || undefined })} />
+              <ChoiceRow
+                name="Seats"
+                value={seatsMin}
+                options={SEAT_OPTIONS}
+                onChange={(v) => set({ seats_min: v || undefined })}
+              />
             </SheetGroup>
             <SheetGroup heading="WHO DRIVES">
               <ChoiceRow

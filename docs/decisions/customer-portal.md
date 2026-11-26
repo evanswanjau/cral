@@ -37,10 +37,36 @@ portals.
   `deploy.md`.
 
 - Customer PRs are numbered `C*` (C4 booking flow, C8 trips, C9 marketing, C11 Ops renters/bookings). Renter documents: `documents.merchant_id` nullable + `user_id`.
-- Hire listing pages (PR H3, 2026-11-26): `/cars/search`, `/trucks/search`
-  and `/machinery/search` are "Cars / Trucks / Machinery on hire", one
-  `components/hire/HireListingLayout` with a Cars / Trucks / Machinery
-  switch. Each sends its catalog `group`. Paging is a "Show 24 more"
-  button on the cursor (no infinite scroll). Filters past where and when
-  sit behind one "Filters" pill (a bottom sheet on a phone) and show as
-  removable tags.
+- **One hire search at `/hire`** (PR H4, 2026-11-26,
+  `docs/plans/hire-search-first.md`; replaces H3's three listing pages).
+  `?type=cars|trucks|machinery`, none = All; titles "Vehicles / Cars /
+  Trucks / Machinery on hire". A Type dropdown (not tabs) opens the filter
+  bar; each type keeps H3's filters, and All has county and dates only.
+  Changing type keeps `county`, `from`, `to` and a sort the type offers,
+  and drops the rest. The county is `county` for every type (a truck's
+  "from"), sent to `/trucks/:id` as `from_county`.
+  - **"All" never sorts or caps by price**: per-day, per-trip and
+    quote-first listings have no one price to compare. It offers
+    Recommended (newest first), Newest and Best-rated owners; a price sort
+    in an All link is ignored. Pick a type for price.
+  - Paging is a "Show 24 more" button on the cursor (no infinite scroll).
+    Filters past where and when sit behind one "Filters" pill (a bottom
+    sheet on a phone) and show as removable tags.
+  - The short text for search engines (a paragraph and three questions
+    with FAQPage JSON-LD) sits **below** the results.
+  - `/cars`, `/cars/search`, `/trucks`, `/trucks/search`, `/machinery`,
+    `/machinery/search` and `/browse` redirect to `/hire?type=...` with
+    their query. Detail and booking paths (`/cars/:id`,
+    `/trucks/:id/request`, ...) did not move. The sitemap lists `/hire`
+    and its three typed views (each its own canonical URL), not the old
+    paths.
+- **Masthead "Hire"** is a dropdown (All vehicles, Cars, Trucks,
+  Machinery), each straight to results: opens on click or tap, closes on
+  Escape and outside click, arrow keys move, 44px rows, portalled so the
+  phone's scrolling tab row can't clip it. Drivers, Towing, Garage and
+  Parts stay plain tabs. **"Buy and sell" goes first in the menu and on
+  home only once its pages exist** (CS3b); until then no link to it.
+- **Home opens with the hire search** (Type, County, dates, Search; dates
+  hide for Trucks) and submits to `/hire`. Below it only the trust strip
+  and the other services' doors; "How CRAL works", "Coming to CRAL" and
+  the earn band were cut, and the footer's "What's coming" link with them.

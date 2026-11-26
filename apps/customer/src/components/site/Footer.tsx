@@ -11,12 +11,18 @@ import { LIVE_SERVICES } from "../../lib/services.js";
  */
 
 // The SERVICES column comes from the registry's live entries (UI1a,
-// docs/plans/ui-services-proposal.md 1.1 F1-F9 and 4.5): coming services
-// are never a column, only the one "What's coming" link to `/#coming`.
+// docs/plans/ui-services-proposal.md 1.1 F1-F9 and 4.5). Hire's menu is
+// spelled out (PR H4), so each type is one click from the footer too.
+// Coming services are never a link: they have no page yet, and the home
+// page no longer lists them (H4 cut its reading sections).
 const COLUMNS: Array<{ head: string; links: Array<[string, string]> }> = [
   {
     head: "SERVICES",
-    links: [...LIVE_SERVICES.map((s): [string, string] => [s.label, s.href]), ["What's coming", "/#coming"]],
+    links: LIVE_SERVICES.flatMap((s): Array<[string, string]> =>
+      s.menu
+        ? s.menu.slice(1).map((m): [string, string] => [`${m.label} on hire`, m.href])
+        : [[s.label, s.href]],
+    ),
   },
   {
     head: "HIRING WITH CRAL",
@@ -115,11 +121,35 @@ export function Footer(): JSX.Element {
               before you pay.
             </p>
             {/* tel: and mailto: links (UI7), each a 44px tap target. */}
-            <div style={{ display: "grid", justifyItems: "start", font: "500 14px/1.6 'IBM Plex Mono',monospace" }}>
-              <a href="tel:+254735656066" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+            <div
+              style={{
+                display: "grid",
+                justifyItems: "start",
+                font: "500 14px/1.6 'IBM Plex Mono',monospace",
+              }}
+            >
+              <a
+                href="tel:+254735656066"
+                style={{
+                  color: "#A7B0BE",
+                  textDecoration: "none",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
                 +254 735 656066
               </a>
-              <a href="mailto:hello@cral.co.ke" style={{ color: "#A7B0BE", textDecoration: "none", minHeight: 44, display: "inline-flex", alignItems: "center" }}>
+              <a
+                href="mailto:hello@cral.co.ke"
+                style={{
+                  color: "#A7B0BE",
+                  textDecoration: "none",
+                  minHeight: 44,
+                  display: "inline-flex",
+                  alignItems: "center",
+                }}
+              >
                 hello@cral.co.ke
               </a>
             </div>

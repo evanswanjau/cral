@@ -1,5 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import { LIVE_SERVICES, activeServiceKey } from "../../lib/services.js";
+import { HireMenu } from "../site/HireMenu.js";
 
 /**
  * The masthead's second row: one tab per live service, from the registry
@@ -12,17 +13,32 @@ import { LIVE_SERVICES, activeServiceKey } from "../../lib/services.js";
  * scrollbar); the page never does. The active tab is marked three ways,
  * not by colour alone: heavier weight, a 2px underline bar, and
  * `aria-current="page"`.
+ *
+ * An entry with a `menu` (Hire, PR H4) is a dropdown button instead of a
+ * link: see HireMenu.tsx.
  */
 export function ServiceTabs({ transparent = false }: { transparent?: boolean }): JSX.Element {
   const { pathname, search } = useLocation();
   const active = activeServiceKey(pathname, search);
 
   return (
-    <nav aria-label="Services" className="cral-rail" style={{ display: "flex", gap: 2, overflowX: "auto", minWidth: 0 }}>
+    <nav
+      aria-label="Services"
+      className="cral-rail"
+      style={{ display: "flex", gap: 2, overflowX: "auto", minWidth: 0 }}
+    >
       {LIVE_SERVICES.map((s) => {
         const on = s.key === active;
         const Icon = s.icon;
-        const fg = transparent ? (on ? "#FFFFFF" : "rgba(255,255,255,.75)") : on ? "#0B0F1A" : "#5A6373";
+        const fg = transparent
+          ? on
+            ? "#FFFFFF"
+            : "rgba(255,255,255,.75)"
+          : on
+            ? "#0B0F1A"
+            : "#5A6373";
+        if (s.menu)
+          return <HireMenu key={s.key} service={s} on={on} fg={fg} transparent={transparent} />;
         return (
           <Link
             key={s.key}
