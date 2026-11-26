@@ -21,6 +21,7 @@ import { OPEN_REQUEST_STATUSES, quoteOf } from "../../lib/booking-quote.js";
 import { needsQuote } from "../vehicles/hiring-units.js";
 import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
+import { bookingPapers, papersNeeded } from "../../lib/renter-papers.js";
 import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
 import type { CancelBookingInput, CreateBookingInput, ListMyBookingsQuery } from "./schemas.js";
 
@@ -428,14 +429,25 @@ function serializeDetail(
   };
 }
 
+const PAPER_NAME = { national_id: "national ID", driving_licence: "driving licence" } as const;
+
+/** "a car", "a truck", "a machine" or "a driver" - for the request gate's copy. */
+function hireNoun(vehicle: PublicVehicleForBooking | null): string {
+  if (!vehicle) return "a driver";
+  if (vehicle.type === "truck") return "a truck";
+  if (vehicle.type === "machinery") return "a machine";
+  return "a car";
+}
+
 async function detailOf(b: BookingRow) {
   const linked = b.linked_booking_id
     ? await db<BookingRow>("bookings").where({ id: b.linked_booking_id }).first("id", "ref", "status", "gross_amount")
     : undefined;
-  const [facts, drivers, handovers] = await Promise.all([
+  const [facts, drivers, handovers, documents] = await Promise.all([
     vehicleFactsFor(b.vehicle_id ? [b.vehicle_id] : []),
     driverFactsFor([b.driver_id]),
     handoversForHirer(b.id),
+    bookingPapers(b),
   ]);
   return {
     ...serializeDetail(
@@ -448,6 +460,9 @@ async function detailOf(b: BookingRow) {
     linked_booking: linked
       ? { id: linked.id, ref: linked.ref, status: linked.status, gross: kes(linked.gross_amount) as Money }
       : null,
+    // The papers this hire needs and whether Ops has cleared them (H5) -
+    // Trip detail shows "being checked" in place of Pay until they are.
+    documents,
   };
 }
 
@@ -699,22 +714,25 @@ export async function createBooking(
     });
   }
 
-  // Identity documents must be on file to request. Ops acceptance is a
-  // separate, later gate - the design is explicit that a renter may send
-  // a request while their licence is still being read, and that only the
-  // keys wait for it.
+  // The papers this hire needs must be on file to request (owner's
+  // decision 3, 2026-11-26: the ID always, the licence only when the
+  // renter drives - `lib/renter-papers.ts`). Ops clearing them is a
+  // separate, later gate: a request may go out while they are being read,
+  // but payment waits for it (`payments/service.ts#initiatePayment`), so
+  // the keys never do.
+  const needed = papersNeeded({
+    hasVehicle: !!vehicle,
+    chauffeured: !!vehicle?.chauffeured,
+    hasDriver: !!driver,
+  });
   const verification = await getRenterVerification(userId);
-  // Someone hiring a driver for their own car isn't driving one of ours,
-  // so only their ID is asked for, not their licence.
-  const notUploaded = verification.documents.filter(
-    (d) => d.state === "missing" && (vehicle || d.kind !== "driving_licence"),
-  );
+  const notUploaded = verification.documents.filter((d) => d.state === "missing" && needed.includes(d.kind));
   if (notUploaded.length > 0) {
     throw new ApiError({
       status: 422,
       type: "validation_error",
       code: "documents_required",
-      message: `Add your ${notUploaded.map((d) => d.kind.replace(/_/g, " ")).join(" and ")} before requesting a car.`,
+      message: `Add your ${notUploaded.map((d) => PAPER_NAME[d.kind]).join(" and ")} before requesting ${hireNoun(vehicle)}.`,
       field: "documents",
     });
   }

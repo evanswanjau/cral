@@ -45,12 +45,20 @@ interface RenterAggregate {
   latestUploadAt: Date;
 }
 
+/**
+ * Where a renter sits in the queue. Since H5 (owner's decision 3) a renter
+ * who only ever hires with a driver or operator never uploads a licence,
+ * so a missing licence is not work for Ops: `pending` means a document is
+ * waiting to be read (or the ID itself is missing), `verified` means the
+ * ID is cleared and nothing uploaded is waiting or rejected.
+ */
 function statusOf(docs: DocumentRow[]): "pending" | "verified" | "rejected" {
   const byKind = new Map(docs.map((d) => [d.kind, d]));
   const states = RENTER_DOC_KINDS.map((k) => byKind.get(k)?.review_state ?? "missing");
-  if (states.some((s) => s === "pending" || s === "missing")) return "pending";
-  if (states.every((s) => s === "ok")) return "verified";
-  return "rejected";
+  if (states.some((s) => s === "pending")) return "pending";
+  if (states.some((s) => s === "rejected" || s === "expiring")) return "rejected";
+  if (byKind.get("national_id")?.review_state === "ok") return "verified";
+  return "pending";
 }
 
 /**

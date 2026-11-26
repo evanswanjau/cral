@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from "./api.js";
 import type { Money } from "./catalog-api.js";
+import type { DocumentState, RenterDocKind } from "./documents-api.js";
 
 /** Typed client for `openapi/customer-bookings.yaml`. */
 
@@ -151,6 +152,14 @@ export interface BookingDetail extends BookingSummary {
   handovers: HandoverStatus[];
   /** The other half of a car + another owner's driver request - accepted and paid on its own. */
   linked_booking: { id: string; ref: string; status: BookingStatus; gross: Money } | null;
+  /**
+   * The renter's papers this hire needs (H5): the ID always, the licence
+   * only for self-drive. Pay is refused until `cleared`.
+   */
+  documents: {
+    cleared: boolean;
+    items: { kind: RenterDocKind; state: DocumentState; review_note: string | null }[];
+  };
 }
 
 export interface BookingsPage {

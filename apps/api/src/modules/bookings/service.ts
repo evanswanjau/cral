@@ -19,7 +19,6 @@ import {
 } from "../../jobs/notification-delivery.js";
 import { ratingSummaries, ratingSummary, type RatingSummary } from "../../lib/ratings.js";
 import { subjectOf, subjectsFor, type BookingSubject } from "../../lib/booking-subject.js";
-import type { DocumentRow } from "../merchant/db-types.js";
 import type {
   BookingEventRow,
   BookingReportRow,
@@ -41,6 +40,7 @@ import type {
 } from "./schemas.js";
 import { routeAndLoadOf } from "../../lib/booking-route.js";
 import { QUOTE_VALID_HOURS, quoteOf } from "../../lib/booking-quote.js";
+import { bookingPapers } from "../../lib/renter-papers.js";
 
 const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
@@ -1023,21 +1023,16 @@ export async function confirmHandover(userId: string, handoverId: string, ctx: R
 }
 
 /**
- * The keys don't change hands until Ops has accepted the hirer's ID and
- * driving licence - the design's own rule ("You can send this request and
- * pay, but {owner} cannot hand over the keys until CRAL has read it").
- * A request can go out, and payment can happen, with documents still
- * `pending`; only the pickup leg of the handover is gated. `getHirerHistory`
- * reads the same two rows for `id_verified` - keep the kinds in step.
+ * The keys don't change hands until Ops has cleared the papers this hire
+ * needs - the ID always, the licence only when the renter drives (owner's
+ * decision 3, 2026-11-26; one rule in `lib/renter-papers.ts`, shared with
+ * the request and pay gates). Payment is already refused until they are
+ * cleared (H5), so a paid booking only reaches this if Ops later
+ * withdraws a clearance - a backstop, not the place a renter finds out.
  */
-async function assertHirerDocumentsAccepted(hirerId: string): Promise<void> {
-  const docs = await db<DocumentRow>("documents")
-    .where({ user_id: hirerId })
-    .whereIn("kind", ["national_id", "driving_licence"]);
-  const byKind = new Map(docs.map((d) => [d.kind, d]));
-  const outstanding = (["national_id", "driving_licence"] as const).filter(
-    (kind) => byKind.get(kind)?.review_state !== "ok",
-  );
+async function assertHirerDocumentsAccepted(booking: BookingRow): Promise<void> {
+  const papers = await bookingPapers(booking);
+  const outstanding = papers.items.filter((i) => i.state !== "ok").map((i) => i.kind);
   if (outstanding.length > 0) {
     unprocessable(
       "hirer_documents_not_accepted",
@@ -1050,7 +1045,7 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
   const { merchant, booking, handover } = await requireOwnHandover(userId, handoverId);
   await requireHandoverNotExpired(handover);
   if (handover.state !== "confirmed") conflict("not_confirmed", "Confirm the handover before completing it.");
-  if (handover.kind === "pickup") await assertHirerDocumentsAccepted(booking.hirer_id);
+  if (handover.kind === "pickup") await assertHirerDocumentsAccepted(booking);
 
   const now = new Date();
   const bookingUpdate: Partial<BookingRow> =
@@ -1260,13 +1255,11 @@ export async function createBookingReport(userId: string, bookingId: string, inp
 
 export async function getHirerHistory(userId: string, bookingId: string) {
   const { booking } = await requireOwnBooking(userId, bookingId);
-  const [user, allBookings, rating, idDocs] = await Promise.all([
+  const [user, allBookings, rating, papers] = await Promise.all([
     db("users").where({ id: booking.hirer_id }).first(),
     db<BookingRow>("bookings").where({ hirer_id: booking.hirer_id }),
     ratingSummary(booking.hirer_id, "hirer"),
-    db<DocumentRow>("documents")
-      .where({ user_id: booking.hirer_id })
-      .whereIn("kind", ["national_id", "driving_licence"]),
+    bookingPapers(booking),
   ]);
 
   const completed = allBookings.filter((b) => b.status === "completed");
@@ -1276,9 +1269,9 @@ export async function getHirerHistory(userId: string, bookingId: string) {
   // was no admin review and nothing honest to key a ✓ badge off — a
   // hardcoded `true` here was exactly the kind of fabricated trust signal
   // this product's whole premise says never to do.
-  const idVerified = (["national_id", "driving_licence"] as const).every(
-    (kind) => idDocs.find((d) => d.kind === kind)?.review_state === "ok",
-  );
+  // Since H5 that is the papers *this* hire needs: a chauffeured hire's
+  // renter is cleared on their ID alone, a self-drive one on both.
+  const idVerified = papers.cleared;
 
   return {
     name: user?.full_name ?? "Hirer",

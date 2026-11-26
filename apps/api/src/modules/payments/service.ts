@@ -9,6 +9,7 @@ import { paymentAdapter } from "../../lib/adapters.js";
 import type { ParsedCallback } from "../../adapters/payment/index.js";
 import type { BookingRow } from "../bookings/db-types.js";
 import { executeRefund } from "../../lib/refunds.js";
+import { bookingPapers } from "../../lib/renter-papers.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { applyOrderPayment, orderRefFor } from "../garage/order-settlement.js";
 
@@ -108,6 +109,22 @@ export async function initiatePayment(
   // than pushing a second prompt at the same phone.
   if (settled?.status === "pending" && settled.expires_at.getTime() > Date.now()) {
     return { payment_request_id: settled.id, status: settled.status };
+  }
+
+  // No money until Ops has cleared the papers this hire needs (owner's
+  // decision 3, 2026-11-26, H5). Before this, a renter could pay and only
+  // learn at the car that the keys were waiting on a review
+  // (`hirer_documents_not_accepted` on pickup). The renter sees "Papers
+  // being checked" in place of Pay; this is the same rule, server-side.
+  const papers = await bookingPapers(booking);
+  if (!papers.cleared) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "papers_not_cleared",
+      message: "CRAL is still checking your papers for this hire. You can pay once they're cleared.",
+      field: "documents",
+    });
   }
 
   const phone = normalizePhone(input.phone);

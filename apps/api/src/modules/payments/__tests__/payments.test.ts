@@ -89,7 +89,32 @@ async function merchantWithVehicle(): Promise<{ merchantId: string; vehicleId: s
   return { merchantId, vehicleId };
 }
 
-async function bookingFor(hirerId: string, overrides: Partial<BookingRow> = {}) {
+/**
+ * Payment waits for Ops to clear the hirer's papers (H5), so every hirer
+ * here starts with an accepted ID and licence unless a test says
+ * otherwise. Documents cascade off `users.id`.
+ */
+async function clearPapers(hirerId: string, kinds: string[] = ["national_id", "driving_licence"], state = "ok") {
+  for (const kind of kinds) {
+    const existing = await db("documents").where({ user_id: hirerId, kind }).first("id");
+    if (existing) continue;
+    await db("documents").insert({
+      id: generateId("document"),
+      merchant_id: null,
+      user_id: hirerId,
+      vehicle_id: null,
+      kind,
+      storage_key: `test/${hirerId}/${kind}`,
+      original_name: `${kind}.pdf`,
+      size_bytes: 100,
+      content_type: "application/pdf",
+      review_state: state,
+    });
+  }
+}
+
+async function bookingFor(hirerId: string, overrides: Partial<BookingRow> = {}, papers: "cleared" | "none" = "cleared") {
+  if (papers === "cleared") await clearPapers(hirerId);
   const id = generateId("booking");
   const { merchantId, vehicleId } = await merchantWithVehicle();
   const [row] = await db<BookingRow>("bookings")
@@ -436,5 +461,54 @@ describe("refunds", () => {
     // second call finds the row already there and owes nothing more.
     expect(second).toBeNull();
     expect(await db("refunds").where({ booking_id: booking.id })).toHaveLength(1);
+  });
+});
+
+/**
+ * H5 (owner's decision 3, 2026-11-26): no money until Ops has cleared the
+ * papers this hire needs - the ID always, the licence only when the
+ * renter drives. Refused before any `payment_requests` row is written.
+ */
+describe("papers before payment", () => {
+  const pay = (userId: string, bookingId: string) =>
+    initiatePayment(userId, bookingId, { purpose: "full", phone: "+254712345678" }, { ip: null, requestId: null });
+
+  it("refuses a self-drive hire while the renter's papers are still being checked", async () => {
+    const { userId } = await createVerifiedTestUser();
+    userIds.push(userId);
+    await clearPapers(userId, ["national_id", "driving_licence"], "pending");
+    const booking = await bookingFor(userId, {}, "none");
+
+    await expect(pay(userId, booking.id)).rejects.toMatchObject({ code: "papers_not_cleared", status: 422 });
+    expect(await db("payment_requests").where({ booking_id: booking.id }).first()).toBeUndefined();
+  });
+
+  it("refuses a self-drive hire with the ID cleared but no licence", async () => {
+    const { userId } = await createVerifiedTestUser();
+    userIds.push(userId);
+    await clearPapers(userId, ["national_id"]);
+    const booking = await bookingFor(userId, {}, "none");
+
+    await expect(pay(userId, booking.id)).rejects.toMatchObject({ code: "papers_not_cleared" });
+  });
+
+  it("takes payment for a chauffeured hire on the ID alone", async () => {
+    const { userId } = await createVerifiedTestUser();
+    userIds.push(userId);
+    await clearPapers(userId, ["national_id"]);
+    const booking = await bookingFor(userId, {}, "none");
+    await db("vehicles").where({ id: booking.vehicle_id }).update({ chauffeured: true });
+
+    const result = await pay(userId, booking.id);
+    expect(result.status).toBe("pending");
+  });
+
+  it("takes payment for a self-drive hire once both papers are cleared", async () => {
+    const { userId } = await createVerifiedTestUser();
+    userIds.push(userId);
+    const booking = await bookingFor(userId);
+
+    const result = await pay(userId, booking.id);
+    expect(result.status).toBe("pending");
   });
 });

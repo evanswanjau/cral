@@ -89,6 +89,27 @@ describe("the queue", () => {
   });
 });
 
+describe("a missing licence is not work for Ops (H5)", () => {
+  it("counts a renter with a cleared ID and no licence as verified, not pending", async () => {
+    const admin = await newAdmin();
+    const renter = await renterWithDocs(["national_id"]);
+    await db("documents").where({ user_id: renter.userId }).update({ review_state: "ok" });
+
+    const pending = await request(app).get("/admin/renters").query({ filter: "pending" }).set(bearer(admin.token));
+    expect(pending.body.data.map((r: { user_id: string }) => r.user_id)).not.toContain(renter.userId);
+    const verified = await request(app).get("/admin/renters").query({ filter: "verified" }).set(bearer(admin.token));
+    expect(verified.body.data.map((r: { user_id: string }) => r.user_id)).toContain(renter.userId);
+  });
+
+  it("keeps a renter whose ID is uploaded but unread in the pending queue", async () => {
+    const admin = await newAdmin();
+    const renter = await renterWithDocs(["national_id"]);
+
+    const pending = await request(app).get("/admin/renters").query({ filter: "pending" }).set(bearer(admin.token));
+    expect(pending.body.data.map((r: { user_id: string }) => r.user_id)).toContain(renter.userId);
+  });
+});
+
 describe("the renter file", () => {
   it("shows both documents and an honest missing state for the one not uploaded", async () => {
     const admin = await newAdmin();

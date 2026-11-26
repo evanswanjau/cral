@@ -187,7 +187,7 @@ components:
         status:
           type: string
           enum: [pending, verified, rejected]
-          description: pending - at least one document not yet decided; rejected - at least one rejected and none pending; verified - both ok.
+          description: pending - at least one uploaded document not yet decided (or no ID at all); rejected - at least one rejected or expiring and none pending; verified - the ID is ok and nothing uploaded is pending or rejected. A missing licence alone is not pending (H5) - a renter hiring only with a driver or operator never needs one.
         uploaded_at:
           type: string
           format: date-time

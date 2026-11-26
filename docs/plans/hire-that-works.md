@@ -613,6 +613,17 @@ listing pages from Part 2 no longer apply; that file is the spec.
 
 ### H5 - Renter papers before payment (customer booking)
 
+**Built 2026-11-26** on `feature/hire-renter-papers`. One rule in
+`apps/api/src/lib/renter-papers.ts` (request, pay, pickup gates and
+`id_verified`); `documents` block on the booking; pay refused with
+`papers_not_cleared`; Trip detail shows "Papers being checked - pay once
+cleared" instead of Pay; the request page asks for a licence only for
+self-drive; Ops nav counts renters waiting (a missing licence alone no
+longer counts as waiting). Walked locally: a self-drive Honda Fit (ID
+cleared, licence pending: no Pay after accept), a chauffeured Actros (ID
+only: Pay after accept) and a JCB backhoe with operator (ID pending:
+"being checked"; Pay appeared once Ops cleared the ID).
+
 - **Goal:** the renter is asked only for what the hire needs (decision
   3), and knows before paying whether CRAL has cleared their papers, so
   pickup never stops at the car.
