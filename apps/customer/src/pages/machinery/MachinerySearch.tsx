@@ -1,120 +1,97 @@
 import { useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../../lib/use-seo.js";
-import { getCounties, searchCatalog, type CatalogSearchParams } from "../../lib/catalog-api.js";
+import { getGroupCounties, type CatalogSearchParams } from "../../lib/catalog-api.js";
 import { earliestPickupDay } from "../../lib/hire-dates.js";
-import { VehicleCard, CARD_TINTS } from "../../components/site/VehicleCard.js";
+import { MACHINE_TYPES } from "../../lib/vehicle-categories.js";
 import { Dropdown, PIN_ICON, type DropdownOption } from "../../components/site/Dropdown.js";
 import { DatePill } from "../../components/site/DatePill.js";
-import { VehicleCardSkeletonGrid } from "../../components/site/Skeleton.js";
+import { HireListingLayout } from "../../components/hire/HireListingLayout.js";
+import { useHireParams } from "../../components/hire/hire-params.js";
 
 /**
- * `/machinery/search` (UI2b): the catalog search locked to
- * `category=machinery`. The filters are where and when - county, from,
- * until - and the sort; not seats, gearbox or "with driver", which are how
- * a car is picked. All of them live in the querystring, so the page is
- * shareable and the back button returns here. The dates travel with the
- * click onto `/machinery/:id`, so they are already picked there.
+ * `/machinery/search` - "Machinery on hire" (PR H3; was UI2b's machinery
+ * search). Asks the catalog for `group=machinery`. The filters are where,
+ * when and what kind of machine (`machine_type`, owner's decision 4) -
+ * never seats, gearbox or self-drive. Every filter is a pill in the bar,
+ * so this page has no Filters sheet.
  *
- * Not from a canvas; built from tokens.ts and
- * docs/plans/ui-services-proposal.md section 4.3 (Machinery column),
- * after `pages/trucks/TrucksSearch.tsx`.
+ * No "with operator" filter yet: the plan lists one, but every machine
+ * listed today comes with an operator, so it would change nothing. Add it
+ * (`chauffeured`) once a machine lists without one. The card says
+ * "With operator" where the listing has one.
+ *
+ * Not from a canvas; built from tokens.ts and the H3 section of
+ * docs/plans/hire-that-works.md.
  */
 
-const SORT_OPTIONS: DropdownOption[] = [
-  { value: "recommended", label: "Recommended" },
-  { value: "price_asc", label: "Price, low to high" },
-  { value: "price_desc", label: "Price, high to low" },
-  { value: "rating_desc", label: "Best-rated owners" },
+const TYPE_OPTIONS: DropdownOption[] = [
+  { value: "", label: "Any machine" },
+  ...MACHINE_TYPES.map((t) => ({ value: t.value, label: t.label })),
 ];
+
+const ALL_KEYS = ["county", "from", "to", "machine_type"] as const;
 
 export function MachinerySearch(): JSX.Element {
   useSeo({
-    title: "Find machinery",
+    title: "Machinery on hire",
     description:
-      "Machinery for site work from owners CRAL has checked. Filter by county and dates, then send the owner a request for free.",
+      "Excavators, loaders, graders and more for site work, from owners CRAL has checked. Filter by county, dates and machine, then send the owner a request for free.",
     path: "/machinery/search",
   });
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const county = params.get("county") ?? "";
-  const from = params.get("from") ?? "";
-  const to = params.get("to") ?? "";
-  const sort = (params.get("sort") as CatalogSearchParams["sort"]) ?? "recommended";
+  const { params, get, set, clear, sort } = useHireParams();
+  const county = get("county");
+  const from = get("from");
+  const to = get("to");
+  const machineType = TYPE_OPTIONS.some((o) => o.value === get("machine_type")) ? get("machine_type") : "";
   const minDay = earliestPickupDay();
 
-  const set = (patch: Record<string, string | undefined>) => {
-    const next = new URLSearchParams(params);
-    for (const [k, v] of Object.entries(patch)) {
-      if (v) next.set(k, v);
-      else next.delete(k);
-    }
-    setParams(next, { replace: true });
-  };
-
-  // Counties with a live listing, the same source the hero search reads.
-  const { data: countyData } = useQuery({ queryKey: ["catalog", "counties"], queryFn: getCounties });
+  // Counties with a live machine in them.
+  const { data: countyData } = useQuery({
+    queryKey: ["catalog", "counties", "machinery"],
+    queryFn: () => getGroupCounties("machinery"),
+  });
   const countyOptions: DropdownOption[] = [
     { value: "", label: "Any county" },
     ...(countyData?.counties ?? []).map((c) => ({ value: c.county, label: c.county })),
   ];
 
   const query = useMemo<CatalogSearchParams>(() => {
-    const q: CatalogSearchParams = { category: "machinery", sort, limit: 24 };
+    const q: CatalogSearchParams = { group: "machinery", sort, limit: 24 };
     if (county) q.county = county;
     // The catalog takes a window or nothing: `from` alone is a 422.
     if (from && to) {
       q.from = from;
       q.to = to;
     }
+    if (machineType) q.machine_type = machineType;
     return q;
-  }, [county, from, to, sort]);
+  }, [county, from, to, machineType, sort]);
 
-  const { data, isLoading, isError, fetchNextPage, hasNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ["catalog", "search", query],
-    queryFn: ({ pageParam }) => searchCatalog(pageParam ? { ...query, cursor: pageParam } : query),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (last) => (last.has_more ? (last.next_cursor ?? undefined) : undefined),
-  });
-  const results = data?.pages.flatMap((p) => p.data) ?? [];
   const carry = from && to ? `?${new URLSearchParams({ from, to })}` : "";
 
   return (
-    <div style={{ padding: "clamp(18px,2.6vw,30px) clamp(16px,3vw,32px) clamp(40px,6vw,72px)" }}>
-      <div style={{ maxWidth: 1240, margin: "0 auto" }}>
-        <h1
-          style={{
-            margin: "0 0 6px",
-            font: "700 clamp(22px,2.8vw,30px)/1.1 Archivo,sans-serif",
-            fontVariationSettings: "'wdth' 108",
-            letterSpacing: "-.025em",
-            color: "#0B0F1A",
-          }}
-        >
-          {county ? `Machinery in ${county}` : "Machinery across Kenya"}
-        </h1>
-        <p style={{ margin: "0 0 16px", font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-          {from && to
-            ? "Showing machinery that is free on your dates. Open one to send the owner a request."
-            : "Every machine here is reviewed by CRAL before it's listed. Pick your dates to see what is free."}
-        </p>
-
-        <div
-          className="cral-filterbar"
-          style={{
-            background: "#FFFFFF",
-            border: "1px solid #E4E7EC",
-            borderRadius: 16,
-            padding: "9px 12px",
-            marginBottom: 18,
-            boxShadow: "0 8px 22px rgba(11,15,26,.05)",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            flexWrap: "wrap",
-          }}
-        >
+    <HireListingLayout
+      group="machinery"
+      title="Machinery on hire"
+      lede={
+        from && to
+          ? "Showing machinery that is free on your dates. Open one to send the owner a request."
+          : "Every machine is checked by a person before it is listed. Pick your dates to see what is free."
+      }
+      noun="machinery"
+      emptyHint="Try any machine, another county or other dates."
+      query={query}
+      sort={sort}
+      onSort={(v) => set({ sort: v || undefined })}
+      tags={[]}
+      onClearAll={() => clear(ALL_KEYS)}
+      note={!!from !== !!to ? "Pick both dates to see what's free." : undefined}
+      onOpen={(m) => navigate(`/machinery/${m.id}${carry}`, { state: { machinerySearch: params.toString() } })}
+      bar={
+        <>
           <Dropdown
             variant="pill"
             label="County"
@@ -132,94 +109,16 @@ export function MachinerySearch(): JSX.Element {
             onChange={(v) => set({ from: v || undefined, ...(v && to && to < v ? { to: undefined } : {}) })}
           />
           <DatePill label="Until" value={to} min={from || minDay} onChange={(v) => set({ to: v || undefined })} />
-          <div style={{ marginLeft: "auto" }}>
-            <Dropdown
-              variant="pill"
-              label="Sort"
-              value={sort}
-              neutralValue="recommended"
-              placeholder="Recommended"
-              options={SORT_OPTIONS}
-              onChange={(v) => set({ sort: v === "recommended" ? undefined : v })}
-            />
-          </div>
-        </div>
-
-        {isError && (
-          <p style={{ margin: "0 0 18px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-            We couldn't load the machinery just now. Refresh in a moment.
-          </p>
-        )}
-
-        {!isLoading && !isError && results.length === 0 && (
-          <div
-            style={{
-              background: "#FFFFFF",
-              border: "1px dashed #CDD2DA",
-              borderRadius: 12,
-              padding: "44px 24px",
-              textAlign: "center",
-            }}
-          >
-            <div style={{ font: "600 17px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 8 }}>
-              No machinery matches all of that yet.
-            </div>
-            <p style={{ margin: "0 0 18px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-              Try another county or other dates.
-            </p>
-            <button
-              type="button"
-              onClick={() => setParams(new URLSearchParams())}
-              style={{
-                height: 44,
-                padding: "0 18px",
-                background: "#0F23A8",
-                color: "#FFFFFF",
-                border: "none",
-                borderRadius: 8,
-                font: "600 14px/1 'Instrument Sans',sans-serif",
-                cursor: "pointer",
-              }}
-            >
-              Show all machinery
-            </button>
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(244px,1fr))", gap: 14 }}>
-          {results.map((car, i) => (
-            <VehicleCard
-              key={car.id}
-              car={car}
-              tint={CARD_TINTS[i % CARD_TINTS.length] as string}
-              onOpen={() => navigate(`/machinery/${car.id}${carry}`, { state: { machinerySearch: params.toString() } })}
-            />
-          ))}
-          {isLoading && <VehicleCardSkeletonGrid count={8} />}
-          {isFetchingNextPage && <VehicleCardSkeletonGrid count={4} />}
-        </div>
-
-        {hasNextPage && !isFetchingNextPage && (
-          <div style={{ display: "flex", justifyContent: "center", paddingTop: 24 }}>
-            <button
-              type="button"
-              onClick={() => void fetchNextPage()}
-              style={{
-                height: 44,
-                padding: "0 22px",
-                background: "#FFFFFF",
-                color: "#0B0F1A",
-                border: "1px solid #E4E7EC",
-                borderRadius: 8,
-                font: "600 14px/1 'Instrument Sans',sans-serif",
-                cursor: "pointer",
-              }}
-            >
-              Show more machinery
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+          <Dropdown
+            variant="pill"
+            label="Machine"
+            value={machineType}
+            placeholder="Any machine"
+            options={TYPE_OPTIONS}
+            onChange={(v) => set({ machine_type: v || undefined })}
+          />
+        </>
+      }
+    />
   );
 }

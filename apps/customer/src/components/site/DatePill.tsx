@@ -2,7 +2,7 @@ import { useRef } from "react";
 
 /**
  * The date pill on a search's filter bar, moved unchanged out of
- * `pages/Browse.tsx` in UI2b so `/machinery/search` shares it with
+ * `pages/Browse.tsx` (now `pages/cars/CarsSearch.tsx`) in UI2b so `/machinery/search` shares it with
  * `/cars/search`.
  */
 

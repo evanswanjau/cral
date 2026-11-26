@@ -122,6 +122,16 @@ paths:
             type: string
             enum: [excavator, backhoe_loader, wheel_loader, skid_steer, bulldozer, grader, roller, forklift, telehandler, mobile_crane, concrete_mixer, other]
           description: Only machines of this kind. Implies `category=machinery`.
+        - name: priced
+          in: query
+          schema:
+            type: string
+            enum: [fixed, quote]
+          description: >
+            PR H3 of `docs/plans/hire-that-works.md`. `quote` returns only
+            listings where a request gets a price from the owner (the
+            summary's `quoted: true`); `fixed` only those with an instant
+            total. Omit for both.
         - name: chauffeured
           in: query
           schema: { type: boolean }

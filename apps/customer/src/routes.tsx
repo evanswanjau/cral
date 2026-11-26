@@ -1,7 +1,7 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { SiteShell } from "./components/site/SiteShell.js";
 import { Home } from "./pages/Home.js";
-import { Browse } from "./pages/Browse.js";
+import { CarsSearch } from "./pages/cars/CarsSearch.js";
 import { LegacyBrowseRedirect } from "./components/routing/LegacyBrowseRedirect.js";
 import { LegacyBookRedirect } from "./components/routing/LegacyBookRedirect.js";
 import { CarsHome } from "./pages/cars/CarsHome.js";
@@ -70,7 +70,7 @@ export const routes: RouteObject[] = [
     children: [
       { path: "/", element: <Home /> },
       { path: "/browse", element: <LegacyBrowseRedirect /> },
-      { path: "/cars/search", element: <Browse /> },
+      { path: "/cars/search", element: <CarsSearch /> },
       { path: "/cars", element: <CarsHome /> },
       // Trucks' own sub-site (UI2a). `/trucks/:id` is CarDetail with the
       // route-first TruckRequestPanel, and `/trucks/:id/request` is the

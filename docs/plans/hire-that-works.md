@@ -537,6 +537,20 @@ timestamp below the millisecond (see "Not in this plan"). Not run on dev.
 
 ### H3 - The three listing pages and the cards
 
+**Built 2026-11-26** on `feature/hire-pages`. `pages/Browse.tsx` is gone:
+`pages/cars/CarsSearch.tsx`, `trucks/TrucksSearch.tsx` and
+`machinery/MachinerySearch.tsx` sit on `components/hire/` (switch,
+layout, filter sheet, states). Each page sends its `group`, so the cars
+page never lists a truck or machine. Two API changes came with it: the
+catalog cursor bug below is fixed (newest-first orders on
+`date_trunc('milliseconds', created_at)`, with a test), and
+`GET /catalog/vehicles` takes `priced=fixed|quote` for the trucks page's
+"Price" filter (contract + test). Differences from the plan: the extra
+filters sit behind one "Filters" pill on desktop too (the 2026-09-20
+call), shown as removable tags; machinery has no "with operator" filter,
+because every machine listed today has one and the filter would change
+nothing. Not from a canvas.
+
 - **Goal:** "Cars on hire", "Trucks on hire", "Machinery on hire" with
   the switch, per-type filters, sort, "Show 24 more", and designed
   loading/empty/error states; cards that read per type.
@@ -622,7 +636,7 @@ timestamp below the millisecond (see "Not in this plan"). Not run on dev.
   product review, still standing.
 - Hourly machinery stays off until a time-of-day picker exists
   (`bookings-payouts.md`).
-- Catalog paging (found in H2): `listCatalog`
+- **Fixed in H3.** Catalog paging (found in H2): `listCatalog`
   (`apps/api/src/modules/catalog/service.ts`) builds the newest-first
   cursor from `created_at.toISOString()` (milliseconds), but Postgres
   keeps microseconds, so rows sharing a millisecond with the page's last

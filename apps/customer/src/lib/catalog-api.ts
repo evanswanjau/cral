@@ -124,6 +124,8 @@ export interface CatalogSearchParams {
   truck_type?: string;
   payload_min_kg?: number;
   machine_type?: string;
+  /** PR H3: "fixed" = an instant total, "quote" = the owner prices it. */
+  priced?: "fixed" | "quote";
   chauffeured?: boolean;
   sort?: "recommended" | "price_asc" | "price_desc" | "newest" | "rating_desc";
   cursor?: string;

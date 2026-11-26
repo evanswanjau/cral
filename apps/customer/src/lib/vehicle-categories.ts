@@ -93,10 +93,13 @@ export function specLine(car: {
   payload_kg: number | null;
   seats: number;
   transmission: string;
+  machine_type?: string | null;
 }): string {
-  // Machinery is picked by what it is, not by seats (UI2b).
-  if (car.category === "machinery") return car.transmission === "manual" ? "Manual" : "Automatic";
-  if (car.category === "truck" && (car.truck_type || car.payload_kg)) {
+  // Machinery is picked by what it is (PR H3: its machine type), never by
+  // seats or gearbox.
+  if (car.category === "machinery") return machineTypeLabel(car.machine_type) || "Machine";
+  // A truck is never described by seats or gearbox, even with no type set.
+  if (car.category === "truck") {
     return [truckTypeLabel(car.truck_type), car.payload_kg ? `carries ${formatPayload(car.payload_kg)}` : ""]
       .filter(Boolean)
       .join(" · ");
@@ -125,6 +128,18 @@ export function listingBase(category: string): "/trucks" | "/machinery" | "/cars
   if (category === "truck") return "/trucks";
   if (category === "machinery") return "/machinery";
   return "/cars";
+}
+
+/**
+ * Who comes with the hire, as the card and the detail page say it (PR H3):
+ * a car is "With driver" or "Self-drive"; a truck "With driver" or
+ * nothing; a machine "With operator" or nothing. Trucks and machines are
+ * never called self-drive.
+ */
+export function crewNote(car: { category: string; chauffeured: boolean }): string {
+  if (car.category === "machinery") return car.chauffeured ? "With operator" : "";
+  if (car.category === "truck") return car.chauffeured ? "With driver" : "";
+  return car.chauffeured ? "With driver" : "Self-drive";
 }
 
 /** Cars are picked by seats and offered self-drive; trucks and machinery are not. */
