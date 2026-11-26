@@ -12,6 +12,14 @@ at `5ee8bd6`. Plan only: no application code was changed.
    replace them where supplied.
 2. **Masthead:** one "Hire" entry, and its menu holds only Cars, Trucks
    and Machinery. Drivers, Towing, Garage and Parts stay their own entries.
+   **Updated after H3:** search first, see
+   [`hire-search-first.md`](./hire-search-first.md). The Hire dropdown
+   leads to `/hire` (All vehicles, Cars, Trucks, Machinery), there's no
+   reading page between the menu and results, and "Buy and sell" goes
+   before Hire once its pages exist. This replaces H4.
+6. **Dev server parked** ("focus on local first"): no dev seed, no
+   waiting on the dev deploy until the owner says so. The VPS isn't
+   answering on 22 or 443 at the moment.
 3. **Renter papers:** by hire type: ID only when a driver or operator
    comes with the hire, ID + licence for self-drive. Payment is refused
    until Ops has cleared the papers the hire needs (H5).
@@ -567,18 +575,41 @@ nothing. Not from a canvas.
 - **Size:** L. **Owner checks:** the three pages on `app-cral.vercel.app`,
   on your phone.
 
-### H4 - Hire section on the home page and the masthead
+### H4 - Hire, search first (replaced 2026-11-26)
 
-- **Goal:** three photo doors with live counts and from-prices, first
-  under the hero; masthead shows one "Hire" entry with a small menu.
-- **Files:** `pages/Home.tsx`, new `components/hire/HireDoors.tsx`,
-  `components/subsite/{ServiceDoors,ServiceTabs}.tsx`, `lib/services.ts`
-  (a `group: "hire"` on cars/trucks/machinery), `components/site/{Masthead,Footer}.tsx`,
-  sitemap if it lists tabs.
-- **Deleted:** the three separate hire tabs.
-- **Worked when:** counts on the doors equal the counts on the listing
-  pages; masthead fits at 375 with no scroll; `check-links.mjs` clean.
-- **Size:** M. **Owner checks:** the home page on your phone and laptop.
+**Built**, merged into `develop` as PR #111 (2026-11-26).
+
+**Replaced by [`hire-search-first.md`](./hire-search-first.md)**, which
+the owner approved after seeing H3. The photo doors and the three
+listing pages from Part 2 no longer apply; that file is the spec.
+
+- **Goal:** one search page at `/hire` with a Type dropdown (All, Cars,
+  Trucks, Machinery) in place of H3's switch tabs; a "Hire" dropdown in
+  the masthead (All vehicles, Cars, Trucks, Machinery), every entry going
+  straight to results; home opens with the hire search box. "Buy and
+  sell" goes first in the menu and on home only once its pages ship
+  (CS3b); until then the menu starts with Hire.
+- **Files:** `routes.tsx`, new `pages/hire/HireSearch.tsx` built from
+  H3's `components/hire/*` (`HireSwitch` gives way to
+  `components/site/Dropdown.tsx`), `pages/Home.tsx`, `components/site/{Masthead,Footer}.tsx`,
+  `components/subsite/{ServiceTabs,ServiceDoors}.tsx`, `lib/services.ts`,
+  the redirect components, sitemap, `docs/decisions/customer-portal.md`.
+- **Deleted:** `pages/cars/CarsHome.tsx`, `pages/trucks/TrucksHome.tsx`,
+  `pages/machinery/MachineryHome.tsx` and the three `*Search` pages. Their
+  paths redirect, keeping the query string: `/cars`, `/cars/search` ->
+  `/hire?type=cars`, and the same for trucks and machinery. Detail and
+  booking paths (`/cars/:id`, `/trucks/:id/request`, ...) don't move, so
+  links in emails and SMS keep working.
+- **Worked when:** "Hire" in the menu lands on results in one click;
+  changing type keeps county and dates and drops filters that don't
+  apply; the "All" list sorts honestly (per day, per trip and quote-only
+  listings mixed: newest by default, or say how price sort is handled);
+  the short Google text sits below the results; no sideways scroll at
+  375, 44px menu rows, keyboard and Escape close the dropdown;
+  `check-links.mjs` clean.
+- **Size:** M-L. **Owner checks:** locally (the dev server is parked):
+  home, the Hire menu, and `/hire` for each type, on phone and laptop
+  widths.
 
 ### H5 - Renter papers before payment (customer booking)
 
