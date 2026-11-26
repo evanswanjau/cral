@@ -114,6 +114,19 @@ export const C = {
   },
   navDot: { width: 6, height: 6, borderRadius: 999, flex: "none" },
   navLabel: { flex: 1, minWidth: 0 },
+  /** A queue's waiting count beside its nav label (Renters, H5). */
+  navCount: {
+    flex: "none",
+    minWidth: 22,
+    height: 20,
+    padding: "0 6px",
+    display: "grid",
+    placeItems: "center",
+    borderRadius: 999,
+    background: "#0F23A8",
+    color: "#FFFFFF",
+    font: "600 11px/1 'IBM Plex Mono',monospace",
+  },
   navCaret: {
     flex: "none",
     display: "grid",

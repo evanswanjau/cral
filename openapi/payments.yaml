@@ -121,7 +121,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
         "422":
-          description: "`invalid_phone`."
+          description: >
+            `invalid_phone`, or `papers_not_cleared` - Ops has not yet
+            cleared the papers this hire needs (the booking's `documents`
+            block, `openapi/customer-bookings.yaml`). Checked before the
+            prompt goes out, so nobody pays for a hire whose keys would
+            then wait on a review.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }

@@ -213,7 +213,7 @@ export function DriverBook(): JSX.Element {
               <p style={warn}>
                 {error.message}{" "}
                 {error.code === "documents_required" && (
-                  <Link to={`/documents?next=${encodeURIComponent(`/drivers/${d.id}`)}`} style={{ color: "#0F23A8" }}>
+                  <Link to={`/documents?next=${encodeURIComponent(`/drivers/${d.id}`)}&needs=national_id`} style={{ color: "#0F23A8" }}>
                     Add your ID
                   </Link>
                 )}

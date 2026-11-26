@@ -21,6 +21,17 @@ portals.
   price in that listing's own unit (quote-first listings counted, never
   priced); `GET /catalog/counties?group=` counts one group. Machines carry
   a `machine_type` filter.
+- **Renter papers by hire type** (PR H5, owner's decision 3, 2026-11-26):
+  the national ID always; the driving licence only when the renter drives
+  (a self-drive vehicle with no driver of the owner's, and none added).
+  A chauffeured truck, a machine with its operator or a driver-only hire
+  needs the ID alone. One rule, `apps/api/src/lib/renter-papers.ts`, read
+  by the request gate (`documents_required`), the pay gate
+  (`papers_not_cleared`: no STK push until Ops has cleared them), the
+  pickup gate (`hirer_documents_not_accepted`, now a backstop) and the
+  merchant's `id_verified`. The booking carries a `documents` block, and
+  Trip detail shows "Papers being checked - pay once cleared" in place of
+  Pay. The Ops nav shows how many renters are waiting.
 - **The pickup code is never shown in the customer app**: only a hash
   exists and the code goes out by email; trip detail shows the handover's
   state.

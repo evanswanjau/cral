@@ -534,6 +534,65 @@ describe("bookings — handover", () => {
     emailSpy.mockRestore();
   });
 
+  /**
+   * H5 (owner's decision 3): the pickup gate asks for the papers this hire
+   * needs - the licence only when the renter drives. One helper walks a
+   * pickup to `confirmed` and tries to complete it.
+   */
+  async function tryPickup(chauffeured: boolean, registration: string) {
+    const { accessToken, userId } = await newMerchant();
+    const vehicle = await newVehicle(accessToken, registration);
+    await db("vehicles").where({ id: vehicle.id }).update({ chauffeured });
+    const hirer = await newHirer();
+    await db("documents").insert({
+      id: generateId("document"),
+      merchant_id: null,
+      user_id: hirer.id,
+      vehicle_id: null,
+      kind: "national_id",
+      storage_key: `test/${hirer.id}/national_id`,
+      original_name: "national_id.pdf",
+      size_bytes: 100,
+      content_type: "application/pdf",
+      review_state: "ok",
+    });
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    const booking = await insertBooking(merchant.id, vehicle.id, hirer.id, { status: "confirmed" });
+
+    const emailSpy = vi.spyOn(emailAdapter, "send");
+    const open = await request(app)
+      .post(`/merchant/bookings/${booking.id}/handovers`)
+      .set(auth(accessToken))
+      .send({ kind: "pickup" });
+    const code = extractCode(emailSpy.mock.calls.at(-1)?.[0]?.text ?? "");
+    await request(app).post(`/merchant/handovers/${open.body.id}/otp/verify`).set(auth(accessToken)).send({ code });
+    await request(app)
+      .post(`/merchant/handovers/${open.body.id}/condition`)
+      .set(auth(accessToken))
+      .send({ odometer_km: 1000, fuel_level: "full" });
+    await request(app).post(`/merchant/handovers/${open.body.id}/confirm`).set(auth(accessToken));
+    const res = await request(app)
+      .post(`/merchant/handovers/${open.body.id}/complete`)
+      .set(auth(accessToken))
+      .set(idem());
+    emailSpy.mockRestore();
+    return res;
+  }
+
+  it("hands over a chauffeured vehicle on the hirer's cleared ID alone", async () => {
+    const res = await tryPickup(true, "KDA 106D");
+    expect(res.status).toBe(200);
+    expect(res.body.booking.status).toBe("active");
+  });
+
+  it("still holds a self-drive pickup for the hirer's licence", async () => {
+    const res = await tryPickup(false, "KDA 106E");
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("hirer_documents_not_accepted");
+    expect(res.body.error.message).toContain("driving licence");
+    expect(res.body.error.message).not.toContain("national id");
+  });
+
   it("locks the session after 5 wrong codes", async () => {
     const { accessToken, userId } = await newMerchant();
     const vehicle = await newVehicle(accessToken, "KDA 107A");

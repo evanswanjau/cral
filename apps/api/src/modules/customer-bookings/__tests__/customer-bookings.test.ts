@@ -62,7 +62,15 @@ function uniquePhone(): string {
  * verified phone - both are gates on `POST /bookings`. `withPhoneVerified:
  * false` exercises the phone gate itself.
  */
-async function renter(opts: { withDocuments?: boolean; withPhoneVerified?: boolean } = {}) {
+async function renter(
+  opts: {
+    withDocuments?: boolean;
+    withPhoneVerified?: boolean;
+    /** Which papers are on file (default both), and in what review state. */
+    kinds?: Array<"national_id" | "driving_licence">;
+    state?: "pending" | "ok" | "rejected";
+  } = {},
+) {
   const u = await createVerifiedTestUser();
   userIds.push(u.userId);
   await db("users").where({ id: u.userId }).update({
@@ -72,7 +80,7 @@ async function renter(opts: { withDocuments?: boolean; withPhoneVerified?: boole
   });
 
   if (opts.withDocuments !== false) {
-    for (const kind of ["national_id", "driving_licence"]) {
+    for (const kind of opts.kinds ?? ["national_id", "driving_licence"]) {
       await db("documents").insert({
         id: generateId("document"),
         merchant_id: null,
@@ -83,7 +91,7 @@ async function renter(opts: { withDocuments?: boolean; withPhoneVerified?: boole
         original_name: `${kind}.pdf`,
         size_bytes: 1024,
         content_type: "application/pdf",
-        review_state: "pending",
+        review_state: opts.state ?? "pending",
       });
     }
   }
@@ -736,5 +744,108 @@ describe("cancelling", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error.code).toBe("booking_not_cancellable");
+  });
+});
+
+/**
+ * H5 (owner's decision 3, 2026-11-26): a renter is asked only for the
+ * papers their hire needs - the ID always, the licence only when they
+ * drive - and the booking says whether CRAL has cleared them.
+ */
+describe("renter papers by hire type (H5)", () => {
+  const route = {
+    route_from: "Godown 14, Enterprise Road",
+    route_from_county: "Nairobi",
+    route_to: "Site office, Kitengela",
+    route_to_county: "Kajiado",
+    cargo_description: "40 bags of cement",
+  };
+
+  it("requests a chauffeured truck with the ID only", async () => {
+    const hirer = await renter({ kinds: ["national_id"] });
+    const { vehicleId } = await listing({ truckPayloadKg: 4_000, hiringUnit: "trip", tripRate: 1_500_000 });
+    await db("vehicles").where({ id: vehicleId }).update({ chauffeured: true });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...route, cargo_kg: 2_000 });
+
+    expect(res.status).toBe(201);
+    expect(res.body.documents).toEqual({
+      cleared: false,
+      items: [{ kind: "national_id", state: "pending", review_note: null }],
+    });
+  });
+
+  it("requests a machine with its operator on the ID only", async () => {
+    const hirer = await renter({ kinds: ["national_id"], state: "ok" });
+    const { vehicleId } = await listing();
+    await db("vehicles").where({ id: vehicleId }).update({ type: "machinery", chauffeured: true });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 2), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(201);
+    expect(res.body.documents.cleared).toBe(true);
+    expect(res.body.documents.items.map((i: { kind: string }) => i.kind)).toEqual(["national_id"]);
+  });
+
+  it("still needs the licence for a self-drive car, and says so by type", async () => {
+    const hirer = await renter({ kinds: ["national_id"] });
+    const { vehicleId } = await listing();
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 2), vehicle_id: vehicleId });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.code).toBe("documents_required");
+    expect(res.body.error.message).toBe("Add your driving licence before requesting a car.");
+  });
+
+  it("names the truck, not a car, when a truck renter has no ID", async () => {
+    const hirer = await renter({ withDocuments: false });
+    const { vehicleId } = await listing({ truckPayloadKg: 4_000, hiringUnit: "trip", tripRate: 1_500_000 });
+    await db("vehicles").where({ id: vehicleId }).update({ chauffeured: true });
+
+    const res = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 0), vehicle_id: vehicleId, ...route, cargo_kg: 2_000 });
+
+    expect(res.status).toBe(422);
+    expect(res.body.error.message).toBe("Add your national ID before requesting a truck.");
+  });
+
+  it("lists both papers on a self-drive booking, cleared only once both are ok", async () => {
+    const hirer = await renter({ kinds: ["national_id", "driving_licence"] });
+    const { vehicleId } = await listing();
+    const created = await request(app)
+      .post("/bookings")
+      .set(bearer(hirer.accessToken))
+      .set(idem())
+      .send({ ...dates(3, 2), vehicle_id: vehicleId });
+    expect(created.status).toBe(201);
+    expect(created.body.documents.cleared).toBe(false);
+    expect(created.body.documents.items.map((i: { kind: string }) => i.kind)).toEqual([
+      "national_id",
+      "driving_licence",
+    ]);
+
+    await db("documents").where({ user_id: hirer.userId, kind: "national_id" }).update({ review_state: "ok" });
+    const half = await request(app).get(`/bookings/${created.body.id}`).set(bearer(hirer.accessToken));
+    expect(half.body.documents.cleared).toBe(false);
+
+    await db("documents").where({ user_id: hirer.userId, kind: "driving_licence" }).update({ review_state: "ok" });
+    const both = await request(app).get(`/bookings/${created.body.id}`).set(bearer(hirer.accessToken));
+    expect(both.body.documents.cleared).toBe(true);
   });
 });

@@ -847,9 +847,10 @@ components:
         CRAL-observable conduct facts only — never another booking's
         free-text comment, vehicle, dates or location. `id_verified` is
         real as of the admin renters-review slice — it reflects whether
-        Ops has accepted both the hirer's national_id and driving_licence
-        documents (admin-renters), the same two rows the pickup handover
-        gate checks. Before that slice existed there was nothing honest to
+        Ops has accepted the papers this hire needs (admin-renters): the
+        national_id always, the driving_licence only for a self-drive hire
+        (H5, owner's decision 3) - the same check the pickup handover gate
+        runs. Before that slice existed there was nothing honest to
         report here; the field was omitted rather than hardcoded true.
       properties:
         name: { type: string }
@@ -866,7 +867,7 @@ components:
         licence_valid_to: { type: string, format: date, nullable: true }
         id_verified:
           type: boolean
-          description: True once Ops has accepted both the hirer's national_id and driving_licence.
+          description: True once Ops has accepted the papers this hire needs - the national_id, plus the driving_licence when the hirer drives.
 
     RatingSummary:
       type: object

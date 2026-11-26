@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import type { AdminRole } from "../../lib/auth-api.js";
+import { fetchRenters } from "../../lib/renters-api.js";
 import { C } from "./styles.js";
 
 /**
@@ -84,11 +86,29 @@ const ITEMS: Item[] = [
   { kind: "leaf", to: "/settings", label: "Settings", roles: [], built: true },
 ];
 
+/**
+ * Renters whose papers are waiting to be read (H5). A renter can't pay
+ * until Ops clears them, so this queue now holds up money - the count sits
+ * on the nav, in front of Ops on every page including the home. A reviewer
+ * without the renters queue gets a 403 and simply sees no count.
+ */
+function useRentersWaiting(enabled: boolean): number | null {
+  const { data } = useQuery({
+    queryKey: ["admin", "renters", "pending-count"],
+    queryFn: () => fetchRenters({ filter: "pending" }),
+    enabled,
+    retry: false,
+    refetchInterval: 60_000,
+  });
+  return data ? data.total : null;
+}
+
 export function SideNav({ role }: { role: AdminRole }): JSX.Element {
   const location = useLocation();
   const [openOverride, setOpenOverride] = useState<Record<string, boolean>>({});
 
   const visible = ITEMS.filter((it) => it.built && (role === "admin_super" || it.roles.includes(role)));
+  const rentersWaiting = useRentersWaiting(visible.some((it) => it.kind === "leaf" && it.to === "/renters"));
 
   return (
     <nav style={C.nav}>
@@ -109,6 +129,11 @@ export function SideNav({ role }: { role: AdminRole }): JSX.Element {
                 <>
                   <span style={{ ...C.navDot, background: isActive ? "#0F23A8" : "#E4E7EC" }} />
                   <span style={C.navLabel}>{role === "admin_super" && it.superLabel ? it.superLabel : it.label}</span>
+                  {it.to === "/renters" && rentersWaiting !== null && rentersWaiting > 0 && (
+                    <span style={C.navCount} aria-label={`${rentersWaiting} waiting`}>
+                      {rentersWaiting}
+                    </span>
+                  )}
                 </>
               )}
             </NavLink>

@@ -16,6 +16,7 @@ import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
 import { formatMoney, photoSrc } from "../lib/catalog-api.js";
 import { VEHICLE_CATEGORY_LABEL, formatPayload, listingBase, vehicleNoun } from "../lib/vehicle-categories.js";
 import { ApiClientError } from "../lib/api.js";
+import { PapersBeingChecked } from "../components/hire/RenterPapers.js";
 
 /**
  * `/bookings/:id` - **the home of a booking once it exists**, and the whole
@@ -680,8 +681,14 @@ export function TripDetail(): JSX.Element {
     enabled: !!id,
     retry: false,
     // Quote requests and sent quotes wait on someone too (PR T3).
-    refetchInterval: (query) =>
-      ["requested", "quote_requested", "quoted"].includes(query.state.data?.status ?? "") ? 8000 : false,
+    // So does an accepted booking whose papers CRAL is still reading (H5):
+    // the M-Pesa prompt opens on its own once they're cleared.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (["requested", "quote_requested", "quoted"].includes(data?.status ?? "")) return 8000;
+      if (data?.status === "confirmed" && !data.documents.cleared) return 30000;
+      return false;
+    },
     // An answer that lands while the tab was in the background should be
     // on screen the moment they look at it again.
     refetchOnWindowFocus: true,
@@ -835,6 +842,16 @@ export function TripDetail(): JSX.Element {
        */}
       {booking.status === "requested" &&
         (paid ? <PaymentCard booking={booking} /> : <WaitingCard booking={booking} />)}
+      {/* While the owner decides, say early which papers are still being
+          read - the renter can't pay until they're cleared (H5). */}
+      {open && !booking.documents.cleared && (
+        <PapersBeingChecked
+          items={booking.documents.items}
+          accepted={false}
+          ownerName={ownerName(booking)}
+          here={`/bookings/${booking.id}`}
+        />
+      )}
       {(booking.status === "quote_requested" || booking.status === "quoted") && (
         <QuoteCard
           booking={booking}
@@ -843,9 +860,20 @@ export function TripDetail(): JSX.Element {
           }}
         />
       )}
-      {(booking.status === "confirmed" || booking.status === "active") && (
-        <PaymentCard booking={booking} />
-      )}
+      {/* No Pay button until CRAL has cleared the papers this hire needs
+          (H5) - the API refuses with `papers_not_cleared` anyway. A booking
+          already paid still shows its receipt. */}
+      {(booking.status === "confirmed" || booking.status === "active") &&
+        (paid || booking.documents.cleared ? (
+          <PaymentCard booking={booking} />
+        ) : (
+          <PapersBeingChecked
+            items={booking.documents.items}
+            accepted
+            ownerName={ownerName(booking)}
+            here={`/bookings/${booking.id}`}
+          />
+        ))}
 
       <HandoverCard handovers={booking.handovers} />
 

@@ -20,8 +20,13 @@ import {
 
 const LABELS: Record<RenterDocKind, { label: string; note: string }> = {
   national_id: { label: "National ID", note: "Both sides in one photo, or the clearer side." },
-  driving_licence: { label: "Driving licence", note: "The card, not a learner's permit." },
+  driving_licence: {
+    label: "Driving licence",
+    note: "Only to drive a car or machine yourself. The card, not a learner's permit.",
+  },
 };
+
+const KINDS: RenterDocKind[] = ["national_id", "driving_licence"];
 
 function stateChip(state: DocumentState): { label: string; bg: string; fg: string; border: string } {
   switch (state) {
@@ -190,8 +195,19 @@ export function Documents(): JSX.Element {
   // string is an open redirect, not a resume.
   const rawNext = params.get("next") ?? "";
   const next = rawNext.startsWith("/") && !rawNext.startsWith("//") ? rawNext : "";
-  const outstanding = data?.verification.outstanding ?? [];
-  const canResume = next && data && outstanding.length === 0;
+  // Which papers the booking that sent them here needs (H5): the ID
+  // always, the licence only for self-drive. Without `needs`, both.
+  const needs = (params.get("needs") ?? "")
+    .split(",")
+    .filter((k): k is RenterDocKind => (KINDS as string[]).includes(k));
+  const needed = needs.length > 0 ? needs : KINDS;
+  // On file is enough to send the request; CRAL clearing them is what
+  // payment waits for, and the booking page shows that.
+  const onFile = (kind: RenterDocKind) => {
+    const state = data?.verification.documents.find((d) => d.kind === kind)?.state ?? "missing";
+    return state === "pending" || state === "ok";
+  };
+  const canResume = next && data && needed.every(onFile);
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", padding: "clamp(28px,4vw,44px) 20px clamp(50px,7vw,80px)" }}>
@@ -212,8 +228,10 @@ export function Documents(): JSX.Element {
         >
           <span style={{ font: "400 13.5px/1.5 'Instrument Sans',sans-serif", color: "#0B1B85" }}>
             {canResume
-              ? "That's both of them. Your booking is waiting where you left it."
-              : "Add these two and you'll go straight back to your booking - nothing you typed is lost."}
+              ? "That's everything this hire needs. Your booking is waiting where you left it."
+              : needed.length === 1
+                ? "Add your ID and you'll go straight back to your booking - nothing you typed is lost."
+                : "Add these two and you'll go straight back to your booking - nothing you typed is lost."}
           </span>
           <Link
             to={next}
@@ -254,9 +272,10 @@ export function Documents(): JSX.Element {
         Your documents
       </h1>
       <p style={{ margin: "0 0 26px", font: "400 15px/1.6 'Instrument Sans',sans-serif", color: "#5A6373", maxWidth: 520 }}>
-        Once. Not every time you hire. Upload your ID and licence and CRAL reads them once - every
-        request after this one goes out with them already attached.
-        {verified && " Both are on file."}
+        Once. Not every time you hire. Upload your ID - and your licence, if you drive yourself - and
+        CRAL reads them once. Every request after this one goes out with them already attached. You
+        pay for a hire once CRAL has cleared the papers it needs.
+        {verified && " Both are cleared."}
       </p>
 
       <div style={{ display: "grid", gap: 12 }}>

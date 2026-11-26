@@ -164,9 +164,13 @@ paths:
           description: >
             `invalid_dates` (dropoff not after pickup, or pickup in the
             past), `below_minimum_hire` (shorter than the listing's
-            `minimum_hire_days`), or `documents_required` (identity
-            documents not yet uploaded - the body names the outstanding
-            kinds).
+            `minimum_hire_days`), or `documents_required` (a paper this
+            hire needs is not yet uploaded - the body names it). What a
+            hire needs follows the owner's decision 3 (2026-11-26): the
+            national ID always; the driving licence only when the renter
+            drives - a self-drive vehicle with no driver coming with it.
+            A chauffeured truck, a machine with its operator, or a driver
+            for the renter's own car is requested with the ID alone.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -404,8 +408,38 @@ components:
       allOf:
         - $ref: "#/components/schemas/BookingSummary"
         - type: object
-          required: [deposit, pickup_location, dropoff_location]
+          required: [deposit, pickup_location, dropoff_location, documents]
           properties:
+            documents:
+              type: object
+              required: [cleared, items]
+              description: >
+                The renter's papers this hire needs, and whether CRAL has
+                cleared them (H5). Only the kinds this hire needs are
+                listed: `national_id` always, `driving_licence` only for
+                self-drive. Payment (`POST /bookings/{id}/pay`) is refused
+                with `papers_not_cleared` until `cleared` is true, so the
+                keys never wait on a review after the renter has paid.
+              properties:
+                cleared:
+                  type: boolean
+                  description: Every listed paper is accepted by Ops (`ok`).
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [kind, state, review_note]
+                    properties:
+                      kind: { type: string, enum: [national_id, driving_licence] }
+                      state:
+                        type: string
+                        enum: [missing, pending, ok, rejected, expiring]
+                        description: >
+                          `missing` - not uploaded; `pending` - with Ops;
+                          `ok` - cleared; `rejected` - upload it again
+                          (`review_note` says why); `expiring` - not
+                          cleared until renewed.
+                      review_note: { type: string, nullable: true }
             deposit:
               allOf: [{ $ref: "#/components/schemas/Money" }]
               description: >

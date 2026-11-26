@@ -16,6 +16,7 @@ import { useIsAuthenticated, setSession, deviceId, TERMS_VERSION } from "../lib/
 import { ApiClientError } from "../lib/api.js";
 import { BookingSteps, bookingSteps } from "../components/site/BookingSteps.js";
 import { PhoneVerify } from "../components/subsite/PhoneVerify.js";
+import { PapersBeforeRequest, documentsLink, papersNeeded } from "../components/hire/RenterPapers.js";
 import { routeFromParams } from "../lib/truck-route.js";
 import { earliestPickupDay, earliestReturnDay, formatHireDate, hireDays, hireInstants } from "../lib/hire-dates.js";
 import { HIRING_UNIT_LABEL, quoteTotal } from "../lib/hiring-units.js";
@@ -210,10 +211,10 @@ export function Booking(): JSX.Element {
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  // Both documents are collected here, not just the licence. The booking
-  // gate (`documents_required`) needs the ID *and* the licence, so asking
-  // for one of them here only guaranteed a bounce to `/documents` at the
-  // last step - the worst place to discover a second upload (2026-09-21).
+  // Every paper this hire needs is collected here, so the request gate
+  // (`documents_required`) never bounces them to `/documents` at the last
+  // step (2026-09-21). Since H5 that is the ID always and the licence only
+  // for self-drive (`needsLicence` below, owner's decision 3).
   const [docFiles, setDocFiles] = useState<Record<RenterDocKind, File | null>>({
     national_id: null,
     driving_licence: null,
@@ -330,6 +331,10 @@ export function Booking(): JSX.Element {
   const driverTotal =
     driver && car.hiring_unit !== "km" && car.hiring_unit !== "tonne" ? driverQuote(driver, car.hiring_unit, days, 0) : null;
   const total = carTotal === null ? null : driver ? (driverTotal === null ? null : carTotal + driverTotal) : carTotal;
+  // A licence only when the renter drives: no driver or operator comes
+  // with the listing and none is added (H5, owner's decision 3).
+  const needs = papersNeeded({ chauffeured: car.chauffeured, withDriver: !!driver });
+  const needsLicence = needs.includes("driving_licence");
   // Dates arrive in the URL, so a pair below this car's minimum can still
   // land here (an old link, an edited query string). Say so on the way in
   // rather than at the end of the flow - the car page now blocks it at
@@ -367,15 +372,18 @@ export function Booking(): JSX.Element {
     // Asked for here rather than at the request step: the API blocks a
     // request until both are on file, so the last screen is the wrong
     // place to find that out.
-    if (!docFiles.national_id || !docFiles.driving_licence) {
-      setError({ code: "account_required", message: "Add a photo of your ID and your licence to continue." });
+    if (!docFiles.national_id || (needsLicence && !docFiles.driving_licence)) {
+      setError({
+        code: "account_required",
+        message: needsLicence ? "Add a photo of your ID and your licence to continue." : "Add a photo of your ID to continue.",
+      });
       return;
     }
-    if (!licenceExpiry) {
+    if (needsLicence && !licenceExpiry) {
       setError({ code: "account_required", message: "Enter the expiry date shown on your licence." });
       return;
     }
-    if (licenceExpired) {
+    if (needsLicence && licenceExpired) {
       setError({
         code: "account_required",
         message: "That licence has expired. CRAL can only accept a licence that is still in date.",
@@ -413,7 +421,7 @@ export function Booking(): JSX.Element {
       }
       setSession(await login(email, password, deviceId()));
 
-      for (const kind of ["national_id", "driving_licence"] as const) {
+      for (const kind of needs) {
         const file = docFiles[kind];
         if (!file) continue;
         try {
@@ -602,9 +610,11 @@ export function Booking(): JSX.Element {
                   </label>
                 </div>
 
-                <div style={{ ...label, marginBottom: 7 }}>Your ID and licence</div>
+                <div style={{ ...label, marginBottom: 7 }}>{needsLicence ? "Your ID and licence" : "Your ID"}</div>
                 <p style={{ margin: "0 0 13px", font: "400 13.5px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                  We need these to validate your identity and that you are licensed to drive.
+                  {needsLicence
+                    ? "You drive this one yourself, so we check who you are and that you are licensed to drive."
+                    : "A driver or operator comes with this hire, so we only need to check who you are."}
                 </p>
                 <div style={{ display: "grid", gap: 10, marginBottom: 20 }}>
                   <DocPicker
@@ -614,39 +624,43 @@ export function Booking(): JSX.Element {
                     file={docFiles.national_id}
                     onChange={onDocChange("national_id")}
                   />
-                  <DocPicker
-                    badge="DL"
-                    title="Add a photo of your driving licence"
-                    hint="The whole card in frame, expiry date readable"
-                    file={docFiles.driving_licence}
-                    onChange={onDocChange("driving_licence")}
-                  />
-                  <label style={{ display: "block" }}>
-                    <span style={label}>Licence expiry date</span>
-                    <input
-                      type="date"
-                      min={new Date().toISOString().slice(0, 10)}
-                      value={licenceExpiry}
-                      onChange={(e) => setLicenceExpiry(e.target.value)}
-                      style={{
-                        ...monoField,
-                        borderColor: licenceExpired ? "#F7BDC5" : "#CDD2DA",
-                      }}
-                    />
-                    {licenceExpired && (
-                      <span
-                        style={{
-                          display: "block",
-                          marginTop: 6,
-                          font: "500 12.5px/1.45 'Instrument Sans',sans-serif",
-                          color: "#A50E22",
-                        }}
-                      >
-                        That licence expired on {formatHireDate(licenceExpiry)}. CRAL can only
-                        accept a licence that is still in date.
-                      </span>
-                    )}
-                  </label>
+                  {needsLicence && (
+                    <>
+                      <DocPicker
+                        badge="DL"
+                        title="Add a photo of your driving licence"
+                        hint="The whole card in frame, expiry date readable"
+                        file={docFiles.driving_licence}
+                        onChange={onDocChange("driving_licence")}
+                      />
+                      <label style={{ display: "block" }}>
+                        <span style={label}>Licence expiry date</span>
+                        <input
+                          type="date"
+                          min={new Date().toISOString().slice(0, 10)}
+                          value={licenceExpiry}
+                          onChange={(e) => setLicenceExpiry(e.target.value)}
+                          style={{
+                            ...monoField,
+                            borderColor: licenceExpired ? "#F7BDC5" : "#CDD2DA",
+                          }}
+                        />
+                        {licenceExpired && (
+                          <span
+                            style={{
+                              display: "block",
+                              marginTop: 6,
+                              font: "500 12.5px/1.45 'Instrument Sans',sans-serif",
+                              color: "#A50E22",
+                            }}
+                          >
+                            That licence expired on {formatHireDate(licenceExpiry)}. CRAL can only
+                            accept a licence that is still in date.
+                          </span>
+                        )}
+                      </label>
+                    </>
+                  )}
                 </div>
 
                 {error && (
@@ -874,6 +888,8 @@ export function Booking(): JSX.Element {
                   />
                 </label>
 
+                <PapersBeforeRequest needs={needs} here={here} />
+
                 {error && (
                   <ErrorNote>
                     {error.message}
@@ -881,7 +897,7 @@ export function Booking(): JSX.Element {
                       <>
                         {" "}
                         {/* `next` is what brings them back here afterwards. */}
-                        <Link to={`/documents?next=${encodeURIComponent(here)}`} style={{ color: "#A50E22" }}>
+                        <Link to={documentsLink(here, needs)} style={{ color: "#A50E22" }}>
                           Add them now →
                         </Link>
                       </>
