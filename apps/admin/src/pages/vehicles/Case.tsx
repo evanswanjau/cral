@@ -410,7 +410,7 @@ export function Case(): JSX.Element {
             </div>
             <div style={{ padding: 18, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", gap: "16px 18px" }}>
               {[
-                ["REGISTRATION", c.registration],
+                [c.registration_kind === "serial" ? "SERIAL NUMBER (NO PLATE)" : "REGISTRATION", c.registration],
                 ["MAKE & MODEL", c.title],
                 ["TYPE", c.type],
                 ...(c.type === "truck"
@@ -419,8 +419,10 @@ export function Case(): JSX.Element {
                       ["CARRIES UP TO", c.payload_kg ? `${c.payload_kg / 1000} t` : "—"],
                     ]
                   : []),
+                ...(c.type === "machinery" ? [["MACHINE TYPE", humaniseSlug(c.machine_type) || "—"]] : []),
                 ["YEAR", c.year],
-                ["SEATS", String(c.seats)],
+                // Seats mean nothing on a truck or a machine (H1 asks them for cars and vans only).
+                ...(c.type === "truck" || c.type === "machinery" ? [] : [["SEATS", String(c.seats)]]),
                 ["TRANSMISSION", c.transmission],
                 ["FUEL", c.fuel],
                 ["COLOUR", c.colour ?? "—"],

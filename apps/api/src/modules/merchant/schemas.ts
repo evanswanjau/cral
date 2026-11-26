@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { MAX_PAYLOAD_KG, TRUCK_TYPES, VEHICLE_CATEGORIES } from "../vehicles/categories.js";
+import {
+  MACHINE_TYPES,
+  MAX_PAYLOAD_KG,
+  REGISTRATION_KINDS,
+  TRUCK_TYPES,
+  VEHICLE_CATEGORIES,
+} from "../vehicles/categories.js";
 
 export const PatchOnboardingSchema = z.object({
   step: z.number().int().min(1).max(5).optional(),
@@ -39,10 +45,16 @@ export const VehicleInputSchema = z.object({
   make: z.string().optional(),
   model: z.string().optional(),
   year: z.string().optional(),
-  registration: z.string().optional(),
+  registration: z.string().max(20).optional(),
+  /** `serial` only for machinery - see `categories.ts#machineColumns`. */
+  registration_kind: z.enum(REGISTRATION_KINDS).optional(),
+  /** Asked for sedan / SUV / van; the column defaults to 5. */
+  seats: z.number().int().min(1).max(70).optional(),
   transmission: z.enum(["Automatic", "Manual"]).optional(),
   fuel: z.enum(["Petrol", "Diesel", "Hybrid", "Electric"]).optional(),
   colour: z.string().optional(),
+  /** Only kept when `type` is `machinery`; required at submission for one. */
+  machine_type: z.enum(MACHINE_TYPES).nullable().optional(),
   /** Only kept when `type` is `truck` - see `categories.ts#truckColumns`. */
   truck_type: z.enum(TRUCK_TYPES).nullable().optional(),
   /** Kilograms. Shown to renters as tonnes. */

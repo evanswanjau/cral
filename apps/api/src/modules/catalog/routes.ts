@@ -2,7 +2,7 @@ import { Router } from "express";
 import { asyncHandler } from "../../lib/async-handler.js";
 import { rateLimit } from "../../middleware/rate-limit.js";
 import { safeContentType, safeDisposition } from "../../lib/uploads.js";
-import { CatalogSearchQuerySchema } from "./schemas.js";
+import { CatalogSearchQuerySchema, CountiesQuerySchema } from "./schemas.js";
 import * as catalog from "./service.js";
 import * as drivers from "./drivers.js";
 import { z } from "zod";
@@ -35,8 +35,18 @@ catalogRouter.get(
 catalogRouter.get(
   "/catalog/counties",
   browse,
+  asyncHandler(async (req, res) => {
+    const { group } = CountiesQuerySchema.parse(req.query);
+    res.status(200).json(await catalog.getCounties(group));
+  }),
+);
+
+// The Hire doors on the home page (PR H1): count + from-price per group.
+catalogRouter.get(
+  "/catalog/hire-summary",
+  browse,
   asyncHandler(async (_req, res) => {
-    res.status(200).json(await catalog.getCounties());
+    res.status(200).json(await catalog.getHireSummary());
   }),
 );
 

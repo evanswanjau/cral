@@ -72,6 +72,10 @@ export interface VehicleRow {
   truck_type: string | null;
   /** Kilograms, only when `type = 'truck'`. */
   payload_kg: number | null;
+  /** Machine sub-type, only when `type = 'machinery'` (20261126090000). */
+  machine_type: string | null;
+  /** "plate" | "serial" - what `registration` holds; serial is machinery only. */
+  registration_kind: string;
   county: string | null;
   pickup_address: string | null;
   daily_rate_amount: number;

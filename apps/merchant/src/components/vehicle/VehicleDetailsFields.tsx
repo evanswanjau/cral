@@ -1,7 +1,25 @@
 import { Combobox } from "../onboarding/Combobox.js";
 import { FormField, Select, TextInput } from "../onboarding/primitives.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../lib/vehicle-catalogue.js";
-import { TRUCK_TYPES, VEHICLE_CATEGORIES, type TruckType, type VehicleType } from "../../lib/vehicle-categories.js";
+import {
+  TRUCK_TYPES,
+  VEHICLE_CATEGORIES,
+  type MachineType,
+  type TruckType,
+  type VehicleType,
+} from "../../lib/vehicle-categories.js";
+import {
+  asksSeats,
+  formatPlate,
+  MachineTypeField,
+  machineTypeMissing,
+  RegistrationField,
+  SeatsField,
+  seatsFromText,
+  type RegistrationKind,
+} from "./ClassFields.js";
+
+export { formatPlate };
 
 export type Transmission = "Automatic" | "Manual";
 export type Fuel = "Petrol" | "Diesel" | "Hybrid" | "Electric";
@@ -22,6 +40,12 @@ export interface VehicleDetailsValue {
   truck_type: TruckType | "";
   /** Truck-only, in tonnes as typed ("4", "1.5"); sent to the API as kg. */
   payload_t: string;
+  /** Machinery-only (PR H1). "" until picked. */
+  machine_type: MachineType | "";
+  /** "serial": a machine with no plate, `registration` is its serial number. */
+  registration_kind: RegistrationKind;
+  /** Seats as typed; asked for sedan / SUV / van only. */
+  seats: string;
 }
 
 /** Kilograms from what the merchant typed in tonnes, or null if it isn't a usable number. */
@@ -41,6 +65,26 @@ export function truckDetailsMissing(value: VehicleDetailsValue): boolean {
   return value.type === "truck" && (!value.truck_type || payloadKgFromTonnes(value.payload_t) === null);
 }
 
+/** True when a machine has no type yet, or a car's seats aren't a usable number. */
+export function classDetailsMissing(value: VehicleDetailsValue): boolean {
+  return machineTypeMissing(value.type, value.machine_type) || (asksSeats(value.type) && seatsFromText(value.seats) === null);
+}
+
+/** The machine + seats fields as the API takes them. Seats are only sent for a car or van. */
+export function classPayload(value: VehicleDetailsValue): {
+  machine_type: string | null;
+  registration_kind: RegistrationKind;
+  seats?: number;
+} {
+  const machine = value.type === "machinery";
+  const seats = asksSeats(value.type) ? seatsFromText(value.seats) : null;
+  return {
+    machine_type: machine ? value.machine_type || null : null,
+    registration_kind: machine ? value.registration_kind : "plate",
+    ...(seats !== null ? { seats } : {}),
+  };
+}
+
 /** The truck fields as the API takes them - null for anything that isn't a truck. */
 export function truckPayload(value: VehicleDetailsValue): { truck_type: string | null; payload_kg: number | null } {
   if (value.type !== "truck") return { truck_type: null, payload_kg: null };
@@ -58,12 +102,10 @@ export const EMPTY_VEHICLE_DETAILS: VehicleDetailsValue = {
   colour: "",
   truck_type: "",
   payload_t: "",
+  machine_type: "",
+  registration_kind: "plate",
+  seats: "5",
 };
-
-export function formatPlate(raw: string): string {
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
-  return clean.length > 3 ? `${clean.slice(0, 3)} ${clean.slice(3)}` : clean;
-}
 
 /** The logbook-derived fields, shared by the Add-a-vehicle page and the
  *  VehicleDetail "edit details" modal. Renders a run of `FormField`s (no
@@ -84,7 +126,14 @@ export function VehicleDetailsFields({
   return (
     <>
       <FormField label="Vehicle type">
-        <Select value={value.type} onChange={(e) => set("type", e.target.value as VehicleType)}>
+        <Select
+          value={value.type}
+          onChange={(e) => {
+            const type = e.target.value as VehicleType;
+            // Only a machine may go without a plate.
+            onChange({ ...value, type, ...(type === "machinery" ? {} : { registration_kind: "plate" as const }) });
+          }}
+        >
           {VEHICLE_CATEGORIES.map((t) => (
             <option key={t.value} value={t.value}>{t.label}</option>
           ))}
@@ -116,6 +165,9 @@ export function VehicleDetailsFields({
           </FormField>
         </>
       )}
+      {value.type === "machinery" && (
+        <MachineTypeField value={value.machine_type} onChange={(v) => set("machine_type", v)} showErrors={showErrors} />
+      )}
       <FormField label="Make" required error={showErrors && !value.make.trim() ? "Required." : undefined} helper="Pick from the list or type your own.">
         <Combobox value={value.make} onChange={(v) => set("make", v)} options={MAKE_NAMES} defaultOptions={POPULAR_KENYAN_MAKES} placeholder="Toyota" error={showErrors && !value.make.trim()} emptyHint="Not listed - we'll use what you typed." />
       </FormField>
@@ -125,9 +177,14 @@ export function VehicleDetailsFields({
       <FormField label="Year" required error={showErrors && !value.year.trim() ? "Required." : undefined} helper="Four digits.">
         <TextInput value={value.year} onChange={(e) => set("year", e.target.value.replace(/\D/g, "").slice(0, 4))} placeholder="2019" error={showErrors && !value.year.trim()} />
       </FormField>
-      <FormField label="Registration" required error={showErrors && !value.registration.trim() ? "Required." : undefined} helper="Spaced and uppercased as you type.">
-        <TextInput value={value.registration} onChange={(e) => set("registration", formatPlate(e.target.value))} placeholder="KDL 442N" error={showErrors && !value.registration.trim()} />
-      </FormField>
+      <RegistrationField
+        type={value.type}
+        kind={value.registration_kind}
+        value={value.registration}
+        onChange={(next) => onChange({ ...value, registration: next.registration, registration_kind: next.registrationKind })}
+        showErrors={showErrors}
+      />
+      {asksSeats(value.type) && <SeatsField value={value.seats} onChange={(v) => set("seats", v)} showErrors={showErrors} />}
       <FormField label="Transmission">
         <Select value={value.transmission} onChange={(e) => set("transmission", e.target.value as Transmission)}>
           {TRANSMISSIONS.map((t) => (

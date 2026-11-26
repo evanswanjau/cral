@@ -78,6 +78,17 @@ paths:
           in: query
           schema: { type: string, format: date }
           description: Hire end (Nairobi calendar day). Requires `from`.
+        - name: group
+          in: query
+          schema:
+            type: string
+            enum: [cars, trucks, machinery]
+          description: >
+            A hire group (PR H1 of `docs/plans/hire-that-works.md`):
+            `cars` is sedan + suv + van, `trucks` is truck, `machinery` is
+            machinery. Use it for "all cars"; `category` still narrows to
+            one type inside it. A `category` outside the group returns an
+            empty page, never the other type.
         - name: category
           in: query
           schema:
@@ -105,6 +116,12 @@ paths:
           description: >
             Only trucks that carry at least this many kilograms. The browse
             UI asks in tonnes and converts. Implies `category=truck`.
+        - name: machine_type
+          in: query
+          schema:
+            type: string
+            enum: [excavator, backhoe_loader, wheel_loader, skid_steer, bulldozer, grader, roller, forklift, telehandler, mobile_crane, concrete_mixer, other]
+          description: Only machines of this kind. Implies `category=machinery`.
         - name: chauffeured
           in: query
           schema: { type: boolean }
@@ -309,7 +326,15 @@ paths:
         dressed up as a choice. `county` is free text on a vehicle, so
         these are the values merchants have actually typed, deduplicated
         case-insensitively and trimmed; ordered by count descending, then
-        name.
+        name. With `group`, only that group's listings are counted, so the
+        trucks page never offers a county that only has cars.
+      parameters:
+        - name: group
+          in: query
+          schema:
+            type: string
+            enum: [cars, trucks, machinery]
+          description: Count only this hire group (see `GET /catalog/vehicles`).
       responses:
         "200":
           description: Counties with live listings, most first.
@@ -327,6 +352,40 @@ paths:
                       properties:
                         county: { type: string, example: "Nairobi" }
                         vehicle_count: { type: integer, example: 12 }
+        "422":
+          description: An unknown `group`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+
+  /catalog/hire-summary:
+    get:
+      tags: [catalog]
+      summary: Count and from-price per hire group
+      operationId: getHireSummary
+      security: []
+      description: >
+        What the home page's Hire doors show (PR H1 of
+        `docs/plans/hire-that-works.md`): for cars, trucks and machinery,
+        how many live listings there are and the lowest price among them.
+        Same two gates as search. The price is each listing's own unit -
+        a per-trip truck's trip rate, never its daily rate - and `unit`
+        says which, so a client writes "from KES 4,500 / trip", never
+        "/ day" for it. Quote-first listings (per km, per tonne, or the
+        owner's "Always quote me first") are counted but not priced. When
+        nothing in a group has a price, `from` and `unit` are null.
+      responses:
+        "200":
+          description: One entry per group, always all three.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cars, trucks, machinery]
+                properties:
+                  cars: { $ref: "#/components/schemas/HireGroupSummary" }
+                  trucks: { $ref: "#/components/schemas/HireGroupSummary" }
+                  machinery: { $ref: "#/components/schemas/HireGroupSummary" }
 
 components:
   schemas:
@@ -402,6 +461,8 @@ components:
           seats,
           truck_type,
           payload_kg,
+          machine_type,
+          registration_kind,
           chauffeured,
           county,
           daily_rate,
@@ -431,7 +492,15 @@ components:
           description: >
             The plate, shown on the card in the design ("papers still
             read"). Public-observable on the car itself; included
-            deliberately, not an oversight.
+            deliberately, not an oversight. For a machine with no plate
+            this is its serial number - see `registration_kind`.
+        registration_kind:
+          type: string
+          enum: [plate, serial]
+          description: >
+            `serial` only for machinery that carries no number plate
+            (owner's call, 2026-11-26); the client labels `registration`
+            "Serial no." then, not "Plate".
         transmission: { type: string, enum: [automatic, manual] }
         fuel: { type: string }
         colour: { type: string, nullable: true }
@@ -445,6 +514,11 @@ components:
           type: integer
           nullable: true
           description: What the truck carries, in kilograms. Set only when `category` is `truck`.
+        machine_type:
+          type: string
+          nullable: true
+          enum: [excavator, backhoe_loader, wheel_loader, skid_steer, bulldozer, grader, roller, forklift, telehandler, mobile_crane, concrete_mixer, other]
+          description: Set only when `category` is `machinery`.
         chauffeured: { type: boolean }
         county: { type: string, nullable: true }
         daily_rate:
@@ -497,6 +571,23 @@ components:
           description: Relative path to the first photo, or null if none uploaded.
         owner: { $ref: "#/components/schemas/CatalogOwner" }
         created_at: { type: string, format: date-time }
+
+    HireGroupSummary:
+      type: object
+      required: [count, from, unit]
+      properties:
+        count:
+          type: integer
+          description: Live listings in the group, quote-first ones included.
+        from:
+          allOf: [{ $ref: "#/components/schemas/Money" }]
+          nullable: true
+          description: Lowest price among the group's priced listings, in that listing's own unit.
+        unit:
+          type: string
+          nullable: true
+          enum: [day, hour, trip]
+          description: The unit `from` is in. Null when `from` is.
 
     CatalogVehicleDetail:
       allOf:

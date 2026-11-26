@@ -725,3 +725,40 @@ describe("vehicles — truck type and capacity (PR T1)", () => {
     expect(ok.status).toBe(200);
   });
 });
+
+describe("vehicles - machine type and serial number (PR H1)", () => {
+  const MACHINE = { type: "machinery" as const, make: "JCB", model: "3CX", transmission: "Manual" as const, fuel: "Diesel" as const };
+
+  it("won't submit a machine without its type, and keeps a serial number on machinery only", async () => {
+    const { accessToken } = await newMerchant();
+    const serial = `JCB${Date.now().toString().slice(-9)}`;
+    const created = await createVehicle(accessToken, serial, { ...MACHINE, registration_kind: "serial" });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({ type: "machinery", machine_type: null, registration_kind: "serial" });
+    await makeSubmittable(accessToken, created.body.id);
+
+    const blocked = await request(app).post(`/merchant/vehicles/${created.body.id}/submit`).set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.code).toBe("machine_type_required");
+
+    await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ ...BASE_VEHICLE, ...MACHINE, registration: serial, registration_kind: "serial", machine_type: "backhoe_loader" });
+    const ok = await request(app).post(`/merchant/vehicles/${created.body.id}/submit`).set(auth(accessToken));
+    expect(ok.status).toBe(200);
+  });
+
+  it("drops the machine type and the serial flag when the category stops being machinery", async () => {
+    const { accessToken } = await newMerchant();
+    const created = await createVehicle(accessToken, "KTT 106A", { ...MACHINE, machine_type: "forklift" });
+    expect(created.body).toMatchObject({ machine_type: "forklift", registration_kind: "plate" });
+
+    const edited = await request(app)
+      .patch(`/merchant/vehicles/${created.body.id}/details`)
+      .set(auth(accessToken))
+      .send({ ...BASE_VEHICLE, type: "sedan", registration: "KTT 106A", machine_type: "forklift", registration_kind: "serial" });
+    expect(edited.status).toBe(200);
+    expect(edited.body).toMatchObject({ type: "sedan", machine_type: null, registration_kind: "plate" });
+  });
+});

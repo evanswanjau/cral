@@ -45,6 +45,35 @@ export function truckTypeLabel(value: string | null | undefined): string {
   return TRUCK_TYPES.find((t) => t.value === value)?.label ?? value;
 }
 
+/**
+ * Machine sub-types (owner's decision 4, 2026-11-26 - PR H1 of
+ * `docs/plans/hire-that-works.md`). Client mirror of `MACHINE_TYPES` in
+ * `apps/api/src/modules/vehicles/categories.ts` - keep them in step. Only
+ * meaningful when the category is `machinery`.
+ */
+export const MACHINE_TYPES = [
+  { value: "excavator", label: "Excavator" },
+  { value: "backhoe_loader", label: "Backhoe loader" },
+  { value: "wheel_loader", label: "Wheel loader" },
+  { value: "skid_steer", label: "Skid steer" },
+  { value: "bulldozer", label: "Bulldozer" },
+  { value: "grader", label: "Grader" },
+  { value: "roller", label: "Roller / compactor" },
+  { value: "forklift", label: "Forklift" },
+  { value: "telehandler", label: "Telehandler" },
+  { value: "mobile_crane", label: "Mobile crane" },
+  { value: "concrete_mixer", label: "Concrete mixer" },
+  { value: "other", label: "Other machine" },
+] as const;
+
+export type MachineType = (typeof MACHINE_TYPES)[number]["value"];
+
+/** How a stored machine-type slug reads on a screen; tolerates an unknown value. */
+export function machineTypeLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  return MACHINE_TYPES.find((t) => t.value === value)?.label ?? value;
+}
+
 /** Kilograms -> "4 t" / "1.5 t". The API stores kg; people think in tonnes. */
 export function formatPayload(kg: number | null | undefined): string {
   if (!kg) return "";
@@ -74,6 +103,17 @@ export function specLine(car: {
   }
   return `${car.seats} seats · ${car.transmission === "manual" ? "Manual" : "Auto"}`;
 }
+
+/**
+ * The hire groups (PR H1): what `group=` on the catalog takes. "Cars" is
+ * sedan + SUV + van; mirror of `HIRE_GROUPS` in the API's `categories.ts`.
+ */
+export const HIRE_GROUPS = {
+  cars: ["sedan", "suv", "van"],
+  trucks: ["truck"],
+  machinery: ["machinery"],
+} as const;
+export type HireGroup = keyof typeof HIRE_GROUPS;
 
 /**
  * Where a listing lives on the site: trucks and machinery each have a

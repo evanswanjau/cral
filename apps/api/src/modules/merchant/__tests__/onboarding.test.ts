@@ -555,6 +555,120 @@ describe("merchant onboarding — submit", () => {
     expect(patched.body).toMatchObject({ type: "sedan", truck_type: null, payload_kg: null });
   });
 
+  it("won't submit a machine without its machine type, and lists one by serial number when it has no plate", async () => {
+    const { accessToken, userId } = await newMerchant();
+    await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(accessToken))
+      .send({
+        first_name: "Wanjiru",
+        surname: "Kamau",
+        national_id: "22345678",
+        kra_pin: "A022345678Z",
+        payout_same: true,
+        phone: "+254712345680",
+        terms_accepted: true,
+      });
+    await markPhoneVerified(userId);
+
+    const serial = `CAT${Date.now().toString().slice(-9)}`;
+    const machine = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "machinery",
+        make: "Caterpillar",
+        model: "320D",
+        year: "2017",
+        registration: serial,
+        registration_kind: "serial",
+        transmission: "Automatic",
+        fuel: "Diesel",
+        county: "Kiambu",
+        pickup_address: "Thika Road, Ruiru",
+        daily_rate: "35000",
+      });
+    expect(machine.status).toBe(201);
+    expect(machine.body).toMatchObject({ registration: serial, registration_kind: "serial", machine_type: null });
+    const vehicleId = machine.body.id;
+
+    for (const kind of ["national_id", "kra_pin"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .field("vehicle_id", vehicleId)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ insurance_expiry: futureDate });
+
+    const blocked = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error).toMatchObject({ code: "machine_type_required", field: "machine_type" });
+
+    const bad = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ machine_type: "spaceship" });
+    expect(bad.status).toBe(422);
+
+    const filled = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ machine_type: "excavator" });
+    expect(filled.body).toMatchObject({ machine_type: "excavator", registration_kind: "serial" });
+
+    const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(ok.status).toBe(200);
+  });
+
+  it("keeps a machine type and a serial number only on machinery, and stores the seats a car declares", async () => {
+    const { accessToken } = await newMerchant();
+    const machine = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "machinery",
+        machine_type: "grader",
+        make: "Komatsu",
+        model: "GD555",
+        year: "2016",
+        registration: `KOM${Date.now().toString().slice(-9)}`,
+        registration_kind: "serial",
+        transmission: "Manual",
+        fuel: "Diesel",
+        pickup_address: "Athi River",
+        daily_rate: "30000",
+      });
+    expect(machine.body).toMatchObject({ machine_type: "grader", registration_kind: "serial" });
+
+    // Switched to a van: the machine type and the "no plate" flag go with it.
+    const switched = await request(app)
+      .patch(`/merchant/onboarding/vehicles/${machine.body.id}`)
+      .set(auth(accessToken))
+      .send({ type: "van", seats: 14 });
+    expect(switched.body).toMatchObject({ type: "van", machine_type: null, registration_kind: "plate", seats: 14 });
+
+    // A serial number is never accepted on a car, even when sent.
+    const car = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({ type: "suv", make: "Toyota", model: "Prado", year: "2020", registration: "KTR 303T", registration_kind: "serial", machine_type: "excavator", transmission: "Automatic", fuel: "Diesel", pickup_address: "Karen", daily_rate: "9000" });
+    expect(car.status).toBe(201);
+    expect(car.body).toMatchObject({ type: "suv", machine_type: null, registration_kind: "plate", seats: 5 });
+  });
+
   it("422s when incomplete and 200s once every requirement is satisfied", async () => {
     const { accessToken, userId } = await newMerchant();
 

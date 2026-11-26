@@ -38,6 +38,50 @@ export const TRUCK_TYPES = [
 ] as const;
 export type TruckType = (typeof TRUCK_TYPES)[number];
 
+/**
+ * Machine sub-types (owner's decision 4, 2026-11-26 - PR H1 of
+ * `docs/plans/hire-that-works.md`). Only set when the category is
+ * `machinery`, and required before a machine goes to review. Repeated in
+ * migration `20261126090000`'s CHECK and mirrored in the merchant +
+ * customer `vehicle-categories.ts` - keep all four in step.
+ */
+export const MACHINE_TYPES = [
+  "excavator",
+  "backhoe_loader",
+  "wheel_loader",
+  "skid_steer",
+  "bulldozer",
+  "grader",
+  "roller",
+  "forklift",
+  "telehandler",
+  "mobile_crane",
+  "concrete_mixer",
+  "other",
+] as const;
+export type MachineType = (typeof MACHINE_TYPES)[number];
+
+/**
+ * What `vehicles.registration` holds: a number plate, or - for a machine
+ * that has none - its serial number (decision 4). `serial` is machinery
+ * only; the migration's CHECK refuses it on anything else.
+ */
+export const REGISTRATION_KINDS = ["plate", "serial"] as const;
+export type RegistrationKind = (typeof REGISTRATION_KINDS)[number];
+
+/**
+ * The hire groups a renter browses (PR H1): "all cars" is three body
+ * types, so the catalog can't ask for it with one `category`. Each group
+ * lists the categories it covers.
+ */
+export const HIRE_GROUPS = {
+  cars: ["sedan", "suv", "van"],
+  trucks: ["truck"],
+  machinery: ["machinery"],
+} as const satisfies Record<string, readonly VehicleCategory[]>;
+export type HireGroup = keyof typeof HIRE_GROUPS;
+export const HIRE_GROUP_KEYS = Object.keys(HIRE_GROUPS) as [HireGroup, ...HireGroup[]];
+
 /** Largest payload we accept, in kg - a 100 t ceiling catches a typo'd extra zero. */
 export const MAX_PAYLOAD_KG = 100_000;
 
@@ -55,6 +99,24 @@ export function truckColumns(
   const out: { truck_type?: TruckType | null; payload_kg?: number | null } = {};
   if (input.truck_type !== undefined) out.truck_type = input.truck_type;
   if (input.payload_kg !== undefined) out.payload_kg = input.payload_kg;
+  return out;
+}
+
+/**
+ * The machine columns for a write, given the category the vehicle will
+ * have afterwards - the `truckColumns` rule for machinery. A non-machine
+ * never keeps a machine type and always reads as a plate, so switching a
+ * draft away from `machinery` can't leave a value the CHECK refuses.
+ * `undefined` means "leave as is".
+ */
+export function machineColumns(
+  category: string | undefined,
+  input: { machine_type?: MachineType | null | undefined; registration_kind?: RegistrationKind | undefined },
+): { machine_type?: MachineType | null; registration_kind?: RegistrationKind } {
+  if (category !== undefined && category !== "machinery") return { machine_type: null, registration_kind: "plate" };
+  const out: { machine_type?: MachineType | null; registration_kind?: RegistrationKind } = {};
+  if (input.machine_type !== undefined) out.machine_type = input.machine_type;
+  if (input.registration_kind !== undefined) out.registration_kind = input.registration_kind;
   return out;
 }
 
@@ -94,4 +156,24 @@ export function assertTruckDetails(vehicle: {
       field: vehicle.truck_type ? "payload_kg" : "truck_type",
     });
   }
+}
+
+/**
+ * Submission gate for machinery: a machine can't go to review without its
+ * type, since that is what a renter filters on (decision 4). Shared by
+ * `submitVehicle` and onboarding's `assertCompleteForSubmission`.
+ */
+export function assertMachineDetails(vehicle: {
+  type: string;
+  machine_type: string | null;
+  registration?: string;
+}): void {
+  if (vehicle.type !== "machinery" || vehicle.machine_type) return;
+  throw new ApiError({
+    status: 422,
+    type: "validation_error",
+    code: "machine_type_required",
+    message: `Pick what kind of machine ${vehicle.registration ? `${vehicle.registration} is` : "this is"} before submitting.`,
+    field: "machine_type",
+  });
 }

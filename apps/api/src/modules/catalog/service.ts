@@ -6,7 +6,8 @@ import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { VEHICLE_DOC_KINDS } from "../vehicles/service.js";
 import { ratingSummaries, vehicleReviews, type RatingSummary } from "../../lib/ratings.js";
 import type { CatalogSearchQuery } from "./schemas.js";
-import { needsQuote } from "../vehicles/hiring-units.js";
+import { needsQuote, QUOTE_ONLY_UNITS } from "../vehicles/hiring-units.js";
+import { HIRE_GROUPS, HIRE_GROUP_KEYS, type HireGroup } from "../vehicles/categories.js";
 
 /**
  * The public catalog. Every read here goes through `baseCatalogQuery`,
@@ -44,6 +45,8 @@ interface CatalogRow {
   seats: number;
   truck_type: string | null;
   payload_kg: number | null;
+  machine_type: string | null;
+  registration_kind: string;
   chauffeured: boolean;
   county: string | null;
   daily_rate_amount: number;
@@ -81,6 +84,8 @@ const CATALOG_COLUMNS = [
   "v.seats",
   "v.truck_type",
   "v.payload_kg",
+  "v.machine_type",
+  "v.registration_kind",
   "v.chauffeured",
   "v.county",
   "v.daily_rate_amount",
@@ -194,12 +199,14 @@ function serializeSummary(
     year: row.year,
     category: row.type,
     registration: row.registration,
+    registration_kind: row.registration_kind,
     transmission: row.transmission.toLowerCase(),
     fuel: row.fuel,
     colour: row.colour,
     seats: row.seats,
     truck_type: row.truck_type,
     payload_kg: row.payload_kg,
+    machine_type: row.machine_type,
     chauffeured: row.chauffeured,
     county: row.county,
     daily_rate: kes(row.daily_rate_amount) as Money,
@@ -291,6 +298,7 @@ export async function listCatalog(query: CatalogSearchQuery) {
   }
 
   if (query.county) qb.whereRaw("lower(v.county) = lower(?)", [query.county]);
+  if (query.group) qb.whereIn("v.type", HIRE_GROUPS[query.group]);
   if (query.category) qb.where("v.type", query.category);
   if (query.max_price !== undefined) qb.where("v.daily_rate_amount", "<=", query.max_price);
   if (query.seats_min !== undefined) qb.where("v.seats", ">=", query.seats_min);
@@ -300,6 +308,7 @@ export async function listCatalog(query: CatalogSearchQuery) {
   if (query.chauffeured !== undefined) qb.where("v.chauffeured", query.chauffeured);
   if (query.truck_type) qb.where("v.truck_type", query.truck_type);
   if (query.payload_min_kg !== undefined) qb.where("v.payload_kg", ">=", query.payload_min_kg);
+  if (query.machine_type) qb.where("v.machine_type", query.machine_type);
 
   if (query.from && query.to) {
     // Day-granular overlap: a confirmed/active hire touching any day in
@@ -598,10 +607,13 @@ export async function getCollections() {
  * each wins. Ordered by count descending so the busiest county leads,
  * then by name so the tail is stable between calls.
  */
-export async function getCounties(): Promise<{
+export async function getCounties(group?: HireGroup): Promise<{
   counties: Array<{ county: string; vehicle_count: number }>;
 }> {
-  const rows = (await baseCatalogQuery()
+  const qb = baseCatalogQuery();
+  // Per group (PR H1), so the trucks page never offers a cars-only county.
+  if (group) qb.whereIn("v.type", HIRE_GROUPS[group]);
+  const rows = (await qb
     .whereNotNull("v.county")
     .whereRaw("btrim(v.county) <> ''")
     .select("v.county")
@@ -633,4 +645,104 @@ export async function getCounties(): Promise<{
     .sort((a, b) => b.vehicle_count - a.vehicle_count || a.county.localeCompare(b.county));
 
   return { counties };
+}
+
+// ---------------------------------------------------------------------
+// Hire summary - the home page's Cars / Trucks / Machinery doors
+// ---------------------------------------------------------------------
+
+type PricedUnit = "day" | "hour" | "trip";
+
+interface HireGroupSummary {
+  count: number;
+  from: Money | null;
+  unit: PricedUnit | null;
+}
+
+/**
+ * The price a renter actually pays on this listing, in its own unit, or
+ * null when it has none to show. A per-trip truck is priced on its trip
+ * rate - its `daily_rate` is a leftover the card must never print as
+ * "/ day". Quote-first listings have no honest price before the owner has
+ * seen the job, so they are counted but never priced.
+ */
+function listingPrice(row: {
+  hiring_unit: string;
+  quote_required: boolean;
+  daily_rate_amount: number;
+  hourly_rate_amount: number | null;
+  trip_rate_amount: number | null;
+}): { amount: number; unit: PricedUnit } | null {
+  if (needsQuote(row)) return null;
+  const amount =
+    row.hiring_unit === "day"
+      ? row.daily_rate_amount
+      : row.hiring_unit === "trip"
+        ? row.trip_rate_amount
+        : row.hiring_unit === "hour"
+          ? row.hourly_rate_amount
+          : null;
+  if (!amount || amount <= 0) return null;
+  return { amount, unit: row.hiring_unit as PricedUnit };
+}
+
+/**
+ * Count and lowest price per hire group, over live listings on approved
+ * merchants only (`baseCatalogQuery`). One small grouped read: the
+ * cheapest priced listing per (type, unit) plus a count per type, folded
+ * into groups here. "From" is the cheapest listing in the group, in that
+ * listing's unit - comparing a trip price with a day price is not
+ * something the card claims, it only says what the cheapest one costs.
+ */
+export async function getHireSummary(): Promise<Record<HireGroup, HireGroupSummary>> {
+  const rows = (await baseCatalogQuery()
+    .whereNot("v.quote_required", true)
+    .whereNotIn("v.hiring_unit", QUOTE_ONLY_UNITS as readonly string[])
+    .groupBy("v.type", "v.hiring_unit")
+    .select(
+      "v.type",
+      "v.hiring_unit",
+      db.raw("min(v.daily_rate_amount) filter (where v.daily_rate_amount > 0) as min_day"),
+      db.raw("min(v.trip_rate_amount) filter (where v.trip_rate_amount > 0) as min_trip"),
+      db.raw("min(v.hourly_rate_amount) filter (where v.hourly_rate_amount > 0) as min_hour"),
+    )) as Array<{
+    type: string;
+    hiring_unit: string;
+    min_day: number | string | null;
+    min_trip: number | string | null;
+    min_hour: number | string | null;
+  }>;
+  const counts = (await baseCatalogQuery()
+    .groupBy("v.type")
+    .select("v.type")
+    .count<{ type: string; count: string }[]>({ count: "*" })) as unknown as Array<{
+    type: string;
+    count: string | number;
+  }>;
+
+  const countByType = new Map(counts.map((c) => [c.type, Number(c.count)]));
+  const num = (v: number | string | null) => (v === null ? null : Number(v));
+
+  const out = {} as Record<HireGroup, HireGroupSummary>;
+  for (const group of HIRE_GROUP_KEYS) {
+    const types = HIRE_GROUPS[group] as readonly string[];
+    let best: { amount: number; unit: PricedUnit } | null = null;
+    for (const r of rows) {
+      if (!types.includes(r.type)) continue;
+      const price = listingPrice({
+        hiring_unit: r.hiring_unit,
+        quote_required: false,
+        daily_rate_amount: num(r.min_day) ?? 0,
+        hourly_rate_amount: num(r.min_hour),
+        trip_rate_amount: num(r.min_trip),
+      });
+      if (price && (!best || price.amount < best.amount)) best = price;
+    }
+    out[group] = {
+      count: types.reduce((sum, t) => sum + (countByType.get(t) ?? 0), 0),
+      from: best ? (kes(best.amount) as Money) : null,
+      unit: best ? best.unit : null,
+    };
+  }
+  return out;
 }

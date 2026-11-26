@@ -38,6 +38,8 @@ import {
   tonnesFromKg,
   truckDetailsMissing,
   truckPayload,
+  classDetailsMissing,
+  classPayload,
   VehicleDetailsFields,
   type VehicleDetailsValue,
 } from "../components/vehicle/VehicleDetailsFields.js";
@@ -477,6 +479,9 @@ function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
     colour: v.colour ?? "",
     truck_type: (v.truck_type as VehicleDetailsValue["truck_type"]) ?? "",
     payload_t: tonnesFromKg(v.payload_kg),
+    machine_type: (v.machine_type as VehicleDetailsValue["machine_type"]) ?? "",
+    registration_kind: v.registration_kind === "serial" ? "serial" : "plate",
+    seats: String(v.seats),
   });
   const [showErrors, setShowErrors] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -486,7 +491,8 @@ function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
     value.model.trim() &&
     value.year.trim() &&
     value.registration.trim() &&
-    !truckDetailsMissing(value);
+    !truckDetailsMissing(value) &&
+    !classDetailsMissing(value);
 
   return (
     <Modal
@@ -512,6 +518,7 @@ function DetailsModal({ v, onClose }: { v: VehicleDetailData; onClose: () => voi
             fuel: value.fuel,
             ...(value.colour.trim() ? { colour: value.colour.trim() } : {}),
             ...truckPayload(value),
+            ...classPayload(value),
           },
           {
             onSuccess: () => {
