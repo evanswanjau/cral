@@ -1,5 +1,5 @@
 import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
 import { PageHero, Section, Card, Body } from "../components/site/marketing.js";
@@ -38,6 +38,24 @@ interface DriverDraft {
   note: string;
 }
 
+/** What the `/drivers` search carries over: `unit`, `from`, `to`, `start`, `end`. */
+function fromSearch(q: URLSearchParams): Partial<DriverDraft> | null {
+  const out: Partial<DriverDraft> = {};
+  const unit = q.get("unit");
+  if (unit === "day" || unit === "hour" || unit === "trip") out.unit = unit;
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const time = /^\d{2}:\d{2}$/;
+  const from = q.get("from") ?? "";
+  const to = q.get("to") ?? "";
+  const start = q.get("start") ?? "";
+  const end = q.get("end") ?? "";
+  if (day.test(from)) out.from = from;
+  if (day.test(to)) out.to = to;
+  if (time.test(start)) out.start = start;
+  if (time.test(end)) out.end = end;
+  return Object.keys(out).length ? out : null;
+}
+
 const NAIROBI = "+03:00";
 const at = (day: string, time: string) => new Date(`${day}T${time}:00${NAIROBI}`).toISOString();
 
@@ -46,7 +64,10 @@ export function DriverBook(): JSX.Element {
   const navigate = useNavigate();
   const isAuthenticated = useIsAuthenticated();
   const draftKey = `cral.driver-request.${id ?? ""}`;
-  const [draft] = useState(() => readSessionDraft<DriverDraft>(draftKey));
+  const [search] = useSearchParams();
+  // A draft saved through sign-in wins; else the `/drivers` search's rate
+  // and dates (DR1), so the form opens on what the list was filtered by.
+  const [draft] = useState<Partial<DriverDraft> | null>(() => readSessionDraft<DriverDraft>(draftKey) ?? fromSearch(search));
   const { data: d, isLoading, error: loadError } = useQuery({
     queryKey: ["catalog", "driver", id],
     queryFn: () => getDriver(id!),
@@ -63,8 +84,8 @@ export function DriverBook(): JSX.Element {
 
   const earliest = earliestPickupDay();
   // A draft's dates may have gone stale while they signed in.
-  const [from, setFrom] = useState(draft && draft.from >= earliest ? draft.from : earliest);
-  const [to, setTo] = useState(draft && draft.to >= earliest ? draft.to : earliest);
+  const [from, setFrom] = useState(draft?.from && draft.from >= earliest ? draft.from : earliest);
+  const [to, setTo] = useState(draft?.to && draft.to >= from ? draft.to : from);
   const [start, setStart] = useState(draft?.start ?? "09:00");
   const [end, setEnd] = useState(draft?.end ?? "13:00");
   const [car, setCar] = useState(draft?.car ?? "");

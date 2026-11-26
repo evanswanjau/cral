@@ -318,7 +318,8 @@ input::placeholder {
 .cral-pill-date {
   position: relative;
 }
-.cral-pill-date input[type="date"] {
+.cral-pill-date input[type="date"],
+.cral-pill-date input[type="time"] {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -328,7 +329,8 @@ input::placeholder {
   padding: 0;
   cursor: pointer;
 }
-.cral-pill-date input[type="date"]:focus-visible {
+.cral-pill-date input[type="date"]:focus-visible,
+.cral-pill-date input[type="time"]:focus-visible {
   outline: none;
 }
 .cral-pill-date:focus-within {
@@ -607,6 +609,13 @@ input::placeholder {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(244px, 1fr));
   gap: 14px;
+}
+/* Driver cards (DR1, /drivers) are a row of name, owner and rates, so
+   they want more width than a vehicle card. */
+.cral-driver-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: 12px;
 }
 @media (max-width: 640px) {
   /* On a phone each pill takes half the bar, so two sit on a row and

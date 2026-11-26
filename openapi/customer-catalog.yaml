@@ -266,17 +266,51 @@ paths:
   /catalog/drivers:
     get:
       tags: [catalog]
-      summary: Drivers for hire (docs/plans/drivers.md)
+      summary: Drivers for hire, searched by county, rate and dates (docs/plans/drivers-that-work.md DR1)
       operationId: listCatalogDrivers
       security: []
       description: >
         Live drivers with a licence in date, on an approved merchant. Thin
-        public projection - first name and surname initial, county, rates
-        and who they drive for. Never the ID, KRA PIN, licence or phone.
+        public projection - the driver's full name, county, rates and who
+        they drive for. Never the ID, KRA PIN, licence or phone.
+
+        With `pickup_at` and `dropoff_at`, a driver already on a confirmed
+        or active booking that overlaps the window (starts before
+        `dropoff_at` and ends after `pickup_at`) is left out - the same
+        rule `POST /bookings` refuses with `driver_unavailable`. The
+        customer site builds the window the way the booking form does: a
+        day hire runs 09:00 on the first day to 17:00 on the last
+        (Nairobi); an hour or trip hire is one day between the times
+        picked.
+
+        Paged by cursor. `total_count` is how many drivers match the
+        filters across every page.
       parameters:
-        - { name: county, in: query, schema: { type: string } }
+        - name: county
+          in: query
+          description: Case-insensitive match on the driver's county.
+          schema: { type: string }
+        - name: unit
+          in: query
+          description: Only drivers who offer this rate.
+          schema: { type: string, enum: [day, hour, trip] }
+        - name: pickup_at
+          in: query
+          description: ISO 8601 instant. Given together with `dropoff_at`, which must be later.
+          schema: { type: string, format: date-time }
+        - name: dropoff_at
+          in: query
+          description: ISO 8601 instant. Given together with `pickup_at`.
+          schema: { type: string, format: date-time }
+        - name: sort
+          in: query
+          description: >
+            `recommended` (default) is newest first. `price_asc` and
+            `price_desc` order on the `unit` rate and need `unit`
+            (422 `invalid_request` on `unit` without it).
+          schema: { type: string, enum: [recommended, price_asc, price_desc], default: recommended }
         - { name: cursor, in: query, schema: { type: string } }
-        - { name: limit, in: query, schema: { type: integer, default: 25 } }
+        - { name: limit, in: query, schema: { type: integer, default: 25, maximum: 100 } }
       responses:
         "200":
           description: A page of drivers.
@@ -284,10 +318,44 @@ paths:
             application/json:
               schema:
                 type: object
+                required: [data, next_cursor, has_more, total_count]
                 properties:
                   data: { type: array, items: { $ref: "#/components/schemas/CatalogDriver" } }
                   next_cursor: { type: string, nullable: true }
                   has_more: { type: boolean }
+                  total_count: { type: integer, description: "Drivers matching the filters, all pages." }
+        "422":
+          description: >
+            `invalid_request` - a half window, `dropoff_at` not after
+            `pickup_at`, or a price sort without `unit`.
+
+  /catalog/drivers/counties:
+    get:
+      tags: [catalog]
+      summary: Counties that have a live driver, with how many
+      operationId: getCatalogDriverCounties
+      security: []
+      description: >
+        Built from the same live-driver gate as the list, so the county
+        picker never offers a county with nobody in it. Ordered by count
+        descending, then name.
+      responses:
+        "200":
+          description: The counties.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counties]
+                properties:
+                  counties:
+                    type: array
+                    items:
+                      type: object
+                      required: [county, count]
+                      properties:
+                        county: { type: string }
+                        count: { type: integer }
 
   /catalog/drivers/{id}:
     get:

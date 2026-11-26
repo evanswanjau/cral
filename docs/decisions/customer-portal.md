@@ -77,6 +77,14 @@ portals.
   phone's scrolling tab row can't clip it. Drivers, Towing, Garage and
   Parts stay plain tabs. **"Buy and sell" goes first in the menu and on
   home only once its pages exist** (CS3b); until then no link to it.
+- **`/drivers` is a search like `/hire`** (DR1, 2026-11-27,
+  `docs/plans/drivers-that-work.md`): "Drivers for hire", one bar
+  (County, Rate, dates, or a date and two times for hour or trip, Sort
+  by price), a count ("5 drivers in Nairobi free on those dates"),
+  results, "Show 24 more" on the cursor. The hero, four steps, prices
+  and five questions became a paragraph and three questions below the
+  results; "Drive for a living?" is last. Drivers stays its own masthead
+  tab right after Hire. Server rules in `docs/decisions/drivers.md`.
 - **Home opens with the hire search** (Type, County, dates, Search; dates
   hide for Trucks) and submits to `/hire`. Below it only the trust strip
   and the other services' doors; "How CRAL works", "Coming to CRAL" and

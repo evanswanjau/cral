@@ -67,24 +67,114 @@ function serialize(row: PublicRow): PublicDriver {
   };
 }
 
-export async function listPublicDrivers(query: { county?: string | undefined; cursor?: string | undefined; limit: number }) {
-  let qb = basePublicDriverQuery().select(SELECT);
-  if (query.county) qb = qb.where("d.county", query.county);
+export type DriverSearchUnit = "day" | "hour" | "trip";
+
+export interface DriverSearchQuery {
+  county?: string | undefined;
+  unit?: DriverSearchUnit | undefined;
+  /** A window, both or neither (the route checks the pair). */
+  pickup_at?: Date | undefined;
+  dropoff_at?: Date | undefined;
+  sort?: "recommended" | "price_asc" | "price_desc" | undefined;
+  cursor?: string | undefined;
+  limit: number;
+}
+
+const RATE_COLUMN: Record<DriverSearchUnit, string> = {
+  day: "d.daily_rate_amount",
+  hour: "d.hourly_rate_amount",
+  trip: "d.trip_rate_amount",
+};
+
+/**
+ * The search on `/drivers` (DR1, docs/plans/drivers-that-work.md): county,
+ * the rate the renter wants, and a window. A driver on a confirmed or
+ * active booking that overlaps the window is left out - the very rule
+ * `customer-bookings/service.ts` refuses a request with
+ * (`driver_unavailable`), on exact instants, so the list never shows a
+ * driver the request would turn away.
+ */
+function filteredDrivers(query: DriverSearchQuery): Knex.QueryBuilder {
+  const qb = basePublicDriverQuery();
+  if (query.county) qb.whereRaw("lower(btrim(d.county)) = lower(btrim(?))", [query.county]);
+  if (query.unit) qb.whereNotNull(RATE_COLUMN[query.unit]).where(RATE_COLUMN[query.unit], ">", 0);
+  if (query.pickup_at && query.dropoff_at) {
+    const pickupAt = query.pickup_at;
+    const dropoffAt = query.dropoff_at;
+    qb.whereNotExists(function () {
+      this.select(db.raw("1"))
+        .from("bookings as bk")
+        .whereRaw("bk.driver_id = d.id")
+        .whereIn("bk.status", ["confirmed", "active"])
+        .where("bk.pickup_at", "<", dropoffAt)
+        .where("bk.dropoff_at", ">", pickupAt);
+    });
+  }
+  return qb;
+}
+
+// Truncated to the millisecond the cursor carries, as the vehicle catalog
+// does: Postgres keeps microseconds, and a millisecond cursor compared to
+// the raw column skips rows that share the last row's millisecond.
+const CREATED_EXPR = "date_trunc('milliseconds', d.created_at)";
+
+export async function listPublicDrivers(query: DriverSearchQuery) {
+  const price = query.sort === "price_asc" || query.sort === "price_desc" ? query.unit : undefined;
+  const expr = price ? RATE_COLUMN[price] : CREATED_EXPR;
+  const direction = query.sort === "price_asc" ? "asc" : "desc";
+  const op = direction === "desc" ? "<" : ">";
+  const cast = price ? "::bigint" : "::timestamptz";
+
+  const qb = filteredDrivers(query).select(SELECT);
+  if (price) qb.select(db.raw(`${expr} as sort_value`));
   if (query.cursor) {
     const decoded = decodeCursor(query.cursor);
     if (decoded) {
-      qb = qb.where((b) => b.where("d.created_at", "<", decoded.v).orWhere((i) => i.where("d.created_at", decoded.v).andWhere("d.id", "<", decoded.id)));
+      qb.whereRaw(`(${expr} ${op} ?${cast} or (${expr} = ?${cast} and d.id ${op} ?))`, [decoded.v, decoded.v, decoded.id]);
     }
   }
-  const rows = (await qb.orderBy("d.created_at", "desc").orderBy("d.id", "desc").limit(query.limit + 1)) as PublicRow[];
+  const rows = (await qb
+    .orderByRaw(`${expr} ${direction}`)
+    .orderBy("d.id", direction)
+    .limit(query.limit + 1)) as Array<PublicRow & { sort_value?: number | string }>;
+  const countRow = (await filteredDrivers(query).count({ count: "*" }).first()) as { count: string | number } | undefined;
   const hasMore = rows.length > query.limit;
   const page = hasMore ? rows.slice(0, query.limit) : rows;
   const last = page[page.length - 1];
   return {
     data: page.map(serialize),
-    next_cursor: hasMore && last ? encodeCursor({ v: last.created_at.toISOString(), id: last.id }) : null,
+    next_cursor:
+      hasMore && last
+        ? encodeCursor({ v: price ? Number(last.sort_value) : last.created_at.toISOString(), id: last.id })
+        : null,
     has_more: hasMore,
+    total_count: Number(countRow?.count ?? 0),
   };
+}
+
+/** Counties that have a live driver, with how many - the picker on `/drivers`. */
+export async function driverCounties(): Promise<{ counties: Array<{ county: string; count: number }> }> {
+  const rows = (await basePublicDriverQuery()
+    .whereRaw("btrim(d.county) <> ''")
+    .select(db.raw("btrim(d.county) as county"))
+    .count<{ county: string; count: string }[]>({ count: "*" })
+    .groupByRaw("btrim(d.county)")) as unknown as Array<{ county: string; count: string | number }>;
+  // "nairobi" and "Nairobi" are one county; keep the spelling most drivers use.
+  const byKey = new Map<string, { label: string; best: number; total: number }>();
+  for (const row of rows) {
+    const n = Number(row.count);
+    const key = row.county.toLowerCase();
+    const entry = byKey.get(key);
+    if (!entry) byKey.set(key, { label: row.county, best: n, total: n });
+    else {
+      entry.total += n;
+      if (n > entry.best) Object.assign(entry, { label: row.county, best: n });
+    }
+  }
+  const counties = [...byKey.values()]
+    .map((e) => ({ county: e.label, count: e.total }))
+    .sort((a, b) => b.count - a.count || a.county.localeCompare(b.county));
+  return { counties };
 }
 
 /**
