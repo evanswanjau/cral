@@ -6,6 +6,7 @@ import { MAX_PHOTOS, PhotoUpload } from "../PhotoUpload.js";
 import { MAKE_NAMES, modelsForMake, POPULAR_KENYAN_MAKES } from "../../../lib/vehicle-catalogue.js";
 import {
   formatPayload,
+  machineTypeLabel,
   TRUCK_TYPES,
   truckTypeLabel,
   VEHICLE_CATEGORIES,
@@ -13,6 +14,14 @@ import {
   type TruckType,
 } from "../../../lib/vehicle-categories.js";
 import { payloadKgFromTonnes } from "../../vehicle/VehicleDetailsFields.js";
+import {
+  asksSeats,
+  MachineTypeField,
+  machineTypeMissing,
+  RegistrationField,
+  SeatsField,
+  seatsFromText,
+} from "../../vehicle/ClassFields.js";
 import { COUNTIES } from "../../../lib/kenya.js";
 import { RateField } from "../RateField.js";
 import {
@@ -40,14 +49,14 @@ import {
 const VEHICLE_TYPES = VEHICLE_CATEGORIES;
 const TRANSMISSIONS: Transmission[] = ["Automatic", "Manual"];
 const FUELS: Fuel[] = ["Petrol", "Diesel", "Hybrid", "Electric"];
-/**
- * Kenyan plates are 3 letters + 3 digits + 1 letter (KDL 442N). Space is
- * inserted after the first three characters as the merchant types, rather
- * than requiring them to type it themselves.
- */
-function formatPlate(raw: string): string {
-  const clean = raw.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 7);
-  return clean.length > 3 ? `${clean.slice(0, 3)} ${clean.slice(3)}` : clean;
+
+/** "Excavator", "Tipper (14 t)", "Sedan / small cars" - what the fleet row calls a vehicle. */
+function fleetKind(v: DraftVehicle): string {
+  if (v.type === "machinery" && v.machineType) return machineTypeLabel(v.machineType);
+  if (v.type !== "truck") return vehicleTypeLabel(v.type);
+  const kg = payloadKgFromTonnes(v.payloadT);
+  const name = v.truckType ? truckTypeLabel(v.truckType) : vehicleTypeLabel(v.type);
+  return kg ? `${name} (${formatPayload(kg)})` : name;
 }
 
 export function Vehicles({
@@ -73,7 +82,10 @@ export function Vehicles({
     // the vehicle being edited.
     const inProgress =
       draft.vehicleDraft && draft.vehicleDraft.id === draft.editingVehicleId ? draft.vehicleDraft : null;
-    const editing = inProgress ?? saved ?? { ...emptyVehicle(draft.editingVehicleId ?? ""), type: newVehicleType };
+    const base = { ...emptyVehicle(draft.editingVehicleId ?? ""), type: newVehicleType };
+    // Spread over the empty vehicle so a draft saved before a field existed
+    // (seats, machine type - PR H1) still opens with every field set.
+    const editing: DraftVehicle = { ...base, ...(inProgress ?? saved ?? {}) };
     return (
       <VehicleForm
         key={editing.id}
@@ -116,8 +128,7 @@ export function Vehicles({
             <div style={{ flex: "1 1 0%", minWidth: "min(100%,160px)" }}>
               <div style={O.fleetName}>{v.make} {v.model}</div>
               <div style={O.fleetSub}>
-                {v.type === "truck" && v.truckType ? truckTypeLabel(v.truckType) : vehicleTypeLabel(v.type)}
-                {v.type === "truck" && payloadKgFromTonnes(v.payloadT) ? ` (${formatPayload(payloadKgFromTonnes(v.payloadT))})` : ""} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
+                {fleetKind(v)} · {v.year} · {v.transmission} · {v.colour || "-"} · {v.county || "-"} · {v.chauffeured ? "With driver" : "Self-drive"}
               </div>
             </div>
             <div style={{ textAlign: "right" }}>
@@ -200,7 +211,8 @@ function VehicleForm({
     });
 
   const truckMissing = v.type === "truck" && (!v.truckType || payloadKgFromTonnes(v.payloadT) === null);
-  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim() && !truckMissing;
+  const seatsMissing = asksSeats(v.type) && seatsFromText(v.seats) === null;
+  const requiredFilled = v.make.trim() && v.model.trim() && v.year.trim() && v.registration.trim() && v.county.trim() && v.pickupAddress.trim() && v.dailyRate.trim() && !truckMissing && !seatsMissing && !machineTypeMissing(v.type, v.machineType);
   const photosOk = v.photos.length === MAX_PHOTOS;
 
   // Lazily create the vehicle on the server the first moment it's saveable
@@ -272,7 +284,14 @@ function VehicleForm({
           <div style={O.formCard}>
             <div style={O.formFields}>
               <FormField label="Vehicle type">
-                <Select value={v.type} onChange={(e) => patch({ type: e.target.value as VehicleType })}>
+                <Select
+                  value={v.type}
+                  onChange={(e) => {
+                    const type = e.target.value as VehicleType;
+                    // Only a machine may go without a plate.
+                    patch(type === "machinery" ? { type } : { type, registrationKind: "plate" });
+                  }}
+                >
                   {VEHICLE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                 </Select>
               </FormField>
@@ -300,6 +319,9 @@ function VehicleForm({
                   </FormField>
                 </>
               )}
+              {v.type === "machinery" && (
+                <MachineTypeField value={v.machineType} onChange={(machineType) => patch({ machineType })} showErrors={showErrors} />
+              )}
               <FormField label="Make" required error={showErrors && !v.make.trim() ? "Required." : undefined} helper="Pick from the list or type your own.">
                 <Combobox
                   value={v.make}
@@ -324,14 +346,16 @@ function VehicleForm({
               <FormField label="Year" required error={showErrors && !v.year.trim() ? "Required." : undefined} helper="Four digits.">
                 <TextInput value={v.year} onChange={(e) => patch({ year: e.target.value.replace(/\D/g, "").slice(0, 4) })} placeholder="2019" error={showErrors && !v.year.trim()} />
               </FormField>
-              <FormField label="Registration" required error={showErrors && !v.registration.trim() ? "Required." : undefined} helper="Spaced and uppercased as you type.">
-                <TextInput
-                  value={v.registration}
-                  onChange={(e) => patch({ registration: formatPlate(e.target.value) })}
-                  placeholder="KDL 442N"
-                  error={showErrors && !v.registration.trim()}
-                />
-              </FormField>
+              <RegistrationField
+                type={v.type}
+                kind={v.registrationKind}
+                value={v.registration}
+                onChange={(next) => patch(next)}
+                showErrors={showErrors}
+              />
+              {asksSeats(v.type) && (
+                <SeatsField value={v.seats} onChange={(seats) => patch({ seats })} showErrors={showErrors} />
+              )}
               <FormField label="Transmission">
                 <Select value={v.transmission} onChange={(e) => patch({ transmission: e.target.value as Transmission })}>
                   {TRANSMISSIONS.map((t) => <option key={t} value={t}>{t}</option>)}

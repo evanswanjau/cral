@@ -252,8 +252,9 @@ paths:
       description: >
         Validates completeness server-side (owner details, payout, at least
         one vehicle with all three vehicle documents and a non-expired
-        insurance-expiry date if comprehensive insurance is attached, both
-        owner documents, and merchant terms accepted) — the same rules the
+        insurance-expiry date if comprehensive insurance is attached, a
+        truck type and capacity for every truck, a machine type for every
+        machine, both owner documents, and merchant terms accepted) — the same rules the
         wizard already enforces client-side, re-checked here as the honest
         backstop. On success, flips `onboarding_submitted` and writes an
         audit row in the same transaction.
@@ -325,7 +326,25 @@ components:
         make: { type: string }
         model: { type: string }
         year: { type: string }
-        registration: { type: string }
+        registration:
+          type: string
+          description: >
+            The number plate, or for a machine with `registration_kind:
+            serial`, its serial number. Unique across CRAL either way.
+        registration_kind:
+          type: string
+          enum: [plate, serial]
+          default: plate
+          description: >
+            `serial` is allowed only for machinery that carries no plate
+            (owner's call, 2026-11-26); any other category stores `plate`.
+        seats:
+          type: integer
+          minimum: 1
+          maximum: 70
+          description: >
+            Seats, asked for a sedan, SUV or van. Defaults to 5 when never
+            sent. Renters filter cars on it.
         transmission: { type: string, enum: [Automatic, Manual] }
         fuel: { type: string, enum: [Petrol, Diesel, Hybrid, Electric] }
         colour: { type: string }
@@ -342,6 +361,14 @@ components:
           minimum: 1
           maximum: 100000
           description: How much the truck carries, in kilograms. Same rules as `truck_type`.
+        machine_type:
+          type: string
+          nullable: true
+          enum: [excavator, backhoe_loader, wheel_loader, skid_steer, bulldozer, grader, roller, forklift, telehandler, mobile_crane, concrete_mixer, other]
+          description: >
+            Only kept when `type` is `machinery`; any other category stores
+            null. Required at submission for a machine (PR H1 of
+            `docs/plans/hire-that-works.md`).
         county: { type: string, description: "Kenyan county the vehicle is based in — required at submission" }
         pickup_address: { type: string }
         daily_rate: { type: string, description: "KES, whole shillings, as a numeric string. Always the gross/list price the hirer pays, even when rate_mode is 'net'." }

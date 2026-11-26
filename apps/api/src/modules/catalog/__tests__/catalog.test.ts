@@ -62,6 +62,13 @@ interface VehicleSpec {
   verification_badge?: string;
   truck_type?: string;
   payload_kg?: number;
+  machine_type?: string;
+  registration?: string;
+  registration_kind?: string;
+  hiring_unit?: string;
+  trip_rate_amount?: number;
+  km_rate_amount?: number;
+  quote_required?: boolean;
 }
 
 async function makeMerchant(
@@ -122,13 +129,21 @@ async function addVehicle(merchantId: string, spec: VehicleSpec = {}): Promise<s
       make: "Toyota",
       model: "Corolla Fielder",
       year: "2018",
-      registration: plate(),
+      registration: spec.registration ?? plate(),
+      registration_kind: spec.registration_kind ?? "plate",
       transmission: spec.transmission ?? "Automatic",
       fuel: "Petrol",
       colour: "Silver",
       seats: spec.seats ?? 5,
       truck_type: spec.truck_type ?? null,
       payload_kg: spec.payload_kg ?? null,
+      machine_type: spec.machine_type ?? null,
+      hiring_unit: spec.hiring_unit ?? "day",
+      trip_rate_amount: spec.trip_rate_amount ?? null,
+      trip_rate_currency: spec.trip_rate_amount ? "KES" : null,
+      km_rate_amount: spec.km_rate_amount ?? null,
+      km_rate_currency: spec.km_rate_amount ? "KES" : null,
+      quote_required: spec.quote_required ?? false,
       county: spec.county ?? "Nairobi",
       pickup_address: "17 Ndemi Road, Kilimani",
       daily_rate_amount: spec.daily_rate_amount ?? 420_000,
@@ -344,6 +359,60 @@ describe("filters", () => {
     expect(bad.status).toBe(422);
   });
 
+  it("lists a whole hire group: all cars is sedan + SUV + van, never a truck or a machine", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = `Group ${Date.now()}`;
+    const sedan = await addVehicle(m.merchantId, { county, type: "sedan" });
+    const suv = await addVehicle(m.merchantId, { county, type: "suv" });
+    const van = await addVehicle(m.merchantId, { county, type: "van" });
+    const truck = await addVehicle(m.merchantId, { county, type: "truck", truck_type: "tipper", payload_kg: 14000 });
+    const digger = await addVehicle(m.merchantId, { county, type: "machinery", machine_type: "excavator" });
+
+    const ids = async (query: Record<string, string>) =>
+      ((await request(app).get("/catalog/vehicles").query({ county, ...query })).body.data as Array<{ id: string }>)
+        .map((v) => v.id)
+        .sort();
+
+    expect(await ids({ group: "cars" })).toEqual([sedan, suv, van].sort());
+    expect(await ids({ group: "trucks" })).toEqual([truck]);
+    expect(await ids({ group: "machinery" })).toEqual([digger]);
+    // `category` narrows inside the group; one outside it finds nothing.
+    expect(await ids({ group: "cars", category: "suv" })).toEqual([suv]);
+    expect(await ids({ group: "cars", category: "truck" })).toEqual([]);
+
+    const bad = await request(app).get("/catalog/vehicles").query({ group: "boats" });
+    expect(bad.status).toBe(422);
+  });
+
+  it("narrows machinery by machine type and says when a machine lists by serial number", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = `Machine ${Date.now()}`;
+    const serial = `CAT${Date.now().toString().slice(-9)}`;
+    const digger = await addVehicle(m.merchantId, {
+      county,
+      type: "machinery",
+      machine_type: "excavator",
+      registration: serial,
+      registration_kind: "serial",
+    });
+    await addVehicle(m.merchantId, { county, type: "machinery", machine_type: "grader" });
+
+    const res = await request(app).get("/catalog/vehicles").query({ county, machine_type: "excavator" });
+    expect(res.body.data.map((v: { id: string }) => v.id)).toEqual([digger]);
+    expect(res.body.data[0]).toMatchObject({
+      category: "machinery",
+      machine_type: "excavator",
+      registration: serial,
+      registration_kind: "serial",
+    });
+
+    const car = await request(app).get("/catalog/vehicles").query({ county, group: "cars" });
+    expect(car.body.data).toEqual([]);
+
+    const bad = await request(app).get("/catalog/vehicles").query({ machine_type: "spaceship" });
+    expect(bad.status).toBe(422);
+  });
+
   it("rejects from without to", async () => {
     const res = await request(app).get("/catalog/vehicles").query({ from: "2026-09-20" });
     expect(res.status).toBe(422);
@@ -526,6 +595,113 @@ describe("counties", () => {
 
     const counts = rows.map((r) => r.vehicle_count);
     expect([...counts].sort((a, b) => b - a)).toEqual(counts);
+  });
+});
+
+describe("counties per hire group", () => {
+  it("counts only the asked group, so the trucks page never offers a cars-only county", async () => {
+    const m = await makeMerchant({ approved: true });
+    const carsOnly = `CarsOnly ${Date.now()}`;
+    const mixed = `Mixed ${Date.now()}`;
+    await addVehicle(m.merchantId, { county: carsOnly, type: "sedan" });
+    await addVehicle(m.merchantId, { county: carsOnly, type: "van" });
+    await addVehicle(m.merchantId, { county: mixed, type: "suv" });
+    await addVehicle(m.merchantId, { county: mixed, type: "truck", truck_type: "canter", payload_kg: 3000 });
+
+    const counties = async (group?: string) =>
+      (await request(app).get("/catalog/counties").query(group ? { group } : {})).body.counties as Array<{
+        county: string;
+        vehicle_count: number;
+      }>;
+
+    const trucks = await counties("trucks");
+    expect(trucks.some((c) => c.county === carsOnly)).toBe(false);
+    expect(trucks.find((c) => c.county === mixed)).toEqual({ county: mixed, vehicle_count: 1 });
+
+    const cars = await counties("cars");
+    expect(cars.find((c) => c.county === carsOnly)).toEqual({ county: carsOnly, vehicle_count: 2 });
+    expect(cars.find((c) => c.county === mixed)).toEqual({ county: mixed, vehicle_count: 1 });
+
+    const all = await counties();
+    expect(all.find((c) => c.county === mixed)).toEqual({ county: mixed, vehicle_count: 2 });
+
+    const bad = await request(app).get("/catalog/counties").query({ group: "boats" });
+    expect(bad.status).toBe(422);
+  });
+});
+
+describe("hire summary", () => {
+  // The shared test database holds other suites' listings too, so these
+  // use prices no realistic listing has (a few cents) to own the
+  // from-price, and count growth rather than absolute totals.
+  it("counts live listings per group and prices each from its cheapest listing, in that listing's unit", async () => {
+    const before = (await request(app).get("/catalog/hire-summary")).body;
+    const m = await makeMerchant({ approved: true });
+    const hidden = await makeMerchant({ approved: false });
+    // Its own county keeps these few-cent listings out of other tests' county-scoped reads.
+    const county = `Summary ${Date.now()}`;
+
+    await addVehicle(m.merchantId, { county, type: "sedan", daily_rate_amount: 7 });
+    await addVehicle(m.merchantId, { county, type: "van", daily_rate_amount: 9 });
+    // Cheaper, but not public: a draft, and a car on an unapproved merchant.
+    await addVehicle(m.merchantId, { county, type: "sedan", daily_rate_amount: 3, status: "draft" });
+    await addVehicle(hidden.merchantId, { county, type: "suv", daily_rate_amount: 2 });
+
+    // A per-trip truck: priced on its trip rate, never its leftover daily rate.
+    await addVehicle(m.merchantId, {
+      county,
+      type: "truck",
+      truck_type: "canter",
+      payload_kg: 3000,
+      hiring_unit: "trip",
+      trip_rate_amount: 8,
+      daily_rate_amount: 1,
+    });
+    // Quote-first trucks are counted but never priced.
+    await addVehicle(m.merchantId, {
+      county,
+      type: "truck",
+      truck_type: "tipper",
+      payload_kg: 14000,
+      hiring_unit: "km",
+      km_rate_amount: 4,
+      daily_rate_amount: 4,
+    });
+    await addVehicle(m.merchantId, { county, type: "truck", truck_type: "flatbed", payload_kg: 20000, quote_required: true, daily_rate_amount: 5 });
+
+    await addVehicle(m.merchantId, { county, type: "machinery", machine_type: "roller", daily_rate_amount: 6 });
+
+    const res = await request(app).get("/catalog/hire-summary");
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body).sort()).toEqual(["cars", "machinery", "trucks"]);
+
+    expect(res.body.cars.count).toBeGreaterThanOrEqual(before.cars.count + 2);
+    expect(res.body.cars.from).toEqual({ amount: 7, currency: "KES" });
+    expect(res.body.cars.unit).toBe("day");
+
+    expect(res.body.trucks.count).toBeGreaterThanOrEqual(before.trucks.count + 3);
+    expect(res.body.trucks.from).toEqual({ amount: 8, currency: "KES" });
+    expect(res.body.trucks.unit).toBe("trip");
+
+    expect(res.body.machinery.count).toBeGreaterThanOrEqual(before.machinery.count + 1);
+    expect(res.body.machinery.from).toEqual({ amount: 6, currency: "KES" });
+    expect(res.body.machinery.unit).toBe("day");
+  });
+
+  it("matches the public listings exactly for a group nothing else touches", async () => {
+    // The count is the same query search uses: whatever `group=machinery`
+    // pages through, the summary counts.
+    const summary = (await request(app).get("/catalog/hire-summary")).body;
+    let listed = 0;
+    let cursor: string | undefined;
+    do {
+      const page = await request(app)
+        .get("/catalog/vehicles")
+        .query({ group: "machinery", limit: 48, ...(cursor ? { cursor } : {}) });
+      listed += page.body.data.length;
+      cursor = page.body.next_cursor ?? undefined;
+    } while (cursor);
+    expect(summary.machinery.count).toBe(listed);
   });
 });
 

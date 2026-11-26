@@ -288,7 +288,9 @@ export function Browse(): JSX.Element {
       q.from = from;
       q.to = to;
     }
+    // "Any" type on the cars page means any car, never a truck or a machine (PR H1).
     if (category) q.category = category as VehicleCategory;
+    else q.group = "cars";
     if (truckType) q.truck_type = truckType;
     if (payloadMin) q.payload_min_kg = Number(payloadMin);
     if (seatsMin) q.seats_min = Number(seatsMin);

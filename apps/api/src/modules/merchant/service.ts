@@ -18,7 +18,7 @@ import {
   emailParagraph,
 } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
-import { truckColumns } from "../vehicles/categories.js";
+import { assertMachineDetails, machineColumns, truckColumns } from "../vehicles/categories.js";
 import type {
   DocumentKind,
   DocumentRow,
@@ -245,11 +245,14 @@ function serializeVehicle(vehicle: VehicleRow, documents: DocumentRow[]) {
     model: vehicle.model,
     year: vehicle.year,
     registration: vehicle.registration,
+    registration_kind: vehicle.registration_kind,
+    seats: vehicle.seats,
     transmission: vehicle.transmission,
     fuel: vehicle.fuel,
     colour: vehicle.colour,
     truck_type: vehicle.truck_type,
     payload_kg: vehicle.payload_kg,
+    machine_type: vehicle.machine_type,
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     daily_rate: String(Math.round(vehicle.daily_rate_amount / 100)),
@@ -819,11 +822,16 @@ function toDailyRateCents(value: string | undefined): number | undefined {
 /**
  * `category` is the type the vehicle will have after this write - the
  * input's own `type` if it sends one, else the row's. A non-truck never
- * keeps truck fields (`truckColumns`).
+ * keeps truck fields (`truckColumns`), and a non-machine keeps no machine
+ * type or serial number (`machineColumns`).
  */
 function vehicleUpdateFromInput(input: VehicleInput, category: string | undefined) {
-  const { daily_rate, truck_type, payload_kg, ...rest } = input;
-  const update: Record<string, unknown> = { ...rest, ...truckColumns(category, { truck_type, payload_kg }) };
+  const { daily_rate, truck_type, payload_kg, machine_type, registration_kind, ...rest } = input;
+  const update: Record<string, unknown> = {
+    ...rest,
+    ...truckColumns(category, { truck_type, payload_kg }),
+    ...machineColumns(category, { machine_type, registration_kind }),
+  };
   const cents = toDailyRateCents(daily_rate);
   if (cents !== undefined) update.daily_rate_amount = cents;
   return update;
@@ -1179,6 +1187,9 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     if (v.type === "truck" && (!v.truck_type || !v.payload_kg)) {
       fail(`${v.registration || "A truck"} needs its truck type and how much it carries.`);
     }
+    // A machine without a type can't be filtered for (decision 4); same
+    // code as `submitVehicle` so the client reads one error either way.
+    assertMachineDetails(v);
     for (const kind of VEHICLE_DOC_KINDS) {
       if (!documents.some((d) => d.vehicle_id === v.id && d.kind === kind)) {
         fail(`${v.registration || "A vehicle"} is missing a required document.`);

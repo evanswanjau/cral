@@ -22,6 +22,10 @@ export interface VehicleSummary {
   seats: number;
   truck_type: string | null;
   payload_kg: number | null;
+  /** Machinery only (PR H1). */
+  machine_type: string | null;
+  /** "serial": a machine with no plate, `registration` is its serial number. */
+  registration_kind: "plate" | "serial";
   county: string | null;
   pickup_address: string | null;
   status: VehicleStatus;
@@ -134,6 +138,9 @@ export interface CreateVehicleInput {
   truck_type?: string | null;
   /** Kilograms. */
   payload_kg?: number | null;
+  /** Only for machinery - the API nulls it for any other type. */
+  machine_type?: string | null;
+  registration_kind?: "plate" | "serial";
   county: string;
   pickup_address: string;
   daily_rate: string;
@@ -180,6 +187,9 @@ export interface EditVehicleDetailsInput {
   truck_type?: string | null;
   /** Kilograms. */
   payload_kg?: number | null;
+  /** Only for machinery - the API nulls it for any other type. */
+  machine_type?: string | null;
+  registration_kind?: "plate" | "serial";
 }
 
 /** The logbook-derived fields. Server accepts this only while the listing

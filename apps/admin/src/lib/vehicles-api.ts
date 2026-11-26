@@ -115,6 +115,10 @@ export interface ReviewCase {
   truck_type: string | null;
   /** Kilograms, set only for a truck. */
   payload_kg: number | null;
+  /** Set only for machinery (PR H1) - a slug such as `backhoe_loader`. */
+  machine_type: string | null;
+  /** "serial" when the machine has no plate and `registration` is its serial number. */
+  registration_kind: "plate" | "serial";
   transmission: string;
   fuel: string;
   colour: string | null;

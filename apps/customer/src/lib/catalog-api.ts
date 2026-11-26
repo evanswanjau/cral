@@ -1,4 +1,5 @@
 import { apiGet } from "./api.js";
+import type { HireGroup } from "./vehicle-categories.js";
 
 /**
  * Typed client for the public catalog (`openapi/customer-catalog.yaml`).
@@ -42,6 +43,10 @@ export interface CatalogVehicleSummary {
   truck_type: string | null;
   /** Kilograms, set only for a truck. */
   payload_kg: number | null;
+  /** Set only when `category` is `machinery` (PR H1). */
+  machine_type: string | null;
+  /** "serial": a machine with no plate - `registration` is its serial number. */
+  registration_kind: "plate" | "serial";
   chauffeured: boolean;
   county: string | null;
   daily_rate: Money;
@@ -110,12 +115,15 @@ export interface CatalogSearchParams {
   county?: string;
   from?: string;
   to?: string;
+  /** cars = sedan + suv + van (PR H1); `category` narrows inside it. */
+  group?: HireGroup;
   category?: CatalogVehicleSummary["category"];
   max_price?: number;
   seats_min?: number;
   transmission?: "automatic" | "manual";
   truck_type?: string;
   payload_min_kg?: number;
+  machine_type?: string;
   chauffeured?: boolean;
   sort?: "recommended" | "price_asc" | "price_desc" | "newest" | "rating_desc";
   cursor?: string;
@@ -146,9 +154,26 @@ export interface CatalogCounty {
   vehicle_count: number;
 }
 
-/** Counties with at least one live listing, busiest first. */
+/** Counties with at least one live listing, busiest first. Takes no argument: it is passed straight to `queryFn`. */
 export function getCounties(): Promise<{ counties: CatalogCounty[] }> {
   return apiGet<{ counties: CatalogCounty[] }>("/catalog/counties", { auth: false });
+}
+
+/** The same, counting one hire group only (PR H1), so a trucks page never offers a cars-only county. */
+export function getGroupCounties(group: HireGroup): Promise<{ counties: CatalogCounty[] }> {
+  return apiGet<{ counties: CatalogCounty[] }>(`/catalog/counties${qs({ group })}`, { auth: false });
+}
+
+/** One Hire door: how many live listings, and the cheapest in its own unit (null if none priced). */
+export interface HireGroupSummary {
+  count: number;
+  from: Money | null;
+  unit: "day" | "hour" | "trip" | null;
+}
+
+/** Count + from-price for cars, trucks and machinery (PR H1). */
+export function getHireSummary(): Promise<Record<HireGroup, HireGroupSummary>> {
+  return apiGet<Record<HireGroup, HireGroupSummary>>("/catalog/hire-summary", { auth: false });
 }
 
 export function getCollections(): Promise<{ collections: CatalogCollection[] }> {

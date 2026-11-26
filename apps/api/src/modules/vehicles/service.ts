@@ -10,7 +10,7 @@ import { emailAdapter } from "../../lib/adapters.js";
 import { emailHeading, emailLayout, emailMuted, emailParagraph } from "../../lib/email-templates.js";
 import { createStorageAdapter } from "../../adapters/storage/index.js";
 import { getOrCreateMerchant, type RequestContext } from "../merchant/service.js";
-import { assertTruckDetails, truckColumns } from "./categories.js";
+import { assertMachineDetails, assertTruckDetails, machineColumns, truckColumns } from "./categories.js";
 import { notify } from "../../lib/notifications.js";
 import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import type {
@@ -143,6 +143,8 @@ function serializeSummary(vehicle: VehicleRow, vehicleDocs: DocumentRow[]) {
     seats: vehicle.seats,
     truck_type: vehicle.truck_type,
     payload_kg: vehicle.payload_kg,
+    machine_type: vehicle.machine_type,
+    registration_kind: vehicle.registration_kind,
     county: vehicle.county,
     pickup_address: vehicle.pickup_address,
     status: vehicle.status,
@@ -309,6 +311,7 @@ export async function createVehicle(userId: string, input: CreateVehicleInput, c
         colour: input.colour ?? null,
         seats: input.seats ?? 5,
         ...truckColumns(input.type, input),
+        ...machineColumns(input.type, input),
         county: input.county,
         pickup_address: input.pickup_address,
         daily_rate_amount: dailyRateCents(input.daily_rate) ?? 0,
@@ -379,6 +382,9 @@ export async function duplicateVehicle(userId: string, vehicleId: string, ctx: R
         seats: vehicle.seats,
         truck_type: vehicle.truck_type,
         payload_kg: vehicle.payload_kg,
+        // The copy gets a placeholder plate, so it starts as a plate even
+        // when the original machine lists by serial number.
+        machine_type: vehicle.machine_type,
         county: vehicle.county,
         pickup_address: vehicle.pickup_address,
         daily_rate_amount: vehicle.daily_rate_amount,
@@ -452,6 +458,7 @@ export async function updateVehicleDetails(
     colour: input.colour?.trim() || null,
     seats: input.seats ?? vehicle.seats,
     ...truckColumns(input.type, input),
+    ...machineColumns(input.type, input),
   };
 
   const updated = await db
@@ -486,6 +493,8 @@ export async function updateVehicleDetails(
           seats: vehicle.seats,
           truck_type: vehicle.truck_type,
           payload_kg: vehicle.payload_kg,
+          machine_type: vehicle.machine_type,
+          registration_kind: vehicle.registration_kind,
         },
         after: update,
         requestId: ctx.requestId,
@@ -689,6 +698,7 @@ export async function submitVehicle(userId: string, vehicleId: string, ctx: Requ
     });
   }
   assertTruckDetails(vehicle);
+  assertMachineDetails(vehicle);
   const insurance = vehicleDocs.find((d) => d.kind === "comprehensive_insurance");
   if (!insurance?.expires_at) {
     throw new ApiError({

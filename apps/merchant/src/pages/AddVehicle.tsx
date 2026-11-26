@@ -6,6 +6,8 @@ import {
   EMPTY_VEHICLE_DETAILS,
   truckDetailsMissing,
   truckPayload,
+  classDetailsMissing,
+  classPayload,
   VehicleDetailsFields,
   type VehicleDetailsValue,
 } from "../components/vehicle/VehicleDetailsFields.js";
@@ -47,6 +49,7 @@ export function AddVehicle(): JSX.Element {
     details.year.trim() &&
     details.registration.trim() &&
     !truckDetailsMissing(details) &&
+    !classDetailsMissing(details) &&
     county.trim() &&
     pickupAddress.trim() &&
     dailyRate.trim();
@@ -69,6 +72,7 @@ export function AddVehicle(): JSX.Element {
         fuel: details.fuel,
         colour: details.colour.trim() || undefined,
         ...truckPayload(details),
+        ...classPayload(details),
         county: county.trim(),
         pickup_address: pickupAddress.trim(),
         daily_rate: dailyRate.trim(),

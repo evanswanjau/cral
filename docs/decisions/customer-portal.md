@@ -14,6 +14,13 @@ portals.
   booking writes the hirer an in-app row (`GET /me/notifications`,
   `openapi/customer-notifications.yaml`). Renter documents (ID, licence
   with expiry) use `documents.user_id` the same way.
+- **Hire groups** (PR H1 of `docs/plans/hire-that-works.md`, 2026-11-26):
+  the catalog takes `group=cars|trucks|machinery`, cars = sedan + SUV +
+  van, so "any type" on the cars page never lists a truck or a machine.
+  `GET /catalog/hire-summary` gives each group's live count and cheapest
+  price in that listing's own unit (quote-first listings counted, never
+  priced); `GET /catalog/counties?group=` counts one group. Machines carry
+  a `machine_type` filter.
 - **The pickup code is never shown in the customer app**: only a hash
   exists and the code goes out by email; trip detail shows the handover's
   state.

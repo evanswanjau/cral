@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TRUCK_TYPES, VEHICLE_CATEGORIES } from "../vehicles/categories.js";
+import { HIRE_GROUP_KEYS, MACHINE_TYPES, TRUCK_TYPES, VEHICLE_CATEGORIES } from "../vehicles/categories.js";
 
 /**
  * Query schema for `GET /catalog/vehicles`. Every filter is optional; a
@@ -11,6 +11,8 @@ export const CatalogSearchQuerySchema = z
     county: z.string().trim().min(1).max(60).optional(),
     from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "from must be YYYY-MM-DD").optional(),
     to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "to must be YYYY-MM-DD").optional(),
+    // "All cars" is sedan + suv + van (PR H1); `category` narrows inside it.
+    group: z.enum(HIRE_GROUP_KEYS).optional(),
     category: z.enum(VEHICLE_CATEGORIES).optional(),
     max_price: z.coerce.number().int().min(0).optional(),
     seats_min: z.coerce.number().int().min(1).max(40).optional(),
@@ -19,6 +21,8 @@ export const CatalogSearchQuerySchema = z
     // no other category carries a truck type or a payload.
     truck_type: z.enum(TRUCK_TYPES).optional(),
     payload_min_kg: z.coerce.number().int().min(1).max(100_000).optional(),
+    // Machinery filter (20261126090000) - narrows to machines the same way.
+    machine_type: z.enum(MACHINE_TYPES).optional(),
     chauffeured: z
       .enum(["true", "false"])
       .transform((v) => v === "true")
@@ -53,3 +57,8 @@ export const CatalogSearchQuerySchema = z
   });
 
 export type CatalogSearchQuery = z.infer<typeof CatalogSearchQuerySchema>;
+
+/** `GET /catalog/counties?group=` - optional, one of the hire groups. */
+export const CountiesQuerySchema = z.object({
+  group: z.enum(HIRE_GROUP_KEYS).optional(),
+});

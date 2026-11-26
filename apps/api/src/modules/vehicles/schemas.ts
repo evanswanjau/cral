@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { PaginationQuerySchema } from "@cral/types";
-import { MAX_PAYLOAD_KG, TRUCK_TYPES, VEHICLE_CATEGORIES } from "./categories.js";
+import { MACHINE_TYPES, MAX_PAYLOAD_KG, REGISTRATION_KINDS, TRUCK_TYPES, VEHICLE_CATEGORIES } from "./categories.js";
 import { HIRING_UNITS } from "./hiring-units.js";
 
 /** Matches the design's five filter pills — see Cruz Merchant Portal.dc.html's `filters`. */
@@ -26,6 +26,10 @@ export const CreateVehicleSchema = z.object({
   truck_type: z.enum(TRUCK_TYPES).nullable().optional(),
   /** Kilograms. Shown to renters as tonnes. */
   payload_kg: z.number().int().min(1).max(MAX_PAYLOAD_KG).nullable().optional(),
+  /** Only kept when `type` is `machinery` - see `categories.ts#machineColumns`. */
+  machine_type: z.enum(MACHINE_TYPES).nullable().optional(),
+  /** `serial`: a machine with no plate, `registration` holds its serial number. */
+  registration_kind: z.enum(REGISTRATION_KINDS).optional(),
   county: z.string().min(1),
   pickup_address: z.string().min(1),
   daily_rate: z.string().min(1),
@@ -59,6 +63,10 @@ export const EditVehicleDetailsSchema = z.object({
   truck_type: z.enum(TRUCK_TYPES).nullable().optional(),
   /** Kilograms. Shown to renters as tonnes. */
   payload_kg: z.number().int().min(1).max(MAX_PAYLOAD_KG).nullable().optional(),
+  /** Only kept when `type` is `machinery` - see `categories.ts#machineColumns`. */
+  machine_type: z.enum(MACHINE_TYPES).nullable().optional(),
+  /** `serial`: a machine with no plate, `registration` holds its serial number. */
+  registration_kind: z.enum(REGISTRATION_KINDS).optional(),
 });
 export type EditVehicleDetailsInput = z.infer<typeof EditVehicleDetailsSchema>;
 

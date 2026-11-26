@@ -38,6 +38,15 @@ dashboard or notifications. Bookings and payouts are in
 
 ## Onboarding
 
+- **Vehicle form by type** (PR H1, owner's decision 4, 2026-11-26): seats
+  for a sedan, SUV or van (default 5); a required machine type for
+  machinery (`categories.ts#MACHINE_TYPES`, CHECK in migration
+  `20261126090000`, mirrored in both `lib/vehicle-categories.ts`); a
+  machine with no plate lists by serial number (`registration_kind:
+  serial`, held in `registration`, machinery only). Submit refuses a
+  machine without a type (422 `machine_type_required`), in onboarding and
+  in the portal. Hourly hire stays off.
+
 - **Step 1 is "What do you offer?"** (UI5, 2026-11-18; replaced the
   Welcome step): multi-select Cars and vans, Trucks, Machinery, Driving,
   and (Phase 4 GS1) Garage services; parts and car sales listed as coming,

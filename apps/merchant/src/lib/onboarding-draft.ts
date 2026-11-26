@@ -13,7 +13,7 @@
 import { getCurrentUserId } from "./auth.js";
 import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
 import { ASSIST_BLOCKED_DRAFT_KEYS, isAssistSession } from "./assist.js";
-import type { TruckType, VehicleType } from "./vehicle-categories.js";
+import type { MachineType, TruckType, VehicleType } from "./vehicle-categories.js";
 
 export type OwnerType = "individual" | "company";
 /**
@@ -57,6 +57,10 @@ export interface DraftVehicle {
   model: string;
   year: string;
   registration: string;
+  /** "serial": a machine with no plate, `registration` is its serial number (PR H1). */
+  registrationKind: "plate" | "serial";
+  /** Seats as typed - asked for sedan / SUV / van (PR H1). */
+  seats: string;
   transmission: Transmission;
   fuel: Fuel;
   colour: string;
@@ -64,6 +68,8 @@ export interface DraftVehicle {
   truckType: TruckType | "";
   /** Truck-only capacity in tonnes as typed; the wire carries kg. */
   payloadT: string;
+  /** Machinery-only (PR H1). "" until picked; required before submitting. */
+  machineType: MachineType | "";
   county: string;
   pickupAddress: string;
   dailyRate: string;
@@ -187,11 +193,14 @@ export function emptyVehicle(id: string): DraftVehicle {
     model: "",
     year: "",
     registration: "",
+    registrationKind: "plate",
+    seats: "5",
     transmission: "Automatic",
     fuel: "Petrol",
     colour: "",
     truckType: "",
     payloadT: "",
+    machineType: "",
     county: "",
     pickupAddress: "",
     dailyRate: "",
@@ -252,11 +261,14 @@ interface WireVehicle {
   model: string;
   year: string;
   registration: string;
+  registration_kind?: "plate" | "serial";
+  seats?: number;
   transmission: Transmission;
   fuel: Fuel;
   colour: string | null;
   truck_type?: TruckType | null;
   payload_kg?: number | null;
+  machine_type?: MachineType | null;
   county: string | null;
   pickup_address: string | null;
   daily_rate: string;
@@ -329,11 +341,14 @@ function toDraftVehicle(v: WireVehicle): DraftVehicle {
     model: v.model,
     year: v.year,
     registration: v.registration,
+    registrationKind: v.registration_kind === "serial" ? "serial" : "plate",
+    seats: String(v.seats ?? 5),
     transmission: v.transmission,
     fuel: v.fuel,
     colour: v.colour ?? "",
     truckType: v.truck_type ?? "",
     payloadT: v.payload_kg ? String(v.payload_kg / 1000) : "",
+    machineType: v.machine_type ?? "",
     county: v.county ?? "",
     pickupAddress: v.pickup_address ?? "",
     chauffeured: v.chauffeured ?? true,
@@ -519,9 +534,27 @@ export async function confirmPhoneVerification(code: string): Promise<void> {
 // --- vehicles --------------------------------------------------------
 
 function vehicleToWireInput(v: Partial<DraftVehicle>) {
-  const { pickupAddress, dailyRate, rateMode, insuranceExpiry, truckType, payloadT, ...rest } = v;
+  const {
+    pickupAddress,
+    dailyRate,
+    rateMode,
+    insuranceExpiry,
+    truckType,
+    payloadT,
+    machineType,
+    registrationKind,
+    seats,
+    ...rest
+  } = v;
   const body: Record<string, unknown> = { ...rest };
   if (truckType !== undefined) body.truck_type = truckType || null;
+  if (machineType !== undefined) body.machine_type = machineType || null;
+  if (registrationKind !== undefined) body.registration_kind = registrationKind;
+  if (seats !== undefined) {
+    const n = Number(seats);
+    // A half-typed seats box isn't sent; the server keeps what it had (5 by default).
+    if (Number.isInteger(n) && n >= 1 && n <= 70) body.seats = n;
+  }
   if (payloadT !== undefined) {
     const t = Number(payloadT);
     body.payload_kg = Number.isFinite(t) && t > 0 && t <= 100 ? Math.round(t * 1000) : null;

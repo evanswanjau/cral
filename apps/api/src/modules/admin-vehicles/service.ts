@@ -366,6 +366,8 @@ async function serializeCase(vehicle: VehicleRow, merchant: MerchantRow) {
     seats: vehicle.seats,
     truck_type: vehicle.truck_type,
     payload_kg: vehicle.payload_kg,
+    machine_type: vehicle.machine_type,
+    registration_kind: vehicle.registration_kind,
     transmission: vehicle.transmission,
     fuel: vehicle.fuel,
     colour: vehicle.colour,
