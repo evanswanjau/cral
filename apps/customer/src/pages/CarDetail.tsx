@@ -5,7 +5,7 @@ import { getCatalogVehicle, photoSrc, formatMoney } from "../lib/catalog-api.js"
 import { PlateBadge } from "../components/site/PlateBadge.js";
 import { Rating, Stars } from "../components/site/Rating.js";
 import { SpecIcon, type SpecIconName } from "../components/site/SpecIcon.js";
-import { formatPayload, isCarCategory, listingBase, specLine, truckTypeLabel, vehicleNoun, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
+import { crewNote, formatPayload, isCarCategory, listingBase, specLine, truckTypeLabel, vehicleNoun, VEHICLE_CATEGORY_LABEL } from "../lib/vehicle-categories.js";
 import { HIRING_UNIT_LABEL, unitRate } from "../lib/hiring-units.js";
 import { CarRequestPanel } from "../components/cars/CarRequestPanel.js";
 import { TruckRequestPanel } from "../components/subsite/TruckRequestPanel.js";
@@ -324,8 +324,7 @@ export function CarDetail(): JSX.Element {
                * find the car described differently on the next screen.
                */}
               <span style={{ font: "400 14px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                {specLine(car)}
-                {car.chauffeured ? " · With driver" : isCar ? " · Self-drive" : ""}
+                {[specLine(car), crewNote(car)].filter(Boolean).join(" · ")}
               </span>
               <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
               {/*
@@ -508,7 +507,7 @@ export function CarDetail(): JSX.Element {
                     }}
                   >
                     <span>
-                      {car.owner.listed_count} car{car.owner.listed_count === 1 ? "" : "s"} listed
+                      {car.owner.listed_count} listing{car.owner.listed_count === 1 ? "" : "s"}
                     </span>
                     <span style={{ width: 4, height: 4, borderRadius: 999, background: "#CDD2DA" }} />
                     {/* The owner's score across every car they list - a

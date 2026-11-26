@@ -280,10 +280,15 @@ function sortConfig(sort: CatalogSearchQuery["sort"]): SortConfig {
       return { expr: RATING_EXPR, key: "rating", direction: "desc" };
     // "recommended" has no real ranking signal yet (the design's is
     // completed hires) - newest-first until booking volume exists.
+    // Truncated to the millisecond the cursor carries (an ISO string):
+    // Postgres keeps microseconds, so ordering on the raw column and
+    // comparing it to a millisecond cursor skipped every row that shared
+    // the last row's millisecond (100 rows inserted in one transaction
+    // listed as 48 - found in H2, fixed in H3). Ties fall to `v.id`.
     case "newest":
     case "recommended":
     default:
-      return { expr: "v.created_at", key: "created_at", direction: "desc" };
+      return { expr: "date_trunc('milliseconds', v.created_at)", key: "created_at", direction: "desc" };
   }
 }
 
@@ -309,6 +314,12 @@ export async function listCatalog(query: CatalogSearchQuery) {
   if (query.truck_type) qb.where("v.truck_type", query.truck_type);
   if (query.payload_min_kg !== undefined) qb.where("v.payload_kg", ">=", query.payload_min_kg);
   if (query.machine_type) qb.where("v.machine_type", query.machine_type);
+  // Fixed price vs price by quote - the same rule as `needsQuote`, in SQL.
+  if (query.priced) {
+    const quoteSql = `(v.quote_required or v.hiring_unit in (${QUOTE_ONLY_UNITS.map(() => "?").join(", ")}))`;
+    if (query.priced === "quote") qb.whereRaw(quoteSql, [...QUOTE_ONLY_UNITS]);
+    else qb.whereRaw(`not ${quoteSql}`, [...QUOTE_ONLY_UNITS]);
+  }
 
   if (query.from && query.to) {
     // Day-granular overlap: a confirmed/active hire touching any day in
@@ -341,20 +352,17 @@ export async function listCatalog(query: CatalogSearchQuery) {
           [decoded.v, decoded.v, decoded.id],
         );
       } else {
-        qb.where((b) => {
-          b.where(sort.expr, op, decoded.v).orWhere((inner) => {
-            inner.where(sort.expr, "=", decoded.v).andWhere("v.id", op, decoded.id);
-          });
-        });
+        const cast = sort.key === "created_at" ? "::timestamptz" : "";
+        qb.whereRaw(`(${sort.expr} ${op} ?${cast} or (${sort.expr} = ?${cast} and v.id ${op} ?))`, [
+          decoded.v,
+          decoded.v,
+          decoded.id,
+        ]);
       }
     }
   }
 
-  if (sort.key === "rating") {
-    qb.orderByRaw(`${RATING_EXPR} ${sort.direction}`);
-  } else {
-    qb.orderBy(sort.expr, sort.direction);
-  }
+  qb.orderByRaw(`${sort.key === "rating" ? RATING_EXPR : sort.expr} ${sort.direction}`);
   qb.orderBy("v.id", sort.direction).limit(query.limit + 1);
 
   const fetched = (await qb) as Array<CatalogRow & { sort_rating?: string | number }>;

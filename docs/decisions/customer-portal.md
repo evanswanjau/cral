@@ -37,3 +37,10 @@ portals.
   `deploy.md`.
 
 - Customer PRs are numbered `C*` (C4 booking flow, C8 trips, C9 marketing, C11 Ops renters/bookings). Renter documents: `documents.merchant_id` nullable + `user_id`.
+- Hire listing pages (PR H3, 2026-11-26): `/cars/search`, `/trucks/search`
+  and `/machinery/search` are "Cars / Trucks / Machinery on hire", one
+  `components/hire/HireListingLayout` with a Cars / Trucks / Machinery
+  switch. Each sends its catalog `group`. Paging is a "Show 24 more"
+  button on the cursor (no infinite scroll). Filters past where and when
+  sit behind one "Filters" pill (a bottom sheet on a phone) and show as
+  removable tags.

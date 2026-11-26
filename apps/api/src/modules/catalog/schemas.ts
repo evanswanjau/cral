@@ -23,6 +23,8 @@ export const CatalogSearchQuerySchema = z
     payload_min_kg: z.coerce.number().int().min(1).max(100_000).optional(),
     // Machinery filter (20261126090000) - narrows to machines the same way.
     machine_type: z.enum(MACHINE_TYPES).optional(),
+    // PR H3: "fixed" = an instant total, "quote" = the owner prices it.
+    priced: z.enum(["fixed", "quote"]).optional(),
     chauffeured: z
       .enum(["true", "false"])
       .transform((v) => v === "true")

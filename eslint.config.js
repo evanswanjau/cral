@@ -85,6 +85,8 @@ export default [
       "**/*.config.js",
       "**/*.config.cjs",
       "**/.local-storage/**",
+      // Agent worktrees inside the checkout are other branches, not this tree.
+      "**/.claude/**",
     ],
   },
   prettier,

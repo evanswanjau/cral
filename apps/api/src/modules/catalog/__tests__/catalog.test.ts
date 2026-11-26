@@ -413,6 +413,48 @@ describe("filters", () => {
     expect(bad.status).toBe(422);
   });
 
+  it("narrows by fixed price or price by quote, the same rule as the card's `quoted`", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = `Priced ${Date.now()}`;
+    const fixed = await addVehicle(m.merchantId, {
+      county,
+      type: "truck",
+      truck_type: "flatbed",
+      hiring_unit: "trip",
+      trip_rate_amount: 3_000_000,
+    });
+    const flagged = await addVehicle(m.merchantId, {
+      county,
+      type: "truck",
+      truck_type: "tipper",
+      hiring_unit: "trip",
+      trip_rate_amount: 3_000_000,
+      quote_required: true,
+    });
+    const perKm = await addVehicle(m.merchantId, {
+      county,
+      type: "truck",
+      truck_type: "box_body",
+      hiring_unit: "km",
+      km_rate_amount: 12_000,
+    });
+
+    const ids = async (priced?: string) =>
+      (
+        (await request(app).get("/catalog/vehicles").query({ county, ...(priced ? { priced } : {}) })).body
+          .data as Array<{ id: string; quoted: boolean }>
+      )
+        .map((v) => v.id)
+        .sort();
+
+    expect(await ids("fixed")).toEqual([fixed]);
+    expect(await ids("quote")).toEqual([flagged, perKm].sort());
+    expect(await ids()).toEqual([fixed, flagged, perKm].sort());
+
+    const bad = await request(app).get("/catalog/vehicles").query({ priced: "free" });
+    expect(bad.status).toBe(422);
+  });
+
   it("rejects from without to", async () => {
     const res = await request(app).get("/catalog/vehicles").query({ from: "2026-09-20" });
     expect(res.status).toBe(422);
@@ -493,6 +535,57 @@ describe("sort and pagination", () => {
       [800_000],
     );
     expect(page3.body.has_more).toBe(false);
+  });
+
+  it("pages newest-first without skipping rows that share a timestamp", async () => {
+    const m = await makeMerchant({ approved: true });
+    const county = `Same instant ${Date.now()}`;
+    // One transaction: every row gets the same `now()`, to the microsecond.
+    // The millisecond cursor used to skip all of them after page one.
+    const made = await db.transaction(async (trx) => {
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const [v] = await trx("vehicles")
+          .insert({
+            id: generateId("vehicle"),
+            merchant_id: m.merchantId,
+            type: "sedan",
+            make: "Toyota",
+            model: "Axio",
+            year: "2017",
+            registration: plate(),
+            transmission: "Automatic",
+            fuel: "Petrol",
+            seats: 5,
+            county,
+            pickup_address: "Kilimani",
+            daily_rate_amount: 400_000,
+            daily_rate_currency: "KES",
+            minimum_hire_days: 1,
+            status: "live",
+            listing_ref: `H-${Date.now().toString().slice(-6)}-${ulid().slice(-6)}`,
+            submitted_at: new Date(),
+            insurance_expiry: "2027-02-15",
+            created_at: trx.fn.now(),
+          })
+          .returning("id");
+        ids.push(v.id);
+      }
+      return ids;
+    });
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < 5; page++) {
+      const res = await request(app)
+        .get("/catalog/vehicles")
+        .query({ county, sort: "newest", limit: 2, ...(cursor ? { cursor } : {}) });
+      expect(res.status).toBe(200);
+      seen.push(...res.body.data.map((v: { id: string }) => v.id));
+      if (!res.body.has_more) break;
+      cursor = res.body.next_cursor;
+    }
+    expect(seen.sort()).toEqual([...made].sort());
   });
 
   it("orders by the owner's rating, unrated owners last, and pages without dupes", async () => {
