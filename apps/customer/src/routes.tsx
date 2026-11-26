@@ -1,14 +1,10 @@
 import { Navigate, type RouteObject } from "react-router-dom";
 import { SiteShell } from "./components/site/SiteShell.js";
 import { Home } from "./pages/Home.js";
-import { CarsSearch } from "./pages/cars/CarsSearch.js";
+import { HireSearch } from "./pages/hire/HireSearch.js";
+import { HireRedirect } from "./components/routing/HireRedirect.js";
 import { LegacyBrowseRedirect } from "./components/routing/LegacyBrowseRedirect.js";
 import { LegacyBookRedirect } from "./components/routing/LegacyBookRedirect.js";
-import { CarsHome } from "./pages/cars/CarsHome.js";
-import { TrucksHome } from "./pages/trucks/TrucksHome.js";
-import { TrucksSearch } from "./pages/trucks/TrucksSearch.js";
-import { MachineryHome } from "./pages/machinery/MachineryHome.js";
-import { MachinerySearch } from "./pages/machinery/MachinerySearch.js";
 import { TowingHome } from "./pages/towing/TowingHome.js";
 import { Drivers } from "./pages/Drivers.js";
 import { DriverBook } from "./pages/DriverBook.js";
@@ -70,21 +66,23 @@ export const routes: RouteObject[] = [
     children: [
       { path: "/", element: <Home /> },
       { path: "/browse", element: <LegacyBrowseRedirect /> },
-      { path: "/cars/search", element: <CarsSearch /> },
-      { path: "/cars", element: <CarsHome /> },
-      // Trucks' own sub-site (UI2a). `/trucks/:id` is CarDetail with the
-      // route-first TruckRequestPanel, and `/trucks/:id/request` is the
-      // same Booking flow; each forwards to the other path when the
-      // listing isn't (or is) a truck.
-      { path: "/trucks", element: <TrucksHome /> },
-      { path: "/trucks/search", element: <TrucksSearch /> },
+      // One hire search (PR H4): `/hire` and `?type=cars|trucks|machinery`.
+      // The old landing and search addresses redirect, query kept;
+      // detail and booking paths below did not move.
+      { path: "/hire", element: <HireSearch /> },
+      { path: "/cars", element: <HireRedirect type="cars" /> },
+      { path: "/cars/search", element: <HireRedirect type="cars" /> },
+      { path: "/trucks", element: <HireRedirect type="trucks" /> },
+      { path: "/trucks/search", element: <HireRedirect type="trucks" /> },
+      { path: "/machinery", element: <HireRedirect type="machinery" /> },
+      { path: "/machinery/search", element: <HireRedirect type="machinery" /> },
+      // `/trucks/:id` is CarDetail with the route-first TruckRequestPanel,
+      // and `/trucks/:id/request` is the same Booking flow; each forwards
+      // to the other path when the listing isn't (or is) a truck.
       { path: "/trucks/:id", element: <CarDetail /> },
       { path: "/trucks/:id/request", element: <Booking /> },
-      // Machinery's own sub-site (UI2b): the cars pattern with the
-      // category locked. Detail and booking are CarDetail and Booking, which
-      // forward a listing to its own sub-site's path.
-      { path: "/machinery", element: <MachineryHome /> },
-      { path: "/machinery/search", element: <MachinerySearch /> },
+      // Machinery detail and booking are CarDetail and Booking, which
+      // forward a listing to its own path.
       { path: "/machinery/:id", element: <CarDetail /> },
       { path: "/machinery/:id/book", element: <Booking /> },
       // `/services` meant garage services; it goes to `/garage` now that

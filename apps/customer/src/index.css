@@ -568,47 +568,31 @@ input::placeholder {
 /*
  * Front door (pages/Home.tsx). On `/` the masthead is fixed and floats
  * over the ink hero: two rows (111px) below 960px, one row (67px) from
- * 960px. The hero's top padding clears it, and the in-page anchors
- * (`/#how`, `/#coming`, the `/services` and `/parts` redirects) stop
- * below it instead of under it.
+ * 960px. The hero's top padding clears it.
  */
 .cral-front-hero {
   padding-top: 140px;
-}
-#how,
-#coming {
-  scroll-margin-top: 120px;
 }
 @media (min-width: 960px) {
   .cral-front-hero {
     padding-top: 128px;
   }
-  #how,
-  #coming {
-    scroll-margin-top: 76px;
-  }
+}
+
+/* The masthead's Hire dropdown (components/site/HireMenu.tsx, PR H4). */
+.cral-mast-menu-btn:focus-visible,
+.cral-menu-item:focus-visible {
+  outline: 2px solid #0f23a8;
+  outline-offset: 2px;
+}
+.cral-menu-item:hover,
+.cral-menu-item:focus-visible {
+  background: #f1f3f6;
 }
 
 /* ---- Hire listing pages (PR H3: components/hire/*). Not from a canvas;
    values from packages/ui/src/tokens.ts. Every control here is a 44px
    target, and nothing in the frame is wider than the phone. ---- */
-.cral-hire-switch {
-  display: flex;
-  gap: 4px;
-  padding: 4px;
-  background: #f1f3f6;
-  border-radius: 12px;
-  width: 100%;
-}
-@media (min-width: 641px) {
-  .cral-hire-switch {
-    width: max-content;
-  }
-}
-.cral-hire-switch a:focus-visible {
-  outline: 2px solid #0f23a8;
-  outline-offset: 2px;
-}
 .cral-hire .cral-pill {
   height: 44px;
 }

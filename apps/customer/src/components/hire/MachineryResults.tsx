@@ -1,18 +1,17 @@
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { useSeo } from "../../lib/use-seo.js";
 import { getGroupCounties, type CatalogSearchParams } from "../../lib/catalog-api.js";
 import { earliestPickupDay } from "../../lib/hire-dates.js";
 import { MACHINE_TYPES } from "../../lib/vehicle-categories.js";
-import { Dropdown, PIN_ICON, type DropdownOption } from "../../components/site/Dropdown.js";
-import { DatePill } from "../../components/site/DatePill.js";
-import { HireListingLayout } from "../../components/hire/HireListingLayout.js";
-import { useHireParams } from "../../components/hire/hire-params.js";
+import { Dropdown, PIN_ICON, type DropdownOption } from "../site/Dropdown.js";
+import { DatePill } from "../site/DatePill.js";
+import { HireListingLayout } from "./HireListingLayout.js";
+import { useHireParams } from "./hire-params.js";
 
 /**
- * `/machinery/search` - "Machinery on hire" (PR H3; was UI2b's machinery
- * search). Asks the catalog for `group=machinery`. The filters are where,
+ * `/hire?type=machinery` - "Machinery on hire" (PR H4; was H3's
+ * `/machinery/search`). Asks the catalog for `group=machinery`. The filters are where,
  * when and what kind of machine (`machine_type`, owner's decision 4) -
  * never seats, gearbox or self-drive. Every filter is a pill in the bar,
  * so this page has no Filters sheet.
@@ -33,19 +32,15 @@ const TYPE_OPTIONS: DropdownOption[] = [
 
 const ALL_KEYS = ["county", "from", "to", "machine_type"] as const;
 
-export function MachinerySearch(): JSX.Element {
-  useSeo({
-    title: "Machinery on hire",
-    description:
-      "Excavators, loaders, graders and more for site work, from owners CRAL has checked. Filter by county, dates and machine, then send the owner a request for free.",
-    path: "/machinery/search",
-  });
+export function MachineryResults(): JSX.Element {
   const navigate = useNavigate();
-  const { params, get, set, clear, sort } = useHireParams();
+  const { params, get, set, clear, sort, type, changeType } = useHireParams();
   const county = get("county");
   const from = get("from");
   const to = get("to");
-  const machineType = TYPE_OPTIONS.some((o) => o.value === get("machine_type")) ? get("machine_type") : "";
+  const machineType = TYPE_OPTIONS.some((o) => o.value === get("machine_type"))
+    ? get("machine_type")
+    : "";
   const minDay = earliestPickupDay();
 
   // Counties with a live machine in them.
@@ -74,14 +69,13 @@ export function MachinerySearch(): JSX.Element {
 
   return (
     <HireListingLayout
-      group="machinery"
-      title="Machinery on hire"
+      type={type}
+      onType={changeType}
       lede={
         from && to
           ? "Showing machinery that is free on your dates. Open one to send the owner a request."
           : "Every machine is checked by a person before it is listed. Pick your dates to see what is free."
       }
-      noun="machinery"
       emptyHint="Try any machine, another county or other dates."
       query={query}
       sort={sort}
@@ -89,7 +83,9 @@ export function MachinerySearch(): JSX.Element {
       tags={[]}
       onClearAll={() => clear(ALL_KEYS)}
       note={!!from !== !!to ? "Pick both dates to see what's free." : undefined}
-      onOpen={(m) => navigate(`/machinery/${m.id}${carry}`, { state: { machinerySearch: params.toString() } })}
+      onOpen={(m) =>
+        navigate(`/machinery/${m.id}${carry}`, { state: { hireSearch: params.toString() } })
+      }
       bar={
         <>
           <Dropdown
@@ -106,9 +102,16 @@ export function MachinerySearch(): JSX.Element {
             label="From"
             value={from}
             min={minDay}
-            onChange={(v) => set({ from: v || undefined, ...(v && to && to < v ? { to: undefined } : {}) })}
+            onChange={(v) =>
+              set({ from: v || undefined, ...(v && to && to < v ? { to: undefined } : {}) })
+            }
           />
-          <DatePill label="Until" value={to} min={from || minDay} onChange={(v) => set({ to: v || undefined })} />
+          <DatePill
+            label="Until"
+            value={to}
+            min={from || minDay}
+            onChange={(v) => set({ to: v || undefined })}
+          />
           <Dropdown
             variant="pill"
             label="Machine"

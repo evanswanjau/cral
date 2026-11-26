@@ -24,7 +24,7 @@ import { Handshake } from "@phosphor-icons/react/dist/ssr/Handshake";
  * photo, icon and kicker only.
  */
 
-export type ServiceKey = "cars" | "trucks" | "machinery" | "drivers" | "towing" | "garage" | "parts" | "selling";
+export type ServiceKey = "hire" | "drivers" | "towing" | "garage" | "parts" | "selling";
 
 export interface LiveService {
   status: "live";
@@ -43,6 +43,8 @@ export interface LiveService {
   photo: string;
   href: string;
   match: string[];
+  /** A dropdown in place of a plain tab: each entry goes straight to results. */
+  menu?: Array<{ label: string; href: string; icon: Icon }>;
 }
 
 export interface ComingService {
@@ -62,47 +64,28 @@ export type Service = LiveService | ComingService;
 
 export const SERVICES: Service[] = [
   {
+    // PR H4: Cars, Trucks and Machinery are one "Hire" entry, a dropdown
+    // in the masthead (`menu`) leading straight to `/hire` results
+    // (docs/plans/hire-search-first.md). The old landing paths redirect
+    // there; detail and booking paths keep the entry's tab active.
     status: "live",
-    key: "cars",
-    tab: "Cars",
-    label: "Hire a car",
-    note: "Self-drive or with a driver",
-    kicker: "HIRE A CAR",
-    h1: "Hire a car whose papers a person has read.",
-    lede: "Self-drive or with a driver, from owners CRAL has checked. Sending a request is free, and you pay by M-Pesa only once the owner accepts your dates.",
+    key: "hire",
+    tab: "Hire",
+    label: "Hire a vehicle",
+    note: "Cars, trucks and machinery",
+    kicker: "HIRE",
+    h1: "What do you want to hire?",
+    lede: "Cars, trucks and machinery from owners CRAL has checked. Sending a request is free, and you pay by M-Pesa only once the owner says yes.",
     icon: Car,
     photo: "/images/services/cars.jpg",
-    href: "/cars",
-    // `/browse` and `/book` until UI1c moves them under `/cars`.
-    match: ["/cars"],
-  },
-  {
-    status: "live",
-    key: "trucks",
-    tab: "Trucks",
-    label: "Hire a truck",
-    note: "Say the route, get a price",
-    kicker: "HIRE A TRUCK",
-    h1: "Tell us the load. Owners send the price.",
-    lede: "Tippers, flatbeds and box bodies from owners CRAL has checked. You pay only once you accept a price.",
-    icon: Truck,
-    photo: "/images/services/trucks.jpg",
-    href: "/trucks",
-    match: ["/trucks"],
-  },
-  {
-    status: "live",
-    key: "machinery",
-    tab: "Machinery",
-    label: "Hire machinery",
-    note: "Plant for site work, by the day",
-    kicker: "HIRE MACHINERY",
-    h1: "Plant for the site, by the day.",
-    lede: "Machinery for site work from owners CRAL has checked. Sending a request is free, and you pay by M-Pesa only once the owner accepts your dates.",
-    icon: Tractor,
-    photo: "/images/services/machinery.jpg",
-    href: "/machinery",
-    match: ["/machinery"],
+    href: "/hire",
+    match: ["/hire", "/cars", "/trucks", "/machinery"],
+    menu: [
+      { label: "All vehicles", href: "/hire", icon: Car },
+      { label: "Cars", href: "/hire?type=cars", icon: Car },
+      { label: "Trucks", href: "/hire?type=trucks", icon: Truck },
+      { label: "Machinery", href: "/hire?type=machinery", icon: Tractor },
+    ],
   },
   {
     status: "live",
@@ -176,8 +159,12 @@ export const SERVICES: Service[] = [
   },
 ];
 
-export const LIVE_SERVICES: LiveService[] = SERVICES.filter((s): s is LiveService => s.status === "live");
-export const COMING_SERVICES: ComingService[] = SERVICES.filter((s): s is ComingService => s.status === "coming");
+export const LIVE_SERVICES: LiveService[] = SERVICES.filter(
+  (s): s is LiveService => s.status === "live",
+);
+export const COMING_SERVICES: ComingService[] = SERVICES.filter(
+  (s): s is ComingService => s.status === "coming",
+);
 
 export function getService(key: ServiceKey): Service | undefined {
   return SERVICES.find((s) => s.key === key);

@@ -31,7 +31,7 @@ export function DriverList({
         <div style={{ background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: 12, padding: 18 }}>
           <p style={bodyText}>
             No drivers are taking bookings here yet. Check back soon, or{" "}
-            <Link to="/cars" style={{ color: "#0F23A8", fontWeight: 600 }}>
+            <Link to="/hire?type=cars" style={{ color: "#0F23A8", fontWeight: 600 }}>
               hire a car that comes with a driver
             </Link>
             .
