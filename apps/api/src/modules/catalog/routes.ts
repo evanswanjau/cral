@@ -82,14 +82,41 @@ catalogRouter.get(
 );
 
 // Drivers for hire (docs/plans/drivers.md) - same public bucket as cars.
-const DriverSearchQuerySchema = PaginationQuerySchema.extend({ county: z.string().min(1).optional() });
+// DR1 (docs/plans/drivers-that-work.md): searched by county, rate and a
+// window; a price sort orders on the chosen rate, so it needs one.
+const DriverSearchQuerySchema = PaginationQuerySchema.extend({
+  county: z.string().trim().min(1).max(60).optional().catch(undefined),
+  unit: z.enum(["day", "hour", "trip"]).optional(),
+  pickup_at: z.coerce.date().optional(),
+  dropoff_at: z.coerce.date().optional(),
+  sort: z.enum(["recommended", "price_asc", "price_desc"]).optional(),
+}).superRefine((q, ctx) => {
+  if (!!q.pickup_at !== !!q.dropoff_at) {
+    ctx.addIssue({ code: "custom", message: "pickup_at and dropoff_at must be given together", path: [q.pickup_at ? "dropoff_at" : "pickup_at"] });
+  }
+  if (q.pickup_at && q.dropoff_at && q.dropoff_at <= q.pickup_at) {
+    ctx.addIssue({ code: "custom", message: "dropoff_at must be after pickup_at", path: ["dropoff_at"] });
+  }
+  if ((q.sort === "price_asc" || q.sort === "price_desc") && !q.unit) {
+    ctx.addIssue({ code: "custom", message: "Pick a rate (day, hour or trip) to sort by price", path: ["unit"] });
+  }
+});
 
 catalogRouter.get(
   "/catalog/drivers",
   browse,
   asyncHandler(async (req, res) => {
     const q = DriverSearchQuerySchema.parse(req.query);
-    res.status(200).json(await drivers.listPublicDrivers({ county: q.county, cursor: q.cursor, limit: q.limit }));
+    res.status(200).json(await drivers.listPublicDrivers(q));
+  }),
+);
+
+// Before `/catalog/drivers/:id`, so "counties" is never read as a driver id.
+catalogRouter.get(
+  "/catalog/drivers/counties",
+  browse,
+  asyncHandler(async (_req, res) => {
+    res.status(200).json(await drivers.driverCounties());
   }),
 );
 

@@ -258,6 +258,15 @@ dispute reaching Ops.
 
 ---
 
+## Drivers that work (before Phase 6)
+
+Owner's call, 2026-11-27: drivers are made to match the new Hire before
+buy-and-sell cars continues. Five PRs, DR1-DR5, one fresh session each, in
+order. The list and its status live in
+[`drivers-that-work.md`](./drivers-that-work.md) ("PR list").
+
+---
+
 ## Phase 6 - Buy and sell cars
 
 **Client sees:** owners list a car for sale; CRAL checks the logbook before

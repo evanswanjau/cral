@@ -88,6 +88,9 @@ export const SERVICES: Service[] = [
     ],
   },
   {
+    // Its own top item right after Hire, one click to results (DR1,
+    // docs/plans/drivers-that-work.md). The order reads Buy and sell, Hire,
+    // Drivers once "selling" goes live; until then it is not in the menu.
     status: "live",
     key: "drivers",
     tab: "Drivers",

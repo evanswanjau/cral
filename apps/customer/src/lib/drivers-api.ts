@@ -3,8 +3,8 @@ import type { Money } from "./catalog-api.js";
 
 /**
  * Drivers for hire (docs/plans/drivers.md) - the public catalog side,
- * `openapi/customer-catalog.yaml`. A thin projection: first name and
- * surname initial, county, rates, and who they drive for.
+ * `openapi/customer-catalog.yaml`. A thin projection: the driver's full
+ * name, county, rates, and who they drive for.
  */
 
 export type DriverUnit = "day" | "hour" | "trip";
@@ -18,10 +18,38 @@ export interface PublicDriver {
   merchant_name: string;
 }
 
-export function listDrivers(county?: string) {
-  const q = new URLSearchParams({ limit: "100" });
-  if (county) q.set("county", county);
-  return apiGet<{ data: PublicDriver[]; has_more: boolean; next_cursor: string | null }>(`/catalog/drivers?${q.toString()}`);
+/** The `/drivers` search (DR1): every filter is the server's, paged by cursor. */
+export interface DriverSearchParams {
+  county?: string;
+  unit?: DriverUnit;
+  /** A window, both or neither: drivers booked over it are left out. */
+  pickup_at?: string;
+  dropoff_at?: string;
+  /** A price sort orders on `unit`'s rate, so it needs `unit`. */
+  sort?: "recommended" | "price_asc" | "price_desc";
+  cursor?: string;
+  limit?: number;
+}
+
+export interface DriverPage {
+  data: PublicDriver[];
+  has_more: boolean;
+  next_cursor: string | null;
+  total_count: number;
+}
+
+export function listDrivers(params: DriverSearchParams = {}) {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") q.set(k, String(v));
+  }
+  const s = q.toString();
+  return apiGet<DriverPage>(`/catalog/drivers${s ? `?${s}` : ""}`);
+}
+
+/** Counties with a live driver, busiest first - the county picker. */
+export function getDriverCounties() {
+  return apiGet<{ counties: Array<{ county: string; count: number }> }>("/catalog/drivers/counties");
 }
 
 export function getDriver(id: string) {
