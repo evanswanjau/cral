@@ -52,6 +52,19 @@ function auth(token: string) {
   return { Authorization: `Bearer ${token}` };
 }
 
+/** Uploads `count` vehicle photos (3 is the least a submission takes - PR H6). */
+async function addPhotos(accessToken: string, vehicleId: string, count = 3) {
+  for (let i = 0; i < count; i++) {
+    const res = await request(app)
+      .post("/merchant/onboarding/documents")
+      .set(auth(accessToken))
+      .field("kind", "vehicle_photo")
+      .field("vehicle_id", vehicleId)
+      .attach("file", testJpeg(`photo-${vehicleId}-${i}`), { filename: `photo-${i}.jpg`, contentType: "image/jpeg" });
+    expect(res.status).toBe(201);
+  }
+}
+
 describe("merchant onboarding — GET/PATCH", () => {
   it("returns a fresh empty draft for a merchant with no row yet", async () => {
     const { accessToken } = await newMerchant();
@@ -350,24 +363,17 @@ describe("merchant onboarding — document upload", () => {
       });
     const vehicleId = vehicleRes.body.id;
 
-    for (let i = 0; i < 3; i++) {
-      await request(app)
-        .post("/merchant/onboarding/documents")
-        .set(auth(accessToken))
-        .field("kind", "vehicle_photo")
-        .field("vehicle_id", vehicleId)
-        .attach("file", testJpeg(`p-${i}`), { filename: `p-${i}.jpg`, contentType: "image/jpeg" });
-    }
+    await addPhotos(accessToken, vehicleId, 8);
 
     const before = await countStoredPhotoFiles(vehicleId);
-    const fourth = await request(app)
+    const ninth = await request(app)
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "vehicle_photo")
       .field("vehicle_id", vehicleId)
-      .attach("file", testJpeg("p-4"), { filename: "p-4.jpg", contentType: "image/jpeg" });
-    expect(fourth.status).toBe(422);
-    expect(fourth.body.error.code).toBe("too_many_photos");
+      .attach("file", testJpeg("p-9"), { filename: "p-9.jpg", contentType: "image/jpeg" });
+    expect(ninth.status).toBe(422);
+    expect(ninth.body.error.code).toBe("too_many_photos");
 
     // The rejected file must not be sitting in storage unreferenced.
     expect(await countStoredPhotoFiles(vehicleId)).toBe(before);
@@ -412,7 +418,7 @@ describe("merchant onboarding — document upload", () => {
     expect(res.status).toBe(422);
   });
 
-  it("uploads a vehicle photo and caps it at 3 per vehicle", async () => {
+  it("takes more than 3 vehicle photos and caps them at 8 per vehicle", async () => {
     const { accessToken } = await newMerchant();
     const vehicleRes = await request(app)
       .post("/merchant/onboarding/vehicles")
@@ -430,26 +436,20 @@ describe("merchant onboarding — document upload", () => {
       });
     const vehicleId = vehicleRes.body.id;
 
-    for (let i = 0; i < 3; i++) {
-      const res = await request(app)
-        .post("/merchant/onboarding/documents")
-        .set(auth(accessToken))
-        .field("kind", "vehicle_photo")
-        .field("vehicle_id", vehicleId)
-        .attach("file", testJpeg(`photo-${i}`), { filename: `photo-${i}.jpg`, contentType: "image/jpeg" });
-      expect(res.status).toBe(201);
-    }
-
+    // "At least 3", not "exactly 3" (F28, PR H6): a 4th and 5th are fine.
+    await addPhotos(accessToken, vehicleId, 5);
     const getRes = await request(app).get("/merchant/onboarding").set(auth(accessToken));
-    expect(getRes.body.vehicles[0].photos).toHaveLength(3);
+    expect(getRes.body.vehicles[0].photos).toHaveLength(5);
 
-    const fourth = await request(app)
+    await addPhotos(accessToken, vehicleId, 3);
+    const ninth = await request(app)
       .post("/merchant/onboarding/documents")
       .set(auth(accessToken))
       .field("kind", "vehicle_photo")
       .field("vehicle_id", vehicleId)
-      .attach("file", testJpeg("photo-4"), { filename: "photo-4.jpg", contentType: "image/jpeg" });
-    expect(fourth.status).toBe(422);
+      .attach("file", testJpeg("photo-9"), { filename: "photo-9.jpg", contentType: "image/jpeg" });
+    expect(ninth.status).toBe(422);
+    expect(ninth.body.error.code).toBe("too_many_photos");
   });
 
   it("replaces a single-slot document on re-upload", async () => {
@@ -522,6 +522,7 @@ describe("merchant onboarding — submit", () => {
         .field("vehicle_id", vehicleId)
         .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
+    await addPhotos(accessToken, vehicleId);
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await request(app)
       .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
@@ -607,6 +608,7 @@ describe("merchant onboarding — submit", () => {
         .field("vehicle_id", vehicleId)
         .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
+    await addPhotos(accessToken, vehicleId);
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await request(app)
       .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
@@ -723,6 +725,7 @@ describe("merchant onboarding — submit", () => {
         .field("vehicle_id", vehicleId)
         .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
+    await addPhotos(accessToken, vehicleId);
 
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await request(app)
@@ -818,6 +821,7 @@ describe("merchant onboarding — submit", () => {
         .field("vehicle_id", vehicleId)
         .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
     }
+    await addPhotos(accessToken, vehicleId);
     const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
     await request(app)
       .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
@@ -836,5 +840,102 @@ describe("merchant onboarding — submit", () => {
     const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
     expect(ok.status).toBe(200);
     expect(ok.body.submitted).toBe(true);
+  });
+});
+
+describe("merchant onboarding — submit rules from PR H6", () => {
+  /** A merchant with everything on file but `photos` photos on one machine. */
+  async function readyMachineOwner(photos: number) {
+    const user = await newMerchant();
+    const { accessToken, userId } = user;
+    await request(app)
+      .patch("/merchant/onboarding")
+      .set(auth(accessToken))
+      .send({
+        first_name: "Wanjiru",
+        surname: "Kamau",
+        national_id: "23456789",
+        kra_pin: "A023456789Z",
+        payout_same: true,
+        phone: `+2547${Math.floor(10000000 + Math.random() * 89999999)}`,
+        terms_accepted: true,
+      });
+    await markPhoneVerified(userId);
+    const machine = await request(app)
+      .post("/merchant/onboarding/vehicles")
+      .set(auth(accessToken))
+      .send({
+        type: "machinery",
+        machine_type: "excavator",
+        make: "CAT",
+        model: "320",
+        year: "2018",
+        registration: `CAT${Date.now().toString().slice(-8)}${Math.floor(Math.random() * 1000)}`,
+        registration_kind: "serial",
+        transmission: "Automatic",
+        fuel: "Diesel",
+        county: "Kiambu",
+        pickup_address: "Thika Road, Ruiru",
+        daily_rate: "45000",
+      });
+    expect(machine.status).toBe(201);
+    const vehicleId = machine.body.id as string;
+    for (const kind of ["national_id", "kra_pin"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    for (const kind of ["logbook", "comprehensive_insurance", "tracker_certificate"]) {
+      await request(app)
+        .post("/merchant/onboarding/documents")
+        .set(auth(accessToken))
+        .field("kind", kind)
+        .field("vehicle_id", vehicleId)
+        .attach("file", testPdf("doc"), { filename: `${kind}.pdf`, contentType: "application/pdf" });
+    }
+    const futureDate = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    await request(app)
+      .patch(`/merchant/onboarding/vehicles/${vehicleId}`)
+      .set(auth(accessToken))
+      .send({ insurance_expiry: futureDate });
+    if (photos > 0) await addPhotos(accessToken, vehicleId, photos);
+    return { ...user, vehicleId };
+  }
+
+  it("refuses to submit until the sign-in email is verified, and says so with its own code", async () => {
+    const { accessToken, userId } = await readyMachineOwner(3);
+    await db("users").where({ id: userId }).update({ email_verified: false });
+
+    const state = await request(app).get("/merchant/onboarding").set(auth(accessToken));
+    expect(state.body.email_verified).toBe(false);
+
+    const blocked = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error).toMatchObject({ code: "email_not_verified", field: "email" });
+    expect(blocked.body.error.message).toMatch(/verify your email/i);
+    const merchant = await db("merchants").where({ user_id: userId }).first();
+    expect(merchant.onboarding_submitted).toBe(false);
+
+    await db("users").where({ id: userId }).update({ email_verified: true });
+    const after = await request(app).get("/merchant/onboarding").set(auth(accessToken));
+    expect(after.body.email_verified).toBe(true);
+    const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(ok.status).toBe(200);
+  });
+
+  it("needs at least 3 photos per vehicle to submit, and takes more than 3", async () => {
+    const { accessToken, vehicleId } = await readyMachineOwner(2);
+
+    const blocked = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(blocked.status).toBe(422);
+    expect(blocked.body.error.code).toBe("incomplete_onboarding");
+    expect(blocked.body.error.message).toMatch(/at least 3 photos/);
+
+    await addPhotos(accessToken, vehicleId, 2);
+    const ok = await request(app).post("/merchant/onboarding/submit").set(auth(accessToken));
+    expect(ok.status).toBe(200);
+    expect(ok.body.vehicles[0].photos).toHaveLength(4);
   });
 });

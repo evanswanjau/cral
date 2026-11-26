@@ -160,7 +160,8 @@ paths:
         `tracker_certificate`, `vehicle_photo`) and forbidden for owner
         kinds (`national_id`, `kra_pin`). Every kind except `vehicle_photo`
         is single-slot — a second upload replaces the first. `vehicle_photo`
-        allows up to 3 per vehicle; a 4th is rejected with 422.
+        allows up to 8 per vehicle (at least 3 are needed to submit); a 9th
+        is rejected with 422 `too_many_photos`.
       requestBody:
         required: true
         content:
@@ -250,8 +251,9 @@ paths:
       summary: Submit the draft for review
       operationId: submitOnboarding
       description: >
-        Validates completeness server-side (owner details, payout, at least
-        one vehicle with all three vehicle documents and a non-expired
+        Validates completeness server-side (a verified sign-in email first,
+        then owner details, payout, at least
+        one vehicle with at least 3 photos, all three vehicle documents and a non-expired
         insurance-expiry date if comprehensive insurance is attached, a
         truck type and capacity for every truck, a machine type for every
         machine, both owner documents, and merchant terms accepted) — the same rules the
@@ -265,7 +267,11 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/OnboardingState" }
         "422":
-          description: Incomplete — `message` names the first missing thing
+          description: >
+            Incomplete — `message` names the first missing thing. Code
+            `email_not_verified` (field `email`) when the sign-in email has
+            not been confirmed: the client shows its "Verify your email"
+            step. Otherwise code `incomplete_onboarding`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorEnvelope" }
@@ -504,6 +510,14 @@ components:
         account_email:
           type: string
           description: The account's sign-in email, for the wizard's read-only email field (an assist token can't call `/me`).
+        email_verified:
+          type: boolean
+          description: >
+            Whether the sign-in email has passed its code check (PR H6).
+            Required before submit; while false the review step shows a
+            "Verify your email" card that sends a code with
+            `POST /auth/otp/request` (`purpose: signup`) and checks it with
+            `POST /auth/otp/verify` (identity.yaml).
         assist:
           type: object
           nullable: true

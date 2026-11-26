@@ -85,6 +85,19 @@ dashboard or notifications. Bookings and payouts are in
   (`drivers.md`).
 - Merchant-terms intro copy is 13px body text, not the 15px `stepLede`.
 - Photos that already uploaded are kept when a step is revisited.
+- **Submit needs a verified email** (PR H6, 2026-11-26). Submit is 422
+  `email_not_verified` (field `email`) until `users.email_verified`; the
+  Review step then shows a "Verify your email" card that reuses the
+  sign-up code pair (`/auth/otp/request` + `/auth/otp/verify`, purpose
+  `signup`). Checked before every other submission rule.
+- **At least 3 photos, up to 8** per vehicle (F28, PR H6). Submit refuses
+  a vehicle with fewer than 3; a 9th upload is 422 `too_many_photos`.
+  The photo slots and captions read for the type (car, truck, machine).
+- **The vehicle form reads for its type** (PR H6): "Add a truck" / "Add a
+  machine"; a machine has an "Operator" (with my operator / hirer brings
+  their own), no transmission field, and asks for its serial number's
+  papers when it has no plate. Seats are asked only for a sedan, SUV or
+  van, and no screen shows seats for a truck or machine.
 
 ## Portal by offering
 

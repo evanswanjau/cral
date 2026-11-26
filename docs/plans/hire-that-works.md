@@ -641,6 +641,19 @@ only: Pay after accept) and a JCB backhoe with operator (ID pending:
 
 ### H6 - Merchant onboarding fixes for trucks and machines
 
+**Built 2026-11-26** on `feature/hire-onboarding-fixes`. Submit is 422
+`email_not_verified` until the sign-in email is confirmed; Review shows a
+"Verify your email" card (sign-up code pair, no new endpoint) and the
+state carries `email_verified`. At least 3 photos to submit, up to 8
+(F28). The vehicle form reads for its type: "Add a truck" / "Add a
+machine", photo captions per type, a machine has an "Operator" and no
+transmission, logbook copy for a serial-number machine, Caterpillar/Isuzu
+placeholders; fleet row, Review and Done say machine/truck. Seats no
+longer show for a truck or machine on the customer trip page or the Ops
+vehicle case. Walked locally at 375px: a Caterpillar 320D excavator
+(serial number, 4 photos) and an Isuzu FVZ truck (10 t, 3 photos), both
+blocked at Review until the email code was entered, then submitted.
+
 - **Goal:** a merchant can't go live without a verified email; listings
   read right for their type.
 - **Files:** `apps/api/src/modules/merchant/service.ts` (submit checks

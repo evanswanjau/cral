@@ -48,11 +48,13 @@ function PhotoTile({
   );
 }
 
-export const MAX_PHOTOS = 3;
+/** At least 3 to save a vehicle, up to 8 (F28: "at least 3", not "exactly 3" - PR H6). Mirrors the API. */
+export const MIN_PHOTOS = 3;
+export const MAX_PHOTOS = 8;
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const ACCEPTED_LABEL = "JPG, PNG or WEBP";
-const CAPTIONS = ["Front three-quarter", "Interior · dashboard", "Rear or side"];
+const CAR_CAPTIONS = ["Front three-quarter", "Interior · dashboard", "Rear or side"];
 
 /** The file that failed, plus whatever uploaded before it - never a bare "try again". */
 function uploadErrorMessage(err: unknown, file: File, savedCount: number): string {
@@ -68,8 +70,8 @@ function uploadErrorMessage(err: unknown, file: File, savedCount: number): strin
 }
 
 /**
- * Real drag-and-drop / click-to-browse photo picker, capped at exactly
- * `MAX_PHOTOS`. Each accepted file uploads immediately via
+ * Real drag-and-drop / click-to-browse photo picker: `MIN_PHOTOS` slots to
+ * fill, then one more "optional" slot at a time up to `MAX_PHOTOS`. Each accepted file uploads immediately via
  * POST /merchant/onboarding/documents (kind=vehicle_photo) - needs a real
  * server-side vehicle id, so this is disabled until the vehicle has been
  * created (see VehicleForm in steps/Vehicles.tsx).
@@ -82,10 +84,13 @@ export function PhotoUpload({
   photos,
   onChange,
   vehicleId,
+  captions = CAR_CAPTIONS,
 }: {
   photos: DraftPhoto[];
   onChange: (photos: DraftPhoto[]) => void;
   vehicleId: string | null;
+  /** What the first slots ask for; a truck or a machine is shot differently from a car. */
+  captions?: readonly string[];
 }): JSX.Element {
   const [, forceUpdate] = useState(0);
   const [dragOver, setDragOver] = useState(false);
@@ -102,7 +107,7 @@ export function PhotoUpload({
     const files = Array.from(fileList);
     const room = MAX_PHOTOS - photos.length;
     if (room <= 0) {
-      setError(`Only ${MAX_PHOTOS} photos are allowed during onboarding.`);
+      setError(`Up to ${MAX_PHOTOS} photos. Remove one to add another.`);
       return;
     }
 
@@ -111,7 +116,7 @@ export function PhotoUpload({
 
     for (const file of files) {
       if (toUpload.length >= room) {
-        rejectionMessage = `Only ${MAX_PHOTOS} photos are allowed during onboarding - the rest weren't added.`;
+        rejectionMessage = `Up to ${MAX_PHOTOS} photos - the rest weren't added.`;
         break;
       }
       if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -205,7 +210,11 @@ export function PhotoUpload({
           />
         ))}
 
-        {Array.from({ length: MAX_PHOTOS - photos.length }).map((_, slot) => {
+        {/* The required slots still empty, or one optional slot once they're
+            filled - never a wall of eight empty boxes. */}
+        {Array.from({
+          length: photos.length < MIN_PHOTOS ? MIN_PHOTOS - photos.length : photos.length < MAX_PHOTOS ? 1 : 0,
+        }).map((_, slot) => {
           const captionIndex = photos.length + slot;
           const slotUploading = slot < uploadingCount;
           return (
@@ -217,7 +226,9 @@ export function PhotoUpload({
               onClick={() => inputRef.current?.click()}
             >
               <span style={O.photoTileAddLabel}>{slotUploading ? "UPLOADING…" : "+ ADD PHOTO"}</span>
-              <span style={O.photoTileCaption}>{CAPTIONS[captionIndex] ?? "Any angle"}</span>
+              <span style={O.photoTileCaption}>
+                {captions[captionIndex] ?? (captionIndex >= MIN_PHOTOS ? "Optional · any angle" : "Any angle")}
+              </span>
             </button>
           );
         })}

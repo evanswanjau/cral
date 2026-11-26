@@ -391,7 +391,13 @@ export function Documents({
 
             <DocRow
               title="Logbook"
-              body="All pages showing owner and chassis number"
+              body={
+                // A machine often has no logbook plate (decision 4): its
+                // ownership papers carry the serial number instead (PR H6).
+                v.type === "machinery" && v.registrationKind === "serial"
+                  ? "Or the purchase or import papers showing the owner and serial number"
+                  : "All pages showing owner and chassis number"
+              }
               doc={v.docs.logbook}
               onChange={(doc) => setDocs({ logbook: doc })}
               kind="logbook"
@@ -410,7 +416,7 @@ export function Documents({
               expiryExpired={Boolean(v.docs.comprehensiveInsurance) && isExpiredIso(v.insuranceExpiry)}
             />
             <DocRow
-              title="Car tracker certificate"
+              title="Tracker certificate"
               body="From your tracking provider"
               doc={v.docs.trackerCertificate}
               onChange={(doc) => setDocs({ trackerCertificate: doc })}

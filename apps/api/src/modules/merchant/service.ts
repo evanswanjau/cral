@@ -80,7 +80,10 @@ const VEHICLE_DOC_KINDS: DocumentKind[] = [
   "tracker_certificate",
 ];
 const OWNER_DOC_KINDS: DocumentKind[] = ["national_id", "kra_pin"];
-const MAX_VEHICLE_PHOTOS = 3;
+// At least 3 photos to submit, up to 8 kept (F28 of the product review:
+// "at least 3", not "exactly 3" - PR H6 of docs/plans/hire-that-works.md).
+const MIN_VEHICLE_PHOTOS = 3;
+const MAX_VEHICLE_PHOTOS = 8;
 
 // Built lazily, not at module load, so importing this module (which every
 // test file does transitively via app.ts) doesn't require a working
@@ -177,6 +180,7 @@ export async function getOnboardingState(
   return {
     ...serializeState(merchant, vehicles, documents, user?.phone ?? null, Boolean(user?.phone_verified)),
     account_email: (user?.email as string | undefined) ?? "",
+    email_verified: Boolean(user?.email_verified),
     assist: current,
     assists: await assistHistory(userId),
   };
@@ -924,7 +928,7 @@ async function assertPhotoSlotAvailable(conn: Knex | Knex.Transaction, vehicleId
       status: 422,
       type: "validation_error",
       code: "too_many_photos",
-      message: `Only ${MAX_VEHICLE_PHOTOS} photos are allowed per vehicle.`,
+      message: `Up to ${MAX_VEHICLE_PHOTOS} photos per vehicle. Remove one to add another.`,
     });
   }
 }
@@ -1149,6 +1153,18 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     });
   }
 
+  // Nobody goes live on an address nobody has proved they read (PR H6).
+  // Its own code so the wizard can show the "Verify your email" step.
+  if (!user?.email_verified) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "email_not_verified",
+      message: "Verify your email before submitting. We'll send a code to your sign-in address.",
+      field: "email",
+    });
+  }
+
   // Mirrors YourDetails.tsx's requiredFilled exactly.
   if (!merchant.first_name?.trim()) fail("First name is required.");
   if (!merchant.surname?.trim()) fail("Surname is required.");
@@ -1190,6 +1206,10 @@ async function assertCompleteForSubmission(userId: string): Promise<{
     // A machine without a type can't be filtered for (decision 4); same
     // code as `submitVehicle` so the client reads one error either way.
     assertMachineDetails(v);
+    const photoCount = documents.filter((d) => d.vehicle_id === v.id && d.kind === "vehicle_photo").length;
+    if (photoCount < MIN_VEHICLE_PHOTOS) {
+      fail(`${v.registration || "A vehicle"} needs at least ${MIN_VEHICLE_PHOTOS} photos.`);
+    }
     for (const kind of VEHICLE_DOC_KINDS) {
       if (!documents.some((d) => d.vehicle_id === v.id && d.kind === kind)) {
         fail(`${v.registration || "A vehicle"} is missing a required document.`);

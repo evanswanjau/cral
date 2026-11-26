@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { O } from "../components/onboarding/styles.js";
 import { ErrorBanner } from "../components/onboarding/primitives.js";
 import { getMe, logout } from "../lib/auth-api.js";
+import { ApiClientError } from "../lib/api.js";
 import { endAssist, fetchAssistInfo, isAssistSession } from "../lib/assist.js";
 import { AssistBanner } from "../components/onboarding/AssistBanner.js";
 import { setSession } from "../lib/auth.js";
@@ -241,6 +242,12 @@ export function Onboarding(): JSX.Element {
     } catch (err) {
       // The wizard's own client-side gates should normally prevent this - 
       // this is the honest backstop when the server disagrees.
+      if (err instanceof ApiClientError && err.code === "email_not_verified") {
+        // PR H6: Review's "Verify your email" card is the step, not a banner.
+        setDraft((d) => (d ? { ...d, emailVerified: false } : d));
+        window.scrollTo({ top: 0 });
+        return;
+      }
       setSubmitError(err instanceof Error ? err.message : "Couldn't submit. Please try again.");
     } finally {
       setSubmitting(false);
