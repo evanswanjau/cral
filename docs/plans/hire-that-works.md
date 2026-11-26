@@ -668,6 +668,17 @@ blocked at Review until the email code was entered, then submitted.
 
 ### H7 - The repeatable nine-walk check
 
+**Built 2026-11-27** on `feature/hire-walk`. `npm run walk:hire` starts
+its own API on :4100 (console email/SMS/payment/disbursement, local
+storage, Redis db 7), reads the codes from that API's output, and runs
+the nine walks with new accounts each run. It refuses a database or
+Redis that isn't on this machine, `NODE_ENV=production`, or a busy port.
+The renter signs up with a phone, so their sign-up code comes by SMS.
+Ops clears the renter's ID and licence after pay is first refused with
+`papers_not_cleared` (H5). Run twice back to back on the local database:
+9 of 9 passed both times (`CB-261127-001` to `-003` completed). Screen
+checklist: `docs/review/hire-walk.md`.
+
 - **Goal:** one command that runs the nine walks against a local API with
   console adapters, and a short written checklist for the by-hand screen
   walk, to run before every release.

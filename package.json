@@ -22,6 +22,7 @@
     "build": "npm run build --workspaces --if-present",
     "gate": "node tools/gate.mjs",
     "check:links": "node tools/check-links.mjs",
+    "walk:hire": "node tools/hire-walk.mjs",
     "prepare": "node tools/install-hooks.mjs",
     "migrate": "npm run migrate -w apps/api",
     "migrate:rollback": "npm run migrate:rollback -w apps/api"
