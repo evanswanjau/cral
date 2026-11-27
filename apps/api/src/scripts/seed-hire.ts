@@ -20,6 +20,7 @@ import {
   seedPlate,
   type SeedVehicle,
 } from "./seed-hire-fleet.js";
+import { fixturePdf } from "./seed-fixture-pdf.js";
 
 /**
  * `npm run seed:hire -w apps/api [-- --dry-run | --clear [--with-bookings] | --server]`
@@ -154,34 +155,6 @@ function loadPhotos(): Map<string, Buffer[]> {
     out.set(m.photos, files);
   }
   return out;
-}
-
-/**
- * A one-page PDF that says what it is. Seeded documents are marked
- * accepted (so the listings are live), but nobody can mistake the file for
- * a real logbook when they open it.
- */
-function fixturePdf(kind: string): Buffer {
-  const text = `CRAL seed fixture - ${kind.replace(/_/g, " ")} - not a real document`;
-  const stream = `BT /F1 14 Tf 50 780 Td (${text}) Tj ET`;
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
-    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-  ];
-  let body = "%PDF-1.4\n";
-  const offsets: number[] = [];
-  objects.forEach((o, i) => {
-    offsets.push(body.length);
-    body += `${i + 1} 0 obj\n${o}\nendobj\n`;
-  });
-  const xref = body.length;
-  body += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (const off of offsets) body += `${String(off).padStart(10, "0")} 00000 n \n`;
-  body += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
-  return Buffer.from(body, "latin1");
 }
 
 interface DocOwner {
@@ -563,6 +536,10 @@ async function clear(): Promise<void> {
   if (otherVehicles.length) {
     refuse(`seeded merchants also hold ${otherVehicles.map((v) => v.registration).join(", ")}; remove those first.`);
   }
+  // Drivers would go with their merchant too, leaving their photos and
+  // documents in storage: `seed:drivers --clear` removes them properly.
+  const drivers = merchantIds.length ? await db("drivers").whereIn("merchant_id", merchantIds).first("id") : null;
+  if (drivers) refuse("seeded merchants have drivers; run seed:drivers --clear first (and remove any added by hand).");
 
   const bookings = userIds.length
     ? await db("bookings")

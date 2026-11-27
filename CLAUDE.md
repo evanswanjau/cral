@@ -143,7 +143,7 @@ npm run gate           # typecheck, lint, API tests, build (shipper runs this)
 
 Postgres is on 5432, Redis on host port 6380. Useful API scripts
 (`npm run <name> -w apps/api`): `seed:demo`, `seed:vehicles`,
-`seed:review-fleet`, `seed:hire`, `admin:create` (first admin only), `approve:merchant`,
+`seed:review-fleet`, `seed:hire`, `seed:drivers`, `admin:create` (first admin only), `approve:merchant`,
 `review:profile-change`, `reminders:sweep`, `smtp:check`, `sms:check`,
 `coop:check`, `storage:migrate-b2`.
 
