@@ -74,7 +74,9 @@ async function newVehicle(merchantId: string, overrides: Record<string, unknown>
       make: "Toyota",
       model: "Axio",
       year: "2019",
-      registration: `KDA ${randomInt(100, 999)}${String.fromCharCode(65 + randomInt(0, 25))}`,
+      // From a ULID, not 22,500 random plates: rows left in the test
+      // database made the old plate collide on the unique index.
+      registration: `KD${ulid().slice(-5).toUpperCase()}`,
       transmission: "Automatic",
       fuel: "Petrol",
       county: "Nairobi",

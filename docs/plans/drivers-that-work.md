@@ -1,7 +1,8 @@
 # Drivers that work (review and proposal)
 
-Status: **approved by the owner, 2026-11-27** ("I agree with the
-recommendations"). DR1-DR4 built; DR5 not built. Drivers come before buy-and-sell cars. Drivers shipped on 2026-10-18
+Status: **done** (approved by the owner, 2026-11-27, "I agree with the
+recommendations"). DR1-DR5 built; `npm run walk:hire` proves both kinds
+of driver booking (11 of 11). Drivers come before buy-and-sell cars. Drivers shipped on 2026-10-18
 ([`drivers.md`](./drivers.md), [`../decisions/drivers.md`](../decisions/drivers.md));
 this is a check of how they work today and what it would take to make
 them feel like the new Hire ([`hire-search-first.md`](./hire-search-first.md)).
@@ -221,7 +222,7 @@ In this order. Tick each row when its PR merges.
 | **DR2** | Driver photo: column, upload on add/edit, card and page, Ops case | - | Done (`feature/driver-photo`) |
 | **DR3** | `seed:drivers`, about 40 drivers with photos, same safety as `seed:hire`, safe phone range, refuses unless SMS is `console` | DR2 | Done (`feature/drivers-seed`) |
 | **DR4** | Driver SMS on paid jobs; driver-to-renter code for driver-only jobs | Read `bookings-payouts.md` (handover rules) first | Done (`feature/drivers-sms`) |
-| **DR5** | `walk:hire` covers driver only and car with driver | DR1, DR4 | Not started |
+| **DR5** | `walk:hire` covers driver only and car with driver | DR1, DR4 | Done (`feature/drivers-walk`) |
 
 Each PR updates `docs/decisions/drivers.md` and
 `docs/decisions/customer-portal.md` where a decision changes.

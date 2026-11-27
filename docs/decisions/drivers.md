@@ -178,3 +178,18 @@ Plan: [`docs/plans/drivers-that-work.md`](../plans/drivers-that-work.md)
   to authenticate). It needn't happen at the roadside.
 - Not built: no SMS to the driver when a paid job is later cancelled or
   changed. Flagged as a follow-up.
+
+### DR5 as built (2026-11-27)
+
+- **`npm run walk:hire` walks both kinds of driver booking** after the
+  nine hire walks, one line each, so the summary reads `11 of 11 passed`
+  (`tools/hire-walk.mjs`, checklist `docs/review/hire-walk.md`). Driver
+  only: "I only drive" owner, driver by the hour found in the dated
+  search, the pickup started with the code read from the console SMS to
+  the driver's phone. Car + driver: the owner's own driver on a
+  self-drive car, one booking, the driver's SMS with no code, the owner's
+  handover.
+- Same safety as the hire walk (own API, console adapters, Redis db 7,
+  local database only, never production). The walk forces
+  `WORKERS_ENABLED=true` on its own API, since the driver's SMS goes out
+  from the notification-delivery worker.
