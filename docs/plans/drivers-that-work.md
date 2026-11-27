@@ -1,7 +1,7 @@
 # Drivers that work (review and proposal)
 
 Status: **approved by the owner, 2026-11-27** ("I agree with the
-recommendations"). DR1 and DR2 built; DR3-DR5 not built. Drivers come before buy-and-sell cars. Drivers shipped on 2026-10-18
+recommendations"). DR1-DR3 built; DR4-DR5 not built. Drivers come before buy-and-sell cars. Drivers shipped on 2026-10-18
 ([`drivers.md`](./drivers.md), [`../decisions/drivers.md`](../decisions/drivers.md));
 this is a check of how they work today and what it would take to make
 them feel like the new Hire ([`hire-search-first.md`](./hire-search-first.md)).
@@ -219,7 +219,7 @@ In this order. Tick each row when its PR merges.
 |---|---|---|---|
 | **DR1** | Search-first `/drivers`: catalog filter by dates and paging (contract first, `openapi/customer-catalog.yaml`), results page from the `/hire` layout, reading parts below results, menu order | - | Done (`feature/drivers-search`) |
 | **DR2** | Driver photo: column, upload on add/edit, card and page, Ops case | - | Done (`feature/driver-photo`) |
-| **DR3** | `seed:drivers`, about 40 drivers with photos, same safety as `seed:hire`, safe phone range, refuses unless SMS is `console` | DR2 | Not started |
+| **DR3** | `seed:drivers`, about 40 drivers with photos, same safety as `seed:hire`, safe phone range, refuses unless SMS is `console` | DR2 | Done (`feature/drivers-seed`) |
 | **DR4** | Driver SMS on paid jobs; driver-to-renter code for driver-only jobs | Read `bookings-payouts.md` (handover rules) first | Not started |
 | **DR5** | `walk:hire` covers driver only and car with driver | DR1, DR4 | Not started |
 

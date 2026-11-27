@@ -106,3 +106,41 @@ Plan: [`docs/plans/drivers-that-work.md`](../plans/drivers-that-work.md)
   above the documents, like a vehicle case's photos, marked "nothing to
   decide". **No badge, tick or "verified" word on or next to the photo**
   - unlike a car card, the driver card has no "Verified" pill.
+
+### DR3 as built (2026-11-27)
+
+- `npm run seed:drivers -w apps/api` adds **40 live drivers** to the 12
+  `seed:hire` owners (run `seed:hire` first; it adds no accounts) across
+  11 counties: 27 offer a day rate, 18 an hour rate, 22 a trip rate.
+  Licences 1-4 years ahead; licence, ID and KRA PIN accepted (fixture
+  PDFs that say "not a real document"). Data in
+  `apps/api/src/scripts/seed-drivers-data.ts`; append, never reorder.
+- **Same safety as `seed:hire`** (refuses production, any database but
+  `cral_dev`/`cral_test`, the `/srv/cral` checkout, and a non-local host
+  without `--server`), and **refuses unless `SMS_ADAPTER` is `console`**.
+  Locally `.env` says `textsms`, so run it as
+  `SMS_ADAPTER=console npm run seed:drivers -w apps/api`; add
+  `STORAGE_ADAPTER=local STORAGE_LOCAL_DIR=./.local-storage` when the
+  running API reads local storage, or the photos land where the API
+  can't see them.
+- **Phones are Ofcom's drama range**, `+447700900001` to `+447700900040`
+  (the UK keeps `+44 7700 900000-900999` for fiction; Kenya publishes no
+  such range, so a Kenyan-looking number could ring a stranger). The
+  phone is never shown to renters; live drivers' phones are locked, so
+  the non-Kenyan format never meets the edit form.
+- Found again by licence number `SEED-DL-001`..`040` (IDs `9800nnnn`); a
+  re-run updates in place and puts back missing documents and photos;
+  the seed stops if those numbers sit on a non-seed merchant.
+  `--clear` removes only those drivers (and their stored files) and
+  refuses while any has a booking - it never deletes a booking.
+  `seed:hire --clear` now refuses while seeded owners have drivers, so
+  their files are not left in storage.
+- **Photos** are set the way DR2 sets one (`fil_` id in the key and on
+  the row). 29 photos (18 men, 11 women) of ordinary people from
+  Wikimedia Commons ("Men of Kenya" / "Women of Kenya"), CC BY 2.0,
+  CC BY-SA 3.0/4.0, credited in
+  `apps/api/src/scripts/seed-assets/drivers/CREDITS.md`. Owner's pick
+  (2026-11-27) over drawn faces or none. Photos whose title names the
+  person in full were left out, so no public figure stands in for a
+  made-up driver. Cropped to 640x800 with the face in the band the card's
+  `center 30%` shows.
