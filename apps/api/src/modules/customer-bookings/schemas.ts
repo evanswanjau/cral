@@ -45,3 +45,10 @@ export const CancelBookingSchema = z.object({
 });
 
 export type CancelBookingInput = z.infer<typeof CancelBookingSchema>;
+
+/** The 4-digit code the driver reads out at pickup (DR4). */
+export const EnterDriverCodeSchema = z.object({
+  code: z.string().trim().regex(/^\d{4}$/, "Enter the 4-digit code your driver read out."),
+});
+
+export type EnterDriverCodeInput = z.infer<typeof EnterDriverCodeSchema>;

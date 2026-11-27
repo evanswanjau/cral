@@ -8,6 +8,7 @@ import type { RequestContext } from "./service.js";
 import {
   CancelBookingSchema,
   CreateBookingSchema,
+  EnterDriverCodeSchema,
   ListMyBookingsQuerySchema,
 } from "./schemas.js";
 
@@ -80,6 +81,23 @@ customerBookingsRouter.post(
   requireIdempotencyKey(),
   asyncHandler(async (req, res) => {
     const result = await service.acceptQuote(req.auth!.sub, req.params.id as string, ctxOf(req));
+    await req.idempotency!.complete(200, result);
+    res.status(200).json(result);
+  }),
+);
+
+/**
+ * The renter enters the code their driver read out, and a driver-only job
+ * starts (DR4). Keyed: it completes a handover, and a double tap must not
+ * count as a second, wrong attempt.
+ */
+customerBookingsRouter.post(
+  "/bookings/:id/driver-code",
+  authenticate(),
+  requireIdempotencyKey(),
+  validateBody(EnterDriverCodeSchema),
+  asyncHandler(async (req, res) => {
+    const result = await service.enterDriverCode(req.auth!.sub, req.params.id as string, req.body, ctxOf(req));
     await req.idempotency!.complete(200, result);
     res.status(200).json(result);
   }),

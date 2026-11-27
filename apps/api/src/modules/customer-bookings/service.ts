@@ -23,7 +23,9 @@ import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 import { getRenterVerification } from "../customer-account/service.js";
 import { bookingPapers, papersNeeded } from "../../lib/renter-papers.js";
 import type { BookingRow, BookingStatus, HandoverRow } from "../bookings/db-types.js";
-import type { CancelBookingInput, CreateBookingInput, ListMyBookingsQuery } from "./schemas.js";
+import type { CancelBookingInput, CreateBookingInput, EnterDriverCodeInput, ListMyBookingsQuery } from "./schemas.js";
+import { hashCode } from "../../lib/otp.js";
+import { OTP_MAX_ATTEMPTS } from "../../lib/handover-codes.js";
 
 /**
  * The renter's side of a booking. A row created here is an ordinary
@@ -388,6 +390,9 @@ function serializeHandoverForHirer(h: HandoverRow) {
   return {
     kind: h.kind,
     state: h.state,
+    // `driver`: the driver was texted the code and reads it to the renter,
+    // who enters it on the trip page (DR4). `hirer`: emailed to the renter.
+    code_holder: h.code_holder,
     masked_destination: h.masked_destination,
     otp_expires_at: h.otp_expires_at ? h.otp_expires_at.toISOString() : null,
     completed_at: h.completed_at ? h.completed_at.toISOString() : null,
@@ -1164,6 +1169,150 @@ export async function acceptQuote(userId: string, bookingId: string, ctx: Reques
   });
 
   // After the commit, never inside it - same rule as createBooking.
+  await enqueueNotificationDelivery(row.merchant_id, [notificationId]);
+  return detailOf(row);
+}
+
+// ---------------------------------------------------------------------
+// The driver's code (DR4, docs/plans/drivers-that-work.md)
+// ---------------------------------------------------------------------
+
+function codeConflict(code: string, message: string): never {
+  throw new ApiError({ status: 409, type: "conflict", code, message });
+}
+
+/**
+ * The renter enters the code their driver read out, and the job starts.
+ *
+ * Only for a booking with no car of the merchant's (driver only, or the
+ * driver half of a linked booking): its code was texted to the driver
+ * when it was paid (`jobs/driver-job-sms.ts`), so the driver proves who
+ * they are to the renter and the owner's login isn't needed at the
+ * roadside. There is no car of the merchant's to check over, so a right
+ * code completes the pickup in one step: the handover is `completed` and
+ * the booking `active`, in one transaction with its audit row.
+ *
+ * Same guards as the merchant's code step: five wrong tries spend the
+ * code (`otp_attempts_exhausted`), after which the owner can still run
+ * the handover from their portal as before. The renter's papers must be
+ * cleared, as for any pickup.
+ */
+export async function enterDriverCode(userId: string, bookingId: string, input: EnterDriverCodeInput, ctx: RequestContext) {
+  const booking = await requireOwnBooking(userId, bookingId);
+  if (booking.vehicle_id !== null || booking.driver_id === null) {
+    codeConflict("driver_code_not_used", "The owner runs this booking's handover - read them the code we emailed you.");
+  }
+  if (booking.status !== "confirmed") {
+    codeConflict(
+      "booking_not_confirmed",
+      booking.status === "active" ? "This job has already started." : `A ${booking.status} booking can't start.`,
+    );
+  }
+
+  const handover = await db<HandoverRow>("handovers")
+    .where({ booking_id: booking.id, kind: "pickup", code_holder: "driver" })
+    .whereIn("state", ["otp_sent", "failed"])
+    .orderBy("created_at", "desc")
+    .first();
+  if (!handover) {
+    codeConflict("driver_code_not_sent", "Your driver hasn't been sent a code for this job yet.");
+  }
+  if (handover.state === "failed" || handover.otp_attempts >= OTP_MAX_ATTEMPTS) {
+    codeConflict("otp_attempts_exhausted", "Too many wrong codes. Ask the owner to start the handover from their CRAL account.");
+  }
+  if (handover.otp_expires_at && handover.otp_expires_at.getTime() < Date.now()) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "otp_expired",
+      message: "This booking's time is over, so its code no longer works.",
+    });
+  }
+
+  const papers = await bookingPapers(booking);
+  if (!papers.cleared) {
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "hirer_documents_not_accepted",
+      message: "CRAL is still checking your papers for this hire. The job can start once they're cleared.",
+      field: "documents",
+    });
+  }
+
+  if (handover.otp_code_hash !== hashCode(input.code)) {
+    const attempts = handover.otp_attempts + 1;
+    await db<HandoverRow>("handovers")
+      .where({ id: handover.id })
+      .update({ otp_attempts: attempts, state: attempts >= OTP_MAX_ATTEMPTS ? "failed" : "otp_sent" });
+    throw new ApiError({
+      status: 422,
+      type: "validation_error",
+      code: "otp_incorrect",
+      message:
+        attempts >= OTP_MAX_ATTEMPTS
+          ? "That code doesn't match, and that was the last try. Ask the owner to start the handover from their CRAL account."
+          : "That code doesn't match. Ask your driver to read it again.",
+      field: "code",
+    });
+  }
+
+  const hirer = await db("users").where({ id: userId }).first("full_name");
+  const now = new Date();
+  const { row, notificationId } = await db.transaction(async (trx) => {
+    // Conditional on the status read above, so two taps can't both start it.
+    const [started] = await trx<BookingRow>("bookings")
+      .where({ id: booking.id, status: "confirmed" })
+      .update({ status: "active" })
+      .returning("*");
+    if (!started) codeConflict("booking_not_confirmed", "This job has already started.");
+
+    await trx<HandoverRow>("handovers")
+      .where({ id: handover.id })
+      .update({ state: "completed", confirmed_at: now, completed_at: now });
+    // Any pickup the owner opened meanwhile is moot now.
+    await trx<HandoverRow>("handovers")
+      .where({ booking_id: booking.id, kind: "pickup" })
+      .whereNot({ id: handover.id })
+      .whereNotIn("state", ["completed", "expired", "failed"])
+      .update({ state: "expired" });
+
+    await trx("booking_events").insert({
+      id: generateId("bookingEvent"),
+      booking_id: booking.id,
+      merchant_id: booking.merchant_id,
+      kind: "vehicle_handed_over",
+      tone: "green",
+      label: "Job started",
+      body: `${hirer?.full_name ?? "The renter"} entered your driver's code.`,
+      actor_type: "hirer",
+      actor_name: hirer?.full_name ?? null,
+    });
+    await writeAuditEntry(trx, {
+      actorType: "user",
+      actorId: userId,
+      action: "booking.activated",
+      entityType: "booking",
+      entityId: booking.id,
+      before: { status: "confirmed" },
+      after: { status: "active", via: "driver_code" },
+      ip: ctx.ip,
+      requestId: ctx.requestId,
+    });
+    // News to the owner: they weren't there and didn't run it.
+    const subject = await subjectOf(started);
+    const notificationId = await notify(trx, {
+      merchantId: booking.merchant_id,
+      category: "booking",
+      title: `${booking.ref} · job started`,
+      body: `${hirer?.full_name ?? "The renter"} entered the code from ${subject.short}. The job is under way.`,
+      ref: booking.ref,
+      subjectType: "booking",
+      subjectId: booking.id,
+    });
+    return { row: started, notificationId };
+  });
+
   await enqueueNotificationDelivery(row.merchant_id, [notificationId]);
   return detailOf(row);
 }

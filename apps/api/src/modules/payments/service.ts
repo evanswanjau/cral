@@ -10,7 +10,7 @@ import type { ParsedCallback } from "../../adapters/payment/index.js";
 import type { BookingRow } from "../bookings/db-types.js";
 import { executeRefund } from "../../lib/refunds.js";
 import { bookingPapers } from "../../lib/renter-papers.js";
-import { enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
+import { enqueueDriverJobSms, enqueueNotificationDelivery } from "../../jobs/notification-delivery.js";
 import { applyOrderPayment, orderRefFor } from "../garage/order-settlement.js";
 
 export interface RequestContext {
@@ -330,6 +330,9 @@ export async function applySettlement(
   // or cancelled while the prompt was open) goes back after commit.
   const refundsToSend: Array<{ refundId: string; ref: string }> = [];
   const merchantNotices: Array<{ merchantId: string; id: string }> = [];
+  // Bookings with a driver whose payment just landed: the driver is texted
+  // after commit (DR4, `jobs/driver-job-sms.ts`).
+  const driverJobs: string[] = [];
   await db.transaction(async (trx) => {
     const existing = await trx<PaymentRequestRow>("payment_requests")
       .where({ provider_request_id: parsed.reference })
@@ -380,6 +383,8 @@ export async function applySettlement(
       await trx<BookingRow>("bookings")
         .where({ id: existing.booking_id })
         .update({ payment_request_id: existing.id });
+      const paid = await trx<BookingRow>("bookings").where({ id: existing.booking_id }).first("driver_id");
+      if (paid?.driver_id) driverJobs.push(existing.booking_id);
     }
     // A garage order's money (Phase 4 GS3): the order's own state moves in
     // this same transaction. The rules above (match, amount, idempotency)
@@ -414,6 +419,7 @@ export async function applySettlement(
     });
   });
   for (const n of merchantNotices) await enqueueNotificationDelivery(n.merchantId, [n.id]);
+  await enqueueDriverJobSms(driverJobs);
   for (const r of refundsToSend) await executeRefund(r.refundId, await orderRefFor(r.ref));
 }
 

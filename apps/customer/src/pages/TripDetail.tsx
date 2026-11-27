@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { CodeInput } from "@cral/ui";
 import { usePageTitle } from "../lib/use-page-title.js";
 import {
   acceptQuote,
   bookingTitle,
   cancelMyBooking,
+  enterDriverCode,
   getMyBooking,
   ownerName,
   type BookingDetail,
@@ -80,15 +82,25 @@ function HandoverCard({ handovers }: { handovers: HandoverStatus[] }): JSX.Eleme
         const h = latestByKind.get(kind);
         if (!h) return null;
         const isOpen = h.state === "otp_sent";
+        // A driver-only job's code went to the driver (DR4): they read it
+        // to the renter, who enters it in DriverCodeCard above.
+        const fromDriver = h.code_holder === "driver";
+        const copy = fromDriver
+          ? h.state === "otp_sent"
+            ? "your driver has it - enter it above when you meet"
+            : h.state === "failed"
+              ? "too many wrong attempts - ask the owner to start the handover"
+              : HANDOVER_STATE_COPY[h.state]
+          : isOpen && h.masked_destination
+            ? `Sent to ${h.masked_destination} - read it to the merchant`
+            : HANDOVER_STATE_COPY[h.state];
         return (
           <div key={kind} style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
             <span style={{ font: "400 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
               {kind === "pickup" ? "Pickup code" : "Return code"}
             </span>
             <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", textAlign: "right" }}>
-              {isOpen && h.masked_destination
-                ? `Sent to ${h.masked_destination} - read it to the merchant`
-                : HANDOVER_STATE_COPY[h.state]}
+              {copy}
             </span>
           </div>
         );
@@ -308,6 +320,110 @@ function QuoteCard({ booking, onAccepted }: { booking: BookingDetail; onAccepted
 }
 
 /**
+ * A driver-only job starts from the renter's side (DR4). Once it is paid,
+ * the driver is texted a 4-digit code; when they meet, the driver reads it
+ * out and the renter types it here. That proves the driver is the one
+ * CRAL booked, and the owner's login isn't needed at the roadside. The
+ * code itself never reaches this page - only whether one is waiting.
+ */
+function DriverCodeCard({ booking, onStarted }: { booking: BookingDetail; onStarted: () => Promise<void> }): JSX.Element | null {
+  const [code, setCode] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const pickup = booking.handovers.find((h) => h.kind === "pickup");
+  if (!pickup || pickup.code_holder !== "driver") return null;
+  if (pickup.state !== "otp_sent" && pickup.state !== "failed") return null;
+  const driverFirst = booking.driver?.display_name.split(" ")[0] ?? "your driver";
+
+  if (pickup.state === "failed") {
+    return (
+      <div style={CARD}>
+        <Pill tone="red">Code locked</Pill>
+        <div style={{ font: "700 19px/1.25 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", marginBottom: 6 }}>
+          Too many wrong codes.
+        </div>
+        <p style={{ margin: 0, font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+          For your safety the code no longer works. Ask {ownerName(booking)} to start the handover from their CRAL
+          account - they&apos;ll email you a new code to read to them.
+        </p>
+      </div>
+    );
+  }
+
+  const send = async (value: string) => {
+    setError(null);
+    if (!/^\d{4}$/.test(value)) {
+      setError(`Enter the 4-digit code ${driverFirst} reads out.`);
+      return;
+    }
+    setSending(true);
+    try {
+      await enterDriverCode(booking.id, value);
+      await onStarted();
+    } catch (e) {
+      setError(e instanceof ApiClientError ? e.message : "Couldn't check that code. Try again.");
+      setCode("");
+      // A wrong code may have spent the last try - show where it stands.
+      await onStarted();
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div style={CARD}>
+      <Pill tone="blue">Start the job</Pill>
+      <div style={{ font: "700 19px/1.25 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", marginBottom: 6 }}>
+        Meet {driverFirst}, then enter their code.
+      </div>
+      <p style={{ margin: "0 0 16px", font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+        We texted {driverFirst} a 4-digit code. Ask them to read it to you, and type it here. A right code shows
+        they&apos;re the driver CRAL booked, and the job starts.
+      </p>
+      <label htmlFor="driver-code" style={{ display: "block", font: "500 13px/1.4 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 8 }}>
+        {driverFirst}&apos;s code
+      </label>
+      <div style={{ marginBottom: 14 }}>
+        <CodeInput
+          id="driver-code"
+          label={`${driverFirst}'s code`}
+          length={4}
+          value={code}
+          onChange={setCode}
+          onComplete={(value) => void send(value)}
+          disabled={sending}
+          invalid={!!error}
+        />
+      </div>
+      {error && (
+        <p role="alert" style={{ margin: "0 0 12px", font: "500 13px/1.5 'Instrument Sans',sans-serif", color: "#A50E22" }}>
+          {error}
+        </p>
+      )}
+      <button
+        type="button"
+        onClick={() => void send(code)}
+        disabled={sending}
+        style={{
+          width: "100%",
+          height: 48,
+          background: "#0F23A8",
+          color: "#FFFFFF",
+          border: "none",
+          borderRadius: 8,
+          font: "600 15px/1 'Instrument Sans',sans-serif",
+          cursor: sending ? "default" : "pointer",
+          opacity: sending ? 0.7 : 1,
+        }}
+      >
+        {sending ? "Checking…" : "Start the job"}
+      </button>
+    </div>
+  );
+}
+
+/**
  * The paying half of a confirmed booking. Everything it renders comes from
  * `GET /bookings/{id}/payment`, so a reload mid-prompt picks up exactly
  * where it was rather than offering to charge the renter a second time.
@@ -372,7 +488,9 @@ function PaymentCard({ booking }: { booking: BookingDetail }): JSX.Element {
             `Walk around the ${vehicleNoun(booking.vehicle.category)} together and make sure you're both happy with its condition before it leaves.`,
           ]
         : [`Your driver is ${booking.driver?.display_name ?? "named on this booking"}, from ${ownerName(booking)}. Check that's who turns up.`]),
-      "We email you a pickup code when the handover starts - read it to the owner, and never send it to anyone who asks for it first.",
+      booking.vehicle
+        ? "We email you a pickup code when the handover starts - read it to the owner, and never send it to anyone who asks for it first."
+        : "When you meet, your driver reads you a 4-digit code. Enter it on this page to start the job - never give a code to anyone yourself.",
     ];
 
     return (
@@ -694,6 +812,16 @@ export function TripDetail(): JSX.Element {
       const data = query.state.data;
       if (["requested", "quote_requested", "quoted"].includes(data?.status ?? "")) return 8000;
       if (data?.status === "confirmed" && !data.documents.cleared) return 30000;
+      // A paid driver-only job: the driver's code is texted from a queue,
+      // so the "Start the job" card appears a few seconds after payment.
+      if (
+        data?.status === "confirmed" &&
+        !data.vehicle &&
+        data.driver &&
+        !data.handovers.some((h) => h.code_holder === "driver")
+      ) {
+        return 10000;
+      }
       return false;
     },
     // An answer that lands while the tab was in the background should be
@@ -881,6 +1009,15 @@ export function TripDetail(): JSX.Element {
             here={`/bookings/${booking.id}`}
           />
         ))}
+
+      {booking.status === "confirmed" && (
+        <DriverCodeCard
+          booking={booking}
+          onStarted={async () => {
+            await queryClient.invalidateQueries({ queryKey: ["bookings", id] });
+          }}
+        />
+      )}
 
       <HandoverCard handovers={booking.handovers} />
 

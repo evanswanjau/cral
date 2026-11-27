@@ -70,6 +70,13 @@ export function acceptQuote(id: string) {
   });
 }
 
+/** Enter the code a driver read out - a driver-only job starts (DR4). */
+export function enterDriverCode(id: string, code: string) {
+  return apiPost<BookingDetail>(`/bookings/${id}/driver-code`, { code }, {
+    headers: { "Idempotency-Key": idempotencyKey() },
+  });
+}
+
 /** Where a truck collects the load and where it goes (PR T2). */
 export interface BookingRoute {
   from: string;
@@ -130,6 +137,8 @@ export type HandoverState =
 export interface HandoverStatus {
   kind: HandoverKind;
   state: HandoverState;
+  /** `driver`: texted to the driver, who reads it to you, and you enter it here (DR4). `hirer`: emailed to you. */
+  code_holder: "hirer" | "driver";
   masked_destination: string | null;
   otp_expires_at: string | null;
   completed_at: string | null;
