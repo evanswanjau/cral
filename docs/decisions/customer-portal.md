@@ -35,8 +35,9 @@ portals.
 - **The pickup code is never shown in the customer app**: only a hash
   exists and the code goes out by email; trip detail shows the handover's
   state.
-- **Renters see a driver's full name** and nothing else about them
-  (`drivers.md`).
+- **Renters see a driver's full name** and photo (DR2, when the
+  merchant added one; else the first letter) and nothing else about
+  them (`drivers.md`). The photo carries no "verified" mark.
 - Auth screens share the merchant auth layout; a renter's reset link opens
   on the customer site.
 - "List your car" sends people to the merchant app; the customer copy was

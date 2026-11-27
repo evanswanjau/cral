@@ -13,6 +13,7 @@ import {
   driverRates,
   isLicenceExpired,
   licenceExpiryKey,
+  readDriverPhotoBytes,
 } from "../drivers/service.js";
 import { DRIVER_DOCUMENT_KINDS, type DriverDocumentKind } from "../drivers/schemas.js";
 import type { DocumentRow, DriverRow, DriverStatus, MerchantRow } from "../merchant/db-types.js";
@@ -118,6 +119,8 @@ async function serializeCase(driver: DriverRow, merchant: MerchantRow) {
     rates: driverRates(driver),
     status: driver.status,
     reviewer_note: driver.reviewer_note,
+    // A picture, not a document (DR2): no state, no decision.
+    photo_id: driver.photo_id,
     submitted_at: driver.submitted_at ? driver.submitted_at.toISOString() : null,
     merchant: {
       id: merchant.id,
@@ -320,4 +323,9 @@ export async function readDriverDocument(driverId: string, documentId: string) {
       throw new ApiError({ status: 404, type: "not_found", code: "document_bytes_missing", message: "That file is no longer stored." });
     });
   return { body, contentType: doc.content_type, originalName: doc.original_name };
+}
+
+export async function readDriverPhoto(driverId: string) {
+  const { driver } = await requireCase(driverId);
+  return readDriverPhotoBytes(driver);
 }

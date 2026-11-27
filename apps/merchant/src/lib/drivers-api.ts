@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
+import { apiBlob, apiDelete, apiGet, apiPatch, apiPost, apiUpload } from "./api.js";
 import type { Money, VehicleStatus } from "./vehicles-api.js";
 
 /** Merchant drivers - openapi/merchant-drivers.yaml. */
@@ -29,6 +29,8 @@ export interface Driver {
   rates: { day: Money | null; hour: Money | null; trip: Money | null };
   status: VehicleStatus;
   reviewer_note: string | null;
+  /** The driver's one photo (DR2), or null. Changes on every upload. */
+  photo_id: string | null;
   documents: Record<DriverDocKind, DriverDocSlot | null>;
   doc_count: number;
   submitted_at: string | null;
@@ -117,4 +119,49 @@ export function useDriverAction(id: string, action: "submit" | "pause" | "resume
 export function useDeleteDriver(id: string) {
   const invalidate = useInvalidate();
   return useMutation({ mutationFn: () => apiDelete<void>(`/merchant/drivers/${id}`), onSuccess: invalidate });
+}
+
+// ---------------------------------------------------------------------
+// Photo (DR2) - a picture, not a document: no review, no status change.
+// ---------------------------------------------------------------------
+
+export const DRIVER_PHOTO_ACCEPT = "image/jpeg,image/png,image/webp";
+export const MAX_DRIVER_PHOTO_BYTES = 10 * 1024 * 1024;
+
+/** A reason the photo can't be sent, or null - the API checks the bytes as well. */
+export function driverPhotoProblem(file: File): string | null {
+  if (!DRIVER_PHOTO_ACCEPT.split(",").includes(file.type)) return "Pick a JPEG, PNG or WebP photo.";
+  if (file.size > MAX_DRIVER_PHOTO_BYTES) return "That photo is over 10 MB. Pick a smaller one.";
+  return null;
+}
+
+export function setDriverPhoto(id: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiUpload<Driver>(`/merchant/drivers/${id}/photo`, form);
+}
+
+export function useSetDriverPhoto(id: string) {
+  const invalidate = useInvalidate(id);
+  return useMutation({ mutationFn: (file: File) => setDriverPhoto(id, file), onSuccess: invalidate });
+}
+
+export function useRemoveDriverPhoto(id: string) {
+  const invalidate = useInvalidate(id);
+  return useMutation({ mutationFn: () => apiDelete<Driver>(`/merchant/drivers/${id}/photo`), onSuccess: invalidate });
+}
+
+/**
+ * An object URL for the driver's photo, fetched with the merchant's token
+ * (an <img> can't send one). Keyed by the photo id, which changes on every
+ * upload, so a replaced photo is fetched fresh and the old one never shows.
+ */
+export function useDriverPhotoSrc(driverId: string, photoId: string | null) {
+  return useQuery({
+    queryKey: ["driver-photo", photoId],
+    queryFn: async () => URL.createObjectURL(await apiBlob(`/merchant/drivers/${driverId}/photo`)),
+    enabled: !!photoId,
+    staleTime: Infinity,
+    gcTime: 30 * 60 * 1000,
+  });
 }

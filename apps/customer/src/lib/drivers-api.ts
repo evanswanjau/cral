@@ -16,6 +16,8 @@ export interface PublicDriver {
   rates: { day: Money | null; hour: Money | null; trip: Money | null };
   merchant_id: string;
   merchant_name: string;
+  /** API path of the driver's photo (DR2), or null - load it with `photoSrc`. */
+  photo_url: string | null;
 }
 
 /** The `/drivers` search (DR1): every filter is the server's, paged by cursor. */

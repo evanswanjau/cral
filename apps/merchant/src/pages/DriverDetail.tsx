@@ -13,12 +13,16 @@ import {
   useDeleteDriver,
   useDriver,
   useDriverAction,
+  useDriverPhotoSrc,
+  useRemoveDriverPhoto,
+  useSetDriverPhoto,
   useUpdateDriver,
   useUploadDriverDocument,
   type Driver,
   type DriverDocKind,
 } from "../lib/drivers-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { PhotoTile } from "../components/driver/DriverPhoto.js";
 
 const EDITABLE = ["draft", "action", "rejected"];
 
@@ -112,6 +116,9 @@ export function DriverDetail(): JSX.Element {
   const pause = useDriverAction(driverId ?? "", "pause");
   const resume = useDriverAction(driverId ?? "", "resume");
   const remove = useDeleteDriver(driverId ?? "");
+  const setPhoto = useSetDriverPhoto(driverId ?? "");
+  const removePhoto = useRemoveDriverPhoto(driverId ?? "");
+  const { data: photoSrc } = useDriverPhotoSrc(driverId ?? "", d?.photo_id ?? null);
 
   const [modal, setModal] = useState<null | "edit" | "delete">(null);
   const [form, setForm] = useState<DriverFormValue | null>(null);
@@ -226,7 +233,9 @@ export function DriverDetail(): JSX.Element {
         </div>
       )}
 
-      <div style={{ ...P.card, marginTop: 16, maxWidth: 820 }}>
+      <div style={{ ...P.detailBody, marginTop: 16 }}>
+      <div style={P.detailMain}>
+      <div style={P.card}>
         <div style={P.cardHead}>
           <span style={P.cardTitle}>Documents</span>
           <span style={{ ...P.cardHeadTag, color: d.doc_count === 3 ? "#5A6373" : "#8A5200" }}>{d.doc_count} OF 3</span>
@@ -251,6 +260,28 @@ export function DriverDetail(): JSX.Element {
           />
         ))}
         <div style={P.cardFoot}>Photos from your phone are fine, as long as every corner is readable.</div>
+      </div>
+      </div>
+
+      {/* The photo (DR2), in a side card as a vehicle page has its own:
+          not one of the documents - no review, and changing it never
+          changes the driver's status. */}
+      <div style={P.detailSide}>
+        <div style={P.sideCard}>
+          <div style={P.sideCardLabel}>PHOTO</div>
+          <PhotoTile
+            name={d.full_name}
+            preview={d.photo_id ? photoSrc : undefined}
+            hasPhoto={!!d.photo_id}
+            busy={setPhoto.isPending || removePhoto.isPending}
+            onPick={(file) => setPhoto.mutate(file, { onSuccess: () => flash("Photo saved.", "#57D69E"), onError: fail })}
+            onRemove={() => removePhoto.mutate(undefined, { onSuccess: () => flash("Photo removed.", "#8C97A8"), onError: fail })}
+          />
+          <p style={{ margin: "10px 0 0", font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
+            Optional. Hirers see it on the driver's card. A clear, recent photo of their face works best.
+          </p>
+        </div>
+      </div>
       </div>
 
       {modal === "edit" && form && (

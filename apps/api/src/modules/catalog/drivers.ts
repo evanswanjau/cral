@@ -3,7 +3,7 @@ import { ApiError, type Money } from "@cral/types";
 import { db } from "../../db/client.js";
 import { encodeCursor, decodeCursor } from "../../lib/pagination.js";
 import { nairobiDayKey } from "../../lib/dates.js";
-import { driverRates } from "../drivers/service.js";
+import { driverRates, readDriverPhotoBytes } from "../drivers/service.js";
 import type { DriverRow, MerchantRow } from "../merchant/db-types.js";
 
 /**
@@ -49,6 +49,8 @@ export interface PublicDriver {
   rates: { day: Money | null; hour: Money | null; trip: Money | null };
   merchant_id: string;
   merchant_name: string;
+  /** API path of the one photo, or null (DR2). A picture, not a check. */
+  photo_url: string | null;
 }
 
 function serialize(row: PublicRow): PublicDriver {
@@ -64,6 +66,7 @@ function serialize(row: PublicRow): PublicDriver {
       row.owner_type === "company"
         ? row.trading_name || row.company_name || "(no name on file)"
         : row.first_name || "(no name on file)",
+    photo_url: row.photo_id ? `/catalog/drivers/${row.id}/photo/${row.photo_id}` : null,
   };
 }
 
@@ -211,4 +214,16 @@ export async function requirePublicDriver(driverId: string): Promise<PublicRow> 
 
 export async function getPublicDriver(driverId: string): Promise<PublicDriver> {
   return serialize(await requirePublicDriver(driverId));
+}
+
+/**
+ * The photo behind `photo_url`: the same live-driver gate as the profile,
+ * and only the current photo id, so an old URL dies with the old photo.
+ */
+export async function readPublicDriverPhoto(driverId: string, photoId: string) {
+  const row = await requirePublicDriver(driverId);
+  if (row.photo_id !== photoId) {
+    throw new ApiError({ status: 404, type: "not_found", code: "photo_not_found", message: "That photo isn't available." });
+  }
+  return readDriverPhotoBytes(row);
 }

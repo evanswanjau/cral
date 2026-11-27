@@ -185,6 +185,10 @@ export interface DriverRow {
   review_assignee: string | null;
   submitted_at: Date | null;
   decided_at: Date | null;
+  /** One optional photo (DR2) - a picture, not a document; all three set or all null. */
+  photo_id: string | null;
+  photo_storage_key: string | null;
+  photo_content_type: string | null;
   created_at: Date;
   updated_at: Date;
 }

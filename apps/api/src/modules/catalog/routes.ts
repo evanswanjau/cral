@@ -128,6 +128,20 @@ catalogRouter.get(
   }),
 );
 
+// The driver's photo (DR2), served like a listing photo.
+catalogRouter.get(
+  "/catalog/drivers/:id/photo/:photoId",
+  browse,
+  asyncHandler(async (req, res) => {
+    const photo = await drivers.readPublicDriverPhoto(req.params.id as string, req.params.photoId as string);
+    res.setHeader("Content-Type", safeContentType(photo.contentType));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.setHeader("Content-Disposition", `${safeDisposition(photo.contentType)}; filename="driver-photo"`);
+    res.status(200).send(photo.body);
+  }),
+);
+
 // The drivers a renter can add to this car - its own merchant's live drivers.
 catalogRouter.get(
   "/catalog/vehicles/:id/drivers",

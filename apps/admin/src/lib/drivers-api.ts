@@ -49,6 +49,8 @@ export interface DriverCase {
   rates: { day: Money | null; hour: Money | null; trip: Money | null };
   status: DriverStatus;
   reviewer_note: string | null;
+  /** The driver's photo (DR2), or null. Not a document: no state, no decision. */
+  photo_id: string | null;
   submitted_at: string | null;
   merchant: { id: string; name: string; owner_type: string; approved: boolean };
   documents: DriverCaseDocument[];
@@ -83,6 +85,16 @@ export async function driverDocObjectUrl(driverId: string, documentId: string): 
     headers: { Authorization: `Bearer ${getAccessToken() ?? ""}` },
   });
   if (!res.ok) throw new Error(`document ${res.status}`);
+  return URL.createObjectURL(await res.blob());
+}
+
+/** The driver's photo as an object URL, with the bearer token attached. */
+export async function driverPhotoObjectUrl(driverId: string): Promise<string> {
+  const { getAccessToken } = await import("./auth.js");
+  const res = await fetch(`${API_BASE_URL}/admin/drivers/${driverId}/photo`, {
+    headers: { Authorization: `Bearer ${getAccessToken() ?? ""}` },
+  });
+  if (!res.ok) throw new Error(`photo ${res.status}`);
   return URL.createObjectURL(await res.blob());
 }
 

@@ -144,6 +144,59 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Driver" }
 
+  /merchant/drivers/{driverId}/photo:
+    parameters:
+      - { name: driverId, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [drivers]
+      summary: The driver's photo (bytes)
+      operationId: getDriverPhoto
+      responses:
+        "200":
+          description: The image, served inline with `nosniff`.
+          content:
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/png: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        "404": { description: "`photo_not_found` - this driver has no photo." }
+    post:
+      tags: [drivers]
+      summary: Set or replace the driver's one photo
+      operationId: setDriverPhoto
+      description: >
+        Optional, one per driver (DR2, owner's call 2026-11-27). A picture,
+        not a document: no review state, no Ops decision, and it never
+        changes the driver's status. JPEG, PNG or WebP only, checked on the
+        bytes; up to 10 MB. Replacing it gives a new `photo_id`.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        "200":
+          description: The driver.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+        "413": { description: "`file_too_large`." }
+        "415": { description: "`unsupported_file_type` - not a JPEG, PNG or WebP." }
+        "422": { description: "`file_required`, `file_content_mismatch`." }
+    delete:
+      tags: [drivers]
+      summary: Remove the driver's photo
+      operationId: removeDriverPhoto
+      responses:
+        "200":
+          description: The driver, with `photo_id` null.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Driver" }
+
   /merchant/drivers/{driverId}/submit:
     post:
       tags: [drivers]
@@ -253,6 +306,11 @@ components:
             trip: { $ref: "#/components/schemas/Money", nullable: true }
         status: { type: string, enum: [draft, pending, review, action, rejected, live, paused] }
         reviewer_note: { type: string, nullable: true }
+        photo_id:
+          type: string
+          nullable: true
+          example: fil_01J...
+          description: The driver's photo, or null. Changes on every upload; read it from `/merchant/drivers/{driverId}/photo`.
         documents:
           type: object
           properties:

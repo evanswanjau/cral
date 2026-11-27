@@ -5,7 +5,8 @@ import { O } from "../components/onboarding/styles.js";
 import { P } from "../components/portal/styles.js";
 import { useToast } from "../components/portal/Toast.js";
 import { DriverFields, EMPTY_DRIVER, driverFormMissing, type DriverFormValue } from "../components/driver/DriverFields.js";
-import { createDriver, useDriverList } from "../lib/drivers-api.js";
+import { PhotoTile, useFilePreview } from "../components/driver/DriverPhoto.js";
+import { createDriver, setDriverPhoto, useDriverList } from "../lib/drivers-api.js";
 import { useProfile } from "../lib/settings-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
 
@@ -26,6 +27,9 @@ export function AddDriver(): JSX.Element {
   const [showErrors, setShowErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The photo waits for the driver to exist, then goes up straight after.
+  const [photo, setPhoto] = useState<File | null>(null);
+  const photoPreview = useFilePreview(photo);
 
   const canBeMe = profile?.owner_type === "individual" && !list?.data.some((d) => d.is_account_holder);
 
@@ -52,7 +56,14 @@ export function AddDriver(): JSX.Element {
     setError(null);
     try {
       const created = await createDriver({ ...value, is_account_holder: isMe });
-      flash("Driver added - upload their documents next.", "#6FC8F0");
+      let photoFailed = false;
+      if (photo) await setDriverPhoto(created.id, photo).catch(() => (photoFailed = true));
+      flash(
+        photoFailed
+          ? "Driver added, but the photo didn't upload - add it again on their page."
+          : "Driver added - upload their documents next.",
+        photoFailed ? "#FFB020" : "#6FC8F0",
+      );
       navigate(`/drivers/${created.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Couldn't add that driver. Try again.");
@@ -86,6 +97,23 @@ export function AddDriver(): JSX.Element {
           </div>
         )}
         <DriverFields value={value} onChange={setValue} showErrors={showErrors} />
+        <div style={{ marginTop: 20, paddingTop: 18, borderTop: "1px solid #E4E7EC", display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-start" }}>
+          <PhotoTile
+            name={value.full_name}
+            preview={photoPreview}
+            hasPhoto={!!photo}
+            busy={saving}
+            height={220}
+            onPick={setPhoto}
+            onRemove={() => setPhoto(null)}
+          />
+          <div style={{ flex: "1 1 220px", minWidth: 0, maxWidth: 380 }}>
+            <div style={{ font: "600 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A", marginBottom: 4 }}>Photo of the driver</div>
+            <div style={O.helper}>
+              Optional, but hirers pick drivers they can see. Use a clear, recent photo of their face, like a passport photo. It shows on the driver's card on CRAL. JPEG, PNG or WebP, up to 10 MB.
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 16, maxWidth: 820 }}>
