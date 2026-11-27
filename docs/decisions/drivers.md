@@ -144,3 +144,37 @@ Plan: [`docs/plans/drivers-that-work.md`](../plans/drivers-that-work.md)
   person in full were left out, so no public figure stands in for a
   made-up driver. Cropped to 640x800 with the face in the band the card's
   `center 30%` shows.
+
+### DR4 as built (2026-11-27)
+
+- **The driver is texted once a booking with a driver is paid.**
+  `applySettlement` queues `text-driver-job` on the notification-delivery
+  queue after commit (only the booking id goes to Redis); the worker
+  (`jobs/driver-job-sms.ts`) sends one SMS to `drivers.phone` through the
+  SMS adapter. Plain words: ref, start and end (Nairobi time), pickup
+  point, the renter's **first name**, the car when known. Never money, the
+  commission or the deposit. Paid means paid and still `confirmed`; a
+  cancelled or unpaid booking texts nothing. `bookings.driver_sms_sent_at`
+  stops a redelivered job texting twice. The merchant's timeline shows
+  "Job texted to <first name>" (`driver_texted`).
+- **A booking with no car of the merchant's** - a driver alone, or the
+  driver half of a linked booking (its car is the other owner's, and
+  their driver is not on that owner's login either) - **runs the code
+  driver to renter**. The worker mints the 4-digit code (stored hashed on
+  a `handovers` row, `code_holder = 'driver'`, valid until `dropoff_at`;
+  a retry mints a fresh one and expires the old row) and puts it in the
+  same SMS. The renter enters it on the trip page ("Start the job",
+  `POST /bookings/{id}/driver-code`, Idempotency-Key, audit row
+  `booking.activated` with `via: driver_code`); a right code completes the
+  pickup and the booking goes `active`, and the owner gets a "job started"
+  notification. Papers must be cleared, as for any pickup.
+- **Five wrong codes spend it**; the trip page then says to ask the owner,
+  whose handover in the merchant portal still works for these bookings as
+  the fallback (code emailed to the renter, as before). Whichever path
+  finishes first expires the other's open code.
+- Car and car + driver bookings: the SMS has no code, and the owner runs
+  the handover exactly as before. "This is me" drivers get the SMS too.
+- **The return stays with the owner** (merchant portal, no code - nobody
+  to authenticate). It needn't happen at the roadside.
+- Not built: no SMS to the driver when a paid job is later cancelled or
+  changed. Flagged as a follow-up.

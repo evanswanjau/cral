@@ -61,6 +61,8 @@ export interface BookingRow {
   rating_open_until: Date | null;
   /** The `payment_requests` row that last succeeded for this booking, if any (2026-09-11 payments slice). */
   payment_request_id: string | null;
+  /** When the paid job's SMS reached the driver (DR4, 20261127100000). Null until then, and on a car-only booking. */
+  driver_sms_sent_at: Date | null;
   /** "day" | "hour" | "trip" - the vehicle's hiring unit at booking time (owner's call, 2026-09-23). Display only - `gross` was already computed once and never recomputed. */
   rate_unit: string;
   /** Days for a day-unit booking, hours (rounded up) for hour, always 1 for trip. */
@@ -106,6 +108,8 @@ export interface HandoverRow {
   otp_sent_at: Date | null;
   otp_expires_at: Date | null;
   masked_destination: string | null;
+  /** Who was given the pickup code: the renter (emailed, read to the merchant) or the driver (texted, read to the renter). 20261127100000. */
+  code_holder: "hirer" | "driver";
   odometer_km: number | null;
   fuel_level: string | null;
   condition_notes: string | null;

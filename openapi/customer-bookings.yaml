@@ -262,6 +262,69 @@ paths:
               schema: { $ref: "#/components/schemas/BookingDetail" }
         "409":
           description: No open quote, or it has lapsed.
+  /bookings/{id}/driver-code:
+    post:
+      tags: [bookings]
+      summary: Enter the code the driver read out, and start the job (DR4)
+      operationId: enterDriverCode
+      description: >
+        Only for a booking with no car of the merchant's: a driver alone
+        for the renter's own car, or the driver half of a linked booking
+        (`vehicle` is null, `driver` is set). When such a booking is paid,
+        its driver is texted the job and a 4-digit code
+        (`jobs/driver-job-sms.ts`); the driver reads it to the renter, who
+        enters it here. A right code completes the pickup in one step -
+        there is no car of the merchant's to check over - so the booking
+        goes `active` without the owner's login. The pickup handover then
+        shows `code_holder: driver`, `state: completed`.
+
+        Five wrong codes spend it (`otp_attempts_exhausted`); the owner can
+        still run the handover from the merchant portal as before. The
+        renter's papers must be cleared, as for any pickup. Car and car +
+        driver bookings keep the owner's handover (409
+        `driver_code_not_used`). Requires an `Idempotency-Key`: it
+        completes a handover.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string }
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string, pattern: "^[0-9]{4}$" }
+      responses:
+        "200":
+          description: The job has started; the booking is `active`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BookingDetail" }
+        "409":
+          description: >
+            `driver_code_not_used` (the booking has a car of the
+            merchant's), `booking_not_confirmed` (not paid and confirmed,
+            or already started), `driver_code_not_sent` (no code has gone
+            to the driver yet), `otp_attempts_exhausted`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
+        "422":
+          description: >
+            `otp_incorrect` (field `code`), `otp_expired` (the booking's
+            time is over), `hirer_documents_not_accepted`, or a code that
+            isn't four digits.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorEnvelope" }
   /bookings/{id}/cancel:
     post:
       tags: [bookings]
@@ -480,9 +543,18 @@ components:
                 portal's fuller handover UI.
               items:
                 type: object
-                required: [kind, state, masked_destination, otp_expires_at, completed_at]
+                required: [kind, state, code_holder, masked_destination, otp_expires_at, completed_at]
                 properties:
                   kind: { type: string, enum: [pickup, return] }
+                  code_holder:
+                    type: string
+                    enum: [hirer, driver]
+                    description: >
+                      Who was given the pickup code. `hirer`: emailed to the
+                      renter, who reads it to the owner. `driver` (DR4):
+                      texted to the driver of a booking with no car of the
+                      merchant's, who reads it to the renter, who enters it
+                      with `POST /bookings/{id}/driver-code`.
                   state:
                     type: string
                     enum: [otp_sent, otp_verified, condition_logged, confirmed, completed, expired, failed]

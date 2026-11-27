@@ -9,6 +9,7 @@ import {
   categoryLocksSms,
 } from "../lib/notifications.js";
 import type { NotificationRow, NotificationPreferenceRow } from "../modules/notifications/db-types.js";
+import { deliverDriverJobSms } from "./driver-job-sms.js";
 
 /**
  * Fans a written notification out to SMS and email per the merchant's
@@ -25,11 +26,45 @@ import type { NotificationRow, NotificationPreferenceRow } from "../modules/noti
 
 const QUEUE_NAME = "notification-delivery";
 const JOB_NAME = "deliver-notification";
+/** The driver's paid-job SMS (DR4) rides the same queue - see `jobs/driver-job-sms.ts`. */
+const DRIVER_JOB_NAME = "text-driver-job";
 
 export const notificationDeliveryQueue = new Queue(QUEUE_NAME, { connection: redis });
 
 interface DeliverJobData {
   notificationId: string;
+}
+
+interface DriverJobData {
+  bookingId: string;
+}
+
+/**
+ * Texts each booking's driver about their paid job. Call **after** the
+ * settlement has committed. Same swallowed-Redis-hiccup rule as below:
+ * the booking is paid either way, and the merchant still sees the job.
+ * Only the booking id goes to Redis; the pickup code is minted in the
+ * worker, never queued.
+ */
+export async function enqueueDriverJobSms(bookingIds: string[]): Promise<void> {
+  if (bookingIds.length === 0) return;
+  try {
+    await notificationDeliveryQueue.addBulk(
+      bookingIds.map((bookingId) => ({
+        name: DRIVER_JOB_NAME,
+        data: { bookingId } satisfies DriverJobData,
+        opts: {
+          jobId: `driver-job-${bookingId}`,
+          attempts: 3,
+          backoff: { type: "exponential", delay: 30_000 },
+          removeOnComplete: 500,
+          removeOnFail: 200,
+        },
+      })),
+    );
+  } catch (error) {
+    console.error("driver job sms enqueue failed", { bookingIds, error });
+  }
 }
 
 /**
@@ -224,10 +259,14 @@ function escapeHtml(value: string): string {
 }
 
 export function startNotificationDeliveryWorker(): Worker {
-  return new Worker<DeliverJobData>(
+  return new Worker<DeliverJobData | DriverJobData>(
     QUEUE_NAME,
     async (job) => {
-      await deliverNotification(job.data);
+      if (job.name === DRIVER_JOB_NAME) {
+        await deliverDriverJobSms((job.data as DriverJobData).bookingId);
+        return;
+      }
+      await deliverNotification(job.data as DeliverJobData);
     },
     { connection: redis, ...sharedWorkerOptions },
   );

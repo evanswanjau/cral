@@ -41,13 +41,11 @@ import type {
 import { routeAndLoadOf } from "../../lib/booking-route.js";
 import { QUOTE_VALID_HOURS, quoteOf } from "../../lib/booking-quote.js";
 import { bookingPapers } from "../../lib/renter-papers.js";
+import { OTP_MAX_ATTEMPTS, PICKUP_CODE_DIGITS } from "../../lib/handover-codes.js";
 
 const RESPONSE_WINDOW_HOURS = 12;
 const HANDOVER_SESSION_MINUTES = 20;
 const OTP_TTL_MINUTES = 10;
-// Read aloud in person, so short; the attempt cap is what keeps it safe.
-const PICKUP_CODE_DIGITS = 4;
-const OTP_MAX_ATTEMPTS = 5;
 const DEPOSIT_HOLD_HOURS = 24;
 // Filing a claim extends the hold while CRAL reviews it — the design's
 // return-modal copy ("CRAL holds the deposit for 48 hours while a claim
@@ -1065,6 +1063,13 @@ export async function completeHandover(userId: string, handoverId: string, ctx: 
       .update({ state: "completed", completed_at: now })
       .returning("*");
     if (!handoverRow) throw new Error("Failed to complete handover");
+    // A driver-only job's code texted to the driver (DR4) is moot once the
+    // owner has run the pickup themselves.
+    if (handover.kind === "pickup") {
+      await trx<HandoverRow>("handovers")
+        .where({ booking_id: booking.id, kind: "pickup", code_holder: "driver", state: "otp_sent" })
+        .update({ state: "expired" });
+    }
 
     const [bookingRow] = await trx<BookingRow>("bookings").where({ id: booking.id }).update(bookingUpdate).returning("*");
     if (!bookingRow) throw new Error("Failed to update booking");

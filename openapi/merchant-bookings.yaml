@@ -26,6 +26,17 @@ info:
     second confirmation slot in later without a schema change — see the
     `handover` tag description.
 
+    **A booking with no car of the merchant's** (a driver alone, or the
+    driver half of a linked booking) also starts from the renter's side
+    (DR4, 2026-11-27): once it is paid, the driver is texted the job and a
+    pickup code, reads it to the renter, and the renter enters it in the
+    customer app (`POST /bookings/{id}/driver-code` in
+    `customer-bookings.yaml`). The booking goes `active` with no call
+    here; the timeline shows `driver_texted` and then
+    `vehicle_handed_over` ("Job started", `actor_type: hirer`). The
+    handover endpoints below still work for such a booking, as the
+    owner's fallback when the driver's code is spent.
+
     The 25% late-cancellation fee has no source in the spec at all
     (spec §28 lists the cancellation/refund ladder as an acknowledged,
     never-specified gap).

@@ -34,7 +34,10 @@ portals.
   Pay. The Ops nav shows how many renters are waiting.
 - **The pickup code is never shown in the customer app**: only a hash
   exists and the code goes out by email; trip detail shows the handover's
-  state.
+  state. For a booking with no car of the merchant's (a driver alone),
+  the code goes to the driver by SMS instead, and trip detail has a
+  "Start the job" card where the renter **types** the code the driver
+  reads out (DR4, `drivers.md`) - the app still never displays one.
 - **Renters see a driver's full name** and photo (DR2, when the
   merchant added one; else the first letter) and nothing else about
   them (`drivers.md`). The photo carries no "verified" mark.

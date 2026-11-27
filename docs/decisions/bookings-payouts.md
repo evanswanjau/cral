@@ -37,6 +37,18 @@ server-side.
   a hash is stored; the code only ever goes out by email, so neither app
   shows it. The renter's trip shows the handover's *state*. The hirer gets
   just that email - no extra "your code was emailed" notification.
+- **A booking with no car of the merchant's runs the code the other way**
+  (DR4, 2026-11-27; `drivers.md`). For a driver alone, or the driver half
+  of a linked booking, the code is texted to the **driver** once the
+  booking is paid (`jobs/driver-job-sms.ts`, a `handovers` row with
+  `code_holder = 'driver'`, good until `dropoff_at`). The driver reads it
+  to the renter, who enters it on the trip page
+  (`POST /bookings/{id}/driver-code`, keyed, audited). A right code
+  completes the pickup in one step and the booking goes `active` - there
+  is no car of the merchant's to check over, and the owner's login is not
+  needed at the roadside. Same 4 digits and 5 tries; a spent code falls
+  back to the owner's handover above. Car and car + driver bookings are
+  unchanged (`code_holder = 'hirer'`, emailed to the renter).
 - **The return leg has no code.** The merchant is taking their own car
   back, so there's nobody to authenticate. `createHandover` with
   `kind: "return"` opens at `otp_verified`, `required` =
