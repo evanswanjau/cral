@@ -143,6 +143,7 @@ function serialize(driver: DriverRow, docs: Record<DriverDocumentKind, (Document
     rates: driverRates(driver),
     status: driver.status,
     reviewer_note: driver.reviewer_note,
+    photo_id: driver.photo_id,
     documents,
     doc_count: Object.values(documents).filter((d) => d && d.review_state !== "rejected").length,
     submitted_at: driver.submitted_at ? driver.submitted_at.toISOString() : null,
@@ -357,6 +358,7 @@ export async function deleteDriver(userId: string, driverId: string, ctx: Reques
     conflict("driver_has_bookings", "This driver has bookings, so they can't be removed. Pause them instead.");
   }
   const docs = await db<DocumentRow>("documents").where({ driver_id: driver.id }).select("storage_key");
+  if (driver.photo_storage_key) docs.push({ storage_key: driver.photo_storage_key } as DocumentRow);
   await db.transaction(async (trx) => {
     await writeAuditEntry(trx, {
       actorId: userId,
@@ -453,6 +455,93 @@ export async function uploadDriverDocument(
   for (const k of replacedKeys) await getStorageAdapter().deleteObject(k).catch(() => undefined);
 
   return serializeOne(updated);
+}
+
+// ---------------------------------------------------------------------
+// Photo (DR2, docs/plans/drivers-that-work.md)
+// ---------------------------------------------------------------------
+
+/** Images only - `createUpload` also lets a PDF through, which is no photo. */
+export const DRIVER_PHOTO_TYPES = ["image/jpeg", "image/png", "image/webp"] as const;
+
+/**
+ * Sets or replaces the driver's one photo. A picture, not a check: no
+ * review state, and it never moves the driver between statuses - a live
+ * driver stays live, as with a vehicle photo added after approval.
+ */
+export async function setDriverPhoto(
+  userId: string,
+  driverId: string,
+  file: { buffer: Buffer; mimetype: string },
+  ctx: RequestContext,
+) {
+  const { merchant, driver } = await requireOwnDriver(userId, driverId);
+  const photoId = generateId("file");
+  const key = `merchant/${merchant.id}/drivers/${driver.id}/photo/${photoId}`;
+  await getStorageAdapter().putObject({ key, body: file.buffer, contentType: file.mimetype });
+
+  const updated = await db.transaction(async (trx) => {
+    const [row] = await trx<DriverRow>("drivers")
+      .where({ id: driver.id })
+      .update({ photo_id: photoId, photo_storage_key: key, photo_content_type: file.mimetype })
+      .returning("*");
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "driver.photo_set",
+      entityType: "driver",
+      entityId: driver.id,
+      before: { photo_id: driver.photo_id },
+      after: { photo_id: photoId },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return row as DriverRow;
+  });
+  if (driver.photo_storage_key) await getStorageAdapter().deleteObject(driver.photo_storage_key).catch(() => undefined);
+  return serializeOne(updated);
+}
+
+export async function removeDriverPhoto(userId: string, driverId: string, ctx: RequestContext) {
+  const { driver } = await requireOwnDriver(userId, driverId);
+  if (!driver.photo_id) return serializeOne(driver);
+  const updated = await db.transaction(async (trx) => {
+    const [row] = await trx<DriverRow>("drivers")
+      .where({ id: driver.id })
+      .update({ photo_id: null, photo_storage_key: null, photo_content_type: null })
+      .returning("*");
+    await writeAuditEntry(trx, {
+      actorId: userId,
+      actorType: "user",
+      action: "driver.photo_removed",
+      entityType: "driver",
+      entityId: driver.id,
+      before: { photo_id: driver.photo_id },
+      requestId: ctx.requestId,
+      ip: ctx.ip,
+    });
+    return row as DriverRow;
+  });
+  if (driver.photo_storage_key) await getStorageAdapter().deleteObject(driver.photo_storage_key).catch(() => undefined);
+  return serializeOne(updated);
+}
+
+/** The photo's bytes, for whoever may see this driver (merchant, Ops, the public catalog). */
+export async function readDriverPhotoBytes(driver: Pick<DriverRow, "photo_storage_key" | "photo_content_type">) {
+  if (!driver.photo_storage_key || !driver.photo_content_type) {
+    throw new ApiError({ status: 404, type: "not_found", code: "photo_not_found", message: "This driver has no photo." });
+  }
+  const body = await getStorageAdapter()
+    .getObject(driver.photo_storage_key)
+    .catch(() => {
+      throw new ApiError({ status: 404, type: "not_found", code: "photo_bytes_missing", message: "That photo is no longer stored." });
+    });
+  return { body, contentType: driver.photo_content_type };
+}
+
+export async function readOwnDriverPhoto(userId: string, driverId: string) {
+  const { driver } = await requireOwnDriver(userId, driverId);
+  return readDriverPhotoBytes(driver);
 }
 
 // ---------------------------------------------------------------------

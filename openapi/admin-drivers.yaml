@@ -72,7 +72,18 @@ paths:
             The driver's details, rates, the merchant (`approved`), and
             `documents[]` - `{ kind, label, document_id, original_name,
             state (missing|pending|ok|expiring|rejected), review_note,
-            expires_at, from_account }`.
+            expires_at, from_account }`. `photo_id` - the driver's photo
+            or null (DR2). The photo is not a document: it has no state and
+            no decision, and nothing in the approval waits on it.
+
+  /admin/drivers/{driverId}/photo:
+    get:
+      summary: The driver's photo bytes (nosniff, image types only)
+      parameters:
+        - { name: driverId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: The image. }
+        "404": { description: "`photo_not_found` - this driver has no photo." }
 
   /admin/drivers/{driverId}/documents/{documentId}:
     get:

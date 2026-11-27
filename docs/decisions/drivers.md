@@ -70,3 +70,39 @@ Plan: [`docs/plans/drivers-that-work.md`](../plans/drivers-that-work.md)
   dates to `/drivers/:id`, which opens filled in.
 - Picking a price sort with no rate sets "Per day". No tags row: every
   filter is a pill, and "Clear all" sits by the count.
+
+### DR2 as built (2026-11-27)
+
+- **One optional photo per driver**, on `drivers` itself (`photo_id`
+  `fil_…`, `photo_storage_key`, `photo_content_type`; all set or all
+  null by CHECK). It is **not a `documents` row**: no review state, no
+  Ops decision, not a checklist item, and setting, replacing or removing
+  it never changes the driver's status (a live driver stays live, as
+  with a vehicle photo added after approval).
+- `POST /merchant/drivers/:id/photo` (multipart `file`) sets or replaces
+  it; `DELETE` removes it; `GET` serves it to the merchant. JPEG, PNG or
+  WebP only - `createUpload` lets a PDF through, so the route narrows to
+  images (415 `unsupported_file_type`) before the byte check (422
+  `file_content_mismatch`). Each change writes `driver.photo_set` /
+  `driver.photo_removed` to `audit_log` in the same transaction; the old
+  bytes are deleted after the commit.
+- `photo_id` changes on every upload. The public URL carries it:
+  `CatalogDriver.photo_url` = `/catalog/drivers/:id/photo/:photoId`,
+  served like a listing photo (nosniff, allowlisted type, public cache
+  1h) behind the same live-driver gate as the profile; an old id 404s,
+  so a cached copy never outlives a replaced photo.
+- Ops sees it at the top of the case (`photo_id` on the case,
+  `GET /admin/drivers/:id/photo`), apart from the three documents.
+  Nothing waits on it.
+- Screens follow the `/hire` look (owner's call after a first pass he
+  found poor, 2026-11-27). `/drivers` cards use the car card's frame
+  (`cral-hire-grid`, photo panel with the county chip, name, "Driver ·
+  drives for ...", the searched rate first). The driver's page uses the
+  car page's two columns: a portrait photo beside the name (a face crops
+  badly in a car's wide panel), the offered rates in the spec grid, a
+  short "How hiring a driver works", and the request form in the car
+  page's sticky panel. Merchant: a vehicle-style photo tile on Add a
+  driver, and a PHOTO side card on the driver's page. Ops: a Photo panel
+  above the documents, like a vehicle case's photos, marked "nothing to
+  decide". **No badge, tick or "verified" word on or next to the photo**
+  - unlike a car card, the driver card has no "Verified" pill.

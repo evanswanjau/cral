@@ -373,6 +373,32 @@ paths:
               schema: { $ref: "#/components/schemas/CatalogDriver" }
         "404": { description: "`driver_not_found` - not live, licence lapsed, or merchant not approved." }
 
+  /catalog/drivers/{id}/photo/{photoId}:
+    get:
+      tags: [catalog]
+      summary: Stream a driver's photo
+      operationId: getCatalogDriverPhoto
+      security: []
+      description: >
+        The driver's one photo (DR2). Scoped by the driver id, so the same
+        live-driver gate applies - a photo of a driver who isn't public
+        404s - and `photoId` must be the driver's current photo, so an old
+        URL stops working once the photo is replaced. `photo_url` on
+        `CatalogDriver` points here. Served with
+        `X-Content-Type-Options: nosniff` and a content type forced through
+        the upload allowlist.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: photoId, in: path, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Image bytes.
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        "404": { description: "`driver_not_found` or `photo_not_found`." }
+
   /catalog/vehicles/{id}/drivers:
     get:
       tags: [catalog]
@@ -481,6 +507,14 @@ components:
             trip: { $ref: "#/components/schemas/Money", nullable: true }
         merchant_id: { type: string }
         merchant_name: { type: string }
+        photo_url:
+          type: string
+          nullable: true
+          example: /catalog/drivers/drv_01J.../photo/fil_01J...
+          description: >
+            API path of the driver's photo, or null when there is none (the
+            site shows the first letter instead). A picture, not a check:
+            nothing about it says the driver was verified.
 
     Money:
       type: object

@@ -58,6 +58,20 @@ adminDriversRouter.get(
   }),
 );
 
+// The photo (DR2) - shown on the case, not a document and not decided.
+adminDriversRouter.get(
+  "/admin/drivers/:driverId/photo",
+  guard,
+  asyncHandler(async (req, res) => {
+    const photo = await admin.readDriverPhoto(req.params.driverId as string);
+    res.setHeader("Content-Type", safeContentType(photo.contentType));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("Content-Disposition", "inline");
+    res.status(200).send(photo.body);
+  }),
+);
+
 adminDriversRouter.post(
   "/admin/drivers/:driverId/documents/:kind/decision",
   guard,

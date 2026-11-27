@@ -5,6 +5,7 @@ import {
   decideDriver,
   decideDriverDocument,
   driverDocObjectUrl,
+  driverPhotoObjectUrl,
   fetchDriverCase,
   rateLine,
   type DriverCaseDocument,
@@ -21,6 +22,14 @@ export function Case(): JSX.Element {
   const key = ["admin", "drivers", driverId];
   const { data: d, isLoading, error } = useQuery({ queryKey: key, queryFn: () => fetchDriverCase(driverId!), enabled: !!driverId });
   usePageTitle(d ? d.full_name : "Driver");
+  // The photo (DR2), keyed by its id so a replaced photo is fetched fresh.
+  const photoId = d?.photo_id ?? null;
+  const { data: photoSrc } = useQuery({
+    queryKey: ["admin", "driver-photo", photoId],
+    queryFn: () => driverPhotoObjectUrl(driverId!),
+    enabled: !!photoId,
+    staleTime: Infinity,
+  });
 
   const [decision, setDecision] = useState<null | "request_changes" | "reject">(null);
   const [note, setNote] = useState("");
@@ -84,6 +93,29 @@ export function Case(): JSX.Element {
           <Link to={`/merchants/${d.merchant.id}`} style={{ color: "#0F23A8", fontWeight: 600 }}>Review the account</Link>
         </div>
       )}
+
+      {/* The photo (DR2), shown like a vehicle case's photos. The
+          merchant's own picture: not a document, nothing to decide, and
+          approval never waits on it. */}
+      <div style={{ ...S.panel, marginBottom: 16 }}>
+        <div style={S.panelHead}>
+          <span style={S.panelTitle}>Photo</span>
+          <span style={S.mono}>SHOWN TO HIRERS · NOTHING TO DECIDE</span>
+        </div>
+        <div style={{ padding: "14px 18px 16px" }}>
+          {!photoId ? (
+            <div style={S.empty0}>No photo added. The driver's card shows their first letter instead.</div>
+          ) : (
+            <a href={photoSrc ?? undefined} target="_blank" rel="noreferrer" style={S.photoTile} title={`Photo of ${d.full_name}`}>
+              {photoSrc ? (
+                <img src={photoSrc} alt={`Photo of ${d.full_name}`} style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center 30%" }} />
+              ) : (
+                <span style={{ ...S.mono, color: "#9AA2B0" }}>LOADING</span>
+              )}
+            </a>
+          )}
+        </div>
+      </div>
 
       <div style={S.panel}>
         <div style={S.panelHead}>
@@ -249,6 +281,8 @@ const S = {
   backBtn: { height: 34, padding: "0 4px", background: "none", border: "none", font: "600 13px/1 'Instrument Sans',sans-serif", color: "#5A6373", cursor: "pointer", marginBottom: 10 },
   headRow: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: 18 },
   h1: { margin: "0 0 4px", font: "600 clamp(23px,3vw,28px)/1.15 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", letterSpacing: "-.02em", color: "#1A1F2B" },
+  photoTile: { display: "grid", placeItems: "center", width: 160, aspectRatio: "4/5", borderRadius: "var(--r)", border: "1px solid #E4E7EC", background: "#F1F3F6", overflow: "hidden" },
+  empty0: { font: "400 13px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" },
   lede: { margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" },
   badge: { display: "inline-flex", alignItems: "center", padding: "5px 11px", border: "1px solid", borderRadius: 999, font: "600 11px/1.4 'IBM Plex Mono',monospace", letterSpacing: ".05em", flex: "none" },
   facts: { display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 16, marginBottom: 18 },

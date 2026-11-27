@@ -2,7 +2,7 @@ import { useEffect, useState, type CSSProperties, type FormEvent, type ReactNode
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSeo } from "../lib/use-seo.js";
-import { PageHero, Section, Card, Body } from "../components/site/marketing.js";
+import { Section, Card, Body } from "../components/site/marketing.js";
 import { ApiClientError } from "../lib/api.js";
 import { createBooking } from "../lib/bookings-api.js";
 import { formatMoney } from "../lib/catalog-api.js";
@@ -11,6 +11,7 @@ import { driverQuote, getDriver, UNIT_WORD, type DriverUnit } from "../lib/drive
 import { useIsAuthenticated } from "../lib/auth.js";
 import { clearSessionDraft, readSessionDraft, writeSessionDraft } from "../lib/session-draft.js";
 import { PhoneVerify } from "../components/subsite/PhoneVerify.js";
+import { DriverPhoto } from "../components/drivers/DriverPhoto.js";
 
 /**
  * Book a driver for your own car (docs/plans/drivers.md). Same footing as
@@ -161,111 +162,207 @@ export function DriverBook(): JSX.Element {
     }
   }
 
+  const lead = (offered as DriverUnit[]).includes(unit) ? unit : offered[0];
+
   return (
-    <div>
-      <PageHero kicker="HIRE A DRIVER" title={d.display_name} sub={`${d.county} · drives for ${d.merchant_name}. Checked by CRAL - licence, ID and KRA PIN.`} />
-      <Section>
-        <Card>
-          <form onSubmit={onSubmit}>
-            {offered.length > 1 && (
-              <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
-                {offered.map((u) => (
-                  <label
-                    key={u}
-                    style={{
-                      flex: "1 1 120px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
-                      padding: "12px 14px",
-                      border: `1.5px solid ${unit === u ? "#0F23A8" : "#CDD2DA"}`,
-                      borderRadius: 10,
-                      cursor: "pointer",
-                      background: unit === u ? "#EDEFFC" : "#FFFFFF",
-                    }}
-                  >
-                    <input type="radio" name="unit" checked={unit === u} onChange={() => setUnit(u)} style={{ margin: 0 }} />
-                    <span style={{ font: "500 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
-                      Per {UNIT_WORD[u]} · {formatMoney(d.rates[u]!)}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
+    <div style={{ padding: "clamp(16px,2.4vw,26px) clamp(14px,3vw,32px) clamp(40px,6vw,72px)" }}>
+      <div style={{ maxWidth: 1180, margin: "0 auto" }}>
+        <Link
+          to={`/drivers?county=${encodeURIComponent(d.county)}`}
+          style={{ display: "inline-block", padding: "8px 12px 8px 0", font: "600 13px/1 'Instrument Sans',sans-serif", color: "#5A6373", textDecoration: "none", marginBottom: 14 }}
+        >
+          ← All drivers in {d.county}
+        </Link>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,160px),1fr))", gap: 12 }}>
-              <Field label={unit === "day" ? "First day" : "Date"}>
-                <input type="date" min={earliest} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} style={input} />
-              </Field>
-              {unit === "day" ? (
-                <Field label="Last day">
-                  <input type="date" min={from} value={to} onChange={(e) => setTo(e.target.value)} style={input} />
-                </Field>
-              ) : (
-                <>
-                  <Field label="Start time">
-                    <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={input} />
-                  </Field>
-                  <Field label={unit === "trip" ? "Back by" : "End time"}>
-                    <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={input} />
-                  </Field>
-                </>
-              )}
-            </div>
-            {timesBad && <p style={warn}>The end time has to be after the start time.</p>}
-
-            <Field label="The car they'll drive">
-              <input value={car} onChange={(e) => setCar(e.target.value)} maxLength={200} placeholder="e.g. White Toyota Fielder, KDA 123A, automatic" style={input} />
-            </Field>
-            <Field label="Where to, and anything else they should know (optional)">
-              <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} style={{ ...input, height: "auto", padding: "10px 13px", resize: "vertical" }} />
-            </Field>
-
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "12px 0", borderTop: "1px solid #F1F3F6", marginBottom: 12 }}>
-              <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
-                {unit === "day" ? `${days} day${days === 1 ? "" : "s"}` : unit === "hour" ? `${hours} hour${hours === 1 ? "" : "s"}` : "Flat trip rate"}
-              </span>
-              <span style={{ font: "700 17px/1 Archivo,sans-serif", color: "#0B0F1A" }}>
-                {quote !== null ? formatMoney({ amount: quote, currency: "KES" }) : "-"}
-              </span>
-            </div>
-
-            {error && (
-              <p style={warn}>
-                {error.message}{" "}
-                {error.code === "documents_required" && (
-                  <Link to={`/documents?next=${encodeURIComponent(`/drivers/${d.id}`)}&needs=national_id`} style={{ color: "#0F23A8" }}>
-                    Add your ID
-                  </Link>
-                )}
-              </p>
-            )}
-
-            {phoneStep ? (
-              <div style={{ paddingTop: 6 }}>
-                <PhoneVerify
-                  startEditing={phoneStep === "add"}
-                  onVerified={() => {
-                    setPhoneStep(null);
-                    void send();
-                  }}
-                />
-              </div>
-            ) : (
-              <button
-                type="submit"
-                disabled={submitting || timesBad}
-                style={{ width: "100%", height: 48, background: "#0F23A8", color: "#FFFFFF", border: "none", borderRadius: 10, font: "600 15px/1 'Instrument Sans',sans-serif", cursor: "pointer", opacity: submitting || timesBad ? 0.6 : 1 }}
+        <div style={{ display: "flex", gap: "clamp(18px,2.6vw,30px)", alignItems: "flex-start", flexWrap: "wrap" }}>
+          {/* ---- left column, the /hire car page's frame ---- */}
+          <div style={{ flex: "1 1 500px", minWidth: "min(100%, 300px)" }}>
+            {/* The driver's photo (DR2), or the first letter, as a portrait
+                beside the name - a face crops badly in a car's wide panel.
+                A picture, not a check: no "Verified" pill, unlike a car's. */}
+            <div style={{ display: "flex", gap: "clamp(16px,2.4vw,24px)", alignItems: "flex-end", flexWrap: "wrap", marginBottom: "clamp(20px,2.8vw,28px)" }}>
+              <div
+                style={{
+                  flex: "none",
+                  width: "clamp(140px,20vw,200px)",
+                  aspectRatio: "4 / 5",
+                  background: "#EEF0F3",
+                  border: "1px solid #E4E7EC",
+                  borderRadius: 12,
+                  position: "relative",
+                  overflow: "hidden",
+                }}
               >
-                {submitting ? "Sending…" : isAuthenticated ? "Send request - pay nothing yet" : "Sign in to send - pay nothing yet"}
-              </button>
+                <DriverPhoto name={d.display_name} photoUrl={d.photo_url} fill />
+              </div>
+              <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+                <h1
+                  style={{
+                    margin: "0 0 8px",
+                    font: "700 clamp(26px,3.4vw,38px)/1.08 Archivo,sans-serif",
+                    fontVariationSettings: "'wdth' 108",
+                    letterSpacing: "-.028em",
+                    color: "#0B0F1A",
+                  }}
+                >
+                  {d.display_name}
+                </h1>
+                <p style={{ margin: 0, font: "400 14px/1.5 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                  Driver · {d.county} · drives for {d.merchant_name}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className="cral-spec-grid"
+              style={{ marginBottom: "clamp(20px,2.8vw,28px)", gridTemplateColumns: `repeat(${offered.length}, minmax(0, 1fr))` }}
+            >
+              {offered.map((u) => (
+                <div key={u} style={{ background: "#FFFFFF", padding: "18px 14px", textAlign: "center" }}>
+                  <div style={{ font: "500 10px/1 'IBM Plex Mono',monospace", letterSpacing: ".09em", color: "#9AA2B0", marginBottom: 9 }}>
+                    PER {UNIT_WORD[u].toUpperCase()}
+                  </div>
+                  <div style={{ font: "600 14px/1.35 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>{formatMoney(d.rates[u]!)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ background: "#FFFFFF", border: "1px solid #E4E7EC", borderRadius: 12, padding: "clamp(18px,2.4vw,24px)" }}>
+              <div style={{ font: "600 17px/1.3 Archivo,sans-serif", fontVariationSettings: "'wdth' 106", color: "#0B0F1A", marginBottom: 10 }}>
+                How hiring a driver works
+              </div>
+              <p style={{ margin: 0, font: "400 14px/1.6 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                {d.display_name} drives your own car. CRAL checked their licence, ID and KRA PIN before they could take bookings.
+                Pick your dates and tell them about the car; you pay nothing until {d.merchant_name} accepts.
+              </p>
+            </div>
+          </div>
+
+          {/* ---- right column: the request panel, as on a car page ---- */}
+          <div
+            style={{
+              flex: "0 0 348px",
+              minWidth: "min(100%, 290px)",
+              maxWidth: "100%",
+              position: "sticky",
+              top: 82,
+              background: "#FFFFFF",
+              border: "1.5px solid #0B0F1A",
+              borderRadius: 12,
+              padding: "clamp(18px,2.4vw,24px)",
+              boxShadow: "0 14px 34px rgba(11,15,26,.08)",
+              boxSizing: "border-box",
+            }}
+          >
+            {lead && (
+              <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+                <span style={{ font: "700 clamp(26px,3.2vw,32px)/1 Archivo,sans-serif", fontVariationSettings: "'wdth' 108", color: "#0B0F1A", fontVariantNumeric: "tabular-nums" }}>
+                  {formatMoney(d.rates[lead]!)}
+                </span>
+                <span style={{ font: "400 15px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>per {UNIT_WORD[lead]}</span>
+              </div>
             )}
-            <p style={{ margin: "10px 0 0", font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
-              {d.merchant_name} has 12 hours to accept. You pay by M-Pesa once they do. Your own insurance needs to cover another driver.
-            </p>
-          </form>
-        </Card>
-      </Section>
+              <form onSubmit={onSubmit}>
+                {offered.length > 1 && (
+                  <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                    {offered.map((u) => (
+                      <label
+                        key={u}
+                        style={{
+                          flex: "1 1 120px",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          padding: "12px 14px",
+                          border: `1.5px solid ${unit === u ? "#0F23A8" : "#CDD2DA"}`,
+                          borderRadius: 10,
+                          cursor: "pointer",
+                          background: unit === u ? "#EDEFFC" : "#FFFFFF",
+                        }}
+                      >
+                        <input type="radio" name="unit" checked={unit === u} onChange={() => setUnit(u)} style={{ margin: 0 }} />
+                        <span style={{ font: "500 14px/1.3 'Instrument Sans',sans-serif", color: "#0B0F1A" }}>
+                          Per {UNIT_WORD[u]} · {formatMoney(d.rates[u]!)}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,160px),1fr))", gap: 12 }}>
+                  <Field label={unit === "day" ? "First day" : "Date"}>
+                    <input type="date" min={earliest} value={from} onChange={(e) => { setFrom(e.target.value); if (e.target.value > to) setTo(e.target.value); }} style={input} />
+                  </Field>
+                  {unit === "day" ? (
+                    <Field label="Last day">
+                      <input type="date" min={from} value={to} onChange={(e) => setTo(e.target.value)} style={input} />
+                    </Field>
+                  ) : (
+                    <>
+                      <Field label="Start time">
+                        <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={input} />
+                      </Field>
+                      <Field label={unit === "trip" ? "Back by" : "End time"}>
+                        <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={input} />
+                      </Field>
+                    </>
+                  )}
+                </div>
+                {timesBad && <p style={warn}>The end time has to be after the start time.</p>}
+
+                <Field label="The car they'll drive">
+                  <input value={car} onChange={(e) => setCar(e.target.value)} maxLength={200} placeholder="e.g. White Toyota Fielder, KDA 123A, automatic" style={input} />
+                </Field>
+                <Field label="Where to, and anything else they should know (optional)">
+                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={1000} style={{ ...input, height: "auto", padding: "10px 13px", resize: "vertical" }} />
+                </Field>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", padding: "12px 0", borderTop: "1px solid #F1F3F6", marginBottom: 12 }}>
+                  <span style={{ font: "500 13.5px/1.4 'Instrument Sans',sans-serif", color: "#5A6373" }}>
+                    {unit === "day" ? `${days} day${days === 1 ? "" : "s"}` : unit === "hour" ? `${hours} hour${hours === 1 ? "" : "s"}` : "Flat trip rate"}
+                  </span>
+                  <span style={{ font: "700 17px/1 Archivo,sans-serif", color: "#0B0F1A" }}>
+                    {quote !== null ? formatMoney({ amount: quote, currency: "KES" }) : "-"}
+                  </span>
+                </div>
+
+                {error && (
+                  <p style={warn}>
+                    {error.message}{" "}
+                    {error.code === "documents_required" && (
+                      <Link to={`/documents?next=${encodeURIComponent(`/drivers/${d.id}`)}&needs=national_id`} style={{ color: "#0F23A8" }}>
+                        Add your ID
+                      </Link>
+                    )}
+                  </p>
+                )}
+
+                {phoneStep ? (
+                  <div style={{ paddingTop: 6 }}>
+                    <PhoneVerify
+                      startEditing={phoneStep === "add"}
+                      onVerified={() => {
+                        setPhoneStep(null);
+                        void send();
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={submitting || timesBad}
+                    style={{ width: "100%", height: 48, background: "#0F23A8", color: "#FFFFFF", border: "none", borderRadius: 10, font: "600 15px/1 'Instrument Sans',sans-serif", cursor: "pointer", opacity: submitting || timesBad ? 0.6 : 1 }}
+                  >
+                    {submitting ? "Sending…" : isAuthenticated ? "Send request - pay nothing yet" : "Sign in to send - pay nothing yet"}
+                  </button>
+                )}
+                <p style={{ margin: "10px 0 0", font: "400 12.5px/1.5 'Instrument Sans',sans-serif", color: "#838C9B" }}>
+                  {d.merchant_name} has 12 hours to accept. You pay by M-Pesa once they do. Your own insurance needs to cover another driver.
+                </p>
+              </form>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

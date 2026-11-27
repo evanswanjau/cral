@@ -3,7 +3,7 @@ import { ApiError } from "@cral/types";
 import { authenticate } from "../../middleware/authenticate.js";
 import { validateBody } from "../../lib/validate.js";
 import { asyncHandler } from "../../lib/async-handler.js";
-import { assertDeclaredTypeMatchesBytes, createUpload } from "../../lib/uploads.js";
+import { assertDeclaredTypeMatchesBytes, createUpload, safeContentType } from "../../lib/uploads.js";
 import type { RequestContext } from "../merchant/service.js";
 import * as drivers from "./service.js";
 import {
@@ -100,6 +100,64 @@ driversRouter.post(
       ctxOf(req),
     );
     res.status(200).json(result);
+  }),
+);
+
+// The driver's one photo (DR2). Images only: `createUpload` also passes a
+// PDF, which is no photo, so the type is narrowed here before the byte check.
+driversRouter.post(
+  "/merchant/drivers/:driverId/photo",
+  authenticate(),
+  upload.single("file"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ApiError({
+        status: 422,
+        type: "validation_error",
+        code: "file_required",
+        message: "Attach a photo.",
+        field: "file",
+      });
+    }
+    if (!(drivers.DRIVER_PHOTO_TYPES as readonly string[]).includes(req.file.mimetype)) {
+      throw new ApiError({
+        status: 415,
+        type: "validation_error",
+        code: "unsupported_file_type",
+        message: "Upload a JPEG, PNG or WebP photo.",
+        field: "file",
+      });
+    }
+    assertDeclaredTypeMatchesBytes(req.file.buffer, req.file.mimetype);
+    res.status(200).json(
+      await drivers.setDriverPhoto(
+        req.auth!.sub,
+        req.params.driverId as string,
+        { buffer: req.file.buffer, mimetype: req.file.mimetype },
+        ctxOf(req),
+      ),
+    );
+  }),
+);
+
+driversRouter.delete(
+  "/merchant/drivers/:driverId/photo",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    res.status(200).json(await drivers.removeDriverPhoto(req.auth!.sub, req.params.driverId as string, ctxOf(req)));
+  }),
+);
+
+driversRouter.get(
+  "/merchant/drivers/:driverId/photo",
+  authenticate(),
+  asyncHandler(async (req, res) => {
+    const photo = await drivers.readOwnDriverPhoto(req.auth!.sub, req.params.driverId as string);
+    res.setHeader("Content-Type", safeContentType(photo.contentType));
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.setHeader("Content-Disposition", "inline");
+    res.status(200).send(photo.body);
   }),
 );
 

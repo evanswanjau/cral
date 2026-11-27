@@ -3,6 +3,7 @@ import { P } from "../components/portal/styles.js";
 import { STATUS } from "../components/portal/status.js";
 import { driverRateLine, useDriverList, type Driver } from "../lib/drivers-api.js";
 import { usePageTitle } from "../lib/use-page-title.js";
+import { DriverAvatar } from "../components/driver/DriverPhoto.js";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }).toUpperCase();
@@ -18,12 +19,15 @@ function Row({ d, onOpen }: { d: Driver; onOpen: () => void }): JSX.Element {
       onMouseEnter={(e) => (e.currentTarget.style.background = "#FAFBFC")}
       onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
     >
-      <div style={P.rowTitleWrap}>
-        <div style={P.rowTitleLine}>
-          <span style={P.rowTitle}>{d.full_name}</span>
-          {d.is_account_holder && <span style={{ ...P.verifiedTag, color: "#0F23A8", background: "#EDEFFC", borderColor: "#C3CBF5" }}>YOU</span>}
+      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+        <DriverAvatar driverId={d.id} photoId={d.photo_id} name={d.full_name} size={40} />
+        <div style={{ ...P.rowTitleWrap, minWidth: 0 }}>
+          <div style={P.rowTitleLine}>
+            <span style={P.rowTitle}>{d.full_name}</span>
+            {d.is_account_holder && <span style={{ ...P.verifiedTag, color: "#0F23A8", background: "#EDEFFC", borderColor: "#C3CBF5" }}>YOU</span>}
+          </div>
+          <div style={P.rowMeta}>{d.county} · Licence {d.licence_number}</div>
         </div>
-        <div style={P.rowMeta}>{d.county} · Licence {d.licence_number}</div>
       </div>
       <span style={{ ...P.statusTag, background: meta.tint, border: `1px solid ${meta.border}`, color: meta.text }}>
         <span style={{ ...P.statusDot, background: meta.core }} />

@@ -307,13 +307,13 @@ export function Drivers(): JSX.Element {
             ))}
 
           {isLoading && (
-            <div className="cral-driver-grid">
+            <div className="cral-hire-grid">
               {Array.from({ length: 6 }, (_, i) => (
-                <Skeleton key={i} height={78} />
+                <Skeleton key={i} height={262} />
               ))}
             </div>
           )}
-          {results.length > 0 && <DriverList drivers={results} hrefFor={hrefFor} />}
+          {results.length > 0 && <DriverList drivers={results} hrefFor={hrefFor} unit={unit} />}
 
           {list.isFetchNextPageError && !isFetchingNextPage && (
             <div style={{ paddingTop: 24 }}>
